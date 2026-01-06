@@ -3076,6 +3076,99 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     });
   }
 
+  /**
+   * Resumes a suspended network loop where multiple agents can collaborate to handle messages.
+   * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
+   *
+   * @experimental
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.resumeNetwork({ approved: true }, {
+   *   runId: 'previous-run-id',
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   },
+   *   maxSteps: 10
+   * });
+   *
+   * for await (const chunk of result.stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
+  async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
+    const runId = options.runId;
+    const requestContextToUse = options?.requestContext || new RequestContext();
+
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadId =
+      threadIdFromContext ||
+      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || options?.memory?.resource;
+
+    return await networkLoop({
+      networkName: this.name,
+      requestContext: requestContextToUse,
+      runId,
+      routingAgent: this,
+      routingAgentOptions: {
+        modelSettings: options?.modelSettings,
+        memory: options?.memory,
+      },
+      generateId: () => this.#mastra?.generateId() || randomUUID(),
+      maxIterations: options?.maxSteps || 1,
+      messages: [],
+      threadId,
+      resourceId,
+      resumeData,
+    });
+  }
+
+  /**
+   * Approves a pending network tool call and resumes execution.
+   * Used when `tool.requireApproval` is enabled to allow the agent to proceed with a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.approveNetworkToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
+  async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
+    return this.resumeNetwork({ approved: true }, options);
+  }
+
+  /**
+   * Declines a pending network tool call and resumes execution.
+   * Used when `tool.requireApproval` is enabled to allow the agent to proceed with a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.declineNetworkToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
+  async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
+    return this.resumeNetwork({ approved: false }, options);
+  }
+
   async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT>,

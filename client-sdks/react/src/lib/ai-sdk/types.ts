@@ -47,6 +47,21 @@ export type MastraUIMessageMetadata = {
       completionResult?: {
         passed: boolean;
       };
+      requireApprovalMetadata?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+        };
+      };
+      suspendedTools?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+          suspendPayload: any;
+        };
+      };
     }
 );
 
