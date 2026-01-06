@@ -73,11 +73,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field, e
     <div className="space-y-3">
       {pairs.map(pair => (
         <div key={pair.id} className="relative space-y-2 rounded-lg border p-4">
-          <Button
-            type="button"
-            className="absolute right-2 top-2"
-            onClick={() => removePair(pair.id)}
-          >
+          <Button type="button" className="absolute right-2 top-2" onClick={() => removePair(pair.id)}>
             <TrashIcon className="h-4 w-4" />
           </Button>
 

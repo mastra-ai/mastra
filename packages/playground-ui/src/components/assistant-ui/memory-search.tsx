@@ -236,10 +236,7 @@ export const MemorySearch = ({
           className="pl-10 pr-10 bg-surface3 border-border1"
         />
         {query && (
-          <Button
-            onClick={clearSearch}
-            className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-          >
+          <Button onClick={clearSearch} className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0">
             <X className="h-4 w-4" />
           </Button>
         )}

@@ -137,11 +137,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button
-                    onClick={() => setIsEditing(true)}
-                    disabled={isUpdating}
-                    className="text-xs"
-                  >
+                  <Button onClick={() => setIsEditing(true)} disabled={isUpdating} className="text-xs">
                     Edit Working Memory
                   </Button>
                 )}

@@ -24,7 +24,10 @@ const variantClasses = {
   light: 'bg-surface3 hover:bg-surface5 text-icon6 disabled:opacity-50',
 };
 
-export function buttonVariants(options?: { variant?: ButtonProps['variant'] | 'outline' | 'ghost'; size?: ButtonProps['size'] }) {
+export function buttonVariants(options?: {
+  variant?: ButtonProps['variant'] | 'outline' | 'ghost';
+  size?: ButtonProps['size'];
+}) {
   // Map old variants to new ones
   let variant: ButtonProps['variant'] = 'default';
   if (options?.variant === 'light' || options?.variant === 'default') {
