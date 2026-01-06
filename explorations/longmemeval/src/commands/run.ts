@@ -417,7 +417,7 @@ Active evaluations:`;
 
     if (usesObservationalMemory) {
       // Use PersistableInMemoryMemory for ObservationalMemory
-      omStorage = new PersistableInMemoryMemory();
+      omStorage = new PersistableInMemoryMemory({ readOnly: true });
 
       // Hydrate OM storage from prepared data
       const omPath = join(questionDir, 'om.json');
@@ -431,12 +431,12 @@ Active evaluations:`;
         storage: omStorage,
         observer: {
           model: retry4o.model,
-          observationThreshold: 100_000, // high number because the eval agent shouldn't be making observations
+          observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
           focus: observationalMemoryConfig.focus,
         },
         reflector: {
           model: retry4o.model,
-          reflectionThreshold: 100_000, // high number because the eval agent shouldn't be making observations
+          reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
         },
         scope: observationalMemoryConfig.scope,
       });
@@ -486,8 +486,6 @@ Be specific rather than generic when the user has expressed clear preferences in
             },
           ]
         : undefined,
-      // don't use output processors, this eval agent shouldn't be writing back to the db at all
-      // outputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
     });
 
     // Create a fresh thread for the evaluation question

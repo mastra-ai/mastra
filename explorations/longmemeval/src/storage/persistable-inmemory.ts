@@ -24,7 +24,9 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
     observationalMemory: InMemoryObservationalMemory;
   };
 
-  constructor() {
+  private isReadonly = false;
+
+  constructor(args?: { readOnly: boolean }) {
     const collection = {
       threads: new Map(),
       resources: new Map(),
@@ -37,6 +39,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
       operations: {} as any, // Not needed for benchmark
     });
 
+    if (args?.readOnly) this.isReadonly = true;
     // Store the SAME map instances that were passed to super()
     this._collection = collection;
   }
@@ -45,6 +48,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
    * Persist the current storage state to a JSON file
    */
   async persist(filePath: string): Promise<void> {
+    if (this.isReadonly) return;
     const data: Record<string, any> = {
       threads: Array.from(this._collection.threads.entries()),
       resources: Array.from(this._collection.resources.entries()),
