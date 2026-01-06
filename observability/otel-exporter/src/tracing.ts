@@ -217,7 +217,7 @@ export class OtelExporter extends BaseExporter {
    * Flush any pending spans to the exporter without shutting down.
    * Useful in serverless environments to export spans before instance termination.
    */
-  async flush(): Promise<void> {
+  protected async flush(): Promise<void> {
     if (this.isDisabled) {
       return;
     }
