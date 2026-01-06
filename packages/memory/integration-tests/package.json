@@ -62,7 +62,7 @@
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.13.17",
     "ai": "^4.2.2",
-    "ai-v5": "npm:ai@^5.0.117",
+    "ai-v5": "npm:ai@^5.0.0",
     "ai-v6": "npm:ai@latest",
     "jsdom": "^26.1.0",
     "mastra": "*",
