@@ -127,6 +127,8 @@ const weatherAgent = new Agent({
   },
 });
 
+let count = 1;
+
 export const networkAgent = new Agent({
   id: 'network-agent',
   name: 'Chef Network',
@@ -159,7 +161,8 @@ export const networkAgent = new Agent({
           name: 'My Scorer 5',
           description: 'Scorer 5',
         }).generateScore(() => {
-          return 1;
+          count++;
+          return count > 2 ? 1 : 0.7;
         }),
       ],
       strategy: 'all',

@@ -329,10 +329,10 @@ export function formatCompletionFeedback(result: CompletionRunResult, maxIterati
     lines.push('');
   }
 
-  if (maxIterationReached) {
-    lines.push('\n\n⚠️ Max iterations reached.');
-  } else if (result.complete) {
+  if (result.complete) {
     lines.push('\n\n✅ The task is complete.');
+  } else if (maxIterationReached) {
+    lines.push('\n\n⚠️ Max iterations reached.');
   } else {
     lines.push('\n\n🔄 Will continue working on the task.');
   }
