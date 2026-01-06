@@ -47,6 +47,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **API reference**: Generated from code comments and exported types
 - **Package READMEs**: Each package/integration has its own README.md
 - **Development guide**: `DEVELOPMENT.md` - Setup and contribution instructions
+- **Playground guidelines**: `packages/playground/CLAUDE.md` - Development standards for the playground application
+- **Playground UI guidelines**: `packages/playground-ui/CLAUDE.md` - Component and frontend standards for the playground UI package
 
 ### Documentation Guidelines
 
