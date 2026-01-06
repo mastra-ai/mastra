@@ -182,8 +182,8 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
           } else if (Array.isArray(msg.content)) {
             // Extract text from parts array
             return msg.content
-              .filter(part => part.type === 'text')
-              .map(part => part.text || '')
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text || '')
               .join(' ');
           }
           return '';
