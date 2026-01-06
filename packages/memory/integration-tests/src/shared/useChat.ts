@@ -5,8 +5,7 @@ import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
-import { MessageList } from '@mastra/core/agent';
-import { AIV4Adapter } from '@mastra/core/agent/message-list/adapters';
+import { AIV4Adapter, AIV5Adapter } from '@mastra/core/agent/message-list/adapters';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai-v5';
@@ -397,7 +396,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
 
       const agentMemory = (await weatherAgentV5.getMemory())!;
       const dbMessages = (await agentMemory.recall({ threadId: localThreadId })).messages;
-      const initialMessages = dbMessages.map(m => MessageList.mastraDBMessageToAIV5UIMessage(m));
+      const initialMessages = dbMessages.map(m => AIV5Adapter.toUIMessage(m));
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChatFunc({
