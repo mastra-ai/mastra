@@ -218,7 +218,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     return pathParamSchema.parseAsync(params);
   }
 
-  async parseQueryParams(route: ServerRoute, params: Record<string, string>): Promise<Record<string, any>> {
+  async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
     const queryParamSchema = route.queryParamSchema;
     if (!queryParamSchema) {
       return params;

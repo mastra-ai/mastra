@@ -345,7 +345,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       if (params.queryParams) {
         try {
-          params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+          params.queryParams = await this.parseQueryParams(route, params.queryParams);
         } catch (error) {
           console.error('Error parsing query params', error);
           // Zod validation errors should return 400 Bad Request with structured issues

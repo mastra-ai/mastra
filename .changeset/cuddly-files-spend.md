@@ -6,9 +6,10 @@
 '@mastra/server': patch
 ---
 
-Added shared `normalizeQueryParams` helper for consistent query parameter handling across all server adapters.
+Fixed inconsistent query parameter handling across server adapters.
 
-- Added `normalizeQueryParams` function to `@mastra/server` that normalizes query params from various HTTP framework formats to a consistent `Record<string, string | string[]>` structure
-- Updated all server adapters (Express, Hono, Fastify, Koa) to use the shared helper
-- Handles both single string values and arrays for repeated query params (e.g., `?tag=a&tag=b`)
-- Filters out non-string values that some frameworks may include
+**What changed:** Query parameters are now processed consistently across all server adapters (Express, Hono, Fastify, Koa). This is an internal improvement with no changes to external APIs.
+
+**Why:** Different HTTP frameworks handle query parameters differently - some return single strings while others return arrays for repeated params like `?tag=a&tag=b`. This caused type inconsistencies that could lead to validation failures in certain adapters.
+
+**User impact:** None - this change is transparent. Your existing code will continue to work as before.
