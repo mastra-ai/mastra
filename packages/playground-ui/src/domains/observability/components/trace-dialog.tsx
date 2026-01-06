@@ -24,6 +24,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 import { type GetScorerResponse } from '@mastra/client-js';
+import { Icon } from '@/ds/icons/Icon';
 
 type TraceDialogProps = {
   traceSpans?: SpanRecord[];
@@ -265,7 +266,10 @@ export function TraceDialog({
 
                     <ButtonsGroup className="w-full">
                       <Button onClick={handleToScoring}>
-                        Scoring <CircleGaugeIcon />{' '}
+                        <Icon>
+                          <CircleGaugeIcon />
+                        </Icon>
+                        Scoring
                       </Button>
                       {spanScoresData?.scores?.[0] && (
                         <Button onClick={handleToLastScore}>
