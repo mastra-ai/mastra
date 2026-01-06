@@ -233,7 +233,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
             scorerId: scorerId || '',
             entityId: entityId || '',
             entityType: entityType || '',
-            source: source || '',
+            source: (source || '') as string,
             page: pagination.page,
             perPage: pagination.perPage,
           },

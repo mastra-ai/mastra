@@ -120,23 +120,26 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
     methodType,
   });
 
-  return createWorkflow({
-    id: 'execution-workflow',
-    inputSchema: z.object({}),
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
-    steps: [prepareToolsStep, prepareMemoryStep, streamStep],
-    options: {
-      tracingPolicy: {
-        internal: InternalSpans.WORKFLOW,
+  return (
+    createWorkflow({
+      id: 'execution-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.union([
+        z.instanceof(MastraModelOutput<OUTPUT | undefined>),
+        z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
+      ]),
+      steps: [prepareToolsStep, prepareMemoryStep, streamStep],
+      options: {
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
+        validateInputs: false,
       },
-      validateInputs: false,
-    },
-  })
-    .parallel([prepareToolsStep, prepareMemoryStep])
-    .map(mapResultsStep)
-    .then(streamStep)
-    .commit();
+    })
+      .parallel([prepareToolsStep, prepareMemoryStep])
+      // Type assertion: ExecuteFunction signature complexity with Zod v4 input/output types
+      .map(mapResultsStep as any)
+      .then(streamStep)
+      .commit()
+  );
 }

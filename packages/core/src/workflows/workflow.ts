@@ -421,6 +421,7 @@ export function createStep<
       inputSchema: ProcessorStepSchema,
       // @ts-ignore - Use flexible schema for output (allows any phase combination)
       outputSchema: ProcessorStepOutputSchema,
+      // @ts-ignore - Execute function signature complexity with Zod v4 input/output types
       execute: async ({
         inputData,
         requestContext,
@@ -1485,7 +1486,8 @@ export class Workflow<
   foreach<
     TPrevIsArray extends TPrevSchema extends z.ZodArray<any> ? true : false,
     TStepState extends z.ZodObject<any>,
-    TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : never,
+    // Add explicit ZodType constraint for Zod v4 compatibility
+    TStepInputSchema extends z.ZodType<any>,
     TStepId extends string,
     TSchemaOut extends z.ZodType<any>,
   >(
@@ -2374,7 +2376,9 @@ export class Run<
         throw new Error('Invalid inputData: \n' + errorMessages);
       }
 
-      inputDataToUse = validatedInputData.data;
+      // Type assertion: validatedInputData.data is output type, but inputDataToUse is input type
+      // For schemas without transforms, input and output are the same at runtime
+      inputDataToUse = validatedInputData.data as z.input<TInputSchema>;
     }
 
     return inputDataToUse;
@@ -2423,8 +2427,8 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    const inputDataToUse = await this._validateInput(inputData as z.input<TInput>);
+    const initialStateToUse = await this._validateInitialState((initialState ?? {}) as z.input<TState>);
 
     const result = await this.executionEngine.execute<
       z.infer<TState>,
@@ -2437,8 +2441,8 @@ export class Run<
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
-      input: inputDataToUse,
-      initialState: initialStateToUse,
+      input: inputDataToUse as z.infer<TInput>,
+      initialState: initialStateToUse as z.infer<TState>,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContext ?? new RequestContext(),
@@ -3150,7 +3154,7 @@ export class Run<
         resourceId: this.resourceId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: snapshot?.context?.input,
+        input: snapshot?.context?.input as z.infer<TInput> | undefined,
         initialState: (snapshot?.value ?? {}) as any,
         resume: {
           steps,

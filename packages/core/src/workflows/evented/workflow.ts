@@ -447,9 +447,9 @@ export class EventedRun<
     requestContext,
     perStep,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: z.input<TInput>;
     requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
+    initialState?: z.input<TState>;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
@@ -485,8 +485,10 @@ export class EventedRun<
       },
     });
 
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    // Type assertions: z.infer<T> returns output type, but validation expects input type
+    // For schemas without transforms, input and output are the same at runtime
+    const inputDataToUse = await this._validateInput(inputData as z.input<TInput>);
+    const initialStateToUse = await this._validateInitialState((initialState ?? {}) as z.input<TState>);
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -503,8 +505,8 @@ export class EventedRun<
       runId: this.runId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
-      input: inputDataToUse,
-      initialState: initialStateToUse,
+      input: inputDataToUse as z.infer<TInput>,
+      initialState: initialStateToUse as z.infer<TState>,
       pubsub: this.mastra.pubsub,
       retryConfig: this.retryConfig,
       requestContext,
@@ -532,9 +534,9 @@ export class EventedRun<
     requestContext,
     perStep,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: z.input<TInput>;
     requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
+    initialState?: z.input<TState>;
     perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Add validation checks
@@ -570,8 +572,10 @@ export class EventedRun<
       },
     });
 
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    // Type assertions: z.infer<T> returns output type, but validation expects input type
+    // For schemas without transforms, input and output are the same at runtime
+    const inputDataToUse = await this._validateInput(inputData as z.input<TInput>);
+    const initialStateToUse = await this._validateInitialState((initialState ?? {}) as z.input<TState>);
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -678,7 +682,7 @@ export class EventedRun<
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: resumeDataToUse,
+        input: resumeDataToUse as z.infer<TInput>,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
