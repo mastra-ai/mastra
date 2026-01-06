@@ -3,8 +3,14 @@ export type { chatRouteOptions, ChatStreamHandlerParams, ChatStreamHandlerOption
 export { workflowRoute, handleWorkflowStream } from './workflow-route';
 export type { WorkflowRouteOptions, WorkflowStreamHandlerParams, WorkflowStreamHandlerOptions } from './workflow-route';
 export type { WorkflowDataPart } from './transformers';
-export { networkRoute, handleNetworkStream } from './network-route';
-export type { NetworkRouteOptions, NetworkStreamHandlerParams, NetworkStreamHandlerOptions } from './network-route';
+export { networkRoute, handleNetworkStream, handleNetworkStructuredOutput } from './network-route';
+export type {
+  NetworkRouteOptions,
+  NetworkStreamHandlerParams,
+  NetworkStreamHandlerOptions,
+  NetworkStructuredHandlerParams,
+  NetworkStructuredHandlerOptions,
+} from './network-route';
 export type { NetworkDataPart } from './transformers';
 export type { AgentDataPart } from './transformers';
 

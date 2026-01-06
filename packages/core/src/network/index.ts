@@ -1,7 +1,4 @@
-export { Mastra, type Config } from './mastra';
-
-// Network exports
-export { NetworkOutputAccumulator } from './network';
+export { NetworkOutputAccumulator } from './output-accumulator';
 export type {
   NetworkStructuredOutput,
   NetworkExecutionStep,
@@ -9,4 +6,4 @@ export type {
   NetworkTokenUsage,
   ToolCallResult,
   StructuredNetworkOutputOptions,
-} from './network';
+} from './structured-output';

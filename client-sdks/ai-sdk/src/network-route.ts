@@ -4,6 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
+import { NetworkOutputAccumulator, type NetworkStructuredOutput, type StructuredNetworkOutputOptions } from '@mastra/core/network';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
@@ -16,6 +17,17 @@ export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined>
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
+};
+
+export type NetworkStructuredHandlerParams<OUTPUT extends OutputSchema = undefined> = NetworkStreamHandlerParams<OUTPUT> & {
+  structuredOutputOptions?: StructuredNetworkOutputOptions;
+};
+
+export type NetworkStructuredHandlerOptions<OUTPUT extends OutputSchema = undefined> = {
+  mastra: Mastra;
+  agentId: string;
+  params: NetworkStructuredHandlerParams<OUTPUT>;
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
@@ -69,9 +81,69 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
   });
 }
 
-export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
+/**
+ * Framework-agnostic handler for accumulating agent network execution into structured output.
+ * Use this function to get a complete structured representation of network execution.
+ *
+ * @example
+ * ```ts
+ * // Next.js App Router
+ * import { handleNetworkStructuredOutput } from '@mastra/ai-sdk';
+ * import { mastra } from '@/src/mastra';
+ *
+ * export async function POST(req: Request) {
+ *   const params = await req.json();
+ *   const structuredOutput = await handleNetworkStructuredOutput({
+ *     mastra,
+ *     agentId: 'routingAgent',
+ *     params,
+ *   });
+ *   return Response.json(structuredOutput);
+ * }
+ * ```
+ */
+export async function handleNetworkStructuredOutput<OUTPUT extends OutputSchema = undefined>({
+  mastra,
+  agentId,
+  params,
+  defaultOptions,
+}: NetworkStructuredHandlerOptions<OUTPUT>): Promise<NetworkStructuredOutput> {
+  const { messages, structuredOutputOptions, ...rest } = params;
+
+  const agentObj = mastra.getAgentById(agentId);
+
+  if (!agentObj) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
+  const result = await agentObj.network(messages, {
+    ...defaultOptions,
+    ...rest,
+  });
+
+  const accumulator = new NetworkOutputAccumulator(structuredOutputOptions);
+
+  for await (const chunk of result) {
+    accumulator.processChunk(chunk);
+  }
+
+  return accumulator.getStructuredOutput();
+}
+
+export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> = (
   | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
+  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> }
+) & {
+  /**
+   * Enable structured output endpoint at `/structuredOutput` variant of this route
+   * @default false
+   */
+  structuredOutput?: boolean;
+  /**
+   * Options for configuring structured output behavior
+   */
+  structuredOutputOptions?: StructuredNetworkOutputOptions;
+};
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
@@ -82,6 +154,8 @@ export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
  * @param {string} [options.path='/network/:agentId'] - The route path. Include `:agentId` for dynamic routing
  * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
  * @param {AgentExecutionOptions} [options.defaultOptions] - Default options passed to agent execution
+ * @param {boolean} [options.structuredOutput=false] - Enable structured output endpoint
+ * @param {StructuredNetworkOutputOptions} [options.structuredOutputOptions] - Options for structured output
  *
  * @example
  * // Dynamic agent routing
@@ -98,11 +172,24 @@ export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
  *     maxSteps: 10,
  *   },
  * });
+ *
+ * @example
+ * // With structured output endpoint
+ * networkRoute({
+ *   path: '/network/:agentId',
+ *   structuredOutput: true,
+ *   structuredOutputOptions: {
+ *     includeSteps: true,
+ *     includeToolCalls: true,
+ *   },
+ * });
  */
 export function networkRoute<OUTPUT extends OutputSchema = undefined>({
   path = '/network/:agentId',
   agent,
   defaultOptions,
+  structuredOutput = false,
+  structuredOutputOptions = {},
 }: NetworkRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
@@ -138,6 +225,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
                 resourceId: { type: 'string' },
                 modelSettings: { type: 'object', additionalProperties: true },
                 tools: { type: 'array', items: { type: 'object' } },
+                structuredOutputOptions: { type: 'object', additionalProperties: true },
               },
               required: ['messages'],
             },
