@@ -17,8 +17,7 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
 
   if (input) {
     try {
-      inputSlot =
-        typeof input === 'object' ? <CodeEditor data={input} /> : <CodeEditor data={JSON.parse(input)} />;
+      inputSlot = typeof input === 'object' ? <CodeEditor data={input} /> : <CodeEditor data={JSON.parse(input)} />;
     } catch {
       inputSlot = <pre className="whitespace-pre-wrap">{input as string}</pre>;
     }

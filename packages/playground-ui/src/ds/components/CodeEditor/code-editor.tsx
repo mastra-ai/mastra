@@ -46,16 +46,9 @@ export type CodeEditorProps = {
   className?: string;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
-export const CodeEditor = ({
-  data,
-  value,
-  onChange,
-  showCopyButton = true,
-  className,
-  ...props
-}: CodeEditorProps) => {
+export const CodeEditor = ({ data, value, onChange, showCopyButton = true, className, ...props }: CodeEditorProps) => {
   const theme = useCodemirrorTheme();
-  const formattedCode = data ? JSON.stringify(data, null, 2) : value ?? '';
+  const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
   return (
     <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
