@@ -92,11 +92,6 @@ export const workflowRunsResponseSchema = z.object({
 });
 
 /**
- * Schema for single workflow run response
- */
-export const workflowRunResponseSchema = workflowRunSchema;
-
-/**
  * Schema for query parameters when listing workflow runs
  * Supports both page/perPage and limit/offset for backwards compatibility
  * If page/perPage provided, use directly; otherwise convert from limit/offset
@@ -184,44 +179,37 @@ export const sendWorkflowRunEventBodySchema = z.object({
   data: z.unknown(),
 });
 
-/**
- * Schema for workflow execution result query parameters
- * Allows filtering which fields to return to reduce payload size
- */
-export const workflowExecutionResultQuerySchema = z.object({
-  fields: z
+// Shared field validation for workflow result queries
+const VALID_WORKFLOW_RESULT_FIELDS = new Set([
+  'result',
+  'error',
+  'payload',
+  'steps',
+  'activeStepsPath',
+  'serializedStepGraph',
+]);
+
+const WORKFLOW_RESULT_FIELDS_ERROR =
+  'Invalid field name. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph';
+
+const createFieldsValidator = (description: string) =>
+  z
     .string()
     .optional()
     .refine(
       value => {
         if (!value) return true;
-        const validFields = new Set([
-          'status',
-          'result',
-          'error',
-          'payload',
-          'steps',
-          'activeStepsPath',
-          'serializedStepGraph',
-        ]);
         const requestedFields = value.split(',').map(f => f.trim());
-        return requestedFields.every(field => validFields.has(field));
+        return requestedFields.every(field => VALID_WORKFLOW_RESULT_FIELDS.has(field));
       },
-      {
-        message:
-          'Invalid field name. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph',
-      },
+      { message: WORKFLOW_RESULT_FIELDS_ERROR },
     )
-    .describe(
-      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
-    ),
-  withNestedWorkflows: z
-    .enum(['true', 'false'])
-    .optional()
-    .describe(
-      'Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.',
-    ),
-});
+    .describe(description);
+
+const withNestedWorkflowsField = z
+  .enum(['true', 'false'])
+  .optional()
+  .describe('Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.');
 
 /**
  * Schema for workflow execution result
@@ -234,6 +222,41 @@ export const workflowExecutionResultSchema = z.object({
   payload: z.unknown().optional(),
   initialState: z.unknown().optional(),
   steps: z.record(z.string(), z.any()).optional(),
+  activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
+  serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
+});
+
+/**
+ * Schema for query parameters when getting a unified workflow run result
+ */
+export const workflowRunResultQuerySchema = z.object({
+  fields: createFieldsValidator(
+    'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
+  ),
+  withNestedWorkflows: withNestedWorkflowsField,
+});
+
+/**
+ * Schema for unified workflow run result response
+ * Combines metadata and processed execution state
+ */
+export const workflowRunResultSchema = z.object({
+  // Metadata - always present
+  runId: z.string(),
+  workflowName: z.string(),
+  resourceId: z.string().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+
+  // Execution state
+  status: workflowRunStatusSchema,
+  initialState: z.record(z.string(), z.any()).optional(),
+  result: z.unknown().optional(),
+  error: z.unknown().optional(),
+  payload: z.unknown().optional(),
+  steps: z.record(z.string(), z.any()).optional(),
+
+  // Optional detailed fields
   activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
   serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
 });
