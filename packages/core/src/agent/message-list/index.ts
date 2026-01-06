@@ -34,6 +34,8 @@ export type AIV5ResponseMessage = (AIV5Type.AssistantModelMessage | AIV5Type.Too
   id: string;
 };
 
+type AIV5ModelMessageWithId = AIV5Type.ModelMessage & { id: string };
+
 type LanguageModelV1Message = LanguageModelV1Prompt[0];
 
 type MastraMessageShared = {
@@ -3185,7 +3187,7 @@ export class MessageList {
   private aiV5UIMessagesToAIV5ModelMessages(
     messages: AIV5Type.UIMessage[],
     filterIncompleteToolCalls = false,
-  ): (AIV5Type.ModelMessage & { id: string })[] {
+  ): AIV5ModelMessageWithId[] {
     const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
@@ -3198,7 +3200,7 @@ export class MessageList {
 
       // Start with the model message and restore id from UIMessage (fixes issue #11615)
       // convertToModelMessages strips the id, but ResponseMessage type requires it
-      let updatedMsg: AIV5Type.ModelMessage & { id: string } = {
+      let updatedMsg: AIV5ModelMessageWithId = {
         ...modelMsg,
         id: uiMsg?.id ?? `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       };
@@ -3232,7 +3234,7 @@ export class MessageList {
             }
             return part;
           }),
-        } as AIV5Type.ModelMessage & { id: string };
+        } as AIV5ModelMessageWithId;
       }
 
       return updatedMsg;
