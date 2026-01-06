@@ -12,6 +12,12 @@ export interface ResolveVectorStoreContext {
   mastra?: MastraUnion;
   /** Fallback vector store name to look up from mastra if vectorStore option is not provided */
   vectorStoreName: string;
+  /**
+   * When true, logs a warning and falls back to mastra.getVector if an explicitly provided
+   * vectorStore is invalid. When false (default), throws an error for invalid vectorStore.
+   * @default false
+   */
+  fallbackOnInvalid?: boolean;
 }
 
 /**
@@ -55,12 +61,13 @@ function buildContextString(context: ResolveVectorStoreContext): string {
  * @param options - Tool options object that may contain a vectorStore property
  * @param context - Context including requestContext, mastra instance, and fallback vectorStoreName
  * @returns The resolved MastraVector instance, or undefined if not found
+ * @throws Error if an explicit vectorStore was provided but is invalid (unless fallbackOnInvalid is true)
  */
 export async function resolveVectorStore(
   options: { vectorStore?: MastraVector | VectorStoreResolver } | Record<string, unknown>,
   context: ResolveVectorStoreContext,
 ): Promise<MastraVector | undefined> {
-  const { requestContext, mastra, vectorStoreName } = context;
+  const { requestContext, mastra, vectorStoreName, fallbackOnInvalid = false } = context;
 
   if ('vectorStore' in options && options.vectorStore !== undefined) {
     const vectorStoreOption = options.vectorStore as MastraVector | VectorStoreResolver;
@@ -73,16 +80,20 @@ export async function resolveVectorStore(
         const contextStr = buildContextString(context);
         const receivedType = resolved === null ? 'null' : resolved === undefined ? 'undefined' : typeof resolved;
 
-        console.error(
-          `VectorStoreResolver returned invalid value: expected MastraVector instance, got ${receivedType}${contextStr}`,
-        );
-
-        // Fall back to mastra.getVector if available
-        if (mastra && vectorStoreName) {
-          return mastra.getVector(vectorStoreName);
+        if (fallbackOnInvalid) {
+          console.warn(
+            `VectorStoreResolver returned invalid value: expected MastraVector instance, got ${receivedType}${contextStr}. Falling back to mastra.getVector("${vectorStoreName}").`,
+          );
+          // Fall back to mastra.getVector if available
+          if (mastra && vectorStoreName) {
+            return mastra.getVector(vectorStoreName);
+          }
+          return undefined;
         }
 
-        return undefined;
+        throw new Error(
+          `VectorStoreResolver returned invalid value: expected MastraVector instance, got ${receivedType}${contextStr}`,
+        );
       }
 
       return resolved;
@@ -94,14 +105,18 @@ export async function resolveVectorStore(
       const receivedType =
         vectorStoreOption === null ? 'null' : vectorStoreOption === undefined ? 'undefined' : typeof vectorStoreOption;
 
-      console.error(`vectorStore option is not a valid MastraVector instance: got ${receivedType}${contextStr}`);
-
-      // Fall back to mastra.getVector if available
-      if (mastra && vectorStoreName) {
-        return mastra.getVector(vectorStoreName);
+      if (fallbackOnInvalid) {
+        console.warn(
+          `vectorStore option is not a valid MastraVector instance: got ${receivedType}${contextStr}. Falling back to mastra.getVector("${vectorStoreName}").`,
+        );
+        // Fall back to mastra.getVector if available
+        if (mastra && vectorStoreName) {
+          return mastra.getVector(vectorStoreName);
+        }
+        return undefined;
       }
 
-      return undefined;
+      throw new Error(`vectorStore option is not a valid MastraVector instance: got ${receivedType}${contextStr}`);
     }
 
     return vectorStoreOption;
