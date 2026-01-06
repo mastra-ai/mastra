@@ -439,9 +439,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
    * Convert Express-style path to regex for matching
    */
   private pathToRegex(path: string): RegExp {
-    const regexPath = path
-      .replace(/:[^/]+/g, '([^/]+)') // Replace :param with capture group
-      .replace(/\//g, '\\/'); // Escape forward slashes
+    // First replace :param with a placeholder that won't be affected by escaping
+    const PARAM_PLACEHOLDER = '\x00PARAM\x00';
+    const pathWithPlaceholders = path.replace(/:[^/]+/g, PARAM_PLACEHOLDER);
+
+    // Escape all regex meta-characters so the path is treated literally
+    const escapedPath = pathWithPlaceholders.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Replace placeholders with capture groups and escape forward slashes
+    const regexPath = escapedPath.replace(new RegExp(PARAM_PLACEHOLDER, 'g'), '([^/]+)').replace(/\//g, '\\/');
+
     return new RegExp(`^${regexPath}$`);
   }
 
