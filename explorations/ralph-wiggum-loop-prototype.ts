@@ -153,8 +153,7 @@ export function outputContains(pattern: string | RegExp): CompletionChecker {
   let lastOutput = '';
   return {
     async check() {
-      const matches =
-        typeof pattern === 'string' ? lastOutput.includes(pattern) : pattern.test(lastOutput);
+      const matches = typeof pattern === 'string' ? lastOutput.includes(pattern) : pattern.test(lastOutput);
 
       return {
         success: matches,
@@ -174,12 +173,12 @@ export function outputContains(pattern: string | RegExp): CompletionChecker {
 export function allCheckersPassing(...checkers: CompletionChecker[]): CompletionChecker {
   return {
     async check() {
-      const results = await Promise.all(checkers.map((c) => c.check()));
-      const allPassed = results.every((r) => r.success);
+      const results = await Promise.all(checkers.map(c => c.check()));
+      const allPassed = results.every(r => r.success);
 
       return {
         success: allPassed,
-        message: results.map((r) => r.message).join('; '),
+        message: results.map(r => r.message).join('; '),
         data: { results },
       };
     },
@@ -206,7 +205,7 @@ export function createAutonomousLoopWorkflow(agent: Agent, mastra?: Mastra) {
         success: z.boolean(),
         output: z.string(),
         error: z.string().optional(),
-      })
+      }),
     ),
     isComplete: z.boolean(),
     completionMessage: z.string().optional(),
@@ -227,12 +226,12 @@ export function createAutonomousLoopWorkflow(agent: Agent, mastra?: Mastra) {
         const historyContext = inputData.previousResults
           .slice(-5) // Last 5 iterations
           .map(
-            (r) => `
+            r => `
 ## Iteration ${r.iteration}
 Result: ${r.success ? 'PARTIAL SUCCESS' : 'NEEDS MORE WORK'}
 Output: ${r.output.slice(0, 500)}${r.output.length > 500 ? '...' : ''}
 ${r.error ? `Error: ${r.error}` : ''}
-`
+`,
           )
           .join('\n');
 
@@ -278,7 +277,7 @@ Focus on making incremental progress toward the completion criteria.
 export async function executeAutonomousLoop(
   agent: Agent,
   config: AutonomousLoopConfig,
-  mastra?: Mastra
+  mastra?: Mastra,
 ): Promise<AutonomousLoopResult> {
   const iterations: IterationResult[] = [];
   let totalTokens = 0;
@@ -293,7 +292,7 @@ export async function executeAutonomousLoop(
     await config.onIterationStart?.(i + 1);
 
     // Build context from previous iterations
-    const previousResults = iterations.slice(-contextWindow).map((r) => ({
+    const previousResults = iterations.slice(-contextWindow).map(r => ({
       iteration: r.iteration,
       success: r.success,
       output: r.agentOutput,
@@ -304,12 +303,12 @@ export async function executeAutonomousLoop(
     if (previousResults.length > 0) {
       const historyContext = previousResults
         .map(
-          (r) => `
+          r => `
 ## Iteration ${r.iteration}
 Status: ${r.success ? 'PARTIAL PROGRESS' : 'NEEDS WORK'}
 Output: ${r.output.slice(0, 1000)}${r.output.length > 1000 ? '...' : ''}
 ${r.error ? `Error: ${r.error}` : ''}
-`
+`,
         )
         .join('\n');
 
@@ -379,7 +378,7 @@ Make incremental progress toward completion.
 
       // Delay before next iteration
       if (config.iterationDelay && i < config.maxIterations - 1) {
-        await new Promise((resolve) => setTimeout(resolve, config.iterationDelay));
+        await new Promise(resolve => setTimeout(resolve, config.iterationDelay));
       }
     } catch (error: any) {
       const iterationResult: IterationResult = {

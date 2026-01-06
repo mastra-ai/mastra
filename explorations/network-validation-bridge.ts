@@ -1,9 +1,9 @@
 /**
  * Network Validation Bridge
- * 
+ *
  * This module shows how to add Ralph Wiggum-style programmatic validation
  * to Mastra's existing Agent Network loop.
- * 
+ *
  * The key insight: Agent Network's LLM-based completion assessment and
  * Ralph Wiggum's programmatic validation are complementary. This bridge
  * combines both for more reliable autonomous execution.
@@ -40,7 +40,7 @@ export interface NetworkValidationConfig {
    * Array of validation checks to run
    */
   checks: ValidationCheck[];
-  
+
   /**
    * How to combine check results:
    * - 'all': All checks must pass
@@ -48,7 +48,7 @@ export interface NetworkValidationConfig {
    * - 'weighted': Use weights (future)
    */
   strategy: 'all' | 'any';
-  
+
   /**
    * How validation interacts with LLM completion assessment:
    * - 'verify': LLM says complete AND validation passes
@@ -56,12 +56,12 @@ export interface NetworkValidationConfig {
    * - 'llm-fallback': Try validation first, use LLM if no checks configured
    */
   mode: 'verify' | 'override' | 'llm-fallback';
-  
+
   /**
    * Maximum time for all validation checks (ms)
    */
   timeout?: number;
-  
+
   /**
    * Run validation in parallel or sequentially
    */
@@ -73,22 +73,22 @@ export interface ValidatedNetworkOptions {
    * Maximum iterations before stopping
    */
   maxIterations: number;
-  
+
   /**
    * Validation configuration
    */
   validation?: NetworkValidationConfig;
-  
+
   /**
    * Called after each iteration with validation results
    */
   onIteration?: (result: IterationStatus) => void | Promise<void>;
-  
+
   /**
    * Thread ID for memory
    */
   threadId?: string;
-  
+
   /**
    * Resource ID for memory
    */
@@ -136,8 +136,8 @@ export function testsPass(command = 'npm test', options?: { timeout?: number; cw
         return {
           success: false,
           message: `Tests failed: ${error.message}`,
-          details: { 
-            stdout: error.stdout?.slice(-1000), 
+          details: {
+            stdout: error.stdout?.slice(-1000),
             stderr: error.stderr?.slice(-1000),
             exitCode: error.code,
           },
@@ -151,7 +151,10 @@ export function testsPass(command = 'npm test', options?: { timeout?: number; cw
 /**
  * Check if build succeeds
  */
-export function buildSucceeds(command = 'npm run build', options?: { timeout?: number; cwd?: string }): ValidationCheck {
+export function buildSucceeds(
+  command = 'npm run build',
+  options?: { timeout?: number; cwd?: string },
+): ValidationCheck {
   return {
     id: 'build-succeeds',
     name: 'Build Succeeds',
@@ -172,8 +175,8 @@ export function buildSucceeds(command = 'npm run build', options?: { timeout?: n
         return {
           success: false,
           message: `Build failed: ${error.message}`,
-          details: { 
-            stdout: error.stdout?.slice(-1000), 
+          details: {
+            stdout: error.stdout?.slice(-1000),
             stderr: error.stderr?.slice(-1000),
           },
           duration: Date.now() - start,
@@ -207,8 +210,8 @@ export function lintPasses(command = 'npm run lint', options?: { timeout?: numbe
         return {
           success: false,
           message: `Lint errors found: ${error.message}`,
-          details: { 
-            stdout: error.stdout?.slice(-1000), 
+          details: {
+            stdout: error.stdout?.slice(-1000),
             stderr: error.stderr?.slice(-1000),
           },
           duration: Date.now() - start,
@@ -221,7 +224,10 @@ export function lintPasses(command = 'npm run lint', options?: { timeout?: numbe
 /**
  * Check if TypeScript compiles without errors
  */
-export function typeChecks(command = 'npx tsc --noEmit', options?: { timeout?: number; cwd?: string }): ValidationCheck {
+export function typeChecks(
+  command = 'npx tsc --noEmit',
+  options?: { timeout?: number; cwd?: string },
+): ValidationCheck {
   return {
     id: 'type-checks',
     name: 'TypeScript Compiles',
@@ -242,8 +248,8 @@ export function typeChecks(command = 'npx tsc --noEmit', options?: { timeout?: n
         return {
           success: false,
           message: `Type errors found`,
-          details: { 
-            stdout: error.stdout?.slice(-2000), 
+          details: {
+            stdout: error.stdout?.slice(-2000),
             stderr: error.stderr?.slice(-1000),
           },
           duration: Date.now() - start,
@@ -259,7 +265,7 @@ export function typeChecks(command = 'npx tsc --noEmit', options?: { timeout?: n
 export function customCheck(
   id: string,
   name: string,
-  fn: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>
+  fn: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>,
 ): ValidationCheck {
   return {
     id,
@@ -312,13 +318,11 @@ export function fileContains(path: string, pattern: string | RegExp): Validation
       try {
         const fs = await import('fs/promises');
         const content = await fs.readFile(path, 'utf-8');
-        const matches = typeof pattern === 'string' 
-          ? content.includes(pattern)
-          : pattern.test(content);
-        
+        const matches = typeof pattern === 'string' ? content.includes(pattern) : pattern.test(content);
+
         return {
           success: matches,
-          message: matches 
+          message: matches
             ? `File ${path} contains expected pattern`
             : `File ${path} does not contain expected pattern`,
           duration: Date.now() - start,
@@ -339,22 +343,20 @@ export function fileContains(path: string, pattern: string | RegExp): Validation
 // ============================================================================
 
 async function runValidation(
-  config: NetworkValidationConfig
+  config: NetworkValidationConfig,
 ): Promise<{ passed: boolean; results: ValidationResult[] }> {
   const results: ValidationResult[] = [];
-  
+
   if (config.parallel) {
     // Run all checks in parallel
-    const checkResults = await Promise.all(
-      config.checks.map(check => check.check())
-    );
+    const checkResults = await Promise.all(config.checks.map(check => check.check()));
     results.push(...checkResults);
   } else {
     // Run checks sequentially (can short-circuit on failure for 'all' strategy)
     for (const check of config.checks) {
       const result = await check.check();
       results.push(result);
-      
+
       // Short-circuit for 'all' strategy if a check fails
       if (config.strategy === 'all' && !result.success) {
         break;
@@ -365,11 +367,9 @@ async function runValidation(
       }
     }
   }
-  
-  const passed = config.strategy === 'all'
-    ? results.every(r => r.success)
-    : results.some(r => r.success);
-  
+
+  const passed = config.strategy === 'all' ? results.every(r => r.success) : results.some(r => r.success);
+
   return { passed, results };
 }
 
@@ -385,7 +385,8 @@ export function createValidationTools() {
   return {
     runTests: createTool({
       id: 'run-tests',
-      description: 'Run the project test suite to verify changes work correctly. Call this after making code changes to ensure tests pass.',
+      description:
+        'Run the project test suite to verify changes work correctly. Call this after making code changes to ensure tests pass.',
       inputSchema: z.object({
         command: z.string().default('npm test').describe('The test command to run'),
         timeout: z.number().default(300000).describe('Timeout in milliseconds'),
@@ -395,7 +396,7 @@ export function createValidationTools() {
         return check.check();
       },
     }),
-    
+
     runBuild: createTool({
       id: 'run-build',
       description: 'Build the project to verify there are no compilation errors. Call this after making code changes.',
@@ -408,7 +409,7 @@ export function createValidationTools() {
         return check.check();
       },
     }),
-    
+
     runLint: createTool({
       id: 'run-lint',
       description: 'Run linting to check for code style issues. Call this after making code changes.',
@@ -421,7 +422,7 @@ export function createValidationTools() {
         return check.check();
       },
     }),
-    
+
     checkTypes: createTool({
       id: 'check-types',
       description: 'Run TypeScript type checking. Call this after making code changes to ensure type safety.',
@@ -434,7 +435,7 @@ export function createValidationTools() {
         return check.check();
       },
     }),
-    
+
     runCommand: createTool({
       id: 'run-command',
       description: 'Execute an arbitrary shell command and return the result. Useful for custom validation.',
@@ -472,28 +473,28 @@ export function createValidationTools() {
 
 /**
  * Wraps an agent's network method with validation support.
- * 
+ *
  * This is a bridge implementation that adds Ralph Wiggum-style validation
  * to the existing Agent Network loop.
  */
 export async function networkWithValidation(
   agent: Agent,
   messages: MessageListInput,
-  options: ValidatedNetworkOptions
+  options: ValidatedNetworkOptions,
 ) {
   const { maxIterations, validation, onIteration, ...networkOptions } = options;
-  
+
   let iteration = 0;
   let isComplete = false;
   let lastResult: any = null;
-  
+
   // Track validation feedback to pass to next iteration
   let validationFeedback: string | null = null;
-  
+
   while (!isComplete && iteration < maxIterations) {
     iteration++;
     const iterationStart = Date.now();
-    
+
     // Prepare messages with validation feedback from previous iteration
     let iterationMessages = messages;
     if (validationFeedback && iteration > 1) {
@@ -505,17 +506,14 @@ ${validationFeedback}
 
 Please address these issues and continue working on the task.
 `;
-      
+
       if (typeof iterationMessages === 'string') {
         iterationMessages = iterationMessages + '\n\n' + feedbackMessage;
       } else if (Array.isArray(iterationMessages)) {
-        iterationMessages = [
-          ...iterationMessages,
-          { role: 'user' as const, content: feedbackMessage }
-        ];
+        iterationMessages = [...iterationMessages, { role: 'user' as const, content: feedbackMessage }];
       }
     }
-    
+
     // Run the network iteration
     // Note: In a real implementation, we'd hook into the network loop internals
     // For now, we simulate by calling network and checking completion
@@ -523,7 +521,7 @@ Please address these issues and continue working on the task.
       maxIterations: 1, // One network iteration at a time
       ...networkOptions,
     });
-    
+
     // Consume the stream to get the result
     let networkOutput = '';
     for await (const chunk of networkResult.fullStream) {
@@ -531,21 +529,21 @@ Please address these issues and continue working on the task.
         networkOutput += chunk.payload?.text || '';
       }
     }
-    
+
     // Check if LLM thinks it's complete
     // (In real implementation, we'd get this from the network result)
     const llmSaysComplete = networkOutput.includes('complete') || iteration >= maxIterations;
-    
+
     // Run validation if configured and LLM says complete (or in override mode)
     let validationPassed: boolean | null = null;
     let validationResults: ValidationResult[] = [];
-    
+
     if (validation) {
       if (validation.mode === 'override' || (validation.mode === 'verify' && llmSaysComplete)) {
         const validationRun = await runValidation(validation);
         validationPassed = validationRun.passed;
         validationResults = validationRun.results;
-        
+
         // Build feedback for next iteration if validation failed
         if (!validationPassed) {
           validationFeedback = validationResults
@@ -557,12 +555,12 @@ Please address these issues and continue working on the task.
         }
       }
     }
-    
+
     // Determine if truly complete based on mode
     if (validation) {
       switch (validation.mode) {
         case 'verify':
-          isComplete = llmSaysComplete && (validationPassed === true);
+          isComplete = llmSaysComplete && validationPassed === true;
           break;
         case 'override':
           isComplete = validationPassed === true;
@@ -574,7 +572,7 @@ Please address these issues and continue working on the task.
     } else {
       isComplete = llmSaysComplete;
     }
-    
+
     // Report iteration status
     const status: IterationStatus = {
       iteration,
@@ -585,11 +583,11 @@ Please address these issues and continue working on the task.
       primitive: { type: 'agent', id: agent.id }, // Simplified
       duration: Date.now() - iterationStart,
     };
-    
+
     await onIteration?.(status);
     lastResult = { networkOutput, status };
   }
-  
+
   return {
     success: isComplete,
     iterations: iteration,

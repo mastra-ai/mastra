@@ -2,15 +2,15 @@
 
 ## Side-by-Side Comparison
 
-| Aspect | Agent Network | Ralph Wiggum |
-|--------|---------------|--------------|
-| **Purpose** | Multi-agent orchestration with dynamic routing | Single agent autonomous iteration |
-| **Completion Check** | LLM-based ("evaluate if task is complete") | Programmatic (tests pass, build succeeds) |
-| **Primitive Selection** | LLM decides (agent, workflow, or tool) | Same agent handles everything |
-| **Context Strategy** | Full conversation history in memory | Sliding window of iteration results |
-| **Routing** | Dynamic per-iteration | Fixed (single agent) |
-| **Validation** | Self-assessment | External verification |
-| **Best For** | Reasoning tasks, coordination | Mechanical tasks, verifiable outcomes |
+| Aspect                  | Agent Network                                  | Ralph Wiggum                              |
+| ----------------------- | ---------------------------------------------- | ----------------------------------------- |
+| **Purpose**             | Multi-agent orchestration with dynamic routing | Single agent autonomous iteration         |
+| **Completion Check**    | LLM-based ("evaluate if task is complete")     | Programmatic (tests pass, build succeeds) |
+| **Primitive Selection** | LLM decides (agent, workflow, or tool)         | Same agent handles everything             |
+| **Context Strategy**    | Full conversation history in memory            | Sliding window of iteration results       |
+| **Routing**             | Dynamic per-iteration                          | Fixed (single agent)                      |
+| **Validation**          | Self-assessment                                | External verification                     |
+| **Best For**            | Reasoning tasks, coordination                  | Mechanical tasks, verifiable outcomes     |
 
 ---
 
@@ -61,6 +61,7 @@
 ### Key Code Points
 
 **Completion Schema** (LLM evaluates):
+
 ```typescript
 const completionSchema = z.object({
   isComplete: z.boolean(),
@@ -70,6 +71,7 @@ const completionSchema = z.object({
 ```
 
 **Completion Prompt**:
+
 ```typescript
 const completionPrompt = `
   The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
@@ -82,6 +84,7 @@ const completionPrompt = `
 ```
 
 **Loop Structure**:
+
 ```typescript
 mainWorkflow
   .dountil(networkWorkflow, async ({ inputData }) => {
@@ -144,6 +147,7 @@ mainWorkflow
 ## The Gap: Why Both Are Needed
 
 ### Agent Network Weakness
+
 The Agent Network relies on **LLM self-assessment** for completion:
 
 ```typescript
@@ -157,6 +161,7 @@ if (completionResult?.object?.isComplete) {
 **Problem**: The LLM might think the task is complete when it isn't. There's no external validation that the changes actually work.
 
 ### Ralph Wiggum Weakness
+
 Ralph Wiggum is **single-agent** only:
 
 ```bash
@@ -183,22 +188,18 @@ The key insight: **These patterns are complementary, not competing.**
 // Option 1: Add validation to networkLoop
 const result = await agent.network(messages, {
   maxIterations: 50,
-  
+
   // NEW: External validation before accepting LLM's "isComplete"
   validation: {
     // Run programmatic checks
-    checks: [
-      testsPassing('npm test'),
-      buildSucceeds('npm run build'),
-      lintClean('npm run lint'),
-    ],
-    
+    checks: [testsPassing('npm test'), buildSucceeds('npm run build'), lintClean('npm run lint')],
+
     // Strategy: 'all' = all checks must pass, 'any' = any check passes
     strategy: 'all',
-    
+
     // Override LLM completion assessment
     // 'verify' = LLM says complete AND checks pass
-    // 'override' = Only checks matter, ignore LLM assessment  
+    // 'override' = Only checks matter, ignore LLM assessment
     // 'llm-only' = Current behavior (default)
     mode: 'verify',
   },
@@ -226,7 +227,7 @@ const agent = new Agent({
       inputSchema: z.object({ testCommand: z.string().optional() }),
       execute: async ({ testCommand }) => {
         const result = await execAsync(testCommand || 'npm test');
-        return { 
+        return {
           success: result.exitCode === 0,
           output: result.stdout,
           error: result.stderr,
@@ -239,7 +240,7 @@ const agent = new Agent({
       inputSchema: z.object({ buildCommand: z.string().optional() }),
       execute: async ({ buildCommand }) => {
         const result = await execAsync(buildCommand || 'npm run build');
-        return { 
+        return {
           success: result.exitCode === 0,
           output: result.stdout,
         };
@@ -250,11 +251,13 @@ const agent = new Agent({
 ```
 
 **Pros**:
+
 - No API changes needed
 - Routing agent learns when to validate
 - More flexible - agent decides validation strategy
 
 **Cons**:
+
 - Agent might skip validation
 - Less deterministic
 
@@ -269,23 +272,22 @@ const completionStep = createStep({
   execute: async ({ inputData, getInitData }) => {
     const initData = await getInitData();
     const validationConfig = initData.validation;
-    
+
     // Step 1: Run LLM completion assessment (existing behavior)
     const llmAssessment = await routingAgent.stream(completionPrompt, {
       structuredOutput: { schema: completionSchema },
     });
     const llmResult = await llmAssessment.getFullOutput();
-    
+
     // Step 2: If validation configured, run programmatic checks
     if (validationConfig && llmResult?.object?.isComplete) {
-      const validationResults = await Promise.all(
-        validationConfig.checks.map(check => check())
-      );
-      
-      const allPassed = validationConfig.strategy === 'all'
-        ? validationResults.every(r => r.success)
-        : validationResults.some(r => r.success);
-      
+      const validationResults = await Promise.all(validationConfig.checks.map(check => check()));
+
+      const allPassed =
+        validationConfig.strategy === 'all'
+          ? validationResults.every(r => r.success)
+          : validationResults.some(r => r.success);
+
       if (!allPassed) {
         // LLM thinks complete, but validation failed
         // Feed validation errors back into the loop
@@ -299,7 +301,7 @@ const completionStep = createStep({
         };
       }
     }
-    
+
     // Both LLM and validation agree: task is complete
     return {
       isComplete: llmResult?.object?.isComplete,
@@ -328,7 +330,7 @@ export const validationTools = {
       cwd: z.string().optional(),
       timeout: z.number().optional(),
     }),
-    execute: async (input) => {
+    execute: async input => {
       const result = await execAsync(input.command, {
         cwd: input.cwd,
         timeout: input.timeout || 60000,
@@ -341,7 +343,7 @@ export const validationTools = {
       };
     },
   }),
-  
+
   runTests: createTool({
     id: 'run-tests',
     description: 'Run project tests and verify they pass',
@@ -352,9 +354,9 @@ export const validationTools = {
       // Implementation
     },
   }),
-  
+
   verifyBuild: createTool({
-    id: 'verify-build', 
+    id: 'verify-build',
     description: 'Build the project and verify no errors',
     inputSchema: z.object({
       buildCommand: z.string().default('npm run build'),
@@ -396,13 +398,13 @@ Add a dedicated method that combines the best of both:
 // Combines Network routing + Ralph Wiggum validation
 const result = await agent.autonomousNetwork({
   prompt: 'Migrate all tests from Jest to Vitest',
-  
+
   // Use specialized agents for different aspects
   agents: {
     coder: codingAgent,
     tester: testingAgent,
   },
-  
+
   // Programmatic completion validation
   completion: {
     check: async () => {
@@ -414,13 +416,13 @@ const result = await agent.autonomousNetwork({
       };
     },
   },
-  
+
   // Safety limits
   maxIterations: 50,
   maxTokens: 500_000,
-  
+
   // Progress tracking
-  onIteration: (ctx) => {
+  onIteration: ctx => {
     console.log(`Iteration ${ctx.iteration}: ${ctx.success ? '✅' : '❌'}`);
   },
 });
@@ -483,6 +485,7 @@ const result = await agent.autonomousNetwork({
 ```
 
 **The unified approach:**
+
 1. **Routes** tasks to the best primitive (from Agent Network)
 2. **Validates** results programmatically (from Ralph Wiggum)
 3. **Iterates** until both LLM and validation agree task is complete

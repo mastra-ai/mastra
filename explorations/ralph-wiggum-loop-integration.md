@@ -21,7 +21,8 @@ The Ralph Wiggum loop is an autonomous agent execution pattern where an AI agent
 Completion checks are just **MastraScorers** that return 0 (not complete) or 1 (complete).
 
 This unifies:
-- **Evals** (offline testing) 
+
+- **Evals** (offline testing)
 - **Completion** (runtime loop control)
 
 Same primitive, different contexts.
@@ -53,7 +54,7 @@ const agent = new Agent({
   model: openai('gpt-4o'),
   memory: new Memory(),
   agents: { coder: codingAgent },
-  
+
   // Default network options
   defaultNetworkOptions: {
     maxSteps: 20,
@@ -83,12 +84,13 @@ Scorers are created using `createScorer` from the evals module. For completion, 
 ### Code-based Scorer
 
 Scorers receive a `run` object with:
+
 - `run.input` - `CompletionContext` with all network state
 - `run.output` - The primitive's result (what we're evaluating)
 - `run.runId` - The network run ID
 - `run.requestContext` - Custom context from the request
 
-```typescript
+````typescript
 import { createScorer } from '@mastra/core/evals';
 
 // Simple scorer - run tests
@@ -111,17 +113,15 @@ const progressScorer = createScorer({
 }).generateScore(async ({ run }) => {
   // run.input is CompletionContext
   const ctx = run.input;
-  
+
   console.log(`Iteration: ${ctx.iteration}`);
   console.log(`Task: ${ctx.originalTask}`);
   console.log(`Primitive: ${ctx.selectedPrimitive.id}`);
   console.log(`Result: ${run.output}`); // Same as ctx.primitiveResult
-  
+
   // Access messages history
-  const hasCodeOutput = ctx.messages.some(m => 
-    m.content?.includes?.('```')
-  );
-  
+  const hasCodeOutput = ctx.messages.some(m => m.content?.includes?.('```'));
+
   return hasCodeOutput ? 1 : 0;
 });
 
@@ -134,7 +134,7 @@ const envScorer = createScorer({
   // Stricter checks in prod
   return isProd ? runStrictChecks() : 1;
 });
-```
+````
 
 ### LLM-based Scorer
 
@@ -154,9 +154,9 @@ const taskCompleteScorer = createScorer({
     const ctx = run.input; // CompletionContext
     return `
       Original task: ${ctx.originalTask}
-      
+
       Latest result: ${ctx.primitiveResult}
-      
+
       Is this task complete? Return 1 if yes, 0 if no.
     `;
   },
@@ -176,16 +176,16 @@ completion: {
 interface CompletionConfig {
   // Scorers to run (return 0 or 1)
   scorers?: MastraScorer[];
-  
+
   // 'all' = all must pass, 'any' = one must pass
   strategy?: 'all' | 'any';
-  
+
   // Timeout for all scorers (ms)
   timeout?: number;
-  
+
   // Run scorers in parallel
   parallel?: boolean;
-  
+
   // Callback after scoring
   onComplete?: (result: CompletionRunResult) => void;
 }
@@ -199,10 +199,10 @@ interface CompletionConfig {
 
 They do NOT generate the final result. The final result is the primitive's output.
 
-| Config | What Runs |
-|--------|-----------|
-| No `completion.scorers` | Default LLM check |
-| `completion.scorers: [...]` | Your scorers |
+| Config                      | What Runs         |
+| --------------------------- | ----------------- |
+| No `completion.scorers`     | Default LLM check |
+| `completion.scorers: [...]` | Your scorers      |
 
 ### What Checks Return
 
@@ -264,9 +264,9 @@ await agent.network('Migrate to Vitest', {
 await agent.network('Build API', {
   completion: {
     scorers: [
-      testsScorer,      // Code-based
-      qualityScorer,    // LLM-based
-      apiScorer,        // Code-based
+      testsScorer, // Code-based
+      qualityScorer, // LLM-based
+      apiScorer, // Code-based
     ],
     strategy: 'all',
   },
