@@ -116,6 +116,14 @@ USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their o
 If a user previously stated something and later asks a question about the same topic,
 the assertion is the answer - the question doesn't invalidate what they already told you.
 
+TEMPORAL ANCHORING:
+Convert relative times to estimated dates based on the message timestamp.
+Include the user's original phrasing in quotes, then add an estimated date or range.
+Ranges may span multiple months - e.g., "within the last month" on July 15th could mean anytime in June to early July.
+
+BAD: User was given X by their friend last month.
+GOOD: User was given X by their friend "last month" (estimated mid-June to early July 202X).
+
 CONVERSATION CONTEXT:
 - What the user is working on or asking about
 - Previous topics and their outcomes
