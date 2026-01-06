@@ -363,7 +363,12 @@ You only need to include fields that have changed - existing data is automatical
           instructions: `You are a helpful AI assistant that remembers everything about the user.
 Update working memory with any information the user shares.
 You only need to include the fields that have new information - existing data is automatically preserved.
-Be thorough in capturing details about people, work, and preferences.`,
+
+IMPORTANT schema guidance:
+- Use "about" for the USER's own info (name, location, timezone, pronouns)
+- Use "people" array ONLY for OTHER people the user mentions (contacts, colleagues)
+- Use "work" for the user's company/job details
+- To delete a field, set it to null in the correct location (e.g., {"about":{"location":null}})`,
           model,
           memory,
         });
@@ -473,10 +478,10 @@ Be thorough in capturing details about people, work, and preferences.`,
       });
 
       it('should remove fields when user asks to forget something (null delete)', async () => {
-        // Turn 1: Set up comprehensive data
+        // Turn 1: Set up comprehensive data - explicitly about the user themselves
         await agentGenerate(
           agent,
-          "I'm Jordan Lee, I work at DataCorp. My email contact is jordan@datacorp.com and I'm in Seattle.",
+          'My name is Jordan Lee and I live in Seattle. I work at DataCorp as a software engineer.',
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -488,10 +493,10 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('datacorp');
         expect(wmRaw!.toLowerCase()).toContain('seattle');
 
-        // Turn 2: Ask to forget location for privacy
+        // Turn 2: Ask to forget location for privacy - explicitly about their own location in "about"
         await agentGenerate(
           agent,
-          'Actually, please forget my location. Remove it from your memory for privacy reasons.',
+          'Actually, please forget my personal location (Seattle) from your memory. Remove it for privacy reasons, but keep my name and work info.',
           { threadId: thread.id, resourceId },
           isV5,
         );
