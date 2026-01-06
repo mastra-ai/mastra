@@ -1034,7 +1034,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   messages,
   validation,
   routing,
-  onIterationComplete: _onIterationComplete,
+  onIterationComplete,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1181,7 +1181,21 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         runId,
       });
 
-      if (completionResult.complete) {
+      // Determine if this iteration completes the task
+      const isComplete = completionResult.complete;
+
+      // Fire the onIterationComplete callback if provided
+      if (onIterationComplete) {
+        await onIterationComplete({
+          iteration: inputData.iteration,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
+          result: inputData.result,
+          isComplete,
+        });
+      }
+
+      if (isComplete) {
         // Task is complete - the result is the primitive's output
         return {
           ...inputData,

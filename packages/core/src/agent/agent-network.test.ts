@@ -1161,4 +1161,80 @@ describe('Agent - network - completion validation', () => {
     expect(validationEnd.payload.results).toHaveLength(1);
     expect(validationEnd.payload.results[0].reason).toBe('Test failed intentionally');
   });
+
+  it('should call onIterationComplete callback after each iteration', async () => {
+    const memory = new MockMemory();
+    const iterationCallbacks: any[] = [];
+
+    // Mock scorer that passes
+    const mockScorer = {
+      id: 'test-scorer',
+      name: 'Test Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Passed' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Task complete',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'callback-test-network',
+      name: 'Callback Test Network',
+      instructions: 'Test network for onIterationComplete',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      onIterationComplete: context => {
+        iterationCallbacks.push(context);
+      },
+      memory: {
+        thread: 'callback-test-thread',
+        resource: 'callback-test-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Verify callback was called
+    expect(iterationCallbacks.length).toBeGreaterThan(0);
+
+    // Verify callback received correct data
+    const lastCallback = iterationCallbacks[iterationCallbacks.length - 1];
+    expect(lastCallback).toMatchObject({
+      iteration: expect.any(Number),
+      primitiveId: expect.any(String),
+      primitiveType: expect.stringMatching(/^(agent|workflow|tool|none)$/),
+      result: expect.any(String),
+      isComplete: true,
+    });
+  });
 });
