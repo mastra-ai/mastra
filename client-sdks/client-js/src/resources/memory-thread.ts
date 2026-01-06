@@ -13,13 +13,25 @@ import type {
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
+/**
+ * MemoryThread resource for interacting with memory threads.
+ *
+ * agentId is optional - when not provided, the server will use storage directly.
+ */
 export class MemoryThread extends BaseResource {
   constructor(
     options: ClientOptions,
     private threadId: string,
-    private agentId: string,
+    private agentId?: string,
   ) {
     super(options);
+  }
+
+  /**
+   * Builds the query string for agentId (if provided)
+   */
+  private getAgentIdQueryParam(prefix: '?' | '&' = '?'): string {
+    return this.agentId ? `${prefix}agentId=${this.agentId}` : '';
   }
 
   /**
@@ -28,9 +40,9 @@ export class MemoryThread extends BaseResource {
    * @returns Promise containing thread details including title and metadata
    */
   get(requestContext?: RequestContext | Record<string, any>): Promise<StorageThreadType> {
-    return this.request(
-      `/api/memory/threads/${this.threadId}?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
-    );
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/api/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
   }
 
   /**
@@ -39,13 +51,12 @@ export class MemoryThread extends BaseResource {
    * @returns Promise containing updated thread details
    */
   update(params: UpdateMemoryThreadParams): Promise<StorageThreadType> {
-    return this.request(
-      `/api/memory/threads/${this.threadId}?agentId=${this.agentId}${requestContextQueryString(params.requestContext, '&')}`,
-      {
-        method: 'PATCH',
-        body: params,
-      },
-    );
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(params.requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/api/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
+      method: 'PATCH',
+      body: params,
+    });
   }
 
   /**
@@ -54,12 +65,11 @@ export class MemoryThread extends BaseResource {
    * @returns Promise containing deletion result
    */
   delete(requestContext?: RequestContext | Record<string, any>): Promise<{ result: string }> {
-    return this.request(
-      `/api/memory/threads/${this.threadId}?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
-      {
-        method: 'DELETE',
-      },
-    );
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/api/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
@@ -75,6 +85,7 @@ export class MemoryThread extends BaseResource {
     const { page, perPage, orderBy, filter, include, resourceId, requestContext } = params;
     const queryParams: Record<string, string> = {};
 
+    if (this.agentId) queryParams.agentId = this.agentId;
     if (resourceId) queryParams.resourceId = resourceId;
     if (page !== undefined) queryParams.page = String(page);
     if (perPage !== undefined) queryParams.perPage = String(perPage);
@@ -84,7 +95,7 @@ export class MemoryThread extends BaseResource {
 
     const query = new URLSearchParams(queryParams);
     const queryString = query.toString();
-    const url = `/api/memory/threads/${this.threadId}/messages?agentId=${this.agentId}${queryString ? `&${queryString}` : ''}${requestContextQueryString(requestContext, '&')}`;
+    const url = `/api/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
     return this.request(url);
   }
 
@@ -99,11 +110,13 @@ export class MemoryThread extends BaseResource {
     messageIds: string | string[] | { id: string } | { id: string }[],
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<{ success: boolean; message: string }> {
-    const query = new URLSearchParams({
-      agentId: this.agentId,
-    });
+    const queryParams: Record<string, string> = {};
+    if (this.agentId) queryParams.agentId = this.agentId;
+
+    const query = new URLSearchParams(queryParams);
+    const queryString = query.toString();
     return this.request(
-      `/api/memory/messages/delete?${query.toString()}${requestContextQueryString(requestContext, '&')}`,
+      `/api/memory/messages/delete${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`,
       {
         method: 'POST',
         body: { messageIds },
@@ -118,12 +131,11 @@ export class MemoryThread extends BaseResource {
    */
   clone(params: CloneMemoryThreadParams = {}): Promise<CloneMemoryThreadResponse> {
     const { requestContext, ...body } = params;
-    return this.request(
-      `/api/memory/threads/${this.threadId}/clone?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
-      {
-        method: 'POST',
-        body,
-      },
-    );
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/api/memory/threads/${this.threadId}/clone${agentIdParam}${contextParam}`, {
+      method: 'POST',
+      body,
+    });
   }
 }
