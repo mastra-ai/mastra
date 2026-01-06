@@ -35,8 +35,7 @@ function isEmptyZodObject(schema: unknown): boolean {
   return false;
 }
 
-// Internal component that uses hooks - only called when schema is valid
-function DynamicFormInternal<T extends z.ZodSchema>({
+export function DynamicForm<T extends z.ZodSchema>({
   schema,
   onSubmit,
   onChange,
@@ -47,7 +46,7 @@ function DynamicFormInternal<T extends z.ZodSchema>({
   readOnly,
   hideSubmitButton,
   children,
-}: DynamicFormProps<T> & { schema: NonNullable<DynamicFormProps<T>['schema']> }) {
+}: DynamicFormProps<T>) {
   const isNotZodObject = !(schema instanceof ZodObject);
 
   // Use refs to store callbacks so they don't cause re-renders
@@ -103,6 +102,11 @@ function DynamicFormInternal<T extends z.ZodSchema>({
     return isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any);
   }, [isNotZodObject, defaultValues]);
 
+  if (!schema) {
+    console.error('no form schema found');
+    return null;
+  }
+
   const formProps: ExtendableAutoFormProps<any> = {
     schema: schemaProvider,
     onSubmit: handleSubmit,
@@ -134,16 +138,4 @@ function DynamicFormInternal<T extends z.ZodSchema>({
   };
 
   return <AutoForm {...formProps} readOnly={readOnly} />;
-}
-
-// Wrapper component that handles early returns before hooks
-export function DynamicForm<T extends z.ZodSchema>(props: DynamicFormProps<T>) {
-  // Early return happens here, before any hooks are called
-  if (!props.schema) {
-    console.error('no form schema found');
-    return null;
-  }
-
-  // Now that we've validated schema exists, pass to internal component with hooks
-  return <DynamicFormInternal {...props} schema={props.schema} />;
 }
