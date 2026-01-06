@@ -372,6 +372,8 @@ export async function runDefaultCompletionCheck(agent: Agent, context: Completio
     You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions.
     Original task: ${context.originalTask}
 
+    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.
+
     You must return this JSON shape:
     {
       "isComplete": boolean,
