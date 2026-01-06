@@ -493,7 +493,13 @@ Be specific rather than generic when the user has expressed clear preferences in
 
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
-    let response = await agent.generate(meta.question, {
+    const today = `Todays date is ${new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(meta.questionDate || Date.now()))}`;
+    let response = await agent.generate(meta.question + `\n${today}`, {
       threadId: evalThreadId,
       resourceId: meta.resourceId,
       modelSettings: {
@@ -503,12 +509,7 @@ Be specific rather than generic when the user has expressed clear preferences in
         ? [
             {
               role: 'system',
-              content: `Todays date is ${new Intl.DateTimeFormat('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              }).format(new Date(meta.questionDate))}`,
+              content: today,
             },
           ]
         : undefined,
