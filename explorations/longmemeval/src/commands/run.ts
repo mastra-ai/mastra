@@ -499,7 +499,19 @@ Be specific rather than generic when the user has expressed clear preferences in
       modelSettings: {
         temperature: 0,
       },
-      context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
+      context: meta.questionDate
+        ? [
+            {
+              role: 'system',
+              content: `Todays date is ${new Intl.DateTimeFormat('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              }).format(new Date(meta.questionDate))}`,
+            },
+          ]
+        : undefined,
     });
 
     console.log(
