@@ -1,6 +1,9 @@
 ---
 title: "Text-to-Speech (TTS) | Voice"
 description: Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai"
 ---
 
 # Text-to-Speech (TTS)
@@ -62,7 +65,6 @@ The primary method for TTS is the `speak()` method, which converts text to speec
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 const voice = new OpenAIVoice();
@@ -72,7 +74,7 @@ const agent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice,
 });
 

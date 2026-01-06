@@ -1,6 +1,11 @@
 ---
 title: "Reference: MongoDB Vector Store | Vectors"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
 ---
 
 # MongoDB Vector Store
@@ -9,13 +14,13 @@ The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Sea
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/mongodb@beta
 ```
 
 ## Usage Example
 
-```typescript copy showLineNumbers
+```typescript
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
@@ -180,7 +185,7 @@ Returns information about the index (collection).
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -210,7 +215,7 @@ Returns: `Promise<string[]>`
 
 ### updateVector()
 
-Updates a specific vector entry by its ID with new vector data and/or metadata.
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
@@ -222,7 +227,14 @@ Updates a specific vector entry by its ID with new vector data and/or metadata.
     {
       name: "id",
       type: "string",
-      description: "ID of the vector entry to update",
+      isOptional: true,
+      description: "ID of the vector entry to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
     },
     {
       name: "update",
@@ -263,6 +275,32 @@ Deletes a specific vector entry from an index by its ID.
   ]}
 />
 
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
 ### disconnect()
 
 Closes the MongoDB client connection. Should be called when done using the store.
@@ -271,7 +309,7 @@ Closes the MongoDB client connection. Should be called when done using the store
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -284,7 +322,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my_collection",
@@ -309,6 +347,59 @@ try {
 - Index metadata fields used in filters for optimal query performance.
 - Use consistent field naming in metadata to avoid unexpected query results.
 - Regularly monitor index and collection statistics to ensure efficient search.
+
+## Usage Example
+
+### Vector embeddings with MongoDB
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
+To use this, install `@mastra/fastembed`:
+
+```bash 
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
+});
+```
 
 ## Related
 

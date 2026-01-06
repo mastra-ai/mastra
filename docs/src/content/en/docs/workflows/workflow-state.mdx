@@ -1,0 +1,189 @@
+---
+title: "Workflow state | Workflows"
+description: "Share values across workflow steps using global state that persists through the entire workflow run."
+packages:
+  - "@mastra/core"
+---
+
+# Workflow State
+
+Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. This is useful for tracking progress, accumulating results, or sharing configuration across the entire workflow.
+
+## State vs step input/output
+
+It's important to understand the difference between **state** and **step input/output**:
+
+- **Step input/output**: Data flows sequentially between steps. Each step receives the previous step's output as its `inputData`, and returns an output for the next step.
+- **State**: A shared store that all steps can read and update via `state` and `setState`. State persists across the entire workflow run, including suspend/resume cycles.
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ workflowInput: z.string() }),
+  outputSchema: z.object({ step1Output: z.string() }),
+  stateSchema: z.object({ sharedCounter: z.number() }),
+  execute: async ({ inputData, state, setState }) => {
+    // inputData comes from workflow input or previous step's output
+    console.log(inputData.workflowInput);
+
+    // state is the shared workflow state
+    console.log(state.sharedCounter);
+
+    // Update state for subsequent steps
+    await setState({ sharedCounter: state.sharedCounter + 1 });
+
+    // Return output that flows to next step's inputData
+    return { step1Output: "processed" };
+  },
+});
+```
+
+## Defining state schemas
+
+Define a `stateSchema` on both the workflow and individual steps. The workflow's stateSchema is the master schema containing all possible state values, while each step declares only the subset it needs:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    await setState({
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
+});
+
+const step2 = createStep({
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+## Setting initial state
+
+Pass `initialState` when starting a workflow run to set the starting values:
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { message: "Hello" },
+  initialState: {
+    processedItems: [],
+    metadata: { processedBy: "system" },
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`.
+
+## State persistence across suspend/resume
+
+State automatically persists across suspend and resume cycles. When a workflow suspends and later resumes, all state updates made before the suspension are preserved:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+  resumeSchema: z.object({ proceed: z.boolean() }),
+  execute: async ({ state, setState, suspend, resumeData }) => {
+    if (!resumeData) {
+      // First run: update state and suspend
+      await setState({ count: state.count + 1, items: [...state.items, "item-1"] });
+      await suspend({});
+      return {};
+    }
+    // After resume: state changes are preserved (count: 1, items: ["item-1"])
+    return {};
+  },
+});
+```
+
+## State in nested workflows
+
+When using nested workflows, state propagates from parent to child. Changes made by the parent workflow before calling a nested workflow are visible to steps inside the nested workflow:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const nestedStep = createStep({
+  id: "nested-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state }) => {
+    // Receives state modified by parent workflow
+    return { result: `Received: ${state.sharedValue}` };
+  },
+});
+
+const nestedWorkflow = createWorkflow({
+  id: "nested-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(nestedStep)
+  .commit();
+
+const parentStep = createStep({
+  id: "parent-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state, setState }) => {
+    // Modify state before nested workflow runs
+    await setState({ sharedValue: "modified-by-parent" });
+    return {};
+  },
+});
+
+const parentWorkflow = createWorkflow({
+  id: "parent-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(parentStep)
+  .then(nestedWorkflow)
+  .commit();
+```
+
+## Related
+
+- [Workflows overview](/docs/v1/workflows/overview)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Step Class](/reference/v1/workflows/step)
+- [Workflow Class](/reference/v1/workflows/workflow)
+

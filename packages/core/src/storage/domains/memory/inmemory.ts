@@ -10,48 +10,38 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
 } from '../../types';
-import { safelyParseJSON } from '../../utils';
-import type { StoreOperations } from '../operations';
+import { filterByDateRange, safelyParseJSON } from '../../utils';
+import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
-export type InMemoryThreads = Map<string, StorageThreadType>;
-export type InMemoryResources = Map<string, StorageResourceType>;
-export type InMemoryMessages = Map<string, StorageMessageType>;
-
 export class InMemoryMemory extends MemoryStorage {
-  private collection: {
-    threads: InMemoryThreads;
-    resources: InMemoryResources;
-    messages: InMemoryMessages;
-  };
-  private operations: StoreOperations;
-  constructor({
-    collection,
-    operations,
-  }: {
-    collection: {
-      threads: InMemoryThreads;
-      resources: InMemoryResources;
-      messages: InMemoryMessages;
-    };
-    operations: StoreOperations;
-  }) {
+  private db: InMemoryDB;
+
+  constructor({ db }: { db: InMemoryDB }) {
     super();
-    this.collection = collection;
-    this.operations = operations;
+    this.db = db;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.db.threads.clear();
+    this.db.messages.clear();
+    this.db.resources.clear();
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    this.logger.debug(`MockStore: getThreadById called for ${threadId}`);
-    const thread = this.collection.threads.get(threadId);
+    this.logger.debug(`InMemoryMemory: getThreadById called for ${threadId}`);
+    const thread = this.db.threads.get(threadId);
     return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    this.logger.debug(`MockStore: saveThread called for ${thread.id}`);
+    this.logger.debug(`InMemoryMemory: saveThread called for ${thread.id}`);
     const key = thread.id;
-    this.collection.threads.set(key, thread);
+    this.db.threads.set(key, thread);
     return thread;
   }
 
@@ -64,8 +54,8 @@ export class InMemoryMemory extends MemoryStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    this.logger.debug(`MockStore: updateThread called for ${id}`);
-    const thread = this.collection.threads.get(id);
+    this.logger.debug(`InMemoryMemory: updateThread called for ${id}`);
+    const thread = this.db.threads.get(id);
 
     if (!thread) {
       throw new Error(`Thread with id ${id} not found`);
@@ -80,12 +70,12 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    this.logger.debug(`MockStore: deleteThread called for ${threadId}`);
-    this.collection.threads.delete(threadId);
+    this.logger.debug(`InMemoryMemory: deleteThread called for ${threadId}`);
+    this.db.threads.delete(threadId);
 
-    this.collection.messages.forEach((msg, key) => {
+    this.db.messages.forEach((msg, key) => {
       if (msg.thread_id === threadId) {
-        this.collection.messages.delete(key);
+        this.db.messages.delete(key);
       }
     });
   }
@@ -99,9 +89,16 @@ export class InMemoryMemory extends MemoryStorage {
     page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    this.logger.debug(`InMemoryMemory: listMessages called for threads ${threadIds.join(', ')}`);
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+      throw new Error('threadId must be a non-empty string or array of non-empty strings');
+    }
+
+    const threadIdSet = new Set(threadIds);
 
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
@@ -122,26 +119,15 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    // Step 1: Get regular paginated messages from the thread first
-    let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
-      if (msg.thread_id !== threadId) return false;
+    // Step 1: Get regular paginated messages from the thread(s) first
+    let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
+      if (!threadIdSet.has(msg.thread_id)) return false;
       if (resourceId && msg.resourceId !== resourceId) return false;
       return true;
     });
 
     // Apply date filtering
-    if (filter?.dateRange) {
-      const { start: from, end: to } = filter.dateRange;
-      threadMessages = threadMessages.filter((msg: any) => {
-        const msgDate = new Date(msg.createdAt);
-        const fromDate = from ? new Date(from) : null;
-        const toDate = to ? new Date(to) : null;
-
-        if (fromDate && msgDate < fromDate) return false;
-        if (toDate && msgDate > toDate) return false;
-        return true;
-      });
-    }
+    threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
 
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
@@ -178,7 +164,7 @@ export class InMemoryMemory extends MemoryStorage {
     // Step 2: Add included messages with context (if any), excluding duplicates
     if (include && include.length > 0) {
       for (const includeItem of include) {
-        const targetMessage = this.collection.messages.get(includeItem.id);
+        const targetMessage = this.db.messages.get(includeItem.id);
         if (targetMessage) {
           // Convert StorageMessageType to MastraDBMessage
           const convertedMessage = {
@@ -199,7 +185,7 @@ export class InMemoryMemory extends MemoryStorage {
 
           // Add previous messages if requested
           if (includeItem.withPreviousMessages) {
-            const allThreadMessages = Array.from(this.collection.messages.values())
+            const allThreadMessages = Array.from(this.db.messages.values())
               .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
               .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
@@ -227,7 +213,7 @@ export class InMemoryMemory extends MemoryStorage {
 
           // Add next messages if requested
           if (includeItem.withNextMessages) {
-            const allThreadMessages = Array.from(this.collection.messages.values())
+            const allThreadMessages = Array.from(this.db.messages.values())
               .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
               .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
@@ -319,17 +305,20 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    this.logger.debug(`MockStore: listMessagesById called`);
+    this.logger.debug(`InMemoryMemory: listMessagesById called`);
 
-    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
+    const rawMessages = messageIds.map(id => this.db.messages.get(id)).filter(message => !!message);
 
-    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
+    const list = new MessageList().add(
+      rawMessages.map(m => this.parseStoredMessage(m)),
+      'memory',
+    );
     return { messages: list.get.all.db() };
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
-    this.logger.debug(`MockStore: saveMessages called with ${messages.length} messages`);
+    this.logger.debug(`InMemoryMemory: saveMessages called with ${messages.length} messages`);
     // Simulate error handling for testing - check before saving
     if (messages.some(msg => msg.id === 'error-message' || msg.resourceId === null)) {
       throw new Error('Simulated error for testing');
@@ -338,7 +327,7 @@ export class InMemoryMemory extends MemoryStorage {
     // Update thread timestamps for each unique threadId
     const threadIds = new Set(messages.map(msg => msg.threadId).filter((id): id is string => Boolean(id)));
     for (const threadId of threadIds) {
-      const thread = this.collection.threads.get(threadId);
+      const thread = this.db.threads.get(threadId);
       if (thread) {
         thread.updatedAt = new Date();
       }
@@ -356,7 +345,7 @@ export class InMemoryMemory extends MemoryStorage {
         createdAt: message.createdAt,
         resourceId: message.resourceId || null,
       };
-      this.collection.messages.set(key, storageMessage);
+      this.db.messages.set(key, storageMessage);
     }
 
     const list = new MessageList().add(messages, 'memory');
@@ -366,7 +355,7 @@ export class InMemoryMemory extends MemoryStorage {
   async updateMessages(args: { messages: (Partial<MastraDBMessage> & { id: string })[] }): Promise<MastraDBMessage[]> {
     const updatedMessages: MastraDBMessage[] = [];
     for (const update of args.messages) {
-      const storageMsg = this.collection.messages.get(update.id);
+      const storageMsg = this.db.messages.get(update.id);
       if (!storageMsg) continue;
 
       // Track old threadId for possible move
@@ -401,13 +390,13 @@ export class InMemoryMemory extends MemoryStorage {
         // Update updatedAt for both threads, ensuring strictly greater and not equal
         const base = Date.now();
         let oldThreadNewTime: number | undefined;
-        const oldThread = this.collection.threads.get(oldThreadId);
+        const oldThread = this.db.threads.get(oldThreadId);
         if (oldThread) {
           const prev = new Date(oldThread.updatedAt).getTime();
           oldThreadNewTime = Math.max(base, prev + 1);
           oldThread.updatedAt = new Date(oldThreadNewTime);
         }
-        const newThread = this.collection.threads.get(newThreadId);
+        const newThread = this.db.threads.get(newThreadId);
         if (newThread) {
           const prev = new Date(newThread.updatedAt).getTime();
           let newThreadNewTime = Math.max(base + 1, prev + 1);
@@ -418,7 +407,7 @@ export class InMemoryMemory extends MemoryStorage {
         }
       } else {
         // Only update the thread's updatedAt if not a move
-        const thread = this.collection.threads.get(oldThreadId);
+        const thread = this.db.threads.get(oldThreadId);
         if (thread) {
           const prev = new Date(thread.updatedAt).getTime();
           let newTime = Date.now();
@@ -427,7 +416,7 @@ export class InMemoryMemory extends MemoryStorage {
         }
       }
       // Save the updated message
-      this.collection.messages.set(update.id, storageMsg);
+      this.db.messages.set(update.id, storageMsg);
       // Return as MastraDBMessage
       updatedMessages.push({
         id: storageMsg.id,
@@ -447,24 +436,24 @@ export class InMemoryMemory extends MemoryStorage {
       return;
     }
 
-    this.logger.debug(`MockStore: deleteMessages called for ${messageIds.length} messages`);
+    this.logger.debug(`InMemoryMemory: deleteMessages called for ${messageIds.length} messages`);
 
     // Collect thread IDs to update
     const threadIds = new Set<string>();
 
     for (const messageId of messageIds) {
-      const message = this.collection.messages.get(messageId);
+      const message = this.db.messages.get(messageId);
       if (message && message.thread_id) {
         threadIds.add(message.thread_id);
       }
       // Delete the message
-      this.collection.messages.delete(messageId);
+      this.db.messages.delete(messageId);
     }
 
     // Update thread timestamps
     const now = new Date();
     for (const threadId of threadIds) {
-      const thread = this.collection.threads.get(threadId);
+      const thread = this.db.threads.get(threadId);
       if (thread) {
         thread.updatedAt = now;
       }
@@ -488,9 +477,9 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error('page value too large');
     }
 
-    this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
+    this.logger.debug(`InMemoryMemory: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
+    const threads = Array.from(this.db.threads.values()).filter((t: any) => t.resourceId === resourceId);
     const sortedThreads = this.sortThreads(threads, field, direction);
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
@@ -507,16 +496,16 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    this.logger.debug(`MockStore: getResourceById called for ${resourceId}`);
-    const resource = this.collection.resources.get(resourceId);
+    this.logger.debug(`InMemoryMemory: getResourceById called for ${resourceId}`);
+    const resource = this.db.resources.get(resourceId);
     return resource
       ? { ...resource, metadata: resource.metadata ? { ...resource.metadata } : resource.metadata }
       : null;
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    this.logger.debug(`MockStore: saveResource called for ${resource.id}`);
-    this.collection.resources.set(resource.id, resource);
+    this.logger.debug(`InMemoryMemory: saveResource called for ${resource.id}`);
+    this.db.resources.set(resource.id, resource);
     return resource;
   }
 
@@ -529,8 +518,8 @@ export class InMemoryMemory extends MemoryStorage {
     workingMemory?: string;
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
-    this.logger.debug(`MockStore: updateResource called for ${resourceId}`);
-    let resource = this.collection.resources.get(resourceId);
+    this.logger.debug(`InMemoryMemory: updateResource called for ${resourceId}`);
+    let resource = this.db.resources.get(resourceId);
 
     if (!resource) {
       // Create new resource if it doesn't exist
@@ -553,8 +542,124 @@ export class InMemoryMemory extends MemoryStorage {
       };
     }
 
-    this.collection.resources.set(resourceId, resource);
+    this.db.resources.set(resourceId, resource);
     return resource;
+  }
+
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    this.logger.debug(`InMemoryMemory: cloneThread called for source thread ${sourceThreadId}`);
+
+    // Get the source thread
+    const sourceThread = this.db.threads.get(sourceThreadId);
+    if (!sourceThread) {
+      throw new Error(`Source thread with id ${sourceThreadId} not found`);
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    if (this.db.threads.has(newThreadId)) {
+      throw new Error(`Thread with id ${newThreadId} already exists`);
+    }
+
+    // Get messages from the source thread
+    let sourceMessages = Array.from(this.db.messages.values())
+      .filter((msg: StorageMessageType) => msg.thread_id === sourceThreadId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    // Apply message filters if provided
+    if (options?.messageFilter) {
+      const { startDate, endDate, messageIds } = options.messageFilter;
+
+      if (messageIds && messageIds.length > 0) {
+        const messageIdSet = new Set(messageIds);
+        sourceMessages = sourceMessages.filter(msg => messageIdSet.has(msg.id));
+      }
+
+      if (startDate) {
+        sourceMessages = sourceMessages.filter(msg => new Date(msg.createdAt) >= startDate);
+      }
+
+      if (endDate) {
+        sourceMessages = sourceMessages.filter(msg => new Date(msg.createdAt) <= endDate);
+      }
+    }
+
+    // Apply message limit (take from the end to get most recent)
+    if (options?.messageLimit && options.messageLimit > 0 && sourceMessages.length > options.messageLimit) {
+      sourceMessages = sourceMessages.slice(-options.messageLimit);
+    }
+
+    const now = new Date();
+
+    // Determine the last message ID for clone metadata
+    const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
+
+    // Create clone metadata
+    const cloneMetadata: ThreadCloneMetadata = {
+      sourceThreadId,
+      clonedAt: now,
+      ...(lastMessageId && { lastMessageId }),
+    };
+
+    // Create the new thread
+    const newThread: StorageThreadType = {
+      id: newThreadId,
+      resourceId: resourceId || sourceThread.resourceId,
+      title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+      metadata: {
+        ...metadata,
+        clone: cloneMetadata,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Save the new thread
+    this.db.threads.set(newThreadId, newThread);
+
+    // Clone messages with new IDs
+    const clonedMessages: MastraDBMessage[] = [];
+    for (const sourceMsg of sourceMessages) {
+      const newMessageId = crypto.randomUUID();
+      const parsedContent = safelyParseJSON(sourceMsg.content);
+
+      // Create storage message
+      const newStorageMessage: StorageMessageType = {
+        id: newMessageId,
+        thread_id: newThreadId,
+        content: sourceMsg.content,
+        role: sourceMsg.role,
+        type: sourceMsg.type,
+        createdAt: sourceMsg.createdAt,
+        resourceId: resourceId || sourceMsg.resourceId,
+      };
+
+      this.db.messages.set(newMessageId, newStorageMessage);
+
+      // Create MastraDBMessage for return
+      clonedMessages.push({
+        id: newMessageId,
+        threadId: newThreadId,
+        content: parsedContent,
+        role: sourceMsg.role as MastraDBMessage['role'],
+        type: sourceMsg.type,
+        createdAt: sourceMsg.createdAt,
+        resourceId: resourceId || sourceMsg.resourceId || undefined,
+      });
+    }
+
+    this.logger.debug(
+      `InMemoryMemory: cloned thread ${sourceThreadId} to ${newThreadId} with ${clonedMessages.length} messages`,
+    );
+
+    return {
+      thread: newThread,
+      clonedMessages,
+    };
   }
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {

@@ -1,6 +1,6 @@
 :root {
   --chatbot-sidebar-width: 400px;
-  --chatbot-sidebar-hidden-width: fit-content;
+  --chatbot-sidebar-hidden-width: 40px;
 }
 
 .chatbotSidebarContainer {
@@ -15,8 +15,7 @@
     height: calc(100vh - var(--ifm-navbar-height));
     margin-left: auto;
     border-left: 0.5px solid var(--border);
-    will-change: width;
-    background-color: var(--mastra-surface-1);
+    background-color: var(--ifm-navbar-background-color);
     position: fixed;
     bottom: 0;
     right: 0;

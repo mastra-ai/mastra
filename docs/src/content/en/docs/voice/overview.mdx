@@ -1,6 +1,21 @@
 ---
 title: "Voice in Mastra | Voice"
 description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-azure"
+  - "@mastra/voice-cloudflare"
+  - "@mastra/voice-deepgram"
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-google"
+  - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-murf"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
+  - "@mastra/voice-sarvam"
+  - "@mastra/voice-speechify"
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
@@ -17,7 +32,6 @@ To learn how to integrate voice capabilities into your agents, check out the [Ad
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 // Initialize OpenAI voice for TTS
@@ -27,7 +41,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice(),
 });
 ```
@@ -46,7 +60,6 @@ For detailed configuration options and advanced features, check out our [Text-to
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { playAudio } from "@mastra/node-audio";
 
@@ -55,7 +68,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice(),
 });
 
@@ -77,7 +90,6 @@ Visit the [OpenAI Voice Reference](/reference/v1/voice/openai) for more informat
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { AzureVoice } from "@mastra/voice-azure";
 import { playAudio } from "@mastra/node-audio";
 
@@ -86,7 +98,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new AzureVoice(),
 });
 
@@ -107,7 +119,6 @@ Visit the [Azure Voice Reference](/reference/v1/voice/azure) for more informatio
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { playAudio } from "@mastra/node-audio";
 
@@ -116,7 +127,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new ElevenLabsVoice(),
 });
 
@@ -137,7 +148,6 @@ Visit the [ElevenLabs Voice Reference](/reference/v1/voice/elevenlabs) for more 
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { PlayAIVoice } from "@mastra/voice-playai";
 import { playAudio } from "@mastra/node-audio";
 
@@ -146,7 +156,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new PlayAIVoice(),
 });
 
@@ -167,7 +177,6 @@ Visit the [PlayAI Voice Reference](/reference/v1/voice/playai) for more informat
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { GoogleVoice } from "@mastra/voice-google";
 import { playAudio } from "@mastra/node-audio";
 
@@ -176,7 +185,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new GoogleVoice(),
 });
 
@@ -197,7 +206,6 @@ Visit the [Google Voice Reference](/reference/v1/voice/google) for more informat
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { playAudio } from "@mastra/node-audio";
 
@@ -206,7 +214,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new CloudflareVoice(),
 });
 
@@ -227,7 +235,6 @@ Visit the [Cloudflare Voice Reference](/reference/v1/voice/cloudflare) for more 
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { playAudio } from "@mastra/node-audio";
 
@@ -236,7 +243,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new DeepgramVoice(),
 });
 
@@ -257,7 +264,6 @@ Visit the [Deepgram Voice Reference](/reference/v1/voice/deepgram) for more info
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { SpeechifyVoice } from "@mastra/voice-speechify";
 import { playAudio } from "@mastra/node-audio";
 
@@ -266,7 +272,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new SpeechifyVoice(),
 });
 
@@ -287,7 +293,6 @@ Visit the [Speechify Voice Reference](/reference/v1/voice/speechify) for more in
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { SarvamVoice } from "@mastra/voice-sarvam";
 import { playAudio } from "@mastra/node-audio";
 
@@ -296,7 +301,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new SarvamVoice(),
 });
 
@@ -317,7 +322,6 @@ Visit the [Sarvam Voice Reference](/reference/v1/voice/sarvam) for more informat
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { MurfVoice } from "@mastra/voice-murf";
 import { playAudio } from "@mastra/node-audio";
 
@@ -326,7 +330,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new MurfVoice(),
 });
 
@@ -359,7 +363,6 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { createReadStream } from "fs";
 
@@ -368,7 +371,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIVoice(),
 });
 
@@ -391,7 +394,6 @@ Visit the [OpenAI Voice Reference](/reference/v1/voice/openai) for more informat
 ```typescript
 import { createReadStream } from "fs";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { AzureVoice } from "@mastra/voice-azure";
 import { createReadStream } from "fs";
 
@@ -400,7 +402,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new AzureVoice(),
 });
 
@@ -422,7 +424,6 @@ Visit the [Azure Voice Reference](/reference/v1/voice/azure) for more informatio
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { createReadStream } from "fs";
 
@@ -431,7 +432,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new ElevenLabsVoice(),
 });
 
@@ -453,7 +454,6 @@ Visit the [ElevenLabs Voice Reference](/reference/v1/voice/elevenlabs) for more 
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { GoogleVoice } from "@mastra/voice-google";
 import { createReadStream } from "fs";
 
@@ -462,7 +462,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new GoogleVoice(),
 });
 
@@ -484,7 +484,6 @@ Visit the [Google Voice Reference](/reference/v1/voice/google) for more informat
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { createReadStream } from "fs";
 
@@ -493,7 +492,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new CloudflareVoice(),
 });
 
@@ -515,7 +514,6 @@ Visit the [Cloudflare Voice Reference](/reference/v1/voice/cloudflare) for more 
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { createReadStream } from "fs";
 
@@ -524,7 +522,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new DeepgramVoice(),
 });
 
@@ -546,7 +544,6 @@ Visit the [Deepgram Voice Reference](/reference/v1/voice/deepgram) for more info
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { SarvamVoice } from "@mastra/voice-sarvam";
 import { createReadStream } from "fs";
 
@@ -555,7 +552,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new SarvamVoice(),
 });
 
@@ -585,7 +582,6 @@ For detailed configuration options and advanced features, check out [Speech to S
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
@@ -594,7 +590,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -618,7 +614,6 @@ Visit the [OpenAI Voice Reference](/reference/v1/voice/openai-realtime) for more
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 
@@ -627,7 +622,7 @@ const voiceAgent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new GeminiLiveVoice({
     // Live API mode
     apiKey: process.env.GOOGLE_API_KEY,
@@ -918,6 +913,30 @@ const voice = new GeminiLiveVoice({
 Visit the [Google Gemini Live Reference](/reference/v1/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
+  <TabItem value="aisdk" label="AI SDK">
+
+```typescript
+// AI SDK Voice Configuration
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// Use AI SDK models directly - no need to install separate packages
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works seamlessly with your agent
+const voiceAgent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK Voice Agent",
+  instructions: "You are a helpful assistant with voice capabilities.",
+  model: "openai/gpt-5.1",
+  voice,
+});
+```
+  </TabItem>
 </Tabs>
 
 ### Using Multiple Voice Providers
@@ -971,6 +990,49 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 playAudio(responseAudio);
 ```
 
+### Using AI SDK Model Providers
+
+You can also use AI SDK models directly with `CompositeVoice`:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// Use AI SDK models directly - no provider setup needed
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK transcription
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK speech
+});
+
+// Works the same way as Mastra providers
+const audioStream = getMicrophoneStream();
+const transcript = await voice.listen(audioStream);
+
+console.log("Transcribed text:", transcript);
+
+// Convert text to speech
+const responseAudio = await voice.speak(`You said: ${transcript}`, {
+  speaker: "Rachel", // ElevenLabs voice
+});
+
+playAudio(responseAudio);
+```
+
+You can also mix AI SDK models with Mastra providers:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { groq } from "@ai-sdk/groq";
+
+const voice = new CompositeVoice({
+  input: groq.transcription('whisper-large-v3'),  // AI SDK for STT
+  output: new PlayAIVoice(),                       // Mastra provider for TTS
+});
+```
+
 For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/reference/v1/voice/composite-voice).
 
 ## More Resources
@@ -984,4 +1046,4 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [Google Gemini Live Voice](/reference/v1/voice/google-gemini-live)
 - [Deepgram Voice](/reference/v1/voice/deepgram)
 - [PlayAI Voice](/reference/v1/voice/playai)
-- [Voice Examples](/examples/v1/voice/text-to-speech)
+- [Voice Examples](https://github.com/mastra-ai/voice-examples)

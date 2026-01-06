@@ -1,5 +1,5 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
@@ -23,6 +23,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   requireToolApproval,
   agentId,
+  toolCallConcurrency,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -54,6 +55,12 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     now: _internal?.now || (() => Date.now()),
     generateId: _internal?.generateId || (() => generateId()),
     currentDate: _internal?.currentDate || (() => new Date()),
+    saveQueueManager: _internal?.saveQueueManager,
+    memoryConfig: _internal?.memoryConfig,
+    threadId: _internal?.threadId,
+    resourceId: _internal?.resourceId,
+    memory: _internal?.memory,
+    threadExists: _internal?.threadExists,
   };
 
   let startTimestamp = internalToUse.now?.();
@@ -87,6 +94,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     messageId: messageId!,
     agentId,
     requireToolApproval,
+    toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,
@@ -131,6 +139,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       outputProcessors,
       returnScorerData,
       tracingContext: rest.modelSpanTracker?.getTracingContext(),
+      requestContext: rest.requestContext,
     },
     initialState: initialStreamState,
   });

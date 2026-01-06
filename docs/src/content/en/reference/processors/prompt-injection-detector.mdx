@@ -1,6 +1,8 @@
 ---
 title: "Reference: Prompt Injection Detector | Processors"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
+packages:
+  - "@mastra/core"
 ---
 
 # PromptInjectionDetector
@@ -9,11 +11,11 @@ The `PromptInjectionDetector` is an **input processor** that detects and prevent
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 const processor = new PromptInjectionDetector({
-  model: "openai/gpt-4.1-nano",
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
   threshold: 0.8,
   strategy: "rewrite",
   detectionTypes: ["injection", "jailbreak", "system-override"]
@@ -78,6 +80,13 @@ const processor = new PromptInjectionDetector({
       isOptional: true,
       default: "false",
     },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+      isOptional: true,
+      default: "undefined",
+    },
   ]}
 />
 
@@ -108,17 +117,17 @@ const processor = new PromptInjectionDetector({
 
 ## Extended usage example
 
-```typescript title="src/mastra/agents/secure-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/secure-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "secure-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   inputProcessors: [
     new PromptInjectionDetector({
-      model: "openai/gpt-4.1-nano",
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
       detectionTypes: ['injection', 'jailbreak', 'system-override'],
       threshold: 0.8,
       strategy: 'rewrite',

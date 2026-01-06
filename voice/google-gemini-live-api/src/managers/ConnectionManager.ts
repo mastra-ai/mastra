@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { WebSocket } from 'ws';
 import { GeminiLiveErrorCode } from '../types';
 import { GeminiLiveError } from '../utils/errors';

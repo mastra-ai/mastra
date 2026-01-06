@@ -1,6 +1,9 @@
 ---
 title: "Reference: voice.addTools() | Voice"
 description: "Documentation for the addTools() method available in voice providers, which equips voice models with function calling capabilities."
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.addTools()
@@ -39,7 +42,7 @@ const weatherTool = createTool({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });

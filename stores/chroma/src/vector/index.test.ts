@@ -1,5 +1,6 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult, IndexStats } from '@mastra/core/vector';
+import { Search } from 'chromadb';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
@@ -1568,8 +1569,8 @@ describe('Chroma Metadata Filtering', () => {
   createVectorTestSuite({
     vector: chromaVector,
     createIndex: async (indexName: string) => {
-      // Using dimension 4 as required by the metadata filtering test vectors
-      await chromaVector.createIndex({ indexName, dimension: 4 });
+      // Using dimension 1536 as required by the metadata filtering test vectors
+      await chromaVector.createIndex({ indexName, dimension: 1536 });
     },
     deleteIndex: async (indexName: string) => {
       await chromaVector.deleteIndex({ indexName });
@@ -1590,6 +1591,7 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
 
   beforeEach(async () => {
     cloudVector = new ChromaVector({
+      id: 'chroma-cloud-vector-fork-test',
       apiKey: process.env.CHROMA_API_KEY,
     });
 
@@ -1668,5 +1670,68 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
         newIndexName: forkedIndexName,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Search API Tests', () => {
+  let cloudVector: ChromaVector;
+  const testIndexName = 'search-test-index';
+  const dimension = 3;
+
+  beforeEach(async () => {
+    cloudVector = new ChromaVector({
+      id: 'chroma-cloud-vector-test',
+      apiKey: process.env.CHROMA_API_KEY,
+    });
+
+    // Clean up any existing test indexes
+    try {
+      await cloudVector.deleteIndex({ indexName: testIndexName });
+    } catch {
+      // Ignore errors if index doesn't exist
+    }
+  });
+
+  afterEach(async () => {
+    // Clean up test indexes
+    try {
+      await cloudVector.deleteIndex({ indexName: testIndexName });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should search an index successfully', async () => {
+    // Create initial index with some data
+    await cloudVector.createIndex({ indexName: testIndexName, dimension });
+
+    const testVectors = [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0],
+    ];
+    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
+    const testIds = ['vec1', 'vec2', 'vec3'];
+
+    await cloudVector.upsert({
+      indexName: testIndexName,
+      vectors: testVectors,
+      ids: testIds,
+      metadata: testMetadata,
+    });
+
+    const search = new Search({
+      where: { label: 'y-axis' },
+      rank: { $knn: { query: [0.1, 0.2, 0.3] } },
+      limit: 10,
+    });
+
+    const result = await cloudVector.hybridSearch({
+      indexName: testIndexName,
+      search,
+    });
+
+    expect(result.length).toBe(1);
+    expect(result[0]?.id).toBe('vec2');
   });
 });

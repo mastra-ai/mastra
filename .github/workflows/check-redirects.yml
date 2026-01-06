@@ -31,22 +31,15 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20.19.5'
-
-      - name: Enable corepack
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: corepack enable
-
-      - name: Install dependencies
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: npm install path-to-regexp
+          package-manager-cache: false
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: |
-          node .github/scripts/check-deleted-pages.js
+        run: node .github/scripts/check-deleted-pages.js
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          COREPACK_ENABLE_STRICT: '0'
 
       - name: Comment on PR if redirects are missing
         if: failure()

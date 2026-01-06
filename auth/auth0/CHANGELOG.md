@@ -1,5 +1,29 @@
 # @mastra/auth-auth0
 
+## 1.0.0-beta.3
+
+### Major Changes
+
+- This change introduces **three major breaking changes** to the Auth0 authentication provider. These updates make token verification safer, prevent server crashes, and ensure proper authorization checks. ([#10632](https://github.com/mastra-ai/mastra/pull/10632))
+  - `authenticateToken()` now fails safely instead of throwing
+  - Empty or invalid tokens are now rejected early
+  - `authorizeUser()` now performs meaningful security checks
+
+  These changes improve stability, prevent runtime crashes, and enforce safer authentication & authorization behavior throughout the system.
+
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- dependencies updates: ([#10132](https://github.com/mastra-ai/mastra/pull/10132))
+  - Updated dependency [`jose@^6.1.1` ↗︎](https://www.npmjs.com/package/jose/v/6.1.1) (from `^6.0.12`, in `dependencies`)
+
 ## 1.0.0-beta.0
 
 ### Major Changes

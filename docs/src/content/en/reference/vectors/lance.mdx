@@ -1,6 +1,8 @@
 ---
 title: "Reference: Lance Vector Store | Vectors"
 description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
+packages:
+  - "@mastra/lance"
 ---
 
 # Lance Vector Store
@@ -263,7 +265,7 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
 
 Returns an array of table names as strings.
 
-```typescript copy
+```typescript
 const tables = await vectorStore.listTables();
 // ['my_vectors', 'embeddings', 'documents']
 ```
@@ -316,7 +318,7 @@ Returns an array of index names as strings.
 
 Returns information about the index:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -345,6 +347,8 @@ interface IndexStats {
 
 ### updateVector()
 
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
 <PropertiesTable
   content={[
     {
@@ -355,31 +359,19 @@ interface IndexStats {
     {
       name: "id",
       type: "string",
-      description: "ID of the vector to update",
+      isOptional: true,
+      description: "ID of the vector to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
     },
     {
       name: "update",
-      type: "object",
-      description: "Update parameters",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "vector",
-              type: "number[]",
-              description: "New vector values",
-              isOptional: true,
-            },
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              description: "New metadata values",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "Object containing the vector and/or metadata to update",
     },
   ]}
 />
@@ -401,6 +393,32 @@ interface IndexStats {
   ]}
 />
 
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
 ### close()
 
 Closes the database connection.
@@ -409,7 +427,7 @@ Closes the database connection.
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -423,7 +441,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     tableName: "my_vectors",

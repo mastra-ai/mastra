@@ -1,0 +1,43 @@
+---
+title: "Observability | Mastra Cloud"
+description: Monitoring and debugging tools for Mastra Cloud deployments
+---
+
+# Observability
+
+Cloud provides observability for production applications, giving you insight into how your agents and workflows behave. Observability works whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
+
+For details on configuring observability, see the [Cloud Exporter](/docs/v1/observability/tracing/exporters/cloud) docs.
+
+## Traces
+
+Traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of the [supported providers](/docs/v1/observability/tracing/overview#exporters).
+
+### Agents
+
+With observability enabled, you can view detailed outputs from your agents in the **Traces** section in [Studio](/docs/v1/mastra-cloud/studio).
+
+![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
+
+Agent traces break a run into clear steps: model calls, tool calls, and intermediate chunks. Each includes timing, inputs, outputs, and errors. Drill into any span to inspect prompts, token usage, and results.
+
+### Workflows
+
+With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in [Studio](/docs/v1/mastra-cloud/studio).
+
+![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
+
+Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls. Inspect inputs, outputs, and errors for every step to debug long-running or multi-step processes.
+
+## Logs
+
+The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#project-dashboard) displays detailed information for debugging and monitoring your application's behavior.
+
+![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
+
+## Next steps
+
+- [Logging](/docs/v1/observability/logging)
+- [Tracing](/docs/v1/observability/tracing/overview)

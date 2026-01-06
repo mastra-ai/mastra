@@ -72,6 +72,9 @@ The following distance metrics are supported:
 - `createIndex({ indexName, dimension, metric? })`: Create a new collection
 - `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors
 - `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
+- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
 - `listIndexes()`: List all collections
 - `describeIndex(indexName)`: Get collection statistics
 - `deleteIndex(indexName)`: Delete a collection

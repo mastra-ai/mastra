@@ -1,7 +1,8 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import { PromptInjectionDetector } from './prompt-injection-detector';
 import type { PromptInjectionResult } from './prompt-injection-detector';
 
@@ -659,6 +660,49 @@ describe('PromptInjectionDetector', () => {
       }).rejects.toThrow('Multiple attacks blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('injection, jailbreak, data-exfiltration'));
+    });
+  });
+
+  describe('provider options support (issue #8112)', () => {
+    it('should pass providerOptions to the internal detection agent', async () => {
+      // Create a mock V2 model that captures the options passed to doGenerate
+      const mockResult = createMockDetectionResult(false);
+
+      const mockModel = new MastraLanguageModelV2Mock({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify(mockResult) }],
+          warnings: [],
+        }),
+      });
+
+      // Create detector with providerOptions
+      const detector = new PromptInjectionDetector({
+        model: mockModel,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'low',
+          },
+        },
+      });
+
+      const mockAbort = vi.fn();
+      const messages = [createTestMessage('Test message', 'user')];
+
+      await detector.processInput({ messages, abort: mockAbort as any });
+
+      // Verify providerOptions were passed to the internal agent's generate call
+      expect(mockModel.doGenerateCalls).toHaveLength(1);
+      const generateCall = mockModel.doGenerateCalls[0];
+
+      // Verify providerOptions are passed through
+      expect(generateCall.providerOptions).toEqual({
+        openai: {
+          reasoningEffort: 'low',
+        },
+      });
     });
   });
 });

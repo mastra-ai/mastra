@@ -2,14 +2,16 @@ import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraDBMessage } from '../../agent/message-list';
+import type { TracingContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**
- * Configuration options for TokenLimiter output processor
+ * Configuration options for TokenLimiter processor
  */
 export interface TokenLimiterOptions {
-  /** Maximum number of tokens to allow in the response */
+  /** Maximum number of tokens to allow */
   limit: number;
   /** Optional encoding to use (defaults to o200k_base which is used by gpt-4o) */
   encoding?: TiktokenBPE;
@@ -28,17 +30,23 @@ export interface TokenLimiterOptions {
 }
 
 /**
- * Output processor that limits the number of tokens in generated responses.
- * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
+ * Processor that limits the number of tokens in messages.
+ *
+ * Can be used as:
+ * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
+ * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor {
+export class TokenLimiterProcessor implements Processor<'token-limiter'> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoder: Tiktoken;
   private maxTokens: number;
-  private currentTokens: number = 0;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
+
+  // Token counting constants for input processing
+  private static readonly TOKENS_PER_MESSAGE = 3.8;
+  private static readonly TOKENS_PER_CONVERSATION = 24;
 
   constructor(options: number | TokenLimiterOptions) {
     if (typeof options === 'number') {
@@ -56,34 +64,172 @@ export class TokenLimiterProcessor implements Processor {
     }
   }
 
+  /**
+   * Process input messages to limit them to the configured token limit.
+   * This filters historical messages to fit within the token budget,
+   * prioritizing the most recent messages.
+   */
+  async processInput(args: {
+    messages: MastraDBMessage[];
+    abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
+    requestContext?: RequestContext;
+  }): Promise<MastraDBMessage[]> {
+    const { messages } = args;
+    const limit = this.maxTokens;
+
+    // If no messages or empty array, return as-is
+    if (!messages || messages.length === 0) {
+      return messages;
+    }
+
+    // Separate system messages from other messages
+    const systemMessages = messages.filter(msg => msg.role === 'system');
+    const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
+
+    // Calculate token count for system messages (always included)
+    let systemTokens = 0;
+    for (const msg of systemMessages) {
+      systemTokens += this.countInputMessageTokens(msg);
+    }
+
+    // If system messages alone exceed the limit (accounting for conversation overhead), return only system messages
+    if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
+      return systemMessages;
+    }
+
+    // Calculate remaining budget for non-system messages (accounting for conversation overhead)
+    const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
+
+    // Process non-system messages in reverse order (newest first)
+    const result: MastraDBMessage[] = [];
+    let currentTokens = 0;
+
+    // Iterate through messages in reverse to prioritize recent messages
+    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
+      const message = nonSystemMessages[i];
+      if (!message) continue;
+
+      const messageTokens = this.countInputMessageTokens(message);
+
+      if (currentTokens + messageTokens <= remainingBudget) {
+        result.unshift(message); // Add to beginning to maintain order
+        currentTokens += messageTokens;
+      }
+      // Continue checking all messages, don't break early
+    }
+
+    // Return system messages followed by the filtered non-system messages
+    return [...systemMessages, ...result];
+  }
+
+  /**
+   * Count tokens for an input message, including overhead for message structure
+   */
+  private countInputMessageTokens(message: MastraDBMessage): number {
+    let tokenString = message.role;
+    let overhead = 0;
+
+    // Handle content based on MastraMessageV2 structure
+    let toolResultCount = 0; // Track tool results that will become separate messages
+
+    if (typeof message.content === 'string') {
+      // Simple string content
+      tokenString += message.content;
+    } else if (message.content && typeof message.content === 'object') {
+      // Object content with parts
+      // Use content.content as the primary text, or fall back to parts
+      if (message.content.content && !Array.isArray(message.content.parts)) {
+        tokenString += message.content.content;
+      } else if (Array.isArray(message.content.parts)) {
+        // Calculate tokens for each content part
+        for (const part of message.content.parts) {
+          if (part.type === 'text') {
+            tokenString += part.text;
+          } else if (part.type === 'tool-invocation') {
+            // Handle tool invocations (both calls and results)
+            const invocation = part.toolInvocation;
+            if (invocation.state === 'call' || invocation.state === 'partial-call') {
+              // Tool call
+              if (invocation.toolName) {
+                tokenString += invocation.toolName;
+              }
+              if (invocation.args) {
+                if (typeof invocation.args === 'string') {
+                  tokenString += invocation.args;
+                } else {
+                  tokenString += JSON.stringify(invocation.args);
+                  overhead -= 12;
+                }
+              }
+            } else if (invocation.state === 'result') {
+              // Tool result - this will become a separate CoreMessage
+              toolResultCount++;
+              if (invocation.result !== undefined) {
+                if (typeof invocation.result === 'string') {
+                  tokenString += invocation.result;
+                } else {
+                  tokenString += JSON.stringify(invocation.result);
+                  overhead -= 12;
+                }
+              }
+            }
+          } else {
+            tokenString += JSON.stringify(part);
+          }
+        }
+      }
+    }
+
+    // Add message formatting overhead
+    // Each MastraDBMessage becomes at least 1 CoreMessage, plus 1 additional CoreMessage per tool-invocation (state: 'result')
+    // Base overhead for the message itself
+    overhead += TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    // Additional overhead for each tool result (which adds an extra CoreMessage)
+    if (toolResultCount > 0) {
+      overhead += toolResultCount * TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    }
+
+    const tokenCount = this.encoder.encode(tokenString).length;
+    const total = tokenCount + overhead;
+    return total;
+  }
+
   async processOutputStream(args: {
     part: ChunkType;
     streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<ChunkType | null> {
-    const { part, abort } = args;
+    // Always process output streams (this is the main/original functionality)
+    const { part, state, abort } = args;
+    const limit = this.maxTokens;
+
+    // Initialize currentTokens in state if not present
+    if (state.currentTokens === undefined) {
+      state.currentTokens = 0;
+    }
 
     // Count tokens in the current part
     const chunkTokens = this.countTokensInChunk(part);
 
     if (this.countMode === 'cumulative') {
       // Add to cumulative count
-      this.currentTokens += chunkTokens;
+      state.currentTokens += chunkTokens;
     } else {
       // Only check the current part
-      this.currentTokens = chunkTokens;
+      state.currentTokens = chunkTokens;
     }
 
     // Check if we've exceeded the limit
-    if (this.currentTokens > this.maxTokens) {
+    if (state.currentTokens > limit) {
       if (this.strategy === 'abort') {
-        abort(`Token limit of ${this.maxTokens} exceeded (current: ${this.currentTokens})`);
+        abort(`Token limit of ${limit} exceeded (current: ${state.currentTokens})`);
       } else {
         // truncate strategy - don't emit this part
         // If we're in part mode, reset the count for next part
         if (this.countMode === 'part') {
-          this.currentTokens = 0;
+          state.currentTokens = 0;
         }
         return null;
       }
@@ -94,7 +240,7 @@ export class TokenLimiterProcessor implements Processor {
 
     // If we're in part mode, reset the count for next part
     if (this.countMode === 'part') {
-      this.currentTokens = 0;
+      state.currentTokens = 0;
     }
 
     return result;
@@ -145,9 +291,12 @@ export class TokenLimiterProcessor implements Processor {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
   }): Promise<MastraDBMessage[]> {
+    // Always process output results (this is the main/original functionality)
     const { messages, abort } = args;
-    // Reset token count for result processing
-    this.currentTokens = 0;
+    const limit = this.maxTokens;
+
+    // Use a local variable to track tokens within this single result processing
+    let cumulativeTokens = 0;
 
     const processedMessages = messages.map(message => {
       if (message.role !== 'assistant' || !message.content?.parts) {
@@ -160,17 +309,17 @@ export class TokenLimiterProcessor implements Processor {
           const tokens = this.encoder.encode(textContent).length;
 
           // Check if adding this part's tokens would exceed the cumulative limit
-          if (this.currentTokens + tokens <= this.maxTokens) {
-            this.currentTokens += tokens;
+          if (cumulativeTokens + tokens <= limit) {
+            cumulativeTokens += tokens;
             return part;
           } else {
             if (this.strategy === 'abort') {
-              abort(`Token limit of ${this.maxTokens} exceeded (current: ${this.currentTokens + tokens})`);
+              abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
             } else {
               // Truncate the text to fit within the remaining token limit
               let truncatedText = '';
               let currentTokens = 0;
-              const remainingTokens = this.maxTokens - this.currentTokens;
+              const remainingTokens = limit - cumulativeTokens;
 
               // Find the cutoff point that fits within the remaining limit using binary search
               let left = 0;
@@ -197,7 +346,7 @@ export class TokenLimiterProcessor implements Processor {
               truncatedText = textContent.slice(0, bestLength);
               currentTokens = bestTokens;
 
-              this.currentTokens += currentTokens;
+              cumulativeTokens += currentTokens;
 
               return {
                 ...part,
@@ -221,20 +370,6 @@ export class TokenLimiterProcessor implements Processor {
     });
 
     return processedMessages;
-  }
-
-  /**
-   * Reset the token counter (useful for testing or reusing the processor)
-   */
-  reset(): void {
-    this.currentTokens = 0;
-  }
-
-  /**
-   * Get the current token count
-   */
-  getCurrentTokens(): number {
-    return this.currentTokens;
   }
 
   /**

@@ -161,10 +161,11 @@ The following distance metrics are supported:
 
 > **Note:** `documentFilter` allows filtering results based on the content of the `document` field. Example: `{ $contains: 'specific text' }` will return only vectors whose associated document contains the specified text.
 
+- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
 - `listIndexes()`: List all vector-enabled collections
 - `describeIndex(indexName)`: Get collection statistics (dimension, count, metric)
-- `updateIndexById(indexName, id, { vector?, metadata? })`: Update a vector and/or its metadata by ID
-- `deleteIndexById(indexName, id)`: Delete a vector by ID
 - `deleteIndex(indexName)`: Delete a collection
 - `disconnect()`: Close the MongoDB connection
 

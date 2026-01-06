@@ -1,13 +1,20 @@
 ---
 title: "Working Memory | Memory"
 description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+  - "@mastra/pg"
+  - "@mastra/upstash"
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
 
 # Working Memory
 
-While [conversation history](/docs/v1/memory/conversation-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [message history](/docs/v1/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
@@ -24,17 +31,16 @@ Working memory can persist at two different scopes:
 
 Here's a minimal example of setting up an agent with working memory:
 
-```typescript {12-15}
+```typescript {11-15}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
 
 // Create agent with working memory enabled
 const agent = new Agent({
   id: "personal-assistant",
   name: "PersonalAssistant",
   instructions: "You are a helpful personal assistant.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   memory: new Memory({
     options: {
       workingMemory: {
@@ -127,11 +133,12 @@ const memory = new Memory({
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### ✅ Supported Storage Adapters
+### Supported Storage Adapters
 
-- **LibSQL** (`@mastra/libsql`)
+- **libSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
+- **MongoDB** (`@mastra/mongodb`)
 
 ## Custom Templates
 
@@ -268,10 +275,18 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 }
 ```
 
+### Merge Semantics for Schema-Based Memory
+
+Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
+
+- **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
+- **Set a field to `null` to delete it:** This explicitly removes the field from memory
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
+
 ## Choosing Between Template and Schema
 
-- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad.
-- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON.
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` is not supported.
 
 ## Example: Multi-step Retention
@@ -317,7 +332,7 @@ While agents typically update working memory through the `updateWorkingMemory` t
 
 When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
 
-```typescript title="src/app/medical-consultation.ts" showLineNumbers copy
+```typescript title="src/app/medical-consultation.ts"
 // Create a thread with initial working memory
 const thread = await memory.createThread({
   threadId: "thread-123",
@@ -346,7 +361,7 @@ await agent.generate("What's my blood type?", {
 
 You can also update an existing thread's working memory:
 
-```typescript title="src/app/medical-consultation.ts" showLineNumbers copy
+```typescript title="src/app/medical-consultation.ts"
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
   id: "thread-123",
@@ -368,7 +383,7 @@ await memory.updateThread({
 
 Alternatively, use the `updateWorkingMemory` method directly:
 
-```typescript title="src/app/medical-consultation.ts" showLineNumbers copy
+```typescript title="src/app/medical-consultation.ts"
 await memory.updateWorkingMemory({
   threadId: "thread-123",
   resourceId: "user-456", // Required for resource-scoped memory
@@ -378,6 +393,6 @@ await memory.updateWorkingMemory({
 
 ## Examples
 
-- [Working memory with template](/examples/v1/memory/working-memory-template)
-- [Working memory with schema](/examples/v1/memory/working-memory-schema)
+- [Working memory with template](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template)
+- [Working memory with schema](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema)
 - [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - Complete example showing resource-scoped memory persistence

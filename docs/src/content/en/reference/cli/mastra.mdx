@@ -1,6 +1,8 @@
 ---
 title: "Reference: CLI Commands | CLI"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
+packages:
+  - "@mastra/core"
 ---
 
 # CLI Commands
@@ -41,7 +43,7 @@ You can set certain environment variables to modify the behavior of `mastra dev`
 
 Set `MASTRA_DEV_NO_CACHE=1` to force a full rebuild rather than using the cached assets under `.mastra/`:
 
-```bash copy
+```bash
 MASTRA_DEV_NO_CACHE=1 mastra dev
 ```
 
@@ -51,7 +53,7 @@ This helps when you are debugging bundler plugins or suspect stale output.
 
 `MASTRA_CONCURRENCY` caps how many expensive operations run in parallel (primarily build and evaluation steps). For example:
 
-```bash copy
+```bash
 MASTRA_CONCURRENCY=4 mastra dev
 ```
 
@@ -61,7 +63,7 @@ Leave it unset to let the CLI pick a sensible default for the machine.
 
 When using providers supported by the Vercel AI SDK you can redirect requests through proxies or internal gateways by setting a base URL. For OpenAI:
 
-```bash copy
+```bash
 OPENAI_API_KEY=<your-api-key> \
 OPENAI_BASE_URL=https://openrouter.example/v1 \
 mastra dev
@@ -69,13 +71,14 @@ mastra dev
 
 For Anthropic:
 
-```bash copy
+```bash
 ANTHROPIC_API_KEY=<your-api-key> \
 ANTHROPIC_BASE_URL=https://anthropic.internal \
 mastra dev
 ```
 
-These are forwarded by the AI SDK and work with any `openai()` or `anthropic()` calls.
+These are forwarded to the Mastra model router and will work with any `"openai/..."`
+or `"anthropic/..."` model selections.
 
 ## `mastra build`
 
@@ -85,7 +88,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/v1/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/guides/v1/deployment) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -97,7 +100,7 @@ You can set certain environment variables to modify the behavior of `mastra buil
 
 For CI or when running in resource constrained environments you can cap how many expensive tasks run at once by setting `MASTRA_CONCURRENCY`.
 
-```bash copy
+```bash
 MASTRA_CONCURRENCY=2 mastra build
 ```
 
@@ -123,6 +126,18 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
 Disable the [OTEL Tracing](/docs/v1/observability/tracing/overview).
 
+## `mastra studio`
+
+Starts [Mastra Studio](/docs/v1/getting-started/studio) as a static server. After starting, you can enter your Mastra instance URL (e.g. `http://localhost:4111`) to connect Studio to your Mastra backend.
+
+### Flags
+
+The command accepts [common flags][common-flags] and the following additional flags:
+
+#### `--port`
+
+The port to run Studio on. Defaults to `3000`.
+
 ## `mastra lint`
 
 The `mastra lint` command validates the structure and code of your Mastra project to ensure it follows best practices and is error-free.
@@ -139,13 +154,13 @@ Read the [Scorers overview](/docs/v1/evals/overview) to learn more.
 
 Add a new scorer to your project. You can use an interactive prompt:
 
-```bash copy
+```bash
 mastra scorers add
 ```
 
 Or provide a scorer name directly:
 
-```bash copy
+```bash
 mastra scorers add answer-relevancy
 ```
 
@@ -211,7 +226,7 @@ Enable verbose logging for Mastra's internals. Defaults to `false`.
 
 ### `--env`
 
-**Available in:** `dev`, `start`
+**Available in:** `dev`, `start`, `studio`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 
@@ -245,13 +260,13 @@ By default, Mastra collects anonymous information about your project like your O
 
 You can opt out of the CLI analytics by setting an environment variable:
 
-```bash copy
+```bash
 MASTRA_TELEMETRY_DISABLED=1
 ```
 
 You can also set this while using other `mastra` commands:
 
-```bash copy
+```bash
 MASTRA_TELEMETRY_DISABLED=1 mastra dev
 ```
 

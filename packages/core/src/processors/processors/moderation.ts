@@ -1,7 +1,9 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
@@ -83,6 +85,19 @@ export interface ModerationOptions {
      */
     jsonPromptInjection?: boolean;
   };
+
+  /**
+   * Provider-specific options passed to the internal moderation agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -92,7 +107,7 @@ export interface ModerationOptions {
  * Provides flexible moderation with custom categories, thresholds, and strategies
  * while maintaining compatibility with OpenAI's moderation API structure.
  */
-export class ModerationProcessor implements Processor {
+export class ModerationProcessor implements Processor<'moderation'> {
   readonly id = 'moderation';
   readonly name = 'Moderation';
 
@@ -103,6 +118,7 @@ export class ModerationProcessor implements Processor {
   private includeScores: boolean;
   private chunkWindow: number;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
+  private providerOptions?: ProviderOptions;
 
   // Default OpenAI moderation categories
   private static readonly DEFAULT_CATEGORIES = [
@@ -126,6 +142,7 @@ export class ModerationProcessor implements Processor {
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
     this.structuredOutputOptions = options.structuredOutputOptions;
+    this.providerOptions = options.providerOptions;
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
@@ -263,7 +280,7 @@ export class ModerationProcessor implements Processor {
         reason: z.string().describe('Brief explanation of why content was flagged').nullable(),
       });
       let response;
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
             schema,
@@ -272,12 +289,14 @@ export class ModerationProcessor implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
         response = await this.moderationAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

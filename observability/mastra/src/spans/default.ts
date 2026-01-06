@@ -7,7 +7,8 @@ import type {
   UpdateSpanOptions,
   CreateSpanOptions,
 } from '@mastra/core/observability';
-import { BaseSpan, deepClean } from './base';
+import { BaseSpan } from './base';
+import { deepClean } from './serialization';
 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
@@ -15,34 +16,36 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     super(options, observabilityInstance);
-    this.id = generateSpanId();
 
-    // Set trace ID based on context:
-    if (options.parent) {
-      // Child span inherits trace ID from parent span
-      this.traceId = options.parent.traceId;
-    } else if (options.traceId) {
-      // Root span with provided trace ID
-      if (isValidTraceId(options.traceId)) {
-        this.traceId = options.traceId;
-      } else {
-        console.error(
-          `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
-        );
-        this.traceId = generateTraceId();
+    // If bridge and not internal span, use bridge to init span
+    const bridge = observabilityInstance.getBridge();
+    if (bridge && !this.isInternal) {
+      const bridgeIds = bridge.createSpan(options);
+      if (bridgeIds) {
+        this.id = bridgeIds.spanId;
+        this.traceId = bridgeIds.traceId;
+        this.parentSpanId = bridgeIds.parentSpanId;
+        return;
       }
-    } else {
-      // Root span without provided trace ID - generate new
-      this.traceId = generateTraceId();
     }
 
-    // Set parent span ID if provided
-    if (!options.parent && options.parentSpanId) {
+    // No bridge or bridge failed - generate IDs ourselves
+    if (options.parent) {
+      this.traceId = options.parent.traceId;
+      this.parentSpanId = options.parent.id;
+      this.id = generateSpanId();
+      return;
+    }
+
+    this.traceId = getOrCreateTraceId(options);
+    this.id = generateSpanId();
+
+    if (options.parentSpanId) {
       if (isValidSpanId(options.parentSpanId)) {
         this.parentSpanId = options.parentSpanId;
       } else {
         console.error(
-          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring parent span ID.`,
+          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring.`,
         );
       }
     }
@@ -54,13 +57,13 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
     this.endTime = new Date();
     if (options?.output !== undefined) {
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }
@@ -87,10 +90,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     // Update attributes if provided
     if (attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
     }
     if (metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
     }
 
     if (endSpan) {
@@ -107,16 +110,16 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     if (options.input !== undefined) {
-      this.input = deepClean(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
     if (options.output !== undefined) {
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
     }
     if (options.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }
@@ -183,4 +186,17 @@ function isValidTraceId(traceId: string): boolean {
  */
 function isValidSpanId(spanId: string): boolean {
   return /^[0-9a-f]{1,16}$/i.test(spanId);
+}
+
+function getOrCreateTraceId(options: CreateSpanOptions<SpanType>): string {
+  if (options.traceId) {
+    if (isValidTraceId(options.traceId)) {
+      return options.traceId;
+    } else {
+      console.error(
+        `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
+      );
+    }
+  }
+  return generateTraceId();
 }

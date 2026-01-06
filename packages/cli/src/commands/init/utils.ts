@@ -1,7 +1,7 @@
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
-import path from 'path';
 import * as p from '@clack/prompts';
 import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';
@@ -12,7 +12,11 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import { cursorGlobalMCPConfigPath, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
+import {
+  cursorGlobalMCPConfigPath,
+  windsurfGlobalMCPConfigPath,
+  antigravityGlobalMCPConfigPath,
+} from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
@@ -80,7 +84,6 @@ export async function writeAgentSample(
   const content = `
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
@@ -117,12 +120,7 @@ export const weatherAgent = new Agent({
   },`
       : ''
   }
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: "memory-storage",
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory
-    })
-  })
+  memory: new Memory()
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -516,7 +514,7 @@ export const mastra = new Mastra({
   observability: new Observability({
     // Enables DefaultExporter and CloudExporter for tracing
     default: { enabled: true },
-    }),
+  }),
 });
 `,
     );
@@ -534,9 +532,10 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async (addExample: boolean) => {
+export const checkAndInstallCoreDeps = async (addExample: boolean, versionTag?: string) => {
   const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
   let packages: Array<{ name: string; version: string }> = [];
+  const mastraVersionTag = versionTag || 'latest';
 
   try {
     const depService = new DepsService();
@@ -548,11 +547,11 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
-      packages.push({ name: '@mastra/core', version: 'latest' });
+      packages.push({ name: '@mastra/core', version: mastraVersionTag });
     }
 
     if (needsCli) {
-      packages.push({ name: 'mastra', version: 'latest' });
+      packages.push({ name: 'mastra', version: mastraVersionTag });
     }
 
     if (needsZod) {
@@ -563,7 +562,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
 
       if (needsLibsql) {
-        packages.push({ name: '@mastra/libsql', version: 'latest' });
+        packages.push({ name: '@mastra/libsql', version: mastraVersionTag });
       }
     }
 
@@ -659,6 +658,7 @@ interface InteractivePromptArgs {
   skip?: {
     llmProvider?: boolean;
     llmApiKey?: boolean;
+    gitInit?: boolean;
   };
 }
 
@@ -728,6 +728,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
               value: 'vscode',
               label: 'VSCode',
             },
+            {
+              value: 'antigravity',
+              label: 'Antigravity',
+            },
           ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
@@ -765,7 +769,28 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           }
         }
 
+        if (editor === `antigravity`) {
+          const confirm = await p.select({
+            message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
         return editor;
+      },
+      initGit: async () => {
+        if (skip?.gitInit) return false;
+
+        return p.confirm({
+          message: 'Initialize a new git repository?',
+          initialValue: true,
+        });
       },
     },
     {

@@ -1,6 +1,5 @@
-import fs, { writeFileSync, readFileSync, readdirSync, copyFileSync } from 'fs';
-import path, { dirname, join, relative } from 'path';
-
+import fs from 'node:fs';
+import path from 'node:path';
 import babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
@@ -41,34 +40,6 @@ let treeshakeDecorators = {
   },
 } satisfies Plugin;
 
-function fixDtsFiles(dir: string) {
-  const files = readdirSync(dir, { recursive: true });
-
-  const typeFile = process.cwd() + '/dist/ai-sdk.types.d.ts';
-  files.forEach(file => {
-    if (file.toString().endsWith('.d.ts')) {
-      const filePath = join(dir, file.toString());
-      const relativePath = relative(dirname(filePath), typeFile);
-      let content = readFileSync(filePath, 'utf-8');
-
-      const hasV4Import = content.includes('@internal/ai-sdk-v4');
-      // Replace imports from @internal/utils to local file
-      content = content.replace(/from ['"]@internal\/ai-sdk-v4['"]/g, `from '${relativePath}'`);
-      content = content.replace(/import\(['"]@internal\/ai-sdk-v4['"]/g, `import('${relativePath}'`);
-
-      // content = content.replace(
-      //   /import\(['"]@internal\/utils['"]\)/g,
-      //   `import('./utils')`
-      // );
-
-      if (hasV4Import) {
-        console.info(`\t updated ${filePath}`);
-      }
-      writeFileSync(filePath, content);
-    }
-  });
-}
-
 export default defineConfig({
   entry: [
     'src/index.ts',
@@ -78,6 +49,7 @@ export default defineConfig({
     'src/*/index.ts',
     'src/tools/is-vercel-tool.ts',
     'src/workflows/constants.ts',
+    'src/storage/constants.ts',
     'src/workflows/evented/index.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
@@ -99,7 +71,10 @@ export default defineConfig({
   sourcemap: true,
   onSuccess: async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    await generateTypes(process.cwd());
+    await generateTypes(
+      process.cwd(),
+      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types']),
+    );
 
     // Copy provider-registry.json to dist folder
     const srcJson = path.join(process.cwd(), 'src/llm/model/provider-registry.json');
@@ -123,11 +98,5 @@ export default defineConfig({
       fs.copyFileSync(srcDts, distDts);
       console.info('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
     }
-
-    const typeFilePath = path.join(process.cwd(), 'src/_types/ai-sdk.types.d.ts');
-    copyFileSync(typeFilePath, path.join(process.cwd(), 'dist/ai-sdk.types.d.ts'));
-    console.info('* Fixing local ai-sdk v4 types');
-    fixDtsFiles(path.join(process.cwd(), 'dist'));
-    console.info('✓ Fixed local ai-sdk v4 types');
   },
 });

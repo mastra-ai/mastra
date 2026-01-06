@@ -1,48 +1,59 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
-import type {
-  PaginationInfo,
-  StorageColumn,
-  StorageResourceType,
-  TABLE_NAMES,
-  WorkflowRun,
-  StoragePagination,
-  WorkflowRuns,
-  StorageDomains,
-  StorageListWorkflowRunsInput,
-} from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageD1 } from './domains/memory';
-import { StoreOperationsD1 } from './domains/operations';
 import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
+export type { D1DomainConfig } from './db';
+
+/**
+ * Base configuration options shared across D1 configurations
+ */
+export interface D1BaseConfig {
+  /** Storage instance ID */
+  id: string;
+  /** Optional prefix for table names */
+  tablePrefix?: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new D1Store({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new D1Store({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+}
 
 /**
  * Configuration for D1 using the REST API
  */
-export interface D1Config {
-  /** Storage instance ID */
-  id: string;
+export interface D1Config extends D1BaseConfig {
   /** Cloudflare account ID */
   accountId: string;
   /** Cloudflare API token with D1 access */
   apiToken: string;
   /** D1 database ID */
   databaseId: string;
-  /** Optional prefix for table names */
-  tablePrefix?: string;
 }
 
-export interface D1ClientConfig {
-  /** Storage instance ID */
-  id: string;
-  /** Optional prefix for table names */
-  tablePrefix?: string;
+export interface D1ClientConfig extends D1BaseConfig {
   /** D1 Client */
   client: D1Client;
 }
@@ -50,13 +61,9 @@ export interface D1ClientConfig {
 /**
  * Configuration for D1 using the Workers Binding API
  */
-export interface D1WorkersConfig {
-  /** Storage instance ID */
-  id: string;
+export interface D1WorkersConfig extends D1BaseConfig {
   /** D1 database binding from Workers environment */
   binding: D1Database; // D1Database binding from Workers
-  /** Optional prefix for table names */
-  tablePrefix?: string;
 }
 
 /**
@@ -69,9 +76,27 @@ export interface D1Client {
   query(args: { sql: string; params: string[] }): Promise<{ result: D1QueryResult }>;
 }
 
+/**
+ * Cloudflare D1 storage adapter for Mastra.
+ *
+ * Access domain-specific storage via `getStore()`:
+ *
+ * @example
+ * ```typescript
+ * const storage = new D1Store({ id: 'my-store', accountId: '...', apiToken: '...', databaseId: '...' });
+ *
+ * // Access memory domain
+ * const memory = await storage.getStore('memory');
+ * await memory?.saveThread({ thread });
+ *
+ * // Access workflows domain
+ * const workflows = await storage.getStore('workflows');
+ * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ * ```
+ */
 export class D1Store extends MastraStorage {
   private client?: D1Client;
-  private binding?: D1Database; // D1Database binding
+  private binding?: D1Database;
   private tablePrefix: string;
 
   stores: StorageDomains;
@@ -82,7 +107,7 @@ export class D1Store extends MastraStorage {
    */
   constructor(config: D1StoreConfig) {
     try {
-      super({ id: config.id, name: 'D1' });
+      super({ id: config.id, name: 'D1', disableInit: config.disableInit });
 
       if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
         throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
@@ -125,7 +150,7 @@ export class D1Store extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_INITIALIZATION_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.SYSTEM,
           text: 'Error initializing D1Store',
@@ -134,286 +159,27 @@ export class D1Store extends MastraStorage {
       );
     }
 
-    const operations = new StoreOperationsD1({
-      client: this.client,
-      binding: this.binding,
-      tablePrefix: this.tablePrefix,
-    });
+    let scores: ScoresStorageD1;
+    let workflows: WorkflowsStorageD1;
+    let memory: MemoryStorageD1;
 
-    const scores = new ScoresStorageD1({
-      operations,
-    });
-
-    const workflows = new WorkflowsStorageD1({
-      operations,
-    });
-
-    const memory = new MemoryStorageD1({
-      operations,
-    });
+    if (this.binding) {
+      const domainConfig = { binding: this.binding, tablePrefix: this.tablePrefix };
+      scores = new ScoresStorageD1(domainConfig);
+      workflows = new WorkflowsStorageD1(domainConfig);
+      memory = new MemoryStorageD1(domainConfig);
+    } else {
+      const domainConfig = { client: this.client!, tablePrefix: this.tablePrefix };
+      scores = new ScoresStorageD1(domainConfig);
+      workflows = new WorkflowsStorageD1(domainConfig);
+      memory = new MemoryStorageD1(domainConfig);
+    }
 
     this.stores = {
-      operations,
       scores,
       workflows,
       memory,
     };
-  }
-
-  get supports() {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: false,
-      listScoresBySpan: true,
-    };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async hasColumn(table: string, column: string): Promise<boolean> {
-    return this.stores.operations.hasColumn(table, column);
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.saveMessages(args);
-  }
-
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
-    workflowName: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
-  }
-
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
-    workflowName: string;
-    runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
-  }
-
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
-  }
-
-  async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot(params);
-  }
-
-  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns(args);
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  /**
-   * Insert multiple records in a batch operation
-   * @param tableName The table to insert into
-   * @param records The records to insert
-   */
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async updateMessages(_args: {
-    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
-      id: string;
-      content?: {
-        metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
-      };
-    })[];
-  }): Promise<MastraDBMessage[]> {
-    return this.stores.memory.updateMessages(_args);
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id: _id });
-  }
-
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
-  }
-
-  async listScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({
-      entityId: _entityId,
-      entityType: _entityType,
-      pagination: _pagination,
-    });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
   /**

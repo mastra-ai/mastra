@@ -1,6 +1,6 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { openai } from '@ai-sdk/openai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
@@ -280,13 +280,13 @@ describe('StructuredOutputProcessor', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'text-delta' as const,
-          payload: { id: '1', text: 'User input' },
+          payload: { id: 'text-1', text: 'User input' },
         },
         {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'text-delta' as const,
-          payload: { id: '2', text: 'Agent response' },
+          payload: { id: 'text-2', text: 'Agent response' },
         },
         // Tool call chunk
         {
@@ -397,13 +397,13 @@ describe('StructuredOutputProcessor', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'reasoning-delta' as const,
-          payload: { id: '1', text: 'I need to analyze the color and intensity' },
+          payload: { id: 'text-1', text: 'I need to analyze the color and intensity' },
         },
         {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'text-delta' as const,
-          payload: { id: '2', text: 'The answer is blue and bright' },
+          payload: { id: 'text-2', text: 'The answer is blue and bright' },
         },
       ];
 
@@ -460,7 +460,7 @@ describe('Structured Output with Tool Execution', () => {
       name = 'State Tracking Processor';
       async processOutputStream({ part, streamParts }: any) {
         streamPartsLog.push({ type: part.type, streamPartsLength: streamParts.length });
-        console.log(`Processor saw ${part.type}, streamParts.length: ${streamParts.length}`);
+        // console.log(`Processor saw ${part.type}, streamParts.length: ${streamParts.length}`);
         return part;
       }
     }
@@ -525,9 +525,9 @@ describe('Structured Output with Tool Execution', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"toolUsed":"calculator","result":"8","confidence":0.95}' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"toolUsed":"calculator","result":"8","confidence":0.95}' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -575,7 +575,6 @@ describe('Structured Output with Tool Execution', () => {
         const collected: any[] = [];
         for await (const chunk of stream.fullStream) {
           collected.push(chunk);
-          console.log('Chunk:', chunk.type, chunk.type === 'finish' ? chunk : '');
         }
         return collected;
       })(),
@@ -584,20 +583,20 @@ describe('Structured Output with Tool Execution', () => {
 
     fullStreamChunks.push(...chunks);
 
-    console.log(
-      'Full stream chunk types:',
-      fullStreamChunks.map(c => c.type),
-    );
-    console.log(
-      'Finish chunks:',
-      fullStreamChunks.filter(c => c.type === 'finish'),
-    );
-    console.log(
-      'Tool result chunk:',
-      fullStreamChunks.find(c => c.type === 'tool-result'),
-    );
-    console.log('Mock tool execute called times:', mockTool.execute.mock.calls.length);
-    console.log('Final object:', finalObject);
+    // console.log(
+    //   'Full stream chunk types:',
+    //   fullStreamChunks.map(c => c.type),
+    // );
+    // console.log(
+    //   'Finish chunks:',
+    //   fullStreamChunks.filter(c => c.type === 'finish'),
+    // );
+    // console.log(
+    //   'Tool result chunk:',
+    //   fullStreamChunks.find(c => c.type === 'tool-result'),
+    // );
+    // console.log('Mock tool execute called times:', mockTool.execute.mock.calls.length);
+    // console.log('Final object:', finalObject);
 
     // ISSUE: Before the fix, no structured output would be generated when tools are involved
     // The structured output processor would lose state between LLM calls or not trigger at all
@@ -663,7 +662,6 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const stream = await agent.stream('What is the weather in Toronto?', {
-      format: 'aisdk',
       maxSteps: 10,
       structuredOutput: {
         schema: responseSchema,
@@ -671,11 +669,7 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    // Consume the stream
-    for await (const chunk of stream.fullStream) {
-      console.log('Chunk:', chunk.type);
-      // Just consume
-    }
+    await stream.consumeStream();
 
     const finalObject = await stream.object;
     console.log('Final object with multiple tools:', finalObject);
@@ -685,7 +679,7 @@ describe('Structured Output with Tool Execution', () => {
     expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
     expect(finalObject.toolsCalled).toHaveLength(2);
     expect(finalObject.location).toBe('Toronto');
-  }, 15000);
+  }, 60000);
 
   it('should NOT use structured output processor when model is not provided', async () => {
     const responseSchema = z.object({

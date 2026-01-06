@@ -1,15 +1,21 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
-import type { PubSub } from '../../events';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { LoopConditionFunction, Step } from '../step';
-import type { Emitter, StepFlowEntry, StepResult } from '../types';
-import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
+import type { StepFlowEntry, StepResult } from '../types';
+import {
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+  validateStepSuspendData,
+} from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -35,10 +41,13 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
+    abortController?: AbortController;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
-    const abortController = new AbortController();
+    // Use provided abortController or create a new one for backwards compatibility
+    const abortController = params.abortController ?? new AbortController();
 
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
@@ -46,7 +55,7 @@ export class StepExecutor extends MastraBase {
     const { inputData, validationError } = await validateStepInput({
       prevOutput: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
       step,
-      validateInputs: params.validateInputs ?? false,
+      validateInputs: params.validateInputs ?? true,
     });
 
     let stepInfo: {
@@ -67,12 +76,22 @@ export class StepExecutor extends MastraBase {
       stepInfo.resumedAt = Date.now();
     }
 
+    // Extract suspend data if this step was previously suspended
+    let suspendDataToUse =
+      params.stepResults[step.id]?.status === 'suspended' ? params.stepResults[step.id]?.suspendPayload : undefined;
+
+    // Filter out internal workflow metadata before exposing to step code
+    if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
+      const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
+      suspendDataToUse = userSuspendData;
+    }
+
     try {
       if (validationError) {
         throw validationError;
       }
 
-      const stepResult = await step.execute(
+      const stepOutput = await step.execute(
         createDeprecationProxy(
           {
             workflowId: params.workflowId,
@@ -81,16 +100,25 @@ export class StepExecutor extends MastraBase {
             requestContext,
             inputData,
             state: params.state,
-            setState: (state: any) => {
+            setState: async (state: any) => {
               // TODO
               params.state = state;
             },
             retryCount,
             resumeData: params.resumeData,
+            suspendData: suspendDataToUse,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
             suspend: async (suspendPayload: any): Promise<any> => {
-              suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
+              const { suspendData, validationError } = await validateStepSuspendData({
+                suspendData: suspendPayload,
+                step,
+                validateInputs: params.validateInputs ?? true,
+              });
+              if (validationError) {
+                throw validationError;
+              }
+              suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
             },
             bail: (result: any) => {
               bailed = { payload: result };
@@ -100,7 +128,7 @@ export class StepExecutor extends MastraBase {
             abort: () => {
               abortController?.abort();
             },
-            [EMITTER_SYMBOL]: params.emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(params.emitter),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -115,6 +143,10 @@ export class StepExecutor extends MastraBase {
         ),
       );
 
+      const isNestedWorkflowStep = step.component === 'WORKFLOW';
+
+      const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
+
       const endedAt = Date.now();
 
       let finalResult: StepResult<any, any, any, any>;
@@ -123,7 +155,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
-          ...(stepResult ? { suspendOutput: stepResult } : {}),
+          ...(stepOutput ? { suspendOutput: stepOutput } : {}),
         };
 
         if (suspended.payload) {
@@ -137,12 +169,17 @@ export class StepExecutor extends MastraBase {
           endedAt,
           output: bailed.payload,
         };
+      } else if (nestedWflowStepPaused) {
+        finalResult = {
+          ...stepInfo,
+          status: 'paused',
+        };
       } else {
         finalResult = {
           ...stepInfo,
           status: 'success',
           endedAt,
-          output: stepResult,
+          output: stepOutput,
         };
       }
 
@@ -151,7 +188,7 @@ export class StepExecutor extends MastraBase {
       const endedAt = Date.now();
 
       const errorInstance = getErrorFromUnknown(error, {
-        includeStack: false,
+        serializeStack: false,
         fallbackMessage: 'Unknown step execution error',
       });
 
@@ -159,7 +196,7 @@ export class StepExecutor extends MastraBase {
         ...stepInfo,
         status: 'failed',
         endedAt,
-        error: `Error: ${errorInstance.message}`,
+        error: errorInstance,
       };
     }
   }
@@ -175,10 +212,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number[]> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     const results = await Promise.all(
@@ -199,7 +237,7 @@ export class StepExecutor extends MastraBase {
             iterationCount: 0,
           });
         } catch (e) {
-          console.error('error evaluating condition', e);
+          this.mastra?.getLogger()?.error('error evaluating condition', e);
           return false;
         }
       }),
@@ -252,16 +290,10 @@ export class StepExecutor extends MastraBase {
           requestContext,
           inputData,
           state,
-          setState: (_state: any) => {
-            // TODO
-          },
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (_suspendPayload: any): Promise<any> => {
-            throw new Error('Not implemented');
-          },
           bail: (_result: any) => {
             throw new Error('Not implemented');
           },
@@ -270,7 +302,7 @@ export class StepExecutor extends MastraBase {
           abort: () => {
             abortController?.abort();
           },
-          [EMITTER_SYMBOL]: emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+          [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(emitter),
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
@@ -297,10 +329,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     if (step.duration) {
@@ -322,7 +355,7 @@ export class StepExecutor extends MastraBase {
             inputData: params.input,
             // TODO: implement state
             state: {},
-            setState: (_state: any) => {
+            setState: async (_state: any) => {
               // TODO
             },
             retryCount,
@@ -340,7 +373,7 @@ export class StepExecutor extends MastraBase {
             },
             // TODO
             writer: undefined as any,
-            [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(ee),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -355,7 +388,7 @@ export class StepExecutor extends MastraBase {
         ),
       );
     } catch (e) {
-      console.error('error evaluating condition', e);
+      this.mastra?.getLogger()?.error('error evaluating condition', e);
       return 0;
     }
   }
@@ -370,10 +403,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     if (step.date) {
@@ -395,7 +429,7 @@ export class StepExecutor extends MastraBase {
             inputData: params.input,
             // TODO: implement state
             state: {},
-            setState: (_state: any) => {
+            setState: async (_state: any) => {
               // TODO
             },
             retryCount,
@@ -413,7 +447,7 @@ export class StepExecutor extends MastraBase {
             },
             // TODO
             writer: undefined as any,
-            [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(ee),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -430,7 +464,7 @@ export class StepExecutor extends MastraBase {
 
       return result.getTime() - Date.now();
     } catch (e) {
-      console.error('error evaluating condition', e);
+      this.mastra?.getLogger()?.error('error evaluating condition', e);
       return 0;
     }
   }

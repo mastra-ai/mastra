@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { resetStorage } from '../../__utils__/reset-storage';
+
+test.afterEach(async () => {
+  await resetStorage();
+});
 
 test('overall layout information', async ({ page }) => {
   await page.goto('http://localhost:4111/agents/weatherAgent/chat/1234');
@@ -100,7 +105,7 @@ test.describe('agent panels', () => {
       // Act
       await page.click('text=Reset');
 
-      // Assert
+      // Assert - values reset to defaults (maxSteps: 5, maxRetries: 2 are fallback defaults)
       await expect(page.getByLabel('Top K')).toHaveValue('');
       await expect(page.getByLabel('Frequency Penalty')).toHaveValue('');
       await expect(page.getByLabel('Presence Penalty')).toHaveValue('');

@@ -1,4 +1,5 @@
 // To setup a Opensearch server, run the docker compose file in the opensearch directory
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult } from '@mastra/core/vector';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1554,5 +1555,24 @@ describe('OpenSearchVector', () => {
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
+  });
+});
+
+// Metadata filtering and advanced operations tests
+describe('OpenSearch Metadata Filtering', () => {
+  const opensearchVector = new OpenSearchVector({ url: 'http://localhost:9200', id: 'opensearch-metadata-test' });
+
+  createVectorTestSuite({
+    vector: opensearchVector,
+    createIndex: async (indexName: string) => {
+      await opensearchVector.createIndex({ indexName, dimension: 1536 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await opensearchVector.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // OpenSearch indexes immediately with refresh: true
+      await new Promise(resolve => setTimeout(resolve, 100));
+    },
   });
 });

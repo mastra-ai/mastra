@@ -1,5 +1,5 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
 
 export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {

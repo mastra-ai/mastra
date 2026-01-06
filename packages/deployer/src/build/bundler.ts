@@ -2,16 +2,19 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import esmShim from '@rollup/plugin-esm-shim';
+import { esmShim } from './plugins/esm-shim';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
 import { esbuild } from './plugins/esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { analyzeBundle } from './analyze';
-import { removeDeployer } from './plugins/remove-deployer';
+import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
+import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
+import { removeDeployer } from './plugins/remove-deployer';
 
 export async function getInputOptions(
   entryFile: string,
@@ -24,12 +27,14 @@ export async function getInputOptions(
     projectRoot,
     workspaceRoot = undefined,
     enableEsmShim = true,
+    externalsPreset = false,
   }: {
     sourcemap?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
     enableEsmShim?: boolean;
+    externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
@@ -43,20 +48,8 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externalsCopy = new Set<string>();
-  // make all nested imports external from the same package
-  for (const external of analyzedBundleInfo.externalDependencies) {
-    if (external.startsWith('@')) {
-      const [scope, name] = external.split('/', 3);
-      externalsCopy.add(`${scope}/${name}`);
-      externalsCopy.add(`${scope}/${name}/*`);
-    } else {
-      externalsCopy.add(external);
-      externalsCopy.add(`${external}/*`);
-    }
-  }
-
-  const externals = Array.from(externalsCopy);
+  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
+  const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
   return {
@@ -65,6 +58,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
+      subpathExternalsResolver(externals),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
@@ -129,15 +123,17 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      commonjs({
-        extensions: ['.js', '.ts'],
-        transformMixedEsModules: true,
-        esmExternals(id) {
-          return externals.includes(id);
-        },
-      }),
+      externalsPreset
+        ? null
+        : commonjs({
+            extensions: ['.js', '.ts'],
+            transformMixedEsModules: true,
+            esmExternals(id) {
+              return externals.includes(id);
+            },
+          }),
       enableEsmShim ? esmShim() : undefined,
-      nodeResolvePlugin,
+      externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
       // {
       //   name: 'logger',

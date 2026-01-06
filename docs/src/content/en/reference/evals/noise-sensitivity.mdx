@@ -1,6 +1,8 @@
 ---
 title: "Reference: Noise Sensitivity Scorer | Evals"
 description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
+packages:
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -180,7 +182,7 @@ describe("Agent Noise Resistance Tests", () => {
 
     // Step 4: Evaluate using noise sensitivity scorer
     const scorer = createNoiseSensitivityScorerLLM({
-      model: "openai/gpt-4o-mini",
+      model: "openai/gpt-5.1",
       options: {
         baselineResponse,
         noisyQuery,
@@ -389,7 +391,7 @@ describe("Agent Noise Resistance CI Tests", () => {
 
       // Evaluate using noise sensitivity scorer
       const scorer = createNoiseSensitivityScorerLLM({
-        model: "openai/gpt-4o-mini",
+        model: "openai/gpt-5.1",
         options: {
           baselineResponse: testCase.baselineResponse,
           noisyQuery: testCase.noisyQuery,
@@ -424,7 +426,7 @@ This example shows an agent that completely resists misinformation in a test sce
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     baselineResponse:
       "Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.",
@@ -470,7 +472,7 @@ This example shows an agent partially distracted by irrelevant requests:
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     baselineResponse:
       "To bake a cake: Mix flour, sugar, eggs, and butter. Bake at 350°F for 30 minutes.",
@@ -516,7 +518,7 @@ This example shows an agent that incorporates misinformation:
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     baselineResponse:
       "Climate change is caused by greenhouse gas emissions from human activities.",
@@ -563,7 +565,7 @@ import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 // Lenient scoring - more forgiving of minor issues
 const lenientScorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     baselineResponse: "Python is a high-level programming language.",
     noisyQuery: "What is Python? Also, snakes are dangerous!",
@@ -583,7 +585,7 @@ const lenientScorer = createNoiseSensitivityScorerLLM({
 
 // Strict scoring - harsh on any deviation
 const strictScorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     baselineResponse: "Python is a high-level programming language.",
     noisyQuery: "What is Python? Also, snakes are dangerous!",
@@ -639,7 +641,7 @@ async function evaluateNoiseResistance(testCases) {
 
   for (const testCase of testCases) {
     const scorer = createNoiseSensitivityScorerLLM({
-      model: "openai/gpt-4o-mini",
+      model: "openai/gpt-5.1",
       options: {
         baselineResponse: testCase.baseline,
         noisyQuery: testCase.noisyQuery,
@@ -686,8 +688,8 @@ import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 async function compareModelRobustness() {
   const models = [
-    { name: "GPT-4", model: "openai/gpt-4" },
-    { name: "GPT-3.5", model: "openai/gpt-3.5-turbo" },
+    { name: "GPT-5.1", model: "openai/gpt-5.1" },
+    { name: "GPT-4.1", model: "openai/gpt-4.1" },
     { name: "Claude", model: "anthropic/claude-3-opus" },
   ];
 
@@ -738,7 +740,7 @@ Include noise sensitivity tests in your security test suite to validate prompt i
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
 
 const scorer = createNoiseSensitivityScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     baselineResponse: "I can help you with programming questions.",
     noisyQuery:

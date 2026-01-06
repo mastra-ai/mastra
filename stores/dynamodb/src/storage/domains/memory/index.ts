@@ -2,7 +2,16 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  filterByDateRange,
+  MemoryStorage,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_THREADS,
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+} from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -11,12 +20,74 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
+import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.service = resolveDynamoDBConfig(config);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_THREADS);
+    await deleteTableData(this.service, TABLE_MESSAGES);
+    await deleteTableData(this.service, TABLE_RESOURCES);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Delete messages in batches of 25 (DynamoDB limit)
+      const batchSize = 25;
+      for (let i = 0; i < messageIds.length; i += batchSize) {
+        const batch = messageIds.slice(i, i + batchSize);
+
+        // Get messages to find their threadIds before deleting
+        const messagesToDelete = await Promise.all(
+          batch.map(async id => {
+            const result = await this.service.entities.message.get({ entity: 'message', id }).go();
+            return result.data;
+          }),
+        );
+
+        // Collect threadIds and delete messages
+        for (const message of messagesToDelete) {
+          if (message) {
+            if (message.threadId) {
+              threadIds.add(message.threadId);
+            }
+            await this.service.entities.message.delete({ entity: 'message', id: message.id }).go();
+          }
+        }
+      }
+
+      // Update thread timestamps
+      const now = new Date().toISOString();
+      for (const threadId of threadIds) {
+        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Helper function to parse message data (handle JSON fields)
@@ -73,7 +144,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -112,7 +183,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -182,7 +253,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id },
@@ -223,7 +294,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -258,7 +329,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -271,15 +342,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
@@ -291,7 +365,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -328,22 +402,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Apply date range filter
-      if (filter?.dateRange) {
-        const dateRange = filter.dateRange;
-        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => {
-          const createdAt = new Date(msg.createdAt).getTime();
-          if (dateRange.start) {
-            const startTime =
-              dateRange.start instanceof Date ? dateRange.start.getTime() : new Date(dateRange.start).getTime();
-            if (createdAt < startTime) return false;
-          }
-          if (dateRange.end) {
-            const endTime = dateRange.end instanceof Date ? dateRange.end.getTime() : new Date(dateRange.end).getTime();
-            if (createdAt > endTime) return false;
-          }
-          return true;
-        });
-      }
+      allThreadMessages = filterByDateRange(
+        allThreadMessages,
+        (msg: MastraDBMessage) => new Date(msg.createdAt),
+        filter?.dateRange,
+      );
 
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
@@ -383,7 +446,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
         const selectBy = { include };
-        includeMessages = await this._getIncludedMessages(threadId, selectBy);
+        includeMessages = await this._getIncludedMessages(selectBy);
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -431,11 +494,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
@@ -529,7 +592,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -548,7 +611,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -597,7 +660,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId, page, perPage },
@@ -608,9 +671,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper method to get included messages with context
-  private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraDBMessage[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
+  private async _getIncludedMessages(selectBy: any): Promise<MastraDBMessage[]> {
     if (!selectBy?.include?.length) {
       return [];
     }
@@ -619,18 +680,26 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     for (const includeItem of selectBy.include) {
       try {
-        const { id, threadId: targetThreadId, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
-        const searchThreadId = targetThreadId || threadId;
+        const { id, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
+
+        // Step 1: Get the target message by ID to find its threadId
+        const targetResult = await this.service.entities.message.get({ entity: 'message', id }).go();
+        if (!targetResult.data) {
+          this.logger.warn('Target message not found', { id });
+          continue;
+        }
+
+        const targetMessageData = targetResult.data as any;
+        const searchThreadId = targetMessageData.threadId;
 
         this.logger.debug('Getting included messages for', {
           id,
-          targetThreadId,
           searchThreadId,
           withPreviousMessages,
           withNextMessages,
         });
 
-        // Get all messages for the target thread
+        // Step 2: Get all messages for the target thread
         const query = this.service.entities.message.query.byThread({ entity: 'message', threadId: searchThreadId });
         const results = await query.go();
         const allMessages = results.data
@@ -653,10 +722,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           return timeA - timeB;
         });
 
-        // Find the target message
+        // Find the target message index
         const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
         if (targetIndex === -1) {
-          this.logger.warn('Target message not found', { id, threadId: searchThreadId });
+          this.logger.warn('Target message not found in thread', { id, threadId: searchThreadId });
           continue;
         }
 
@@ -784,7 +853,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -817,7 +886,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -854,7 +923,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -922,7 +991,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

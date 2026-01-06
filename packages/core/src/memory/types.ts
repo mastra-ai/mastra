@@ -1,14 +1,14 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
+import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
+import type { ZodObject } from 'zod';
 
 export type { MastraDBMessage } from '../agent';
-import type { ZodObject } from 'zod';
 import type { EmbeddingModelId } from '../llm/model/index.js';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
+import type { RequestContext } from '../request-context';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
-import type { MastraVector } from '../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -41,6 +41,58 @@ export type StorageThreadType = {
   updatedAt: Date;
   metadata?: Record<string, unknown>;
 };
+
+/**
+ * Memory-specific context passed via RequestContext under the 'MastraMemory' key
+ * This provides processors with access to memory-related execution context
+ */
+export type MemoryRequestContext = {
+  thread?: Partial<StorageThreadType> & { id: string };
+  resourceId?: string;
+  memoryConfig?: MemoryConfig;
+};
+
+/**
+ * Parse and validate memory runtime context from RequestContext
+ * @param requestContext - The RequestContext to extract memory context from
+ * @returns The validated MemoryRequestContext or null if not available
+ * @throws Error if the context exists but is malformed
+ */
+export function parseMemoryRequestContext(requestContext?: RequestContext): MemoryRequestContext | null {
+  if (!requestContext) {
+    return null;
+  }
+
+  const memoryContext = requestContext.get('MastraMemory');
+  if (!memoryContext) {
+    return null;
+  }
+
+  // Validate the structure
+  if (typeof memoryContext !== 'object' || memoryContext === null) {
+    throw new Error(`Invalid MemoryRequestContext: expected object, got ${typeof memoryContext}`);
+  }
+
+  const ctx = memoryContext as Record<string, unknown>;
+
+  // Validate thread if present
+  if (ctx.thread !== undefined) {
+    if (typeof ctx.thread !== 'object' || ctx.thread === null) {
+      throw new Error(`Invalid MemoryRequestContext.thread: expected object, got ${typeof ctx.thread}`);
+    }
+    const thread = ctx.thread as Record<string, unknown>;
+    if (typeof thread.id !== 'string') {
+      throw new Error(`Invalid MemoryRequestContext.thread.id: expected string, got ${typeof thread.id}`);
+    }
+  }
+
+  // Validate resourceId if present
+  if (ctx.resourceId !== undefined && typeof ctx.resourceId !== 'string') {
+    throw new Error(`Invalid MemoryRequestContext.resourceId: expected string, got ${typeof ctx.resourceId}`);
+  }
+
+  return memoryContext as MemoryRequestContext;
+}
 
 export type MessageResponse<T extends 'raw' | 'core_message'> = {
   raw: MastraMessageV1[];
@@ -227,6 +279,28 @@ export type SemanticRecall = {
    * ```
    */
   indexConfig?: VectorIndexConfig;
+
+  /**
+   * Minimum similarity score threshold (0-1).
+   * Messages below this threshold will be filtered out from semantic search results.
+   *
+   * @example
+   * ```typescript
+   * threshold: 0.7 // Only include messages with 70%+ similarity
+   * ```
+   */
+  threshold?: number;
+
+  /**
+   * Index name for the vector store.
+   * If not provided, will be auto-generated based on embedder model.
+   *
+   * @example
+   * ```typescript
+   * indexName: 'my-custom-index'
+   * ```
+   */
+  indexName?: string;
 };
 
 /**
@@ -239,6 +313,18 @@ export type SemanticRecall = {
  * @see https://mastra.ai/docs/memory/overview
  */
 export type MemoryConfig = {
+  /**
+   * When true, prevents memory from saving new messages.
+   * Useful for internal agents (like routing agents) that should read memory but not modify it.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * readOnly: true // Agent can read memory but won't save new messages
+   * ```
+   */
+  readOnly?: boolean;
+
   /**
    * Number of recent messages from the current thread to include in context.
    * Provides short-term conversational continuity.
@@ -316,8 +402,9 @@ export type MemoryConfig = {
         /**
          * Language model to use for title generation.
          * Can be static or a function that receives request context for dynamic selection.
+         * Accepts both Mastra models and standard AI SDK LanguageModelV1/V2.
          */
-        model: DynamicArgument<MastraLanguageModel>;
+        model: DynamicArgument<MastraModelConfig>;
         /**
          * Custom instructions for title generation.
          * Can be static or a function that receives request context for dynamic customization.
@@ -336,7 +423,7 @@ export type MemoryConfig = {
     generateTitle?:
       | boolean
       | {
-          model: DynamicArgument<MastraLanguageModel>;
+          model: DynamicArgument<MastraModelConfig>;
           instructions?: DynamicArgument<string>;
         };
   };
@@ -399,19 +486,45 @@ export type SharedMemoryConfig = {
    * embedder: openai.embedding("text-embedding-3-small")
    * ```
    */
-  embedder?: EmbeddingModelId | EmbeddingModel<string> | EmbeddingModelV2<string>;
+  embedder?: EmbeddingModelId | MastraEmbeddingModel<string>;
 
   /**
-   * Memory processors that modify retrieved messages before sending to the LLM.
-   * Useful for managing context size, filtering content, and preventing token limit errors.
-   * Processors execute in order, with TokenLimiter typically placed last.
+   * Options to pass to the embedder when generating embeddings.
+   * Use this to pass provider-specific options like outputDimensionality for Google models.
    *
    * @example
    * ```typescript
-   * processors: [
-   *   new CustomMemoryProcessor(),
-   *   new TokenLimiter(127000)
-   * ]
+   * // Control embedding dimensions for Google models
+   * embedderOptions: {
+   *   providerOptions: {
+   *     google: {
+   *       outputDimensionality: 768,
+   *       taskType: 'RETRIEVAL_DOCUMENT'
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  embedderOptions?: MastraEmbeddingOptions;
+
+  /**
+   * @deprecated This option is deprecated and will throw an error if used.
+   * Use the new Input/Output processor system instead.
+   *
+   * See: https://mastra.ai/en/docs/memory/processors
+   *
+   * @example
+   * ```typescript
+   * // OLD (throws error):
+   * new Memory({
+   *   processors: [new TokenLimiter(100000)]
+   * })
+   *
+   * // NEW (use this):
+   * new Agent({
+   *   memory,
+   *   outputProcessors: [new TokenLimiterProcessor(100000)]
+   * })
    * ```
    */
   processors?: MemoryProcessor[];

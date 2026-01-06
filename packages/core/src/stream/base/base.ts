@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'stream/web';
+import type { ReadableStream } from 'node:stream/web';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 
 export interface MastraBaseStream<T> {

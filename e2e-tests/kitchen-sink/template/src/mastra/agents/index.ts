@@ -1,21 +1,17 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
 
 import { weatherInfo } from '../tools';
-import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
 import { lessComplexWorkflow } from '../workflows/complex-workflow';
 import { simpleMcpTool } from '../tools';
+import { storage } from '../storage';
 
 const memory = new Memory({
   // ...
-  storage: new LibSQLStore({
-    id: 'e2e-libsql-storage',
-    url: 'file:../mastra.db',
-  }),
+  storage,
 
   options: {
     generateTitle: true,
@@ -23,6 +19,23 @@ const memory = new Memory({
 });
 
 let count = 0;
+
+// Helper function to create a delayed readable stream
+function createDelayedStream(chunks: Array<any>, delayMs: number = 10) {
+  return new ReadableStream({
+    async start(controller) {
+      for (let i = 0; i < chunks.length; i++) {
+        controller.enqueue(chunks[i]);
+        // Add delay only for text-delta chunks to show progressive text streaming
+        // Skip delay for other chunk types to speed up tool/workflow execution
+        if (delayMs > 0 && chunks[i]?.type === 'text-delta' && i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+      controller.close();
+    },
+  });
+}
 
 export const subAgent = new Agent({
   id: 'sub-agent',
@@ -46,23 +59,48 @@ export const weatherAgent = new Agent({
 `,
   model: ({ requestContext }) => {
     const fixture = requestContext.get('fixture') as Fixtures;
+
+    console.log({ fixture });
     const fixtureData = fixtures[fixture];
 
     return new aiTest.MockLanguageModelV2({
-      doStream: async () => {
+      doGenerate: async () => {
+        const chunk = fixtureData[count] as Array<any>;
+
         count++;
+        if (count >= fixtureData.length) {
+          count = 0;
+        }
 
-        const chunk = fixtureData[count - 1] as Array<any>;
+        // Extract text from fixture chunks
+        const textChunks = chunk.filter((item: any) => item.type === 'text-delta').map((item: any) => item.delta);
+        const text = textChunks.join('');
 
-        if (count === fixtureData.length) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'text',
+              text,
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        const chunk = fixtureData[count] as Array<any>;
+
+        count++;
+        if (count >= fixtureData.length) {
           count = 0;
         }
 
         return {
-          stream: simulateReadableStream({
-            chunks: chunk,
-            delay: 500,
-          }),
+          stream: createDelayedStream(chunk, 20),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
         };
       },
     });

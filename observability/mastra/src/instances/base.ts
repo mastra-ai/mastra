@@ -10,6 +10,7 @@ import type {
   Span,
   SpanType,
   ObservabilityExporter,
+  ObservabilityBridge,
   SpanOutputProcessor,
   TracingEvent,
   AnySpan,
@@ -37,7 +38,7 @@ import { NoOpSpan } from '../spans';
  * Abstract base class for all Observability implementations in Mastra.
  */
 export abstract class BaseObservabilityInstance extends MastraBase implements ObservabilityInstance {
-  protected config: Required<ObservabilityInstanceConfig>;
+  protected config: ObservabilityInstanceConfig;
 
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
@@ -49,14 +50,21 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
       exporters: config.exporters ?? [],
       spanOutputProcessors: config.spanOutputProcessors ?? [],
+      bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
       requestContextKeys: config.requestContextKeys ?? [],
+      serializationOptions: config.serializationOptions,
     };
+
+    // Initialize bridge if present
+    if (this.config.bridge?.init) {
+      this.config.bridge.init({ config: this.config });
+    }
   }
 
   /**
    * Override setLogger to add Observability specific initialization log
-   * and propagate logger to exporters
+   * and propagate logger to exporters and bridge
    */
   __setLogger(logger: IMastraLogger) {
     super.__setLogger(logger);
@@ -68,9 +76,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
     });
 
+    // Propagate logger to bridge if present
+    if (this.config.bridge?.__setLogger) {
+      this.config.bridge.__setLogger(logger);
+    }
+
     // Log Observability initialization details after logger is properly set
     this.logger.debug(
-      `[Observability] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling.type}]`,
+      `[Observability] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling?.type}] [bridge=${!!this.config.bridge}]`,
     );
   }
 
@@ -111,13 +124,21 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = this.computeTraceState(tracingOptions);
     }
 
+    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
+    const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
+    const mergedMetadata = metadata || tracingMetadata ? { ...metadata, ...tracingMetadata } : undefined;
+
     // Extract metadata from RequestContext
-    const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, metadata, traceState);
+    const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
+
+    // Tags are only passed for root spans (no parent)
+    const tags = !options.parent ? tracingOptions?.tags : undefined;
 
     const span = this.createSpan<TType>({
       ...rest,
       metadata: enrichedMetadata,
       traceState,
+      tags,
     });
 
     if (span.isEvent) {
@@ -158,7 +179,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   /**
    * Get current configuration
    */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>> {
+  getConfig(): Readonly<ObservabilityInstanceConfig> {
     return { ...this.config };
   }
 
@@ -178,6 +199,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getSpanOutputProcessors(): readonly SpanOutputProcessor[] {
     return [...this.spanOutputProcessors];
+  }
+
+  /**
+   * Get the bridge instance if configured
+   */
+  getBridge(): ObservabilityBridge | undefined {
+    return this.config.bridge;
   }
 
   /**
@@ -236,7 +264,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Check built-in sampling strategy
     const { sampling } = this.config;
 
-    switch (sampling.type) {
+    switch (sampling?.type) {
+      case undefined:
+        return true;
       case SamplingStrategyType.ALWAYS:
         return true;
       case SamplingStrategyType.NEVER:
@@ -399,18 +429,27 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Export tracing event through all exporters (realtime mode)
+   * Export tracing event through all exporters and bridge (realtime mode)
    */
   protected async exportTracingEvent(event: TracingEvent): Promise<void> {
-    const exportPromises = this.exporters.map(async exporter => {
+    // Collect all export targets
+    const targets: Array<{ name: string; exportTracingEvent: (event: TracingEvent) => Promise<void> }> = [
+      ...this.exporters,
+    ];
+
+    // Add bridge if present
+    if (this.config.bridge) {
+      targets.push(this.config.bridge);
+    }
+
+    // Export to all targets
+    const exportPromises = targets.map(async target => {
       try {
-        if (exporter.exportTracingEvent) {
-          await exporter.exportTracingEvent(event);
-          this.logger.debug(`[Observability] Event exported [exporter=${exporter.name}] [type=${event.type}]`);
-        }
+        await target.exportTracingEvent(event);
+        this.logger.debug(`[Observability] Event exported [target=${target.name}] [type=${event.type}]`);
       } catch (error) {
-        this.logger.error(`[Observability] Export error [exporter=${exporter.name}]`, error);
-        // Don't rethrow - continue with other exporters
+        this.logger.error(`[Observability] Export error [target=${target.name}]`, error);
+        // Don't rethrow - continue with other targets
       }
     });
 
@@ -439,11 +478,16 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   async shutdown(): Promise<void> {
     this.logger.debug(`[Observability] Shutdown started [name=${this.name}]`);
 
-    // Shutdown all components
+    // Shutdown all components including bridge
     const shutdownPromises = [
       ...this.exporters.map(e => e.shutdown()),
       ...this.spanOutputProcessors.map(p => p.shutdown()),
     ];
+
+    // Add bridge shutdown if present
+    if (this.config.bridge) {
+      shutdownPromises.push(this.config.bridge.shutdown());
+    }
 
     await Promise.allSettled(shutdownPromises);
 

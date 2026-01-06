@@ -1,4 +1,5 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -14,8 +15,13 @@ export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = und
 
 // Tripwire result extensions
 export type TripwireProperties = {
-  tripwire?: boolean;
-  tripwireReason?: string;
+  /** Tripwire data when processing was aborted */
+  tripwire?: {
+    reason: string;
+    retry?: boolean;
+    metadata?: unknown;
+    processorId?: string;
+  };
 };
 
 export type ScoringProperties = {
@@ -37,16 +43,41 @@ export type OpenAICompatibleConfig =
       headers?: Record<string, string>; // Additional headers
     };
 
-export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
+type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
+type DoStreamResultPromiseV3 = PromiseLike<Awaited<ReturnType<LanguageModelV3['doStream']>>>;
+
+/** Wrapped V2 model with unified doGenerate/doStream that returns streams */
+export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
+  doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
+  doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
+};
+
+/** Wrapped V3 model with unified doGenerate/doStream that returns streams */
+export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStream'> & {
+  doGenerate: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
+  doStream: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
+};
+
+export type MastraLanguageModelV1 = MastraLegacyLanguageModel;
+export type MastraLegacyLanguageModel = LanguageModelV1;
+
+/** Union of modern language models (V2/V3) */
+export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3;
+
+export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions;
 
 // Support for:
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
-// - LanguageModelV1/V2 (existing AI SDK models)
-export type MastraModelConfig = MastraLanguageModel | ModelRouterModelId | OpenAICompatibleConfig;
-
-export type MastraLanguageModelV2 = LanguageModelV2;
+// - LanguageModelV1/V2/V3 (existing AI SDK models)
+export type MastraModelConfig =
+  | LanguageModelV1
+  | LanguageModelV2
+  | LanguageModelV3
+  | ModelRouterModelId
+  | OpenAICompatibleConfig
+  | MastraLanguageModel;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;

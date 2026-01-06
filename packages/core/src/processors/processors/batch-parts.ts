@@ -33,7 +33,7 @@ export interface BatchPartsOptions {
  * Processor that batches multiple stream parts together to reduce stream overhead.
  * Only implements processOutputStream - does not process final results.
  */
-export class BatchPartsProcessor implements Processor {
+export class BatchPartsProcessor implements Processor<'batch-parts'> {
   public readonly id = 'batch-parts';
   public readonly name = 'Batch Parts';
 
@@ -130,7 +130,7 @@ export class BatchPartsProcessor implements Processor {
       // Create a new combined text part
       const combinedChunk: ChunkType = {
         type: 'text-delta',
-        payload: { text: combinedText, id: '1' },
+        payload: { text: combinedText, id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };

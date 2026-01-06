@@ -5,6 +5,9 @@ on:
     branches: [main, 0.x]
     paths:
       - 'packages/cli/**'
+      - 'packages/core/**'
+      - 'packages/deployer/**'
+      - 'packages/loggers/**'
       - '.github/workflows/test-cli.yml'
 
 jobs:

@@ -1,8 +1,8 @@
-import { randomUUID } from 'crypto';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import os from 'os';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PostHog } from 'posthog-node';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -123,6 +123,10 @@ export class PosthogAnalytics {
       machine_id: os.hostname(),
     };
   }
+  private getDurationMs(startTime: [number, number]): number {
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    return seconds * 1000 + nanoseconds / 1_000_000;
+  }
 
   private captureSessionStart(): void {
     if (!this.client) {
@@ -217,9 +221,7 @@ export class PosthogAnalytics {
 
     try {
       const result = await execution();
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      const durationMs = seconds * 1000 + nanoseconds / 1000000;
-
+      const durationMs = this.getDurationMs(startTime);
       this.trackCommand({
         command,
         args,
@@ -230,9 +232,7 @@ export class PosthogAnalytics {
 
       return result;
     } catch (error) {
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      const durationMs = seconds * 1000 + nanoseconds / 1000000;
-
+      const durationMs = this.getDurationMs(startTime);
       this.trackCommand({
         command,
         args,

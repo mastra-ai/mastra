@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
-import path, { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs/promises';
+import path, { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import z from 'zod';
 
 const mdxFileCache = new Map<string, string[]>();

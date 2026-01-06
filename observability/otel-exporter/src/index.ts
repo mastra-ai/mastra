@@ -1,4 +1,5 @@
 export { OtelExporter } from './tracing.js';
+export { SpanConverter, getSpanKind } from './span-converter.js';
 export type {
   OtelExporterConfig,
   ProviderConfig,

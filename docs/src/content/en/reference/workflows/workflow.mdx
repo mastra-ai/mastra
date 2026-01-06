@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow Class | Workflows"
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow Class
@@ -9,7 +11,7 @@ The `Workflow` class enables you to create state machines for complex sequences 
 
 ## Usage example
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -75,7 +77,7 @@ export const workflow = createWorkflow({
       description:
         "Optional flag to determine whether to validate the workflow inputs. This also applies default values from zodSchemas on the workflow/step input/resume data. If input/resume data validation fails on start/resume, the workflow will not start/resume, it throws an error instead. If input data validation fails on a step execution, the step fails, causing the workflow to fail and the error is returned.",
       isOptional: true,
-      defaultValue: "false",
+      defaultValue: "true",
     },
     {
       name: "shouldPersistSnapshot",
@@ -85,8 +87,40 @@ export const workflow = createWorkflow({
       isOptional: true,
       defaultValue: "() => true",
     },
+    {
+      name: "onFinish",
+      type: "(result: WorkflowFinishCallbackResult) => void | Promise<void>",
+      description:
+        "Callback invoked when workflow completes with any status (success, failed, suspended, tripwire). Receives the workflow result including status, output, error, and step results. Errors thrown in this callback are caught and logged, not propagated.",
+      isOptional: true,
+    },
+    {
+      name: "onError",
+      type: "(errorInfo: WorkflowErrorCallbackInfo) => void | Promise<void>",
+      description:
+        "Callback invoked only when workflow fails (failed or tripwire status). Receives error details and step results. Errors thrown in this callback are caught and logged, not propagated.",
+      isOptional: true,
+    },
   ]}
 />
+
+## Running with initial state
+
+When starting a workflow run, you can pass `initialState` to set the starting values for the workflow's state:
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { value: "hello" },
+  initialState: {
+    counter: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
 
 ## Workflow status
 
@@ -112,10 +146,34 @@ A workflow's `status` indicates its current execution state. The possible values
       description:
         "Workflow execution is paused waiting for resume, with suspended step information",
     },
+    {
+      name: "tripwire",
+      type: "string",
+      description:
+        "Workflow was terminated by a processor tripwire. This occurs when an agent step within the workflow triggers a tripwire (e.g., content was blocked by a guardrail). The tripwire information is available on the result.",
+    },
   ]}
 />
+
+### Handling tripwire status
+
+When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+```typescript
+const run = await workflow.createRun();
+const result = await run.start({ inputData: { message: "Hello" } });
+
+if (result.status === "tripwire") {
+  console.log("Workflow terminated by tripwire:", result.tripwire?.reason);
+  console.log("Processor ID:", result.tripwire?.processorId);
+  console.log("Retry requested:", result.tripwire?.retry);
+}
+```
+
+This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
 
 ## Related
 
 - [Step Class](./step)
+- [Workflow State](/docs/v1/workflows/workflow-state)
 - [Control flow](/docs/v1/workflows/control-flow)

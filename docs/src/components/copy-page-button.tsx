@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ClaudeIcon,
   CopyPageIcon,
+  CursorIcon,
   ExternalLinkIcon,
 } from "./copy-page-icons";
 import { Button } from "./ui/button";
@@ -31,6 +32,12 @@ function openInClaude(
   );
   const claudeUrl = `https://claude.ai/new?q=${query}`;
   return claudeUrl;
+}
+
+function openInCursor() {
+  const cursorUrl =
+    "cursor://anysphere.cursor-deeplink/mcp/install?name=mastra&config=eyJjb21tYW5kIjoibnB4IC15IEBtYXN0cmEvbWNwLWRvY3Mtc2VydmVyIn0%3D";
+  return cursorUrl;
 }
 
 function openWindow(url: string) {
@@ -60,6 +67,11 @@ export const CopyPageButton = () => {
     const currentUrl = window.location.href;
     const claudeUrl = openInClaude(currentUrl, encodeURIComponent);
     openWindow(claudeUrl);
+  };
+
+  const handleOpenInCursor = () => {
+    const cursorUrl = openInCursor();
+    openWindow(cursorUrl);
   };
 
   return (
@@ -173,6 +185,31 @@ export const CopyPageButton = () => {
                 </div>
                 <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
                   Ask questions about this page
+                </div>
+              </div>
+            </DropdownMenu.Item>
+
+            <DropdownMenu.Item
+              className={cn(
+                "flex items-center gap-3 p-2 text-sm",
+                "text-(--mastra-text-secondary) dark:text-white",
+                "rounded-lg cursor-pointer outline-none",
+                "hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50",
+                "focus:bg-(--mastra-surface-2)",
+                "transition-colors duration-150",
+              )}
+              onClick={handleOpenInCursor}
+            >
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2) dark:bg-(--mastra-surface-5) border border-(--border)/50 dark:border-(--border)">
+                <CursorIcon className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col gap-0.5 flex-1">
+                <div className="font-medium flex items-center gap-1.5">
+                  Connect to Cursor
+                  <ExternalLinkIcon className="w-3 h-3" />
+                </div>
+                <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
+                  Install MCP Server on Cursor
                 </div>
               </div>
             </DropdownMenu.Item>

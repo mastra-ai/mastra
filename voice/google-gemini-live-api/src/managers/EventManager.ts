@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 // Make the event manager generic over an event map
 export type EventMap = Record<string, unknown>;
 

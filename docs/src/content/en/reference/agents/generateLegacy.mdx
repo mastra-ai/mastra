@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.generateLegacy() (Legacy) | Agents"
 description: "Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.generateLegacy() (Legacy)
@@ -15,7 +17,7 @@ The `.generateLegacy()` method is the legacy version of the agent generation API
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.generateLegacy("message for agent");
 ```
 
@@ -546,7 +548,7 @@ const result = await agent.generate("message", {
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 import { z } from "zod";
 import {
   ModerationProcessor,
@@ -590,12 +592,12 @@ await agent.generateLegacy(
         sentiment: z.enum(["positive", "negative", "neutral"]),
         confidence: z.number(),
       }),
-      model: openai("gpt-4o-mini"),
+      model: "openai/gpt-5.1",
       errorStrategy: "warn",
     },
     // Output processors for response validation
     outputProcessors: [
-      new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
+      new ModerationProcessor({ model: "openai/gpt-4.1-nano" }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
   },

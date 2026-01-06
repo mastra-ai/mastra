@@ -9,8 +9,10 @@ import type { RequestContext } from '@mastra/core/di';
 import type {
   ObservabilityInstance,
   ObservabilityExporter,
+  ObservabilityBridge,
   SpanOutputProcessor,
   ConfigSelector,
+  SerializationOptions,
 } from '@mastra/core/observability';
 import { z } from 'zod';
 
@@ -61,6 +63,8 @@ export interface ObservabilityInstanceConfig {
   sampling?: SamplingStrategy;
   /** Custom exporters */
   exporters?: ObservabilityExporter[];
+  /** Observability bridge (e.g., OpenTelemetry bridge for context extraction) */
+  bridge?: ObservabilityBridge;
   /** Custom span output processors */
   spanOutputProcessors?: SpanOutputProcessor[];
   /** Set to `true` if you want to see spans internal to the operation of mastra */
@@ -71,6 +75,11 @@ export interface ObservabilityInstanceConfig {
    * Supports dot notation for nested values.
    */
   requestContextKeys?: string[];
+  /**
+   * Options for controlling serialization of span data (input/output/attributes).
+   * Use these to customize truncation limits for large payloads.
+   */
+  serializationOptions?: SerializationOptions;
 }
 
 /**
@@ -112,32 +121,72 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
 ]);
 
 /**
+ * Zod schema for SerializationOptions
+ */
+export const serializationOptionsSchema = z
+  .object({
+    maxStringLength: z.number().int().positive().optional(),
+    maxDepth: z.number().int().positive().optional(),
+    maxArrayLength: z.number().int().positive().optional(),
+    maxObjectKeys: z.number().int().positive().optional(),
+  })
+  .optional();
+
+/**
  * Zod schema for ObservabilityInstanceConfig
- * Note: exporters, spanOutputProcessors, and configSelector are validated as any
+ * Note: exporters, spanOutputProcessors, bridge, and configSelector are validated as any
  * since they're complex runtime objects
  */
-export const observabilityInstanceConfigSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  serviceName: z.string().min(1, 'Service name is required'),
-  sampling: samplingStrategySchema.optional(),
-  exporters: z.array(z.any()).optional(),
-  spanOutputProcessors: z.array(z.any()).optional(),
-  includeInternalSpans: z.boolean().optional(),
-  requestContextKeys: z.array(z.string()).optional(),
-});
+export const observabilityInstanceConfigSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required'),
+    serviceName: z.string().min(1, 'Service name is required'),
+    sampling: samplingStrategySchema.optional(),
+    exporters: z.array(z.any()).optional(),
+    bridge: z.any().optional(),
+    spanOutputProcessors: z.array(z.any()).optional(),
+    includeInternalSpans: z.boolean().optional(),
+    requestContextKeys: z.array(z.string()).optional(),
+    serializationOptions: serializationOptionsSchema,
+  })
+  .refine(
+    data => {
+      // At least one exporter or a bridge must be provided
+      const hasExporters = data.exporters && data.exporters.length > 0;
+      const hasBridge = !!data.bridge;
+      return hasExporters || hasBridge;
+    },
+    {
+      message: 'At least one exporter or a bridge is required',
+    },
+  );
 
 /**
  * Zod schema for config values in the configs map
  * This is the config object without the name field
  */
-export const observabilityConfigValueSchema = z.object({
-  serviceName: z.string().min(1, 'Service name is required'),
-  sampling: samplingStrategySchema.optional(),
-  exporters: z.array(z.any()).optional(),
-  spanOutputProcessors: z.array(z.any()).optional(),
-  includeInternalSpans: z.boolean().optional(),
-  requestContextKeys: z.array(z.string()).optional(),
-});
+export const observabilityConfigValueSchema = z
+  .object({
+    serviceName: z.string().min(1, 'Service name is required'),
+    sampling: samplingStrategySchema.optional(),
+    exporters: z.array(z.any()).optional(),
+    bridge: z.any().optional(),
+    spanOutputProcessors: z.array(z.any()).optional(),
+    includeInternalSpans: z.boolean().optional(),
+    requestContextKeys: z.array(z.string()).optional(),
+    serializationOptions: serializationOptionsSchema,
+  })
+  .refine(
+    data => {
+      // At least one exporter or a bridge must be provided
+      const hasExporters = data.exporters && data.exporters.length > 0;
+      const hasBridge = !!data.bridge;
+      return hasExporters || hasBridge;
+    },
+    {
+      message: 'At least one exporter or a bridge is required',
+    },
+  );
 
 /**
  * Zod schema for ObservabilityRegistryConfig
@@ -193,5 +242,25 @@ export const observabilityRegistryConfigSchema = z
     {
       message:
         'A "configSelector" function is required when multiple configs are specified to determine which config to use.',
+    },
+  )
+  .refine(
+    data => {
+      // Validate that if configSelector is provided, there must be configs or default
+      if (data.configSelector) {
+        const isDefaultEnabled = data.default?.enabled === true;
+        const hasConfigs =
+          data.configs && typeof data.configs === 'object' && !Array.isArray(data.configs)
+            ? Object.keys(data.configs).length > 0
+            : false;
+
+        // If configSelector is provided, must have either default enabled or configs
+        return isDefaultEnabled || hasConfigs;
+      }
+
+      return true;
+    },
+    {
+      message: 'A "configSelector" requires at least one config or default observability to be configured.',
     },
   );

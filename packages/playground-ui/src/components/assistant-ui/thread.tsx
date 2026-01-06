@@ -41,7 +41,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
         <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
+        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -106,23 +106,30 @@ interface ComposerProps {
 
 const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
-        <div className="max-w-[568px] w-full mx-auto pb-2">
+        <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
+        <div
+          className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
+          onClick={() => {
+            textareaRef.current?.focus();
+          }}
+        >
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
+              ref={textareaRef}
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
-            ></textarea>
+            />
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
             <SpeechInput agentId={agentId} />

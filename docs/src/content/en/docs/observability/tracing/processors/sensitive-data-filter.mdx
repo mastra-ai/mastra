@@ -1,6 +1,8 @@
 ---
 title: "Sensitive Data Filter | Processors | Observability"
 description: "Protect sensitive information in your traces with automatic data redaction"
+packages:
+  - "@mastra/observability"
 ---
 
 # Sensitive Data Filter
@@ -11,7 +13,7 @@ The Sensitive Data Filter is a span processor that automatically redacts sensiti
 
 By default, the Sensitive Data Filter is automatically enabled when you use the standard Mastra configuration:
 
-```ts title="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts"
 export const mastra = new Mastra({
   observability: new Observability({
     default: { enabled: true }, // Automatically includes SensitiveDataFilter
@@ -63,7 +65,7 @@ When a sensitive field is detected, its value is replaced with `[REDACTED]` by d
 
 You can customize which fields are redacted and how redaction appears:
 
-```ts title="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts"
 import { SensitiveDataFilter, DefaultExporter, Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
@@ -210,7 +212,7 @@ The Sensitive Data Filter is designed to be lightweight and efficient:
 
 If you need to disable sensitive data filtering (not recommended for production):
 
-```ts title="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts"
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
@@ -293,4 +295,3 @@ This ensures that processing errors don't prevent traces from being exported or 
 ## Related
 
 - [SensitiveDataFilter API](/reference/v1/observability/tracing/processors/sensitive-data-filter)
-- [Basic Tracing Example](/examples/v1/observability/basic-ai-tracing)

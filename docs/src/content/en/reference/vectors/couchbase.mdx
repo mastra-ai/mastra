@@ -1,6 +1,8 @@
 ---
 title: "Reference: Couchbase Vector Store | Vectors"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+packages:
+  - "@mastra/couchbase"
 ---
 
 # Couchbase Vector Store
@@ -14,13 +16,13 @@ The `CouchbaseVector` class provides vector search using [Couchbase Vector Searc
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/couchbase@beta
 ```
 
 ## Usage Example
 
-```typescript copy
+```typescript
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
@@ -209,7 +211,7 @@ Returns information about the index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -239,7 +241,7 @@ Returns: `Promise<string[]>`
 
 ### updateVector()
 
-Updates a specific vector entry by its ID with new vector data and/or metadata.
+Updates a specific vector entry by its ID with new vector data and/or metadata. **Note:** Filter-based updates are not yet implemented for Couchbase.
 
 <PropertiesTable
   content={[
@@ -255,27 +257,15 @@ Updates a specific vector entry by its ID with new vector data and/or metadata.
     },
     {
       name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector data to update",
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata to update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "Object containing the vector and/or metadata to update",
     },
   ]}
 />
 
 ### deleteVector()
 
-Deletes a specific vector entry from an index by its ID.
+Deletes a single vector by its ID from the index.
 
 <PropertiesTable
   content={[
@@ -287,7 +277,26 @@ Deletes a specific vector entry from an index by its ID.
     {
       name: "id",
       type: "string",
-      description: "ID of the vector entry to delete",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+Deletes multiple vectors by their IDs. **Note:** Filter-based deletion is not yet implemented for Couchbase.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      description: "Array of vector IDs to delete",
     },
   ]}
 />
@@ -300,7 +309,7 @@ Closes the Couchbase client connection. Should be called when done using the sto
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -313,7 +322,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my_index",

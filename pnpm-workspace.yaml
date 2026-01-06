@@ -1,9 +1,11 @@
 packages:
+  - packages/_vendored/*
   - packages/*
   - deployers/*
   - stores/*
   - voice/*
   - workflows/*
+  - server-adapters/*
   - pubsub/*
   - client-sdks/*
   - integrations/*
@@ -14,9 +16,10 @@ packages:
   - explorations/agent-builder-gh-repro
 
 catalog:
-  '@vitest/coverage-v8': 4.0.8
-  '@vitest/ui': 4.0.8
-  vitest: ^4.0.8
+  '@vitest/coverage-v8': 4.0.12
+  '@vitest/ui': 4.0.12
+  vitest: 4.0.16
+  typescript: ^5.9.3
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch

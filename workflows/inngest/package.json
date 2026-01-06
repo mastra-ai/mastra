@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.10",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -41,7 +41,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -49,10 +48,10 @@
     "eslint": "^9.37.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
-    "hono": "^4.10.5",
+    "hono": "^4.11.3",
     "inngest-cli": "^1.12.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

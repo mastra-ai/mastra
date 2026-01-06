@@ -359,7 +359,7 @@ Spans are named following OTEL conventions:
 
 - **LLM Operations**: `chat {model}` or `tool_selection {model}`
 - **Tool Execution**: `tool.execute {tool_name}`
-- **Agent Runs**: `agent.{agent_id}`
+- **Agent Runs**: `invoke_agent {agent_name}`
 - **Workflow Runs**: `workflow.{workflow_id}`
 
 ### Attributes
@@ -369,7 +369,7 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 #### Core Attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, agent.run, workflow.run)
-- `gen_ai.system` - AI provider (openai, anthropic, etc.)
+- `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
 
 #### LLM-Specific Attributes
@@ -382,8 +382,12 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 - `gen_ai.request.top_p` - Top-p sampling parameter
 - `gen_ai.request.top_k` - Top-k sampling parameter
 - `gen_ai.response.finish_reasons` - Reason for completion
+- `gen_ai.response.model` - Actual model used in response (may differ from request)
+- `gen_ai.response.id` - Unique response identifier
 - `gen_ai.prompt` - Input prompt (for Model spans)
 - `gen_ai.completion` - Model output (for Model spans)
+- `server.address` - Server address for the model endpoint
+- `server.port` - Server port for the model endpoint
 
 #### Tool Attributes
 
@@ -395,7 +399,10 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 
 #### Agent & Workflow Attributes
 
-- `agent.id` - Agent identifier
+- `gen_ai.agent.id` - Agent identifier
+- `gen_ai.agent.name` - Human-readable agent name
+- `gen_ai.conversation.id` - Conversation/thread/session identifier
+- `agent.id` - Agent identifier (also included for compatibility)
 - `agent.max_steps` - Maximum agent steps
 - `workflow.id` - Workflow identifier
 - `workflow.status` - Workflow execution status
@@ -406,6 +413,43 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 - `error.type` - Error identifier
 - `error.message` - Error description
 - `error.domain` - Error domain/category
+
+### Opt-In Content Attributes
+
+For enhanced observability, you can enable additional content attributes that capture detailed message data. These attributes may contain sensitive information and should only be enabled with proper consent and security considerations.
+
+To enable content attributes:
+
+```typescript
+new OtelExporter({
+  provider: {
+    /* your provider config */
+  },
+  genAiConventions: {
+    includeContentAttributes: true, // Default: false
+  },
+});
+```
+
+When enabled, the following additional attributes are captured:
+
+#### Model Content Attributes
+
+- `gen_ai.input.messages` - Structured input messages in OpenTelemetry format
+- `gen_ai.output.messages` - Structured output messages in OpenTelemetry format
+
+These attributes convert Mastra's message format to the OpenTelemetry GenAI standard message schema, providing detailed conversation history and tool interactions.
+
+#### Agent Content Attributes
+
+- `gen_ai.system_instructions` - Agent system instructions/prompts
+
+**Privacy Considerations:**
+
+- These attributes may contain user data, prompts, and model responses
+- Only enable in environments where data privacy and compliance requirements are met
+- Consider using span processors to filter sensitive data before export
+- Review your organization's data retention and privacy policies before enabling
 
 ## Troubleshooting
 

@@ -1,6 +1,6 @@
-import { writeFileSync, mkdirSync } from 'fs';
-import path from 'path';
-import { Readable } from 'stream';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { Readable } from 'node:stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { SpeechifyVoice } from './index';

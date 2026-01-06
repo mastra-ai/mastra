@@ -9,6 +9,12 @@ Use the GH CLI to examine the GitHub issue for the current repository.
 
 RUN GH_PAGER=cat gh issue view ${input:issue} --json title,body,comments,labels,assignees,milestone
 
+If the Github issue has a discord link in the first message, ie https://discord.com/channels/GUILD_ID/<THREAD_ID>, grab the THREAD_ID off the URL to apply to the next command.
+
+RUN curl -s -X GET -H "Authorization: Bot $MASTRA_DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/<THREAD_ID>/messages?limit=100" > /tmp/discord_out.json && jq '[.[] | {timestamp, author: {username: .author.username, display_name: .author.global_name}, content, attachments: [.attachments[]? | {filename, url}], embeds: [.embeds[]? | {title, description, url}]}]' /tmp/discord_out.json ; rm -f /tmp/discord_out.json
+
+If discord returns a 401, ignore it, the user hasn't set up the token yet, continue on without the discord messages.
+
 Debugging Github issues has 3 stages. Each stage must be fully completed before moving on to the next.
 
 ## Stage 1 "Analyze"
@@ -22,11 +28,12 @@ Debugging Github issues has 3 stages. Each stage must be fully completed before 
 
 Once you've analyzed the issue:
 
-1. Create an ISSUE_SUMMARY.md file in the project root and add a summary of what you've analyzed so far. Do not begin to fix the issue, that isn't our goal.
+1. Create an ISSUE_SUMMARY${ISSUE_NUMBER}.md file in the project root and add a summary of what you've analyzed so far. Do not begin to fix the issue, that isn't our goal.
 2. Deeply explore and think about the issue. Find relevant tests and files, and docs/info about how the feature works and how it should work. Add this info to the issue summary file. Especially add info about what you think is happening and how the issue can be reproduced in a test.
 3. Ask the user for feedback on your issue summary document. Do you have any misconceptions? Is your theory plausible? Did you miss anything?
-4. Now that the user agrees with your findings, write a test (in the appropriate package and test file) that reproduces the issue. The test MUST fail and clearly show the problem.
-5. Explain your failing test to the user. They must understand fully, and agree that the test really does reproduce the issue at hand.
+4. Now that the user agrees with your findings, write a test (in the appropriate package and test file) that reproduces the issue. The test MUST fail and clearly show the problem. The test should make sense in the context of the repo, do not make the test specific to the issue (ie with references to the issue and the specific reproduction if provided in the issue). Tests should be generalized and fit into the broader testing ecosystem in the repo.
+5. If the test is not running properly or is failing for unrelated reasons, your task is not finished.
+6. Explain your failing test to the user. They must understand fully, and agree that the test really does reproduce the issue at hand.
 
 ## Stage 3 "Fix it!"
 

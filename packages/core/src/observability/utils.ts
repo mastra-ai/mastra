@@ -1,4 +1,4 @@
-import type { Span, SpanType, GetOrCreateSpanOptions } from './types';
+import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan } from './types';
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -44,4 +44,62 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
       metadata,
     },
   });
+}
+
+/**
+ * Execute an async function within the span's tracing context if available.
+ * Falls back to direct execution if no span exists.
+ *
+ * When a bridge is configured, this enables auto-instrumented operations
+ * (HTTP requests, database queries, etc.) to be properly nested under the
+ * current span in the external tracing system.
+ *
+ * @param span - The span to use as context (or undefined to execute without context)
+ * @param fn - The async function to execute
+ * @returns The result of the function execution
+ *
+ * @example
+ * ```typescript
+ * const result = await executeWithContext(llmSpan, async () =>
+ *   model.generateText(args)
+ * );
+ * ```
+ */
+export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
+  const { span, fn } = params;
+
+  if (span?.executeInContext) {
+    return span.executeInContext(fn);
+  }
+
+  return fn();
+}
+
+/**
+ * Execute a synchronous function within the span's tracing context if available.
+ * Falls back to direct execution if no span exists.
+ *
+ * When a bridge is configured, this enables auto-instrumented operations
+ * (HTTP requests, database queries, etc.) to be properly nested under the
+ * current span in the external tracing system.
+ *
+ * @param span - The span to use as context (or undefined to execute without context)
+ * @param fn - The synchronous function to execute
+ * @returns The result of the function execution
+ *
+ * @example
+ * ```typescript
+ * const result = executeWithContextSync(llmSpan, () =>
+ *   model.streamText(args)
+ * );
+ * ```
+ */
+export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
+  const { span, fn } = params;
+
+  if (span?.executeInContextSync) {
+    return span.executeInContextSync(fn);
+  }
+
+  return fn();
 }

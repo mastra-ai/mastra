@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import type { WritableStream } from 'stream/web';
+import { randomUUID } from 'node:crypto';
+import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -17,21 +17,28 @@ import type {
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
 } from '../llm/model/base.types';
-import type { MastraLanguageModel, TripwireProperties } from '../llm/model/shared.types';
+import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, TracingContext, TracingOptions, TracingProperties } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors/index';
-import { RequestContext } from '../request-context';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import type { MessageListInput, MastraDBMessage, UIMessageWithMetadata } from './message-list';
 import { MessageList } from './message-list';
-import { SaveQueueManager } from './save-queue';
-import type { AgentGenerateOptions, AgentStreamOptions, AgentInstructions, ToolsetsInput, ToolsInput } from './types';
+import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
+
+import type {
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  AgentInstructions,
+  ToolsetsInput,
+  ToolsInput,
+  AgentMethodType,
+} from './types';
 import { resolveThreadIdFromArgs } from './utils';
 
 /**
@@ -69,6 +76,14 @@ export interface AgentLegacyCapabilities {
   getLLM(options: { requestContext: RequestContext }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
+  /** Get memory messages (deprecated - use input processors) */
+  getMemoryMessages(args: {
+    resourceId?: string;
+    threadId: string;
+    vectorMessageSearch: string;
+    memoryConfig?: MemoryConfig;
+    requestContext: RequestContext;
+  }): Promise<{ messages: MastraDBMessage[] }>;
   /** Convert tools for LLM */
   convertTools(args: {
     toolsets?: ToolsetsInput;
@@ -79,26 +94,24 @@ export interface AgentLegacyCapabilities {
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  }): Promise<Record<string, CoreTool>>;
-  /** Get memory messages */
-  getMemoryMessages(args: {
-    resourceId?: string;
-    threadId: string;
-    vectorMessageSearch: string;
+    methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
-    requestContext: RequestContext;
-  }): Promise<{ messages: MastraDBMessage[] }>;
+  }): Promise<Record<string, CoreTool>>;
+
   /** Run input processors */
   __runInputProcessors(args: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    inputProcessorOverrides?: InputProcessor[];
+    inputProcessorOverrides?: InputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }>;
   /** Get most recent user message */
   getMostRecentUserMessage(
@@ -109,29 +122,22 @@ export interface AgentLegacyCapabilities {
     userMessage: UIMessage | UIMessageWithMetadata,
     requestContext: RequestContext,
     tracingContext: TracingContext,
-    titleModel?: DynamicArgument<MastraLanguageModel>,
+    titleModel?: DynamicArgument<MastraModelConfig>,
     titleInstructions?: DynamicArgument<string>,
   ): Promise<string | undefined>;
   /** Resolve title generation config */
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraLanguageModel>;
+    model?: DynamicArgument<MastraModelConfig>;
     instructions?: DynamicArgument<string>;
   };
   /** Save step messages */
-  saveStepMessages(args: {
-    saveQueueManager: SaveQueueManager;
-    result: any;
-    messageList: MessageList;
-    threadId?: string;
-    memoryConfig?: MemoryConfig;
-    runId: string;
-  }): Promise<void>;
+  saveStepMessages(args: { result: any; messageList: MessageList; runId: string }): Promise<void>;
   /** Convert instructions to string */
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
@@ -139,17 +145,21 @@ export interface AgentLegacyCapabilities {
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
-  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]>;
+  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   /** Run output processors */
   __runOutputProcessors(args: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    outputProcessorOverrides?: OutputProcessor[];
+    outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }>;
   /** Run scorers */
   runScorers(args: {
@@ -187,7 +197,6 @@ export class AgentLegacyHandler {
     toolsets,
     clientTools,
     requestContext,
-    saveQueueManager,
     writableStream,
     methodType,
     tracingContext,
@@ -203,7 +212,6 @@ export class AgentLegacyHandler {
     runId?: string;
     messages: MessageListInput;
     requestContext: RequestContext;
-    saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingContext?: TracingContext;
@@ -218,11 +226,13 @@ export class AgentLegacyHandler {
         const agentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           name: `agent run: '${this.capabilities.id}'`,
+          entityType: EntityType.AGENT,
+          entityId: this.capabilities.id,
+          entityName: this.capabilities.name,
           input: {
             messages,
           },
           attributes: {
-            agentId: this.capabilities.id,
             instructions: this.capabilities.convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
@@ -276,9 +286,10 @@ export class AgentLegacyHandler {
           tracingContext: innerTracingContext,
           writableStream,
           methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
+          memoryConfig,
         });
 
-        const messageList = new MessageList({
+        let messageList = new MessageList({
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
@@ -290,22 +301,19 @@ export class AgentLegacyHandler {
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
-          const { tripwireTriggered, tripwireReason } = await this.capabilities.__runInputProcessors({
+          const { tripwire } = await this.capabilities.__runInputProcessors({
             requestContext,
             tracingContext: innerTracingContext,
             messageList,
           });
           return {
-            messageObjects: tripwireTriggered ? [] : messageList.get.all.prompt(),
+            messageObjects: tripwire ? [] : messageList.get.all.prompt(),
             convertedTools,
             threadExists: false,
             thread: undefined,
             messageList,
             agentSpan,
-            ...(tripwireTriggered && {
-              tripwire: true,
-              tripwireReason,
-            }),
+            tripwire,
           };
         }
         if (!threadId || !resourceId) {
@@ -361,115 +369,27 @@ export class AgentLegacyHandler {
           });
         }
 
-        const config = memory.getMergedThreadConfig(memoryConfig || {});
-        const hasResourceScopeSemanticRecall =
-          (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
-          config?.semanticRecall === true;
-        let [memoryResult, memorySystemMessage] = await Promise.all([
-          existingThread || hasResourceScopeSemanticRecall
-            ? this.capabilities.getMemoryMessages({
-                resourceId,
-                threadId: threadObject.id,
-                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                memoryConfig,
-                requestContext,
-              })
-            : { messages: [] },
-          memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-        ]);
-
-        const memoryMessages = memoryResult.messages;
-
-        this.capabilities.logger.debug('Fetched messages from memory', {
-          threadId: threadObject.id,
-          runId,
-          fetchedCount: memoryMessages.length,
+        // Set memory context in RequestContext for processors to access
+        requestContext.set('MastraMemory', {
+          thread: threadObject,
+          resourceId,
+          memoryConfig,
         });
 
-        // So the agent doesn't get confused and start replying directly to messages
-        // that were added via semanticRecall from a different conversation,
-        // we need to pull those out and add to the system message.
-        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
-        if (resultsFromOtherThreads.length && !memorySystemMessage) {
-          memorySystemMessage = ``;
-        }
-        if (resultsFromOtherThreads.length) {
-          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${(() => {
-            let result = ``;
+        // Add new user messages to the list
+        // Historical messages, semantic recall, and working memory will be added by input processors
+        messageList.add(messages, 'user');
 
-            const messages = new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1();
-            let lastYmd: string | null = null;
-            for (const msg of messages) {
-              const date = msg.createdAt;
-              const year = date.getUTCFullYear();
-              const month = date.toLocaleString('default', { month: 'short' });
-              const day = date.getUTCDate();
-              const ymd = `${year}, ${month}, ${day}`;
-              const utcHour = date.getUTCHours();
-              const utcMinute = date.getUTCMinutes();
-              const hour12 = utcHour % 12 || 12;
-              const ampm = utcHour < 12 ? 'AM' : 'PM';
-              const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
-
-              if (!lastYmd || lastYmd !== ymd) {
-                result += `\nthe following messages are from ${ymd}\n`;
-              }
-              result += `
-  Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
-
-              lastYmd = ymd;
-            }
-            return result;
-          })()}\n<end_remembered_from_other_conversation>`;
-        }
-
-        if (memorySystemMessage) {
-          messageList.addSystem(memorySystemMessage, 'memory');
-        }
-
-        messageList
-          .add(
-            memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
-            'memory',
-          )
-          // add new user messages to the list AFTER remembered messages to make ordering more reliable
-          .add(messages, 'user');
-
-        const { tripwireTriggered, tripwireReason } = await this.capabilities.__runInputProcessors({
+        const { messageList: processedMessageList, tripwire } = await this.capabilities.__runInputProcessors({
           requestContext,
           tracingContext: innerTracingContext,
           messageList,
         });
+        messageList = processedMessageList;
 
-        const systemMessages = messageList.getSystemMessages();
-
-        const systemMessage =
-          [...systemMessages, ...messageList.getSystemMessages('memory')]?.map(m => m.content)?.join(`\n`) ?? undefined;
-
-        const processedMemoryMessages = await memory.processMessages({
-          // these will be processed
-          messages: messageList.get.remembered.v1() as CoreMessage[],
-          // these are here for inspecting but shouldn't be returned by the processor
-          // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
-          newMessages: messageList.get.input.v1() as CoreMessage[],
-          systemMessage,
-          memorySystemMessage: memorySystemMessage || undefined,
-        });
-
-        const processedList = new MessageList({
-          threadId: threadObject.id,
-          resourceId,
-          generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-ignore Flag for agent network messages
-          _agentNetworkAppend: this.capabilities._agentNetworkAppend,
-        })
-          .addSystem(instructions || (await this.capabilities.getInstructions({ requestContext })))
-          .addSystem(memorySystemMessage)
-          .addSystem(systemMessages)
-          .add(context || [], 'context')
-          .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.db(), 'user')
-          .get.all.prompt();
+        // Messages are already processed by __runInputProcessors above
+        // which includes memory processors (WorkingMemory, MessageHistory, etc.)
+        const processedList = messageList.get.all.prompt();
 
         return {
           convertedTools,
@@ -478,10 +398,7 @@ export class AgentLegacyHandler {
           // add old processed messages + new input messages
           messageObjects: processedList,
           agentSpan,
-          ...(tripwireTriggered && {
-            tripwire: true,
-            tripwireReason,
-          }),
+          tripwire,
           threadExists: !!existingThread,
         };
       },
@@ -586,8 +503,9 @@ export class AgentLegacyHandler {
               });
             }
 
-            // Parallelize title generation and message saving
-            const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
+            // Message saving is now handled by MessageHistory output processor
+            // Only parallelize title generation if needed
+            const promises: Promise<any>[] = [];
 
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
@@ -619,9 +537,11 @@ export class AgentLegacyHandler {
               }
             }
 
-            await Promise.all(promises);
+            if (promises.length > 0) {
+              await Promise.all(promises);
+            }
           } catch (e) {
-            await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+            // Message saving is handled by MessageHistory output processor
             if (e instanceof MastraError) {
               agentSpan?.error({ error: e });
               throw e;
@@ -729,7 +649,9 @@ export class AgentLegacyHandler {
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties & { agentSpan?: Span<SpanType.AGENT_RUN> }
+      > & { runId: string } & TripwireProperties & { agentSpan?: Span<SpanType.AGENT_RUN> } & {
+          messageList: MessageList;
+        }
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput> | StreamReturn<any, Output, ExperimentalOutput>;
@@ -763,8 +685,16 @@ export class AgentLegacyHandler {
       ...args
     } = options;
 
-    const threadFromArgs = resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
-    const resourceId = (args.memory as any)?.resource || resourceIdFromArgs;
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadFromArgs = threadIdFromContext
+      ? { id: threadIdFromContext }
+      : resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
+    const resourceId = resourceIdFromContext || (args.memory as any)?.resource || resourceIdFromArgs;
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
     if (resourceId && threadFromArgs && !this.capabilities.hasOwnMemory()) {
@@ -777,10 +707,6 @@ export class AgentLegacyHandler {
     const llm = await this.capabilities.getLLM({ requestContext });
 
     const memory = await this.capabilities.getMemory({ requestContext });
-    const saveQueueManager = new SaveQueueManager({
-      logger: this.capabilities.logger as any,
-      memory,
-    });
 
     const { before, after } = this.__primitive({
       messages,
@@ -793,7 +719,6 @@ export class AgentLegacyHandler {
       toolsets,
       clientTools,
       requestContext,
-      saveQueueManager,
       writableStream,
       methodType,
       tracingContext,
@@ -840,26 +765,20 @@ export class AgentLegacyHandler {
               }
 
               await this.capabilities.saveStepMessages({
-                saveQueueManager,
                 result: props,
                 messageList,
-                threadId,
-                memoryConfig,
                 runId,
               });
             }
 
             return onStepFinish?.({ ...props, runId });
           },
-          ...(beforeResult.tripwire && {
-            tripwire: beforeResult.tripwire,
-            tripwireReason: beforeResult.tripwireReason,
-          }),
+          tripwire: beforeResult.tripwire,
           ...args,
           agentSpan,
         } as any;
 
-        return result;
+        return { ...result, messageList, requestContext };
       },
       after: async ({
         result,
@@ -946,6 +865,7 @@ export class AgentLegacyHandler {
 
     const llmToUse = llm as MastraLLMV1;
     const beforeResult = await before();
+    const { messageList, requestContext: contextWithMemory } = beforeResult;
     const traceId = beforeResult.agentSpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
@@ -971,8 +891,7 @@ export class AgentLegacyHandler {
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
+        tripwire: beforeResult.tripwire,
         traceId,
       };
 
@@ -994,24 +913,24 @@ export class AgentLegacyHandler {
         experimental_output,
       } as any);
 
+      // Add the response to the full message list before running output processors
+      messageList.add(
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: result.text }],
+        },
+        'response',
+      );
+
       const outputProcessorResult = await this.capabilities.__runOutputProcessors({
-        requestContext: mergedGenerateOptions.requestContext || new RequestContext(),
+        requestContext: contextWithMemory || new RequestContext(),
         tracingContext,
         outputProcessorOverrides: finalOutputProcessors,
-        messageList: new MessageList({
-          threadId: llmOptions.threadId || '',
-          resourceId: llmOptions.resourceId || '',
-        }).add(
-          {
-            role: 'assistant',
-            content: [{ type: 'text', text: result.text }],
-          },
-          'response',
-        ),
+        messageList, // Use the full message list with complete conversation history
       });
 
       // Handle tripwire for output processors
-      if (outputProcessorResult.tripwireTriggered) {
+      if (outputProcessorResult.tripwire) {
         const tripwireResult = {
           text: '',
           object: undefined,
@@ -1033,8 +952,7 @@ export class AgentLegacyHandler {
           experimental_output: undefined,
           steps: undefined,
           experimental_providerMetadata: undefined,
-          tripwire: true,
-          tripwireReason: outputProcessorResult.tripwireReason,
+          tripwire: outputProcessorResult.tripwire,
           traceId,
         };
 
@@ -1111,23 +1029,23 @@ export class AgentLegacyHandler {
 
     const outputText = JSON.stringify(result.object);
 
+    // Add the response to the full message list before running output processors
+    messageList.add(
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: outputText }],
+      },
+      'response',
+    );
+
     const outputProcessorResult = await this.capabilities.__runOutputProcessors({
-      requestContext: mergedGenerateOptions.requestContext || new RequestContext(),
+      requestContext: contextWithMemory || new RequestContext(),
       tracingContext,
-      messageList: new MessageList({
-        threadId: llmOptions.threadId || '',
-        resourceId: llmOptions.resourceId || '',
-      }).add(
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: outputText }],
-        },
-        'response',
-      ),
+      messageList, // Use the full message list with complete conversation history
     });
 
     // Handle tripwire for output processors
-    if (outputProcessorResult.tripwireTriggered) {
+    if (outputProcessorResult.tripwire) {
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -1149,8 +1067,7 @@ export class AgentLegacyHandler {
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: outputProcessorResult.tripwireReason,
+        tripwire: outputProcessorResult.tripwire,
         traceId,
       };
 
@@ -1257,8 +1174,7 @@ export class AgentLegacyHandler {
         text: Promise.resolve(''),
         usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
         finishReason: Promise.resolve('other'),
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
+        tripwire: beforeResult.tripwire,
         response: {
           id: randomUUID(),
           timestamp: new Date(),
@@ -1300,7 +1216,8 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
     }
 
-    const { onFinish, runId, output, experimental_output, agentSpan, ...llmOptions } = beforeResult;
+    const { onFinish, runId, output, experimental_output, agentSpan, messageList, requestContext, ...llmOptions } =
+      beforeResult;
     const overrideScorers = mergedStreamOptions.scorers;
     const tracingContext: TracingContext = { currentSpan: agentSpan };
 
@@ -1313,9 +1230,19 @@ export class AgentLegacyHandler {
         ...llmOptions,
         experimental_output,
         tracingContext,
-        outputProcessors: await this.capabilities.listResolvedOutputProcessors(mergedStreamOptions.requestContext),
+        requestContext,
+        outputProcessors: await this.capabilities.listResolvedOutputProcessors(requestContext),
         onFinish: async result => {
           try {
+            messageList.add(result.response.messages, 'response');
+
+            // Run output processors to save messages
+            await this.capabilities.__runOutputProcessors({
+              requestContext,
+              tracingContext,
+              messageList,
+            });
+
             const outputText = result.text;
             await after({
               result: result as any,
@@ -1348,8 +1275,33 @@ export class AgentLegacyHandler {
     const streamObjectResult = llm.__streamObject({
       ...llmOptions,
       tracingContext,
+      requestContext,
       onFinish: async result => {
         try {
+          // Add response messages to messageList
+          // For streamObject, create a message from the structured output
+          if (result.object) {
+            const responseMessages = [
+              {
+                role: 'assistant' as const,
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: JSON.stringify(result.object),
+                  },
+                ],
+              },
+            ];
+            messageList.add(responseMessages as any, 'response');
+          }
+
+          // Run output processors to save messages
+          await this.capabilities.__runOutputProcessors({
+            requestContext,
+            tracingContext,
+            messageList,
+          });
+
           const outputText = JSON.stringify(result.object);
           await after({
             result: result as any,

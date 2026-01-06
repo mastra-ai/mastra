@@ -13,10 +13,13 @@ import type {
   TraceState,
   IModelSpanTracker,
   AIModelGenerationSpan,
+  EntityType,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
+import { deepClean, mergeSerializationOptions } from './serialization';
+import type { DeepCleanOptions } from './serialization';
 
 /**
  * Determines if a span type should be considered internal based on flags.
@@ -60,6 +63,47 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
   }
 }
 
+/**
+ * Get the external parent span ID from CreateSpanOptions.
+ *
+ * If the parent is internal, walks up the parent chain to find
+ * the closest external ancestor. If the parent is already external,
+ * returns its ID directly.
+ *
+ * This is useful when exporting spans to external observability systems
+ * that shouldn't include internal framework spans.
+ *
+ * @param options - Span creation options
+ * @returns The external parent span ID, or undefined if no external parent exists
+ *
+ * @example
+ * ```typescript
+ * // Parent is external - returns parent.id
+ * const externalParent = { id: 'span-123', isInternal: false };
+ * const options = { parent: externalParent, ... };
+ * getExternalParentId(options); // 'span-123'
+ *
+ * // Parent is internal - walks up to find external ancestor
+ * const externalGrandparent = { id: 'span-456', isInternal: false };
+ * const internalParent = { id: 'span-123', isInternal: true, parent: externalGrandparent };
+ * const options = { parent: internalParent, ... };
+ * getExternalParentId(options); // 'span-456'
+ * ```
+ */
+export function getExternalParentId(options: CreateSpanOptions<any>): string | undefined {
+  if (!options.parent) {
+    return undefined;
+  }
+
+  if (options.parent.isInternal) {
+    // Parent is internal, find its external ancestor
+    return options.parent.getParentSpanId(false);
+  } else {
+    // Parent is already external, use it directly
+    return options.parent.id;
+  }
+}
+
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
@@ -83,28 +127,47 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  public tags?: string[];
   public traceState?: TraceState;
+  /** Entity type that created the span (e.g., agent, workflow) */
+  public entityType?: EntityType;
+  /** Entity ID that created the span */
+  public entityId?: string;
+  /** Entity name that created the span */
+  public entityName?: string;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
+  /** Deep clean options for serialization */
+  protected deepCleanOptions: DeepCleanOptions;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    // Get serialization options from observability instance config
+    const serializationOptions = observabilityInstance.getConfig().serializationOptions;
+    this.deepCleanOptions = mergeSerializationOptions(serializationOptions);
+
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes) || ({} as SpanTypeMap[TType]);
-    this.metadata = deepClean(options.metadata);
+    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
+    this.metadata = deepClean(options.metadata, this.deepCleanOptions);
     this.parent = options.parent;
     this.startTime = new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
+    // Tags are only set for root spans (spans without a parent)
+    this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
+    // Entity identification
+    this.entityType = options.entityType;
+    this.entityId = options.entityId;
+    this.entityName = options.entityName;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     } else {
-      this.input = deepClean(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
   }
 
@@ -181,6 +244,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       traceId: this.traceId,
       name: this.name,
       type: this.type,
+      entityType: this.entityType,
+      entityId: this.entityId,
+      entityName: this.entityName,
       attributes: this.attributes,
       metadata: this.metadata,
       startTime: this.startTime,
@@ -191,81 +257,40 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      // Tags are only included for root spans
+      ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };
   }
 
   get externalTraceId(): string | undefined {
     return this.isValid ? this.traceId : undefined;
   }
-}
 
-const DEFAULT_KEYS_TO_STRIP = new Set([
-  'logger',
-  'experimental_providerMetadata',
-  'providerMetadata',
-  'steps',
-  'tracingContext',
-]);
-export interface DeepCleanOptions {
-  keysToStrip?: Set<string>;
-  maxDepth?: number;
-}
+  /**
+   * Execute an async function within this span's tracing context.
+   * Delegates to the bridge if available.
+   */
+  async executeInContext<T>(fn: () => Promise<T>): Promise<T> {
+    const bridge = this.observabilityInstance.getBridge();
 
-/**
- * Recursively cleans a value by removing circular references and stripping problematic or sensitive keys.
- * Circular references are replaced with "[Circular]". Unserializable values are replaced with error messages.
- * Keys like "logger" and "tracingContext" are stripped by default.
- * A maximum recursion depth is enforced to avoid stack overflow or excessive memory usage.
- *
- * @param value - The value to clean (object, array, primitive, etc.)
- * @param options - Optional configuration:
- *   - keysToStrip: Set of keys to remove from objects (default: logger, tracingContext)
- *   - maxDepth: Maximum recursion depth before values are replaced with "[MaxDepth]" (default: 10)
- * @returns A cleaned version of the input with circular references, specified keys, and overly deep values handled
- */
-export function deepClean(
-  value: any,
-  options: DeepCleanOptions = {},
-  _seen: WeakSet<any> = new WeakSet(),
-  _depth: number = 0,
-): any {
-  const { keysToStrip = DEFAULT_KEYS_TO_STRIP, maxDepth = 10 } = options;
-
-  if (_depth > maxDepth) {
-    return '[MaxDepth]';
-  }
-
-  if (value === null || typeof value !== 'object') {
-    try {
-      JSON.stringify(value);
-      return value;
-    } catch (error) {
-      return `[${error instanceof Error ? error.message : String(error)}]`;
-    }
-  }
-
-  if (_seen.has(value)) {
-    return '[Circular]';
-  }
-
-  _seen.add(value);
-
-  if (Array.isArray(value)) {
-    return value.map(item => deepClean(item, options, _seen, _depth + 1));
-  }
-
-  const cleaned: Record<string, any> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (keysToStrip.has(key)) {
-      continue;
+    if (bridge?.executeInContext) {
+      return bridge.executeInContext(this.id, fn);
     }
 
-    try {
-      cleaned[key] = deepClean(val, options, _seen, _depth + 1);
-    } catch (error) {
-      cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-    }
+    return fn();
   }
 
-  return cleaned;
+  /**
+   * Execute a synchronous function within this span's tracing context.
+   * Delegates to the bridge if available.
+   */
+  executeInContextSync<T>(fn: () => T): T {
+    const bridge = this.observabilityInstance.getBridge();
+
+    if (bridge?.executeInContextSync) {
+      return bridge.executeInContextSync(this.id, fn);
+    }
+
+    return fn();
+  }
 }

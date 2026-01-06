@@ -1,0 +1,39 @@
+{
+  "name": "@mastra/hono-multi-example",
+  "version": "0.1.0",
+  "description": "Multi-service distributed tracing example with Mastra, Hono, and Arize Phoenix",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter @mastra/hono-multi-instrumentation build && pnpm --filter @mastra/hono-multi-service-mastra build",
+    "test": "vitest run",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "keywords": [
+    "mastra",
+    "opentelemetry",
+    "distributed-tracing",
+    "hono",
+    "arize-phoenix"
+  ],
+  "devDependencies": {
+    "@hono/otel": "^1.0.1",
+    "@types/node": "^20.19.0",
+    "dotenv": "^17.2.0",
+    "specifier-resolution-node": "^1.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^2.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core",
+      "@mastra/hono": "link:../../../../server-adapters/hono",
+      "@mastra/observability": "link:../../../mastra",
+      "@mastra/otel-bridge": "link:../../../otel-bridge",
+      "@mastra/otel-exporter": "link:../../../otel-exporter",
+      "mastra": "link:../../../../packages/cli"
+    }
+  }
+}

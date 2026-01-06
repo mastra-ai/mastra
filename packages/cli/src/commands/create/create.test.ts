@@ -38,6 +38,7 @@ vi.mock('@clack/prompts', () => ({
     start: vi.fn(),
     stop: vi.fn(),
   })),
+  confirm: vi.fn(),
 }));
 
 // Mock init command

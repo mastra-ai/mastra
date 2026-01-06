@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.9",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -19,14 +19,15 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/lance",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.22.2",
+    "@lancedb/lancedb": "^0.22.3",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
@@ -34,13 +35,12 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:^",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

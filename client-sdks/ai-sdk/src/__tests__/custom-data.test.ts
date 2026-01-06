@@ -1,4 +1,5 @@
-import type { MastraModelOutput } from '@mastra/core/stream';
+import { ReadableStream } from 'node:stream/web';
+import type { MastraAgentNetworkStream, MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { toAISdkV5Stream } from '../convert-streams';
 
@@ -147,6 +148,178 @@ describe('Custom Data Handling', () => {
     });
   });
 
+  describe('nested workflow with branch and custom data', () => {
+    it('should propagate custom data chunks from nested workflow in branch to root stream', async () => {
+      // This test simulates:
+      // - A parent workflow with a branch
+      // - The branch contains a nested workflow
+      // - The nested workflow has a step that uses writer.custom() to write data-* chunks
+      // - When using toAISdkV5Stream with {from: 'workflow'}, the custom data should propagate
+
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          // Parent workflow starts
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'parent-run-id',
+            payload: {
+              workflowId: 'parent-workflow',
+            },
+          });
+
+          // Branch step starts (the nested workflow)
+          controller.enqueue({
+            type: 'workflow-step-start',
+            runId: 'parent-run-id',
+            payload: {
+              id: 'nested-workflow-step',
+              stepCallId: 'step-call-1',
+              status: 'running',
+            },
+          });
+
+          // Nested workflow starts
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'nested-run-id',
+            payload: {
+              workflowId: 'nested-workflow',
+            },
+          });
+
+          // Step in nested workflow that uses writer.custom()
+          controller.enqueue({
+            type: 'workflow-step-start',
+            runId: 'nested-run-id',
+            payload: {
+              id: 'custom-data-step',
+              stepCallId: 'step-call-2',
+              status: 'running',
+            },
+          });
+
+          // This is the key: workflow-step-output containing a data-* chunk
+          // This should be extracted and propagated to the root stream
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'nested-run-id',
+            payload: {
+              output: {
+                type: 'data-custom-progress',
+                data: {
+                  status: 'processing',
+                  progress: 50,
+                  message: 'Custom data from nested workflow',
+                },
+              },
+            },
+          });
+
+          // Another custom data chunk
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'nested-run-id',
+            payload: {
+              output: {
+                type: 'data-custom-result',
+                data: {
+                  status: 'complete',
+                  result: 'Custom result from nested workflow',
+                },
+              },
+            },
+          });
+
+          // Nested workflow step finishes
+          controller.enqueue({
+            type: 'workflow-step-result',
+            runId: 'nested-run-id',
+            payload: {
+              id: 'custom-data-step',
+              stepCallId: 'step-call-2',
+              status: 'success',
+              output: { result: 'done' },
+            },
+          });
+
+          // Nested workflow finishes
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'nested-run-id',
+            payload: {
+              workflowStatus: 'success',
+              output: {
+                usage: {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0,
+                },
+              },
+              metadata: {},
+            },
+          });
+
+          // Parent workflow step finishes
+          controller.enqueue({
+            type: 'workflow-step-result',
+            runId: 'parent-run-id',
+            payload: {
+              id: 'nested-workflow-step',
+              stepCallId: 'step-call-1',
+              status: 'success',
+              output: { result: 'done' },
+            },
+          });
+
+          // Parent workflow finishes
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'parent-run-id',
+            payload: {
+              workflowStatus: 'success',
+              output: {
+                usage: {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0,
+                },
+              },
+              metadata: {},
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'workflow' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      // The custom data chunks should be present in the root stream
+      const customProgressChunk = chunks.find(chunk => chunk.type === 'data-custom-progress');
+      const customResultChunk = chunks.find(chunk => chunk.type === 'data-custom-result');
+
+      expect(customProgressChunk).toBeDefined();
+      expect(customProgressChunk?.type).toBe('data-custom-progress');
+      expect(customProgressChunk?.data).toEqual({
+        status: 'processing',
+        progress: 50,
+        message: 'Custom data from nested workflow',
+      });
+
+      expect(customResultChunk).toBeDefined();
+      expect(customResultChunk?.type).toBe('data-custom-result');
+      expect(customResultChunk?.data).toEqual({
+        status: 'complete',
+        result: 'Custom result from nested workflow',
+      });
+    });
+  });
+
   describe('validation and error handling', () => {
     it('should throw error when custom data chunk is missing data property', async () => {
       const mockStream = new ReadableStream({
@@ -222,6 +395,243 @@ describe('Custom Data Handling', () => {
         expect(error.message).toContain('UI Messages require a data property');
         expect(error.message).toContain('data-missing-data-prop');
       }
+    });
+  });
+
+  describe('network custom data', () => {
+    it('should generate a network data chunk', async () => {
+      const { networkStreamFixture } = await import('./__fixtures__/network.stream');
+      const mockStream = ReadableStream.from(networkStreamFixture);
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-network');
+
+      // Verify the number of steps is correct
+      expect(customDataChunk.data.steps).toHaveLength(7);
+
+      // Verify the order of step types matches expected sequence
+      const stepNames = customDataChunk.data.steps.map((step: any) => step.name);
+      expect(stepNames).toEqual([
+        'routing-agent',
+        'inventory-agent',
+        'routing-agent',
+        'purchase-workflow-step',
+        'routing-agent',
+        'create-invoice',
+        'routing-agent',
+      ]);
+
+      expect(customDataChunk.data.steps[0].task.id).toEqual('inventoryAgent');
+      expect(customDataChunk.data.steps[1].task.id).toEqual('inventory-agent');
+      expect(customDataChunk.data.steps[2].task.id).toEqual('purchaseWorkflow');
+      expect(customDataChunk.data.steps[3].task.id).toEqual('purchase-workflow-step');
+      expect(customDataChunk.data.steps[5].task.id).toEqual('create-invoice');
+      expect(customDataChunk.data.steps[6].task.id).toEqual('');
+    });
+
+    it('should pass a custom data chunk through the network', async () => {
+      const { networkStreamFixture } = await import('./__fixtures__/network.stream');
+      const mockStream = ReadableStream.from(networkStreamFixture);
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-inventory-search');
+
+      // Verify the number of steps is correct
+      expect(customDataChunk).toMatchInlineSnapshot(`
+        {
+          "data": {
+            "description": "search for laptops in inventory",
+            "name": "laptop",
+          },
+          "type": "data-inventory-search",
+        }
+      `);
+    });
+  });
+
+  describe('data chunk property filtering', () => {
+    it('should only include type, data, and id properties in data chunks', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'data-filtered-event',
+                data: { foo: 'bar' },
+                id: 'chunk-id-123',
+                // These extra properties should be filtered out
+                extraProp: 'should not appear',
+                anotherProp: 123,
+                nested: { obj: 'value' },
+              },
+              toolCallId: 'call_test',
+              toolName: 'workflow-test',
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-filtered-event');
+
+      expect(customDataChunk).toBeDefined();
+      expect(customDataChunk.type).toBe('data-filtered-event');
+      expect(customDataChunk.data).toEqual({ foo: 'bar' });
+      expect(customDataChunk.id).toBe('chunk-id-123');
+
+      // Verify that extra properties are NOT present
+      expect(customDataChunk).not.toHaveProperty('extraProp');
+      expect(customDataChunk).not.toHaveProperty('anotherProp');
+      expect(customDataChunk).not.toHaveProperty('nested');
+      expect(customDataChunk).not.toHaveProperty('from');
+      expect(customDataChunk).not.toHaveProperty('runId');
+
+      // Verify that only the expected properties exist
+      const keys = Object.keys(customDataChunk);
+      expect(keys.sort()).toEqual(['data', 'id', 'type'].sort());
+    });
+
+    it('should omit id property when not present in original chunk', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'data-no-id-event',
+                data: { message: 'no id here' },
+                // No id property
+                extraProp: 'should not appear',
+              },
+              toolCallId: 'call_test',
+              toolName: 'workflow-test',
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-no-id-event');
+
+      expect(customDataChunk).toBeDefined();
+      expect(customDataChunk.type).toBe('data-no-id-event');
+      expect(customDataChunk.data).toEqual({ message: 'no id here' });
+
+      // Verify that id property is NOT present
+      expect(customDataChunk).not.toHaveProperty('id');
+      expect(customDataChunk).not.toHaveProperty('extraProp');
+
+      // Verify that only type and data exist
+      const keys = Object.keys(customDataChunk);
+      expect(keys.sort()).toEqual(['data', 'type'].sort());
+    });
+
+    it('should filter properties in workflow-step-output data chunks', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'test-run-id',
+            payload: { workflowId: 'test-workflow' },
+          });
+
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            payload: {
+              output: {
+                type: 'data-workflow-custom',
+                data: { status: 'processing' },
+                id: 'workflow-chunk-1',
+                // Extra properties that should be filtered
+                from: 'USER',
+                runId: 'test-run-id',
+                metadata: { extra: 'data' },
+              },
+            },
+          });
+
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'test-run-id',
+            payload: {
+              workflowStatus: 'success',
+              output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+              metadata: {},
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'workflow' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-workflow-custom');
+
+      expect(customDataChunk).toBeDefined();
+      expect(customDataChunk.type).toBe('data-workflow-custom');
+      expect(customDataChunk.data).toEqual({ status: 'processing' });
+      expect(customDataChunk.id).toBe('workflow-chunk-1');
+
+      // Verify extra properties are filtered
+      expect(customDataChunk).not.toHaveProperty('from');
+      expect(customDataChunk).not.toHaveProperty('runId');
+      expect(customDataChunk).not.toHaveProperty('metadata');
+
+      // Verify only expected properties exist
+      const keys = Object.keys(customDataChunk);
+      expect(keys.sort()).toEqual(['data', 'id', 'type'].sort());
     });
   });
 });

@@ -23,12 +23,12 @@
     "@mastra/memory": "beta",
     "@mastra/observability": "beta",
     "ai": "^4.3.19",
-    "exa-js": "^1.8.27",
+    "exa-js": "^2.0.9",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.0.3",
     "mastra": "beta",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

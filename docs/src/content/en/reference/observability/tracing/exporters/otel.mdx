@@ -1,17 +1,13 @@
 ---
 title: "Reference: OtelExporter | Observability"
 description: OpenTelemetry exporter for Tracing
+packages:
+  - "@mastra/otel-exporter"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # OtelExporter
-
-:::warning
-
-The OtelExporter is currently **experimental**. APIs and configuration options may change in future releases.
-
-:::
 
 Sends Tracing data to any OpenTelemetry-compatible observability platform using standardized GenAI semantic conventions.
 
@@ -317,38 +313,6 @@ const exporter = new OtelExporter({
 });
 ```
 
-## Span Mapping
-
-The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semantic conventions:
-
-### Span Names
-
-- `MODEL_GENERATION` → `chat {model}` or `tool_selection {model}`
-- `TOOL_CALL` → `tool.execute {tool_name}`
-- `AGENT_RUN` → `agent.{agent_id}`
-- `WORKFLOW_RUN` → `workflow.{workflow_id}`
-
-### Span Kinds
-
-- Root agent/workflow spans → `SERVER`
-- LLM calls → `CLIENT`
-- Tool calls → `INTERNAL` or `CLIENT`
-- Workflow steps → `INTERNAL`
-
-### Attributes
-
-The exporter maps to standard OTEL GenAI attributes:
-
-| Mastra Attribute                    | OTEL Attribute                   |
-| ----------------------------------- | -------------------------------- |
-| `model`                             | `gen_ai.request.model`           |
-| `provider`                          | `gen_ai.system`                  |
-| `inputTokens` / `promptTokens`      | `gen_ai.usage.input_tokens`      |
-| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens`     |
-| `temperature`                       | `gen_ai.request.temperature`     |
-| `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
-| `finishReason`                      | `gen_ai.response.finish_reasons` |
-
 ## Protocol Requirements
 
 Different providers require different OTEL exporter packages:
@@ -360,10 +324,38 @@ Different providers require different OTEL exporter packages:
 | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
 | Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin collectors          |
 
-## Parent-Child Relationships
 
-The exporter preserves span hierarchy from Mastra's Tracing:
+## Tags Support
 
-- Uses `parentSpanId` directly from Mastra spans
-- Maintains correct nesting for agents, workflows, LLM calls, and tools
-- Exports complete traces with all relationships intact
+The OtelExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are stored as the `mastra.tags` attribute.
+
+### Usage
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### How Tags Are Stored
+
+Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute for maximum backend compatibility:
+
+```json
+{
+  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+}
+```
+
+:::note
+While the OpenTelemetry specification supports native array attributes, many backends (Jaeger, Zipkin, Tempo) have limited array support. JSON strings ensure consistent behavior across all observability platforms.
+:::
+
+## Related
+
+- [OtelExporter Guide](/docs/v1/observability/tracing/exporters/otel) - Setup guide with provider configurations
+- [OtelBridge](/docs/v1/observability/tracing/bridges/otel) - For bidirectional OTEL context integration
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - General tracing concepts

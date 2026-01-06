@@ -1,5 +1,9 @@
-import type { ChildProcess } from 'child_process';
+import type { ChildProcess } from 'node:child_process';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('node:fs', () => ({
+  writeFileSync: vi.fn(),
+}));
 
 vi.mock('execa', () => ({
   execa: vi.fn(),
@@ -25,12 +29,18 @@ vi.mock('@mastra/deployer', () => {
   };
 });
 
-vi.mock('@mastra/deployer/build', () => ({
-  getServerOptions: vi.fn().mockResolvedValue({
-    port: 4111,
-    host: 'localhost',
-  }),
-}));
+vi.mock('@mastra/deployer/build', async importOriginal => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  const actual = await importOriginal<typeof import('@mastra/deployer/build')>();
+
+  return {
+    normalizeStudioBase: actual.normalizeStudioBase,
+    getServerOptions: vi.fn().mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    }),
+  };
+});
 
 vi.mock('get-port', () => ({
   default: vi.fn().mockResolvedValue(4111),

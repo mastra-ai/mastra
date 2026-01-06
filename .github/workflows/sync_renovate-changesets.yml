@@ -36,6 +36,12 @@ jobs:
             echo "examples_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Configure git
+        shell: bash
+        run: |
+          git config --global user.name 'daneatmastra'
+          git config --global user.email 'dane@mastra.ai'
+
       - name: Create/Update Changesets
         uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
         env:

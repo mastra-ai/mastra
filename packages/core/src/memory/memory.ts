@@ -1,19 +1,31 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
-import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
+import { ErrorDomain, MastraError } from '../error';
+import { ModelRouterEmbeddingModel } from '../llm/model';
+import type { EmbeddingModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors';
+import { isProcessorWorkflow } from '../processors';
+import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
-import type { MastraVector } from '../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
 import type {
   SharedMemoryConfig,
@@ -22,6 +34,7 @@ import type {
   MastraMessageV1,
   WorkingMemoryTemplate,
   MessageDeleteInput,
+  MemoryRequestContext,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -75,20 +88,56 @@ export const memoryDefaultOptions = {
  * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
+  /**
+   * Unique identifier for the memory instance.
+   * If not provided, defaults to a static name 'default-memory'.
+   */
+  readonly id: string;
+
   MAX_CONTEXT_TOKENS?: number;
 
   protected _storage?: MastraStorage;
   vector?: MastraVector;
-  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
-  private processors: MemoryProcessor[] = [];
+  embedder?: MastraEmbeddingModel<string>;
+  embedderOptions?: MastraEmbeddingOptions;
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
-  constructor(config: { name: string } & SharedMemoryConfig) {
+  constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
+    this.id = config.id ?? config.name ?? 'default-memory';
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
-    if (config.processors) this.processors = config.processors;
+
+    // DEPRECATION: Block old processors config
+    if (config.processors) {
+      throw new Error(
+        `The 'processors' option in Memory is deprecated and has been removed.
+      
+Please use the new Input/Output processor system instead:
+
+OLD (deprecated):
+  new Memory({
+    processors: [new TokenLimiter(100000)]
+  })
+
+NEW (use this):
+  new Agent({
+    memory,
+    outputProcessors: [
+      new TokenLimiterProcessor(100000)
+    ]
+  })
+
+Or pass memory directly to processor arrays:
+  new Agent({
+    inputProcessors: [memory],
+    outputProcessors: [memory]
+  })
+
+See: https://mastra.ai/en/docs/memory/processors`,
+      );
+    }
     if (config.storage) {
       this._storage = augmentWithInit(config.storage);
       this._hasOwnStorage = true;
@@ -97,14 +146,18 @@ export abstract class MastraMemory extends MastraBase {
     if (this.threadConfig.semanticRecall) {
       if (!config.vector) {
         throw new Error(
-          `Semantic recall requires a vector store to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
+          `Semantic recall requires a vector store to be configured.
+
+https://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
       this.vector = config.vector;
 
       if (!config.embedder) {
         throw new Error(
-          `Semantic recall requires an embedder to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
+          `Semantic recall requires an embedder to be configured.
+
+https://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
 
@@ -113,6 +166,11 @@ export abstract class MastraMemory extends MastraBase {
         this.embedder = new ModelRouterEmbeddingModel(config.embedder);
       } else {
         this.embedder = config.embedder;
+      }
+
+      // Set embedder options (e.g., providerOptions for Google models)
+      if (config.embedderOptions) {
+        this.embedderOptions = config.embedderOptions;
       }
     }
   }
@@ -134,7 +192,9 @@ export abstract class MastraMemory extends MastraBase {
   get storage() {
     if (!this._storage) {
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.\n\nhttps://mastra.ai/en/docs/memory/overview`,
+        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.
+
+https://mastra.ai/en/docs/memory/overview`,
       );
     }
     return this._storage;
@@ -148,8 +208,18 @@ export abstract class MastraMemory extends MastraBase {
     this.vector = vector;
   }
 
-  public setEmbedder(embedder: EmbeddingModel<string>) {
-    this.embedder = embedder;
+  public setEmbedder(
+    embedder: EmbeddingModelId | MastraEmbeddingModel<string>,
+    embedderOptions?: MastraEmbeddingOptions,
+  ) {
+    if (typeof embedder === 'string') {
+      this.embedder = new ModelRouterEmbeddingModel(embedder);
+    } else {
+      this.embedder = embedder;
+    }
+    if (embedderOptions) {
+      this.embedderOptions = embedderOptions;
+    }
   }
 
   /**
@@ -174,14 +244,22 @@ export abstract class MastraMemory extends MastraBase {
     return {};
   }
 
+  /**
+   * Get the index name for semantic recall embeddings.
+   * This is used to ensure consistency between the Memory class and SemanticRecall processor.
+   */
+  protected getEmbeddingIndexName(dimensions?: number): string {
+    const defaultDimensions = 1536;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const isDefault = usedDimensions === defaultDimensions;
+    const separator = this.vector?.indexSeparator ?? '_';
+    return isDefault ? `memory${separator}messages` : `memory${separator}messages${separator}${usedDimensions}`;
+  }
+
   protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
-    const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
-    const separator = this.vector?.indexSeparator ?? '_';
-    const indexName = isDefault
-      ? `memory${separator}messages`
-      : `memory${separator}messages${separator}${usedDimensions}`;
+    const indexName = this.getEmbeddingIndexName(dimensions);
 
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
@@ -212,7 +290,7 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
-    if (config?.workingMemory && 'use' in config.workingMemory) {
+    if (config?.workingMemory && typeof config.workingMemory === 'object' && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
 
@@ -224,53 +302,15 @@ export abstract class MastraMemory extends MastraBase {
 
     const mergedConfig = deepMerge(this.threadConfig, config || {});
 
-    if (config?.workingMemory?.schema) {
-      if (mergedConfig.workingMemory) {
-        mergedConfig.workingMemory.schema = config.workingMemory.schema;
-      }
+    if (
+      typeof config?.workingMemory === 'object' &&
+      config.workingMemory?.schema &&
+      typeof mergedConfig.workingMemory === 'object'
+    ) {
+      mergedConfig.workingMemory.schema = config.workingMemory.schema;
     }
 
     return mergedConfig;
-  }
-
-  /**
-   * Apply all configured message processors to a list of messages.
-   * @param messages The messages to process
-   * @returns The processed messages
-   */
-  protected async applyProcessors(
-    messages: CoreMessage[],
-    opts: {
-      processors?: MemoryProcessor[];
-    } & MemoryProcessorOpts,
-  ): Promise<CoreMessage[]> {
-    const processors = opts.processors || this.processors;
-    if (!processors || processors.length === 0) {
-      return messages;
-    }
-
-    let processedMessages = [...messages];
-
-    for (const processor of processors) {
-      processedMessages = await processor.process(processedMessages, {
-        systemMessage: opts.systemMessage,
-        newMessages: opts.newMessages,
-        memorySystemMessage: opts.memorySystemMessage,
-      });
-    }
-
-    return processedMessages;
-  }
-
-  processMessages({
-    messages,
-    processors,
-    ...opts
-  }: {
-    messages: CoreMessage[];
-    processors?: MemoryProcessor[];
-  } & MemoryProcessorOpts) {
-    return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
   estimateTokens(text: string): number {
@@ -428,13 +468,14 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<string | null>;
 
   /**
-   * Retrieves working memory template for a specific thread
-   * @param memoryConfig - Optional memory configuration
+   * Get working memory template
+   * @param threadId - Thread ID
+   * @param resourceId - Resource ID
    * @returns Promise resolving to working memory template or null if not found
    */
   abstract getWorkingMemoryTemplate({
     memoryConfig,
-  }?: {
+  }: {
     memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null>;
 
@@ -468,9 +509,245 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<{ success: boolean; reason: string }>;
 
   /**
-   * Deletes multiple messages by their IDs
-   * @param messageIds - Array of message IDs to delete
-   * @returns Promise that resolves when all messages are deleted
+   * Get input processors for this memory instance
+   * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @returns Array of input processors configured for this memory instance
    */
+  async getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor[]> {
+    const memoryStore = await this.storage.getStore('memory');
+    const processors: InputProcessor[] = [];
+
+    // Extract runtime memoryConfig from context if available
+    const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
+    const runtimeMemoryConfig = memoryContext?.memoryConfig;
+    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    // Add working memory input processor if configured
+    const isWorkingMemoryEnabled =
+      typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
+
+    if (isWorkingMemoryEnabled) {
+      if (!memoryStore)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'WORKING_MEMORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory working memory requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added WorkingMemory
+      const hasWorkingMemory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'working-memory');
+
+      if (!hasWorkingMemory) {
+        // Convert string template to WorkingMemoryTemplate format
+        let template: { format: 'markdown' | 'json'; content: string } | undefined;
+        if (typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.template) {
+          template = {
+            format: 'markdown',
+            content: effectiveConfig.workingMemory.template,
+          };
+        }
+
+        processors.push(
+          new WorkingMemory({
+            storage: memoryStore,
+            template,
+            scope: typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory.scope : undefined,
+            useVNext:
+              typeof effectiveConfig.workingMemory === 'object' &&
+              'version' in effectiveConfig.workingMemory &&
+              effectiveConfig.workingMemory.version === 'vnext',
+            templateProvider: this,
+          }),
+        );
+      }
+    }
+
+    const lastMessages = effectiveConfig.lastMessages;
+    if (lastMessages) {
+      if (!memoryStore)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: memoryStore,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+          }),
+        );
+      }
+    }
+
+    // Add semantic recall input processor if configured
+    if (effectiveConfig.semanticRecall) {
+      if (!memoryStore)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
+        });
+
+      if (!this.vector)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
+        });
+
+      if (!this.embedder)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
+          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+        });
+
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
+
+      if (!hasSemanticRecall) {
+        const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+
+        // Use the Memory class's index name for consistency with memory.recall()
+        const indexName = this.getEmbeddingIndexName();
+
+        processors.push(
+          new SemanticRecall({
+            storage: memoryStore,
+            vector: this.vector,
+            embedder: this.embedder,
+            embedderOptions: this.embedderOptions,
+            indexName,
+            ...semanticConfig,
+          }),
+        );
+      }
+    }
+
+    // Return only the auto-generated processors (not the configured ones)
+    // The agent will merge them with configuredProcessors
+    return processors;
+  }
+
+  /**
+   * Get output processors for this memory instance
+   * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @returns Array of output processors configured for this memory instance
+   */
+  async getOutputProcessors(
+    configuredProcessors: OutputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<OutputProcessor[]> {
+    const memoryStore = await this.storage.getStore('memory');
+    const processors: OutputProcessor[] = [];
+
+    // Extract runtime memoryConfig from context if available
+    const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
+    const runtimeMemoryConfig = memoryContext?.memoryConfig;
+    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    if (effectiveConfig.readOnly) {
+      return [];
+    }
+
+    // Add SemanticRecall output processor if configured
+    if (effectiveConfig.semanticRecall) {
+      if (!memoryStore)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
+        });
+
+      if (!this.vector)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
+          text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
+        });
+
+      if (!this.embedder)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
+          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+        });
+
+      // Check if user already manually added SemanticRecall
+      const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
+
+      if (!hasSemanticRecall) {
+        const semanticRecallConfig =
+          typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+
+        // Use the Memory class's index name for consistency with memory.recall()
+        const indexName = this.getEmbeddingIndexName();
+
+        processors.push(
+          new SemanticRecall({
+            storage: memoryStore,
+            vector: this.vector,
+            embedder: this.embedder,
+            embedderOptions: this.embedderOptions,
+            indexName,
+            ...semanticRecallConfig,
+          }),
+        );
+      }
+    }
+
+    const lastMessages = effectiveConfig.lastMessages;
+    if (lastMessages) {
+      if (!memoryStore)
+        throw new MastraError({
+          category: 'USER',
+          domain: ErrorDomain.STORAGE,
+          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
+          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
+        });
+
+      // Check if user already manually added MessageHistory
+      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
+
+      if (!hasMessageHistory) {
+        processors.push(
+          new MessageHistory({
+            storage: memoryStore,
+            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+          }),
+        );
+      }
+    }
+
+    // Return only the auto-generated processors (not the configured ones)
+    // The agent will merge them with configuredProcessors
+    return processors;
+  }
+
   abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
+
+  /**
+   * Clones a thread with all its messages to a new thread
+   * @param args - Clone parameters including source thread ID and optional filtering options
+   * @returns Promise resolving to the cloned thread and copied messages
+   */
+  abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
 }

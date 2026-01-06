@@ -3,8 +3,8 @@ import type {
   LanguageModelV2ProviderDefinedTool,
   LanguageModelV2ToolChoice,
 } from '@ai-sdk/provider-v5';
-import { asSchema, tool as toolFn } from 'ai-v5';
-import type { Tool, ToolChoice } from 'ai-v5';
+import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
+import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
 
 export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools,
@@ -62,14 +62,28 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 inputSchema: asSchema(sdkTool.inputSchema).jsonSchema,
                 providerOptions: sdkTool.providerOptions,
               };
-            case 'provider-defined':
+            case 'provider-defined': {
+              // For provider-defined tools, extract the name from the ID to match doStream behavior
+              // ID format is typically "provider.toolName" (e.g. "openai.web_search")
+              // doStream returns just "toolName" part, so we use that as name for consistency
+              const providerId = (sdkTool as any).id;
+
+              let providerToolName = name;
+
+              if (providerId && providerId.includes('.')) {
+                providerToolName = providerId.split('.').slice(1).join('.');
+              } else if (providerId) {
+                providerToolName = providerId;
+              }
+
               return {
                 type: 'provider-defined' as const,
-                name,
+                name: providerToolName,
                 // TODO: as any seems wrong here. are there cases where we don't have an id?
-                id: (sdkTool as any).id,
+                id: providerId,
                 args: (sdkTool as any).args,
               };
+            }
             default: {
               const exhaustiveCheck: never = toolType;
               throw new Error(`Unsupported tool type: ${exhaustiveCheck}`);

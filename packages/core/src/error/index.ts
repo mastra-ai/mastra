@@ -1,5 +1,8 @@
-import { safeParseErrorObject } from './utils.js';
-export { getErrorFromUnknown } from './utils.js';
+import { getErrorFromUnknown } from './utils.js';
+import type { SerializableError, SerializedError } from './utils.js';
+
+export { getErrorFromUnknown };
+export type { SerializableError, SerializedError };
 
 export enum ErrorDomain {
   TOOL = 'TOOL',
@@ -11,6 +14,7 @@ export enum ErrorDomain {
   MASTRA_WORKFLOW = 'MASTRA_WORKFLOW',
   MASTRA_VOICE = 'MASTRA_VOICE',
   MASTRA_VECTOR = 'MASTRA_VECTOR',
+  MASTRA_MEMORY = 'MASTRA_MEMORY',
   LLM = 'LLM',
   EVAL = 'EVAL',
   SCORER = 'SCORER',
@@ -41,7 +45,7 @@ type Json<T> = [T] extends [Scalar | undefined]
  * Defines the structure for an error's metadata.
  * This is used to create instances of MastraError.
  */
-export interface IErrorDefinition<D, C> {
+export interface IErrorDefinition<DOMAIN, CATEGORY> {
   /** Unique identifier for the error. */
   id: Uppercase<string>;
   /**
@@ -52,36 +56,47 @@ export interface IErrorDefinition<D, C> {
   /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
-  domain: D;
+  domain: DOMAIN;
   /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
-  category: C;
+  category: CATEGORY;
 
   details?: Record<string, Json<Scalar>>;
+}
+
+/**
+ * JSON representation of a MastraError for serialization
+ */
+export interface MastraErrorJSON<DOMAIN = string, CATEGORY = string> {
+  message: string;
+  code: Uppercase<string>;
+  category: CATEGORY;
+  domain: DOMAIN;
+  details?: Record<string, Json<Scalar>>;
+  cause?: ReturnType<SerializableError['toJSON']>;
 }
 
 /**
  * Base error class for the Mastra ecosystem.
  * It standardizes error reporting and can be extended for more specific error types.
  */
-export class MastraBaseError<D, C> extends Error {
+export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
   public readonly id: Uppercase<string>;
-  public readonly domain: D;
-  public readonly category: C;
+  public readonly domain: DOMAIN;
+  public readonly category: CATEGORY;
   public readonly details?: Record<string, Json<Scalar>> = {};
   public readonly message: string;
+  public cause?: SerializableError;
 
   constructor(
-    errorDefinition: IErrorDefinition<D, C>,
-    originalError?: string | Error | MastraBaseError<D, C> | unknown,
+    errorDefinition: IErrorDefinition<DOMAIN, CATEGORY>,
+    originalError?: string | Error | MastraBaseError<DOMAIN, CATEGORY> | unknown,
   ) {
-    // Convert originalError to Error instance
-    let error: Error | undefined;
-    if (originalError instanceof Error) {
-      error = originalError;
-    } else if (originalError) {
-      const errorMessage = safeParseErrorObject(originalError);
-      error = new Error(errorMessage);
-    }
+    const error = originalError
+      ? getErrorFromUnknown(originalError, {
+          serializeStack: false,
+          fallbackMessage: 'Unknown error',
+        })
+      : undefined;
 
     const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
 
@@ -91,6 +106,7 @@ export class MastraBaseError<D, C> extends Error {
     this.category = errorDefinition.category;
     this.details = errorDefinition.details ?? {};
     this.message = message;
+    this.cause = error;
 
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -107,11 +123,14 @@ export class MastraBaseError<D, C> extends Error {
     };
   }
 
-  public toJSON() {
+  public toJSON(): MastraErrorJSON<DOMAIN, CATEGORY> {
     return {
       message: this.message,
-      details: this.toJSONDetails(),
+      domain: this.domain,
+      category: this.category,
       code: this.id,
+      details: this.details,
+      cause: this.cause?.toJSON?.(),
     };
   }
 

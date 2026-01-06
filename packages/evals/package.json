@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.3",
   "description": "",
   "type": "module",
   "files": [
@@ -53,8 +53,9 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup --silent --config tsup.config.ts",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "pnpm check && tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/evals",
+    "build:watch": "pnpm build:lib --watch",
     "test": "vitest",
     "lint": "eslint ."
   },
@@ -77,7 +78,6 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
@@ -86,7 +86,7 @@
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

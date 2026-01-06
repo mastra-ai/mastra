@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
@@ -34,6 +34,37 @@ export function createAgenticExecutionWorkflow<
     llmExecutionStep,
   );
 
+  // Sequential execution may be required for tool calls to avoid race conditions, otherwise concurrency is configurable
+  let toolCallConcurrency = 10;
+  if (rest?.toolCallConcurrency) {
+    toolCallConcurrency = rest.toolCallConcurrency > 0 ? rest.toolCallConcurrency : 10;
+  }
+
+  // Check for sequential execution requirements:
+  // 1. Global requireToolApproval flag
+  // 2. Any tool has suspendSchema
+  // 3. Any tool has requireApproval flag
+  const hasRequireToolApproval = !!rest.requireToolApproval;
+
+  let hasSuspendSchema = false;
+  let hasRequireApproval = false;
+
+  if (rest.tools) {
+    for (const tool of Object.values(rest.tools)) {
+      if ((tool as any)?.hasSuspendSchema) {
+        hasSuspendSchema = true;
+      }
+
+      if ((tool as any)?.requireApproval) {
+        hasRequireApproval = true;
+      }
+
+      if (hasSuspendSchema || hasRequireApproval) break;
+    }
+  }
+
+  const sequentialExecutionRequired = hasRequireToolApproval || hasSuspendSchema || hasRequireApproval;
+
   return createWorkflow({
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
@@ -45,9 +76,23 @@ export function createAgenticExecutionWorkflow<
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
     },
   })
     .then(llmExecutionStep)
+    .map(
+      async ({ inputData }) => {
+        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+        // Add assistant response messages to messageList BEFORE processing tool calls
+        // This ensures messages are available for persistence before suspension
+        const responseMessages = typedInputData.messages.nonUser;
+        if (responseMessages && responseMessages.length > 0) {
+          rest.messageList.add(responseMessages, 'response');
+        }
+        return typedInputData;
+      },
+      { id: 'add-response-to-messagelist' },
+    )
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
@@ -55,7 +100,7 @@ export function createAgenticExecutionWorkflow<
       },
       { id: 'map-tool-calls' },
     )
-    .foreach(toolCallStep, { concurrency: 10 })
+    .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : toolCallConcurrency })
     .then(llmMappingStep)
     .commit();
 }

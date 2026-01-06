@@ -1491,3 +1491,6 @@ describe('Lance vector store tests', () => {
     });
   });
 });
+
+// Note: Lance's architecture (tables + column names + index names) doesn't align cleanly
+// with the shared test suite's expectations. Lance-specific tests are above.

@@ -3,7 +3,7 @@
 '@mastra/core': major
 ---
 
-**BREAKING CHANGE**: Scorers for Agents will now use `MastraDBMessage` instead of `UIMessage`
+Scorers for Agents will now use `MastraDBMessage` instead of `UIMessage`
 
 - Scorer input/output types now use `MastraDBMessage[]` with nested `content` object structure
 - Added `getTextContentFromMastraDBMessage()` helper function to extract text content from `MastraDBMessage` objects

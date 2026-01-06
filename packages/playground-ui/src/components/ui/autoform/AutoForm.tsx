@@ -1,5 +1,5 @@
 import React from 'react';
-import { AutoForm as BaseAutoForm, AutoFormUIComponents } from '@autoform/react';
+import { AutoFormUIComponents } from '@autoform/react';
 import { AutoFormProps } from './types';
 import { Form } from './components/Form';
 import { FieldWrapper } from './components/FieldWrapper';
@@ -16,6 +16,7 @@ import { ArrayElementWrapper } from './components/ArrayElementWrapper';
 import { RecordField } from './components/RecordField';
 import { UnionField } from './components/UnionField';
 import { DiscriminatedUnionField } from './components/DiscriminatedUnionField';
+import { CustomAutoForm } from './CustomAutoForm';
 
 const ShadcnUIComponents: AutoFormUIComponents = {
   Form,
@@ -44,7 +45,7 @@ export function AutoForm<T extends Record<string, any>>({
   ...props
 }: AutoFormProps<T> & { readOnly?: boolean }) {
   return (
-    <BaseAutoForm
+    <CustomAutoForm
       {...props}
       uiComponents={{ ...ShadcnUIComponents, ...uiComponents }}
       formComponents={{

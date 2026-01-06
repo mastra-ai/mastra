@@ -202,6 +202,46 @@ To migrate, update from `output` or `experimental_output` to `structuredOutput.s
   });
 ```
 
+### Agent `id` field is now required
+
+The `id` field is now required when creating an Agent. Previously, agents could be created without an explicit ID, but this is no longer supported.
+
+To migrate, add an `id` field to all Agent configurations.
+
+```diff
+  const agent = new Agent({
++   id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model: 'openai/gpt-4',
+  });
+```
+
+The `id` can be the same as the `name`, or you can use a different identifier. The ID will be used when calling `mastra.getAgentById()` and must be unique within your Mastra instance.
+
+```typescript
+// Register agent with Mastra
+const mastra = new Mastra({
+  agents: {
+    myAgent: agent, // key can differ from id
+  },
+});
+
+// Retrieve by ID
+const agent = mastra.getAgentById('my-agent');
+```
+
+### Stream API responses now redact sensitive data
+
+The Mastra server now automatically redacts sensitive information from agent stream responses. This prevents accidental exposure of system prompts, tool definitions, and API keys in `step-start`, `step-finish`, and `finish` stream chunks.
+
+**What's redacted:**
+- `request.body` containing LLM request payloads (system prompts, tool schemas)
+- `metadata.request` in step results
+- `output.steps[].request` in nested step data
+
+This behavior is enabled by default. If you need access to the full request data (e.g., for debugging or internal services), you can disable redaction when using server adapters directly (e.g., `@mastra/hono` or `@mastra/express`).
+
 ## Removed
 
 ### `generateVNext` and `streamVNext` methods
@@ -271,5 +311,75 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
 - const agent = new Agent<AgentId, Tools, Metrics>({
 + const agent = new Agent<AgentId, Tools>({
     // ...
+  });
+```
+
+### Tripwire response format changed
+
+The tripwire response format has changed from separate `tripwire` and `tripwireReason` fields to a single `tripwire` object containing all related data.
+
+To migrate, update your code to access tripwire data from the new object structure.
+
+```diff
+  const result = await agent.generate('Hello');
+
+- if (result.tripwire) {
+-   console.log(result.tripwireReason);
+- }
++ if (result.tripwire) {
++   console.log(result.tripwire.reason);
++   // New fields available:
++   // result.tripwire.retry - whether this step should be retried
++   // result.tripwire.metadata - additional metadata from the processor
++   // result.tripwire.processorId - which processor triggered the tripwire
++ }
+```
+
+For streaming responses:
+
+```diff
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tripwire') {
+-     console.log(chunk.payload.tripwireReason);
++     console.log(chunk.payload.reason);
++     // New fields available:
++     // chunk.payload.retry
++     // chunk.payload.metadata
++     // chunk.payload.processorId
+    }
+  }
+```
+
+The step results now also include tripwire information:
+
+```diff
+  const result = await agent.generate('Hello');
+
+  for (const step of result.steps) {
+-   // No tripwire info on steps
++   if (step.tripwire) {
++     console.log('Step was blocked:', step.tripwire.reason);
++   }
+  }
+```
+
+### `prepareStep` messages format
+
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+
+If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+
+```diff
+  agent.generate({
+    prompt: 'Hello',
+    prepareStep: async ({ messages, messageList }) => {
+-     // messages was AI SDK v5 ModelMessage format
+-     console.log(messages[0].content);
++     // messages is now MastraDBMessage format
++     // Use messageList to get AI SDK v5 format if needed:
++     const aiSdkMessages = messageList.get.all.aiV5.model();
+
+      return { toolChoice: 'auto' };
+    },
   });
 ```

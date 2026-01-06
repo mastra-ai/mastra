@@ -7,9 +7,12 @@ import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
+export { CompositeAuth } from './composite-auth';
+export { MastraServerBase } from './base';
+export { SimpleAuth } from './simple-auth';
+export type { SimpleAuthOptions } from './simple-auth';
 
 // Helper type for inferring parameters from a path
-// Thank you Claude!
 type ParamsFromPath<P extends string> = {
   [K in P extends `${string}:${infer Param}/${string}` | `${string}:${infer Param}` ? Param : never]: string;
 };

@@ -25,7 +25,7 @@ export type { MCPToolType } from '../tools';
  * This provides a common interface and shared functionality for all MCP servers
  * that can be registered with Mastra, including handling of server metadata.
  */
-export abstract class MCPServerBase extends MastraBase {
+export abstract class MCPServerBase<TId extends string = string> extends MastraBase {
   /** Tracks if the server ID has been definitively set. */
   private idWasSet = false;
   /** The display name of the MCP server. */
@@ -33,9 +33,11 @@ export abstract class MCPServerBase extends MastraBase {
   /** The semantic version of the MCP server. */
   public readonly version: string;
   /** Internal storage for the server's unique ID. */
-  private _id: string;
+  private _id: TId;
   /** A description of what the MCP server does. */
   public readonly description?: string;
+  /** Optional instructions describing how to use the server and its features. */
+  public readonly instructions?: string;
   /** Repository information for the server's source code. */
   public readonly repository?: Repository;
   /** The release date of this server version (ISO 8601 string). */
@@ -63,7 +65,7 @@ export abstract class MCPServerBase extends MastraBase {
    * Public getter for the server's unique ID.
    * The ID is set at construction or by Mastra and is read-only afterwards.
    */
-  public get id(): string {
+  public get id(): TId {
     return this._id;
   }
 
@@ -82,7 +84,7 @@ export abstract class MCPServerBase extends MastraBase {
    * If an ID was already provided in the MCPServerConfig, this method will be a no-op.
    * @param id The unique ID to assign to the server.
    */
-  setId(id: string) {
+  setId(id: TId) {
     if (this.idWasSet) {
       return;
     }
@@ -166,7 +168,7 @@ export abstract class MCPServerBase extends MastraBase {
    * Constructor for the MCPServerBase.
    * @param config Configuration options for the MCP server, including metadata.
    */
-  constructor(config: MCPServerConfig) {
+  constructor(config: MCPServerConfig<TId>) {
     super({ component: RegisteredLogger.MCP_SERVER, name: config.name });
     this.name = config.name;
     this.version = config.version;
@@ -174,13 +176,14 @@ export abstract class MCPServerBase extends MastraBase {
     // If user does not provide an ID, we will use the key from the Mastra config, but if user does not pass MCPServer
     // to Mastra, we will generate a random UUID as a backup.
     if (config.id) {
-      this._id = slugify(config.id);
+      this._id = slugify(config.id) as TId;
       this.idWasSet = true;
     } else {
-      this._id = this.mastra?.generateId() || randomUUID();
+      this._id = (this.mastra?.generateId() || randomUUID()) as TId;
     }
 
     this.description = config.description;
+    this.instructions = config.instructions;
     this.repository = config.repository;
     this.releaseDate = config.releaseDate || new Date().toISOString();
     this.isLatest = config.isLatest === undefined ? true : config.isLatest;

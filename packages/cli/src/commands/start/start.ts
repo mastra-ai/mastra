@@ -1,6 +1,6 @@
-import { spawn } from 'child_process';
-import fs from 'fs';
-import { join } from 'path';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { join } from 'node:path';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
 import { shouldSkipDotenvLoading } from '../utils';
@@ -28,7 +28,7 @@ export async function start(options: StartOptions = {}) {
     commands.push('index.mjs');
 
     // Start the server using node
-    const server = spawn('node', commands, {
+    const server = spawn(process.execPath, commands, {
       cwd: outputPath,
       stdio: ['inherit', 'inherit', 'pipe'],
       env: {

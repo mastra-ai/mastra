@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.11.0-beta.0",
+  "version": "0.11.0-beta.2",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
@@ -24,11 +24,10 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts voice/google-gemini-live-api",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "test:simple": "npx tsx src/test.ts simple",
-    "test:comprehensive": "npx tsx src/test.ts comprehensive",
-    "test:tts": "npx tsx src/test.ts",
+    "test:integration": "vitest run tool-args-integration.test.ts",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
@@ -50,7 +49,7 @@
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "tsx": "latest",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

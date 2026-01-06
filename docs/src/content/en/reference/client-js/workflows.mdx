@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflows API | Client SDK"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Workflows API
@@ -17,7 +19,7 @@ const workflows = await mastraClient.listWorkflows();
 
 ## Working with a Specific Workflow
 
-Get an instance of a specific workflow as defined by the const name:
+Get an instance of a specific workflow by its ID:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
@@ -26,12 +28,12 @@ export const testWorkflow = createWorkflow({
 ```
 
 ```typescript
-const workflow = mastraClient.getWorkflow("testWorkflow");
+const workflow = mastraClient.getWorkflow("city-workflow");
 ```
 
 ## Workflow Methods
 
-### Get Workflow Details
+### details()
 
 Retrieve detailed information about a workflow:
 
@@ -39,9 +41,28 @@ Retrieve detailed information about a workflow:
 const details = await workflow.details();
 ```
 
-### Start workflow run asynchronously
+### createRun()
 
-Start a workflow run with inputData and await full run results:
+Create a new workflow run instance:
+
+```typescript
+const run = await workflow.createRun();
+
+// Or with an existing runId
+const run = await workflow.createRun({ runId: "existing-run-id" });
+
+// Or with a resourceId to associate the run with a specific resource
+const run = await workflow.createRun({
+  runId: "my-run-id",
+  resourceId: "user-123"
+});
+```
+
+The `resourceId` parameter associates the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the run and can be used for filtering and querying runs later.
+
+### startAsync()
+
+Start a workflow run and await the full result:
 
 ```typescript
 const run = await workflow.createRun();
@@ -53,12 +74,59 @@ const result = await run.startAsync({
 });
 ```
 
-### Resume Workflow run asynchronously
+You can also pass `initialState` to set the starting values for the workflow's state:
 
-Resume a suspended workflow step and await full run result:
+```typescript
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+  initialState: {
+    count: 0,
+    items: [],
+  },
+});
+```
+
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+
+To associate a run with a specific resource, pass `resourceId` to `createRun()`:
+
+```typescript
+const run = await workflow.createRun({ resourceId: "user-123" });
+
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+});
+```
+
+### start()
+
+Start a workflow run without waiting for completion:
 
 ```typescript
 const run = await workflow.createRun();
+
+await run.start({
+  inputData: {
+    city: "New York",
+  },
+});
+
+// Poll for results later
+const result = await workflow.runExecutionResult(run.runId);
+```
+
+This is useful for long-running workflows where you want to start execution and check results later.
+
+### resumeAsync()
+
+Resume a suspended workflow step and await the full result:
+
+```typescript
+const run = await workflow.createRun({ runId: prevRunId });
 
 const result = await run.resumeAsync({
   step: "step-id",
@@ -66,82 +134,80 @@ const result = await run.resumeAsync({
 });
 ```
 
-### Resume Workflow
+### resume()
 
-Resume workflow run:
+Resume a suspended workflow step without waiting for completion:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const run = await workflow.createRun({ runId: prevRunId });
 
-  const run = await workflow.createRun({ runId: prevRunId });
-
-  run.resume({
-    step: "step-id",
-    resumeData: { key: "value" },
-  });
-} catch (e) {
-  console.error(e);
-}
+await run.resume({
+  step: "step-id",
+  resumeData: { key: "value" },
+});
 ```
 
-### Stream Workflow
+### cancel()
+
+Cancel a running workflow:
+
+```typescript
+const run = await workflow.createRun({ runId: existingRunId });
+
+const result = await run.cancel();
+// Returns: { message: 'Workflow run canceled' }
+```
+
+This method stops any running steps and prevents subsequent steps from executing. Steps that check the `abortSignal` parameter can respond to cancellation by cleaning up resources (timeouts, network requests, etc.).
+
+See the [Run.cancel()](/reference/v1/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
+
+### stream()
 
 Stream workflow execution for real-time updates:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const run = await workflow.createRun();
 
-  const run = await workflow.createRun();
+const stream = await run.stream({
+  inputData: {
+    city: "New York",
+  },
+});
 
-  const stream = await run.stream({
-    inputData: {
-      city: "New York",
-    },
-  });
-
-  for await (const chunk of stream) {
-    console.log(JSON.stringify(chunk, null, 2));
-  }
-} catch (e) {
-  console.error("Workflow error:", e);
+for await (const chunk of stream) {
+  console.log(JSON.stringify(chunk, null, 2));
 }
 ```
 
-### Get Workflow Run result
+### runExecutionResult()
 
-Get the result of a workflow run:
+Get the execution result for a workflow run:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
-
-  const run = await workflow.createRun();
-
-  // start the workflow run
-  const startResult = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
-
-  const result = await workflow.runExecutionResult(run.runId);
-
-  console.log(result);
-} catch (e) {
-  console.error(e);
-}
+const result = await workflow.runExecutionResult(runId);
 ```
 
-This is useful when dealing with long running workflows. You can use this to poll the result of the workflow run.
-
-### Workflow run result
+<h3>Run result format</h3>
 
 A workflow run result yields the following:
 
-| Field            | Type                                                                                                                                                                                                                                               | Description                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `payload`        | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | The current step and workflow state of the run   |
-| `eventTimestamp` | `Date`                                                                                                                                                                                                                                             | The timestamp of the event                       |
-| `runId`          | `string`                                                                                                                                                                                                                                           | Unique identifier for this workflow run instance |
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "Unique identifier for this workflow run instance",
+    },
+    {
+      name: "eventTimestamp",
+      type: "Date",
+      description: "The timestamp of the event",
+    },
+    {
+      name: "payload",
+      type: "object",
+      description: "Contains currentStep (id, status, output, payload) and workflowState (status, steps record)",
+    },
+  ]}
+/>

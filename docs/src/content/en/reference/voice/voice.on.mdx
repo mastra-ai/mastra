@@ -1,6 +1,10 @@
 ---
 title: "Reference: voice.on() | Voice"
 description: "Documentation for the on() method available in voice providers, which registers event listeners for voice events."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.on()
@@ -17,7 +21,7 @@ import chalk from "chalk";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });

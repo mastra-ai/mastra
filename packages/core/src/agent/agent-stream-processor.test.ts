@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Processor } from '../processors/index';
 import { Agent } from './index';
@@ -74,11 +74,11 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'This contains ' },
-            { type: 'text-delta', id: '1', delta: 'SENSITIVE data that ' },
-            { type: 'text-delta', id: '1', delta: 'should be SENSITIVE redacted' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'This contains ' },
+            { type: 'text-delta', id: 'text-1', delta: 'SENSITIVE data that ' },
+            { type: 'text-delta', id: 'text-1', delta: 'should be SENSITIVE redacted' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',

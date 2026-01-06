@@ -1,7 +1,11 @@
 ---
 title: "Reference: Agent.generate() | Agents"
 description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
+packages:
+  - "@mastra/core"
 ---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
 
 # Agent.generate()
 
@@ -9,13 +13,21 @@ The `.generate()` method enables non-streaming response generation from an agent
 
 ## Usage example
 
-```typescript copy
+```typescript
 // Default Mastra format
 const mastraResult = await agent.generate("message for agent");
 
 // AI SDK v5 compatible format
 const aiSdkResult = await agent.generate("message for agent", {
   format: "aisdk",
+});
+
+// With model settings (e.g., limiting output tokens)
+const limitedResult = await agent.generate("Write a short poem about coding", {
+  modelSettings: {
+    maxOutputTokens: 50,
+    temperature: 0.7,
+  },
 });
 ```
 
@@ -113,12 +125,6 @@ const aiSdkResult = await agent.generate("message for agent", {
           ],
         },
       ],
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "Tracing context for span hierarchy and metadata.",
     },
     {
       name: "returnScorerData",
@@ -243,6 +249,17 @@ const aiSdkResult = await agent.generate("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -316,7 +333,7 @@ const aiSdkResult = await agent.generate("message for agent", {
               type: "MemoryConfig",
               isOptional: true,
               description:
-                "Additional memory configuration options for conversation management.",
+                "Additional memory configuration options including lastMessages, readOnly, semanticRecall, and workingMemory.",
             },
           ],
         },
@@ -392,91 +409,7 @@ const aiSdkResult = await agent.generate("message for agent", {
         },
       ],
     },
-    {
-      name: "modelSettings",
-      type: "CallSettings",
-      isOptional: true,
-      description: "Model-specific settings like temperature, topP, etc.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description:
-                "Controls randomness in generation (0-2). Higher values make output more random.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "maxRetries",
-              type: "number",
-              isOptional: true,
-              description:
-                "Maximum number of retry attempts for failed requests.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topP",
-              type: "number",
-              isOptional: true,
-              description:
-                "Nucleus sampling parameter (0-1). Controls diversity of generated text.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topK",
-              type: "number",
-              isOptional: true,
-              description:
-                "Top-k sampling parameter. Limits vocabulary to k most likely tokens.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "presencePenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Penalty for token presence (-2 to 2). Reduces repetition.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "frequencyPenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Penalty for token frequency (-2 to 2). Reduces repetition of frequent tokens.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "stopSequences",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Array of strings that will stop generation when encountered.",
-            },
-          ],
-        },
-      ],
-    },
+    MODEL_SETTINGS_OBJECT,
     {
       name: "threadId",
       type: "string",
@@ -650,14 +583,51 @@ const aiSdkResult = await agent.generate("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
-    },
-    {
-      name: "maxTokens",
-      type: "number",
-      isOptional: true,
-      description:
-        "Conditions for stopping execution (e.g., step count, token limit).",
     },
   ]}
 />

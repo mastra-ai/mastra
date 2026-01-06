@@ -1,6 +1,10 @@
 ---
 title: "Reference: voice.answer() | Voice"
 description: "Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.answer()
@@ -23,7 +27,7 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o",
+    model: "gpt-5.1",
     apiKey: process.env.OPENAI_API_KEY,
   },
   speaker: "alloy", // Default voice

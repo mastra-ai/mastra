@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, it, expect } from 'vitest';
 import { RequestContext } from '../../request-context';
+import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
 
@@ -21,7 +22,10 @@ describe('resolveModelConfig', () => {
   it('should return a LanguageModel instance as-is', async () => {
     const model = openai('gpt-4o');
     const result = await resolveModelConfig(model);
-    expect(result).toBe(model);
+    expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+    expect(result.modelId).toBe('gpt-4o');
+    expect(result.provider).toBe('openai.responses');
+    expect(result.specificationVersion).toBe('v2');
   });
 
   it('should resolve a dynamic function returning a string', async () => {
@@ -44,7 +48,10 @@ describe('resolveModelConfig', () => {
     const model = openai('gpt-4o');
     const dynamicFn = () => model;
     const result = await resolveModelConfig(dynamicFn);
-    expect(result).toBe(model);
+    expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+    expect(result.modelId).toBe('gpt-4o');
+    expect(result.provider).toBe('openai.responses');
+    expect(result.specificationVersion).toBe('v2');
   });
 
   it('should pass requestContext to dynamic function', async () => {

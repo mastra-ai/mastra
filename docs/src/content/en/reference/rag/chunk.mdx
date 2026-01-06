@@ -1,6 +1,8 @@
 ---
 title: "Reference: Reference: .chunk() | RAG"
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
+packages:
+  - "@mastra/rag"
 ---
 
 # Reference: .chunk()
@@ -112,7 +114,7 @@ See [ExtractParams reference](/reference/v1/rag/extract-params) for details on t
 
 Strategy-specific options are passed as top-level parameters alongside the strategy parameter. For example:
 
-```typescript showLineNumbers copy
+```typescript
 // Character strategy example
 const chunks = await doc.chunk({
   strategy: "character",

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run.resume() | Workflows"
 description: Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.resume()
@@ -9,7 +11,7 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
@@ -87,6 +89,50 @@ if (result.status === "suspended") {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
     {
@@ -133,7 +179,7 @@ if (result.status === "suspended") {
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 if (result.status === "suspended") {
   const resumedResults = await run.resume({
     step: result.suspended[0],

@@ -1,5 +1,5 @@
-import { spawn } from 'child_process';
-import { Transform } from 'stream';
+import { spawn } from 'node:child_process';
+import { Transform } from 'node:stream';
 import type { IMastraLogger } from '@mastra/core/logger';
 
 export const createPinoStream = (logger: IMastraLogger) => {

@@ -135,6 +135,7 @@ export const myMcpServer = new MCPServer({
 
 export const myMcpServerTwo = new MCPServer({
   name: 'My Utility MCP Server',
+  id: 'my-utility-mcp-server',
   version: '1.0.0',
   agents: { chefAgent },
   workflows: { myWorkflow },

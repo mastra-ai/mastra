@@ -1,5 +1,5 @@
-import { spawn } from 'child_process';
-import path from 'path';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';

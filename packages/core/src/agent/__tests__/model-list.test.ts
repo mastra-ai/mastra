@@ -1,7 +1,8 @@
 import { openai } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
@@ -166,11 +167,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -263,11 +264,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -365,11 +366,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -488,11 +489,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -613,11 +614,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -662,11 +663,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', Second' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', Second' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -772,11 +773,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -797,35 +798,35 @@ function modelListTests(version: 'v1' | 'v2') {
           await agent.getLLM();
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.generate('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.stream('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.generate('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.stream('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
       });
     },

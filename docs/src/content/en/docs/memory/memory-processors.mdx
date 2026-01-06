@@ -1,137 +1,328 @@
 ---
 title: "Memory Processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/openai"
+  - "@mastra/pinecone"
 ---
 
 # Memory Processors
 
-Memory Processors allow you to modify the list of messages retrieved from memory _before_ they are added to the agent's context window and sent to the LLM. This is useful for managing context size, filtering content, and optimizing performance.
+Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
-Processors operate on the messages retrieved based on your memory configuration (e.g., `lastMessages`, `semanticRecall`). They do **not** affect the new incoming user message.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
-## Built-in Processors
+Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
 
-Mastra provides built-in processors:
+## Built-in Memory Processors
 
-### `TokenLimiter`
+Mastra automatically adds these processors when memory is enabled:
 
-This processor is used to prevent errors caused by exceeding the LLM's context window limit. It counts the tokens in the retrieved memory messages and removes the oldest messages until the total count is below the specified `limit`.
+### MessageHistory
 
-```typescript copy showLineNumbers {9-12}
-import { Memory } from "@mastra/memory";
-import { TokenLimiter } from "@mastra/memory/processors";
+Retrieves message history and persists new messages.
+
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  lastMessages: 10,
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `MessageHistory` processor with `limit: 10`
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Adds it to the agent's output processors (runs after the LLM)
+
+**What it does:**
+
+- **Input**: Fetches the last 10 messages from storage and prepends them to the conversation
+- **Output**: Persists new messages to storage after the model responds
+
+**Example:**
+
+```typescript
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  model: openai("gpt-4o"),
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
   memory: new Memory({
-    processors: [
-      // Ensure the total tokens from memory don't exceed ~127k
-      new TokenLimiter(127000),
-    ],
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    lastMessages: 10, // MessageHistory processor automatically added
   }),
 });
 ```
 
-The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings if needed for different models:
+### SemanticRecall
 
-```typescript copy showLineNumbers {6-9}
-// Import the encoding you need (e.g., for older OpenAI models)
-import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+Retrieves semantically relevant messages based on the current input and creates embeddings for new messages.
 
-const memoryForOlderModel = new Memory({
-  processors: [
-    new TokenLimiter({
-      limit: 16000, // Example limit for a 16k context model
-      encoding: cl100k_base,
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  semanticRecall: { enabled: true },
+  vector: myVectorStore,
+  embedder: myEmbedder,
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `SemanticRecall` processor
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Adds it to the agent's output processors (runs after the LLM)
+4. Requires both a vector store and embedder to be configured
+
+**What it does:**
+
+- **Input**: Performs vector similarity search to find relevant past messages and prepends them to the conversation
+- **Output**: Creates embeddings for new messages and stores them in the vector store for future retrieval
+
+**Example:**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { PineconeVector } from "@mastra/pinecone";
+import { OpenAIEmbedder } from "@mastra/openai";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "semantic-agent",
+  instructions: "You are a helpful assistant with semantic memory",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
     }),
-  ],
+    vector: new PineconeVector({
+      id: "memory-vector",
+      apiKey: process.env.PINECONE_API_KEY!,
+      environment: "us-east-1",
+    }),
+    embedder: new OpenAIEmbedder({
+      model: "text-embedding-3-small",
+      apiKey: process.env.OPENAI_API_KEY!,
+    }),
+    semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
+  }),
 });
 ```
 
-See the [OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings) or [`js-tiktoken` repo](https://github.com/dqbd/tiktoken) for more on encodings.
+### WorkingMemory
 
-### `ToolCallFilter`
+Manages working memory state across conversations.
 
-This processor removes tool calls from the memory messages sent to the LLM. It saves tokens by excluding potentially verbose tool interactions from the context, which is useful if the details aren't needed for future interactions. It's also useful if you always want your agent to call a specific tool again and not rely on previous tool results in memory.
+**When you configure:**
 
-```typescript copy showLineNumbers {5-14}
+```typescript
+memory: new Memory({
+  workingMemory: { enabled: true },
+});
+```
+
+**Mastra internally:**
+
+1. Creates a `WorkingMemory` processor
+2. Adds it to the agent's input processors (runs before the LLM)
+3. Requires a storage adapter to be configured
+
+**What it does:**
+
+- **Input**: Retrieves working memory state for the current thread and prepends it to the conversation
+- **Output**: No output processing
+
+**Example:**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-const memoryFilteringTools = new Memory({
-  processors: [
-    // Example 1: Remove all tool calls/results
-    new ToolCallFilter(),
-
-    // Example 2: Remove only noisy image generation tool calls/results
-    new ToolCallFilter({ exclude: ["generateImageTool"] }),
-
-    // Always place TokenLimiter last
-    new TokenLimiter(127000),
-  ],
+const agent = new Agent({
+  name: "working-memory-agent",
+  instructions: "You are an assistant with working memory",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    workingMemory: { enabled: true }, // WorkingMemory processor automatically added
+  }),
 });
 ```
 
-## Applying Multiple Processors
+## Manual Control and Deduplication
 
-You can chain multiple processors. They execute in the order they appear in the `processors` array. The output of one processor becomes the input for the next.
+If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
-**Order matters!** It's generally best practice to place `TokenLimiter` **last** in the chain. This ensures it operates on the final set of messages after other filtering has occurred, providing the most accurate token limit enforcement.
-
-```typescript copy showLineNumbers {7-14}
+```typescript
+import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
-// Assume a hypothetical 'PIIFilter' custom processor exists
-// import { PIIFilter } from './custom-processors';
+import { MessageHistory } from "@mastra/memory/processors";
+import { TokenLimiter } from "@mastra/core/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-const memoryWithMultipleProcessors = new Memory({
-  processors: [
-    // 1. Filter specific tool calls first
-    new ToolCallFilter({ exclude: ["verboseDebugTool"] }),
-    // 2. Apply custom filtering (e.g., remove hypothetical PII - use with caution)
-    // new PIIFilter(),
-    // 3. Apply token limiting as the final step
-    new TokenLimiter(127000),
+// Custom MessageHistory with different configuration
+const customMessageHistory = new MessageHistory({
+  storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+  lastMessages: 20,
+});
+
+const agent = new Agent({
+  name: "custom-memory-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+    lastMessages: 10, // This would normally add MessageHistory(10)
+  }),
+  inputProcessors: [
+    customMessageHistory, // Your custom one is used instead
+    new TokenLimiter({ limit: 4000 }), // Runs after your custom MessageHistory
   ],
 });
 ```
 
-## Creating Custom Processors
+## Processor Execution Order
 
-You can create custom logic by extending the base `MemoryProcessor` class.
+Understanding the execution order is important when combining guardrails with memory:
 
-```typescript copy showLineNumbers {5-20,24-27}
-import { Memory, MemoryProcessorOpts, MemoryProcessor } from "@mastra/memory";
-import { CoreMessage } from "@mastra/core/llm";
+### Input Processors
 
-class ConversationOnlyFilter extends MemoryProcessor {
-  constructor() {
-    // Provide a name for easier debugging if needed
-    super({ name: "ConversationOnlyFilter" });
-  }
+```
+[Memory Processors] → [Your inputProcessors]
+```
 
-  process(
-    messages: CoreMessage[],
-    _opts: MemoryProcessorOpts = {}, // Options passed during memory retrieval, rarely needed here
-  ): CoreMessage[] {
-    // Filter messages based on role
-    return messages.filter(
-      (msg) => msg.role === "user" || msg.role === "assistant",
+1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
+2. **Your input processors run AFTER**: guardrails, filters, validators
+
+This means memory loads message history before your processors can validate or filter the input.
+
+### Output Processors
+
+```
+[Your outputProcessors] → [Memory Processors]
+```
+
+1. **Your output processors run FIRST**: guardrails, filters, validators
+2. **Memory processors run AFTER**: `SemanticRecall` (embeddings), `MessageHistory` (persistence)
+
+This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
+
+## Guardrails and Memory
+
+The default execution order provides safe guardrail behavior:
+
+### Output guardrails (recommended)
+
+Output guardrails run **before** memory processors save messages. If a guardrail aborts:
+
+- The tripwire is triggered
+- Memory processors are skipped
+- **No messages are persisted to storage**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// Output guardrail that blocks inappropriate content
+const contentBlocker = {
+  id: "content-blocker",
+  processOutputResult: async ({ messages, abort }) => {
+    const hasInappropriateContent = messages.some((msg) =>
+      containsBadContent(msg)
     );
-  }
-}
+    if (hasInappropriateContent) {
+      abort("Content blocked by guardrail");
+    }
+    return messages;
+  },
+};
 
-// Use the custom processor
-const memoryWithCustomFilter = new Memory({
-  processors: [
-    new ConversationOnlyFilter(),
-    new TokenLimiter(127000), // Still apply token limiting
-  ],
+const agent = new Agent({
+  name: "safe-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs BEFORE memory saves
+  outputProcessors: [contentBlocker],
+});
+
+// If the guardrail aborts, nothing is saved to memory
+const result = await agent.generate("Hello");
+if (result.tripwire) {
+  console.log("Blocked:", result.tripwireReason);
+  // Memory is empty - no messages were persisted
+}
+```
+
+### Input guardrails
+
+Input guardrails run **after** memory processors load history. If a guardrail aborts:
+
+- The tripwire is triggered
+- The LLM is never called
+- Output processors (including memory persistence) are skipped
+- **No messages are persisted to storage**
+
+```typescript
+// Input guardrail that validates user input
+const inputValidator = {
+  id: "input-validator",
+  processInput: async ({ messages, abort }) => {
+    const lastUserMessage = messages.findLast((m) => m.role === "user");
+    if (isInvalidInput(lastUserMessage)) {
+      abort("Invalid input detected");
+    }
+    return messages;
+  },
+};
+
+const agent = new Agent({
+  name: "validated-agent",
+  instructions: "You are a helpful assistant",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // Your guardrail runs AFTER memory loads history
+  inputProcessors: [inputValidator],
 });
 ```
+
+### Summary
+
+| Guardrail Type | When it runs | If it aborts |
+| -------------- | ------------ | ------------ |
+| Input | After memory loads history | LLM not called, nothing saved |
+| Output | Before memory saves | Nothing saved to storage |
+
+Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
+
+## Related documentation
+
+- [Processors](/docs/v1/agents/processors) - General processor concepts and custom processor creation
+- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
+- [Memory Overview](/docs/v1/memory/overview) - Memory types and configuration
 
 When creating custom processors avoid mutating the input `messages` array or its objects directly.

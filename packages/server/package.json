@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.19",
   "description": "",
   "type": "module",
   "files": [
@@ -40,6 +40,16 @@
         "default": "./dist/server/handlers/*.cjs"
       }
     },
+    "./server-adapter": {
+      "import": {
+        "types": "./dist/server/server-adapter/index.d.ts",
+        "default": "./dist/server/server-adapter/index.js"
+      },
+      "require": {
+        "types": "./dist/server/server-adapter/index.d.ts",
+        "default": "./dist/server/server-adapter/index.cjs"
+      }
+    },
     "./a2a/store": {
       "import": {
         "types": "./dist/server/a2a/store.d.ts",
@@ -50,11 +60,22 @@
         "default": "./dist/server/a2a/store.cjs"
       }
     },
+    "./auth": {
+      "import": {
+        "types": "./dist/server/auth/index.d.ts",
+        "default": "./dist/server/auth/index.js"
+      },
+      "require": {
+        "types": "./dist/server/auth/index.d.ts",
+        "default": "./dist/server/auth/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/server",
+    "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
     "lint": "eslint ."
@@ -74,14 +95,13 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },
@@ -96,5 +116,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "hono": "^4.11.3"
   }
 }

@@ -1,7 +1,9 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { Processor } from '../index';
@@ -94,6 +96,19 @@ export interface LanguageDetectorOptions {
    * - 'balanced': Balance between speed and quality
    */
   translationQuality?: 'speed' | 'quality' | 'balanced';
+
+  /**
+   * Provider-specific options passed to the internal detection agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -103,7 +118,7 @@ export interface LanguageDetectorOptions {
  * Supports 100+ languages via internal agent-based detection and translation,
  * making it ideal for multilingual AI applications and global deployment.
  */
-export class LanguageDetector implements Processor {
+export class LanguageDetector implements Processor<'language-detector'> {
   readonly id = 'language-detector';
   readonly name = 'Language Detector';
 
@@ -115,6 +130,7 @@ export class LanguageDetector implements Processor {
   private minTextLength: number;
   private includeDetectionDetails: boolean;
   private translationQuality: 'speed' | 'quality' | 'balanced';
+  private providerOptions?: ProviderOptions;
 
   // Default target language
   private static readonly DEFAULT_TARGET_LANGUAGES = ['English', 'en'];
@@ -168,6 +184,7 @@ export class LanguageDetector implements Processor {
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
     this.translationQuality = options.translationQuality || 'quality';
+    this.providerOptions = options.providerOptions;
 
     // Create internal detection and translation agent
     this.detectionAgent = new Agent({
@@ -269,7 +286,7 @@ export class LanguageDetector implements Processor {
             })
           : baseSchema;
 
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
@@ -277,12 +294,14 @@ export class LanguageDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

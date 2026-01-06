@@ -1,0 +1,61 @@
+{
+  "name": "@mastra/otel-bridge-agent-hub",
+  "version": "0.1.0",
+  "description": "Mastra Otel Bridge Agent Hub example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "prettier --check '*/**/*.{js,jsx,ts,tsx}'",
+    "lint:fix": "prettier --write '*/**/*.{js,jsx,ts,tsx}'",
+    "test": "vitest run",
+    "start": "KNOWN_EXTS=js,ts node -r dotenv/config --loader ts-node/esm --import=specifier-resolution-node/register --import=@opentelemetry/instrumentation/hook.mjs --import=./src/core/telemetry/init.ts src/server.ts",
+    "docker:up": "docker compose -f docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker-compose.yml down"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20",
+    "pnpm": "^10"
+  },
+  "dependencies": {
+    "@fastify/otel": "0.9.4",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/otel-bridge": "latest",
+    "@mastra/server": "latest",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "0.67.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.208.0",
+    "@opentelemetry/host-metrics": "0.37.0",
+    "@opentelemetry/instrumentation": "0.208.0",
+    "@opentelemetry/resources": "2.2.0",
+    "@opentelemetry/sdk-node": "0.208.0",
+    "@opentelemetry/semantic-conventions": "1.38.0",
+    "fastify": "5.6.0",
+    "fastify-plugin": "5.0.1",
+    "fastify-type-provider-zod": "4.0.2",
+    "pino": "9.11.0",
+    "specifier-resolution-node": "1.1.4",
+    "uri-template": "2.0.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.7",
+    "concurrently": "9.2.1",
+    "dotenv": "17.2.0",
+    "prettier": "3.6.2",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3",
+    "vitest": "^2.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../../packages/core",
+      "@mastra/libsql": "link:../../../../stores/libsql",
+      "@mastra/observability": "link:../../../mastra",
+      "@mastra/otel-bridge": "link:../../../otel-bridge",
+      "@mastra/server": "link:../../../../packages/server"
+    }
+  }
+}

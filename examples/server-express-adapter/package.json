@@ -1,0 +1,32 @@
+{
+  "name": "examples-server-express-adapter",
+  "type": "module",
+  "private": true,
+  "description": "Example demonstrating the @mastra/express server adapter",
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/express": "latest",
+    "express": "^5.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "22.13.17",
+    "tsx": "^4.19.3",
+    "typescript": "^5.9.3"
+  },
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/express": "link:../../server-adapters/express"
+    }
+  }
+}

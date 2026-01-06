@@ -1,7 +1,7 @@
-import { createWriteStream, createReadStream, mkdirSync } from 'fs';
-import { writeFile } from 'fs/promises';
-import path from 'path';
-import { Readable } from 'stream';
+import { createWriteStream, createReadStream, mkdirSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { Readable } from 'node:stream';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SARVAM_VOICES } from './voices';
 import type { SarvamVoiceId } from './voices';

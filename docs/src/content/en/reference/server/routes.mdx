@@ -1,0 +1,322 @@
+---
+title: "Reference: Server Routes | Server"
+description: "API reference for HTTP routes registered by Mastra server adapters."
+packages:
+  - "@mastra/server"
+---
+
+# Server Routes
+
+Server adapters register these routes when you call `server.init()`. All routes are prefixed with the `prefix` option if configured.
+
+## Agents
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/agents` | List all agents |
+| `GET` | `/api/agents/:agentId` | Get agent by ID |
+| `POST` | `/api/agents/:agentId/generate` | Generate agent response |
+| `POST` | `/api/agents/:agentId/stream` | Stream agent response |
+| `GET` | `/api/agents/:agentId/tools` | List agent tools |
+| `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
+
+### Generate request body
+
+```typescript
+{
+  messages: CoreMessage[] | string;       // Required
+  instructions?: string;                   // System instructions
+  system?: string;                         // System prompt
+  context?: CoreMessage[];                 // Additional context
+  memory?: { key: string } | boolean;      // Memory config
+  resourceId?: string;                     // Resource identifier
+  threadId?: string;                       // Thread identifier
+  runId?: string;                          // Run identifier
+  maxSteps?: number;                       // Max tool steps
+  activeTools?: string[];                  // Tools to enable
+  toolChoice?: ToolChoice;                 // Tool selection mode
+  requestContext?: Record<string, unknown>; // Request context
+  output?: ZodSchema;                      // Structured output schema
+}
+```
+
+### Generate response
+
+```typescript
+{
+  text: string;
+  toolCalls?: ToolCall[];
+  finishReason: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+  };
+}
+```
+
+## Workflows
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/workflows` | List all workflows |
+| `GET` | `/api/workflows/:workflowId` | Get workflow by ID |
+| `POST` | `/api/workflows/:workflowId/create-run` | Create a new workflow run |
+| `POST` | `/api/workflows/:workflowId/start-async` | Start workflow and await result |
+| `POST` | `/api/workflows/:workflowId/stream` | Stream workflow execution |
+| `POST` | `/api/workflows/:workflowId/resume` | Resume suspended workflow |
+| `POST` | `/api/workflows/:workflowId/resume-async` | Resume asynchronously |
+| `GET` | `/api/workflows/:workflowId/runs` | List workflow runs |
+| `GET` | `/api/workflows/:workflowId/runs/:runId` | Get specific run |
+
+### Create run request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  disableScorers?: boolean; // Disable scorers for this run
+}
+```
+
+### Start-async request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  tracingOptions?: {
+    spanName?: string;
+    attributes?: Record<string, unknown>;
+  };
+}
+```
+
+### Stream workflow request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  closeOnSuspend?: boolean;
+}
+```
+
+### Resume request body
+
+```typescript
+{
+  step?: string | string[];
+  resumeData?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+```
+
+## Tools
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/tools` | List all tools |
+| `GET` | `/api/tools/:toolId` | Get tool by ID |
+| `POST` | `/api/tools/:toolId/execute` | Execute tool |
+
+### Execute tool request body
+
+```typescript
+{
+  data: unknown;  // Tool input data
+  requestContext?: Record<string, unknown>;
+}
+```
+
+## Memory
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/memory/threads` | List threads |
+| `GET` | `/api/memory/threads/:threadId` | Get thread |
+| `POST` | `/api/memory/threads` | Create thread |
+| `DELETE` | `/api/memory/threads/:threadId` | Delete thread |
+| `POST` | `/api/memory/threads/:threadId/clone` | Clone thread |
+| `GET` | `/api/memory/threads/:threadId/messages` | Get thread messages |
+| `POST` | `/api/memory/threads/:threadId/messages` | Add message |
+
+### Create thread request body
+
+```typescript
+{
+  resourceId: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+### Clone thread request body
+
+```typescript
+{
+  newThreadId?: string;           // Custom ID for cloned thread
+  resourceId?: string;            // Override resource ID
+  title?: string;                 // Custom title for clone
+  metadata?: Record<string, unknown>;  // Additional metadata
+  options?: {
+    messageLimit?: number;        // Max messages to clone
+    messageFilter?: {
+      startDate?: Date;           // Clone messages after this date
+      endDate?: Date;             // Clone messages before this date
+      messageIds?: string[];      // Clone specific messages
+    };
+  };
+}
+```
+
+### Clone thread response
+
+```typescript
+{
+  thread: {
+    id: string;
+    resourceId: string;
+    title: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata: {
+      clone: {
+        sourceThreadId: string;
+        clonedAt: Date;
+        lastMessageId?: string;
+      };
+      // ... other metadata
+    };
+  };
+  clonedMessages: MastraDBMessage[];
+}
+```
+
+## Vectors
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/vectors/:vectorName/upsert` | Upsert vectors |
+| `POST` | `/api/vectors/:vectorName/query` | Query vectors |
+| `POST` | `/api/vectors/:vectorName/delete` | Delete vectors |
+
+### Upsert request body
+
+```typescript
+{
+  vectors: Array<{
+    id: string;
+    values: number[];
+    metadata?: Record<string, unknown>;
+  }>;
+}
+```
+
+### Query request body
+
+```typescript
+{
+  vector: number[];
+  topK?: number;
+  filter?: Record<string, unknown>;
+  includeMetadata?: boolean;
+}
+```
+
+## MCP
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/mcp/servers` | List MCP servers |
+| `GET` | `/api/mcp/servers/:serverId/tools` | List server tools |
+| `POST` | `/api/mcp/:serverId` | MCP HTTP transport |
+| `GET` | `/api/mcp/:serverId/sse` | MCP SSE transport |
+
+## Logs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/logs` | List logs |
+| `GET` | `/api/logs/:runId` | Get logs by run ID |
+
+### Query parameters
+
+```typescript
+{
+  page?: number;
+  perPage?: number;
+  transportId?: string;
+}
+```
+
+## Telemetry
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/telemetry/traces` | List traces |
+| `GET` | `/api/telemetry/traces/:traceId` | Get trace |
+| `GET` | `/api/telemetry/traces/:traceId/spans` | Get trace spans |
+
+## Common query parameters
+
+### Pagination
+
+Most list endpoints support:
+
+```typescript
+{
+  page?: number;   // Page number (0-indexed)
+  perPage?: number; // Items per page (default: 10)
+}
+```
+
+Or offset-based:
+
+```typescript
+{
+  offset?: number; // Skip N items
+  limit?: number;  // Max items (default: 50)
+}
+```
+
+### Filtering
+
+Workflow runs support:
+
+```typescript
+{
+  fromDate?: string;  // ISO date string
+  toDate?: string;    // ISO date string
+  status?: string;    // Run status filter
+  resourceId?: string; // Filter by resource
+}
+```
+
+## Error responses
+
+All routes return errors in this format:
+
+```typescript
+{
+  error: string;      // Error message
+  details?: unknown;  // Additional details
+}
+```
+
+Common status codes:
+
+| Code | Meaning |
+|------|---------|
+| 400 | Bad Request - Invalid parameters |
+| 401 | Unauthorized - Missing/invalid auth |
+| 403 | Forbidden - Insufficient permissions |
+| 404 | Not Found - Resource doesn't exist |
+| 500 | Internal Server Error |
+
+## Related
+
+- [createRoute()](/reference/v1/server/create-route) - Creating custom routes
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters

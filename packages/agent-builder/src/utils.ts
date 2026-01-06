@@ -1,11 +1,11 @@
-import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'child_process';
-import type { SpawnOptions } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { copyFile, readFile } from 'fs/promises';
-import { createRequire } from 'module';
-import { dirname, basename, extname, resolve, join } from 'path';
-import { promisify } from 'util';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'node:child_process';
+import type { SpawnOptions } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { copyFile, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, basename, extname, resolve, join } from 'node:path';
+import { promisify } from 'node:util';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { UNIT_KINDS } from './types';
@@ -411,8 +411,8 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
   return uniqueTargetFile;
 }
 
-// Type guard to check if object is a valid MastraLanguageModel
-export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
+// Type guard to check if object is a valid language model (V1, V2, or V3)
+export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel | MastraLegacyLanguageModel => {
   return model && typeof model === 'object' && typeof model.modelId === 'string';
 };
 
@@ -615,7 +615,7 @@ export const createModelInstance = async (
   provider: string,
   modelId: string,
   version: 'v1' | 'v2' = 'v2',
-): Promise<MastraLanguageModel | null> => {
+): Promise<MastraLanguageModel | MastraLegacyLanguageModel | ModelRouterLanguageModel | null> => {
   try {
     // Dynamic imports to avoid issues if packages aren't available
     const providerMap = {
@@ -669,9 +669,9 @@ export const resolveModel = async ({
   projectPath,
 }: {
   requestContext: RequestContext;
-  defaultModel?: MastraLanguageModel | string;
+  defaultModel?: MastraLanguageModel | MastraLegacyLanguageModel | string;
   projectPath?: string;
-}): Promise<MastraLanguageModel> => {
+}): Promise<MastraLanguageModel | MastraLegacyLanguageModel> => {
   // First try to get model from request context
   const modelFromContext = requestContext.get('model');
   if (modelFromContext) {

@@ -1,6 +1,10 @@
 ---
 title: "Reference: Mastra Class | Core"
 description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
 ---
 
 # Mastra Class
@@ -137,6 +141,22 @@ export const mastra = new Mastra({
       type: "Record<string, MastraScorer>",
       description:
         "Scorers to register for scoring traces and overriding default scorers used during agent generation or workflow execution. Structured as a key-value pair, with keys being the scorer name and values being the scorer instance.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "gateways",
+      type: "Record<string, MastraModelGateway>",
+      description:
+        "Custom model gateways to register for accessing AI models through alternative providers or private deployments. Structured as a key-value pair, with keys being the registry key (used for getGateway()) and values being gateway instances.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.",
       isOptional: true,
       defaultValue: "{}",
     },

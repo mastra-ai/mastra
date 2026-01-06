@@ -266,6 +266,169 @@ describe('ProcessorRunner', () => {
       expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
       expect((messages[2].content[0] as TextPart).text).toBe('from processor 3');
     });
+
+    /**
+     * Regression test for GitHub Issue #9969
+     * @see https://github.com/mastra-ai/mastra/issues/9969
+     *
+     * Users want to process system messages (including semantic recall, working memory,
+     * and user-provided system prompts) using InputProcessors. Currently, InputProcessors
+     * only receive user messages via the `messages` parameter.
+     *
+     * Use cases:
+     * - Manipulate system prompts for smaller models (trim markdown, reduce length)
+     * - Modify semantic recall to prevent context overflow ("prompt too long" errors)
+     */
+    describe('Issue #9969: System messages in InputProcessor', () => {
+      it('should provide systemMessages parameter to processInput for accessing system messages', async () => {
+        // Add system messages to the MessageList
+        messageList.addSystem('You are a helpful assistant.'); // untagged system message
+        messageList.addSystem('Remember the user prefers formal language.', 'user-provided'); // tagged system message
+        messageList.addSystem('Relevant context from previous conversations.', 'memory'); // memory tag (like semantic recall)
+
+        // Add a user message
+        messageList.add([createMessage('Hello, how are you?', 'user')], 'input');
+
+        let receivedMessages: any[] = [];
+        let receivedSystemMessages: any[] | undefined;
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-message-processor',
+            name: 'System Message Processor',
+            processInput: async ({ messages, systemMessages }) => {
+              receivedMessages = messages;
+              receivedSystemMessages = systemMessages;
+              return messages;
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        await runner.runInputProcessors(messageList);
+
+        // The messages parameter should only contain user messages (current behavior)
+        expect(receivedMessages).toHaveLength(1);
+        expect(receivedMessages[0].role).toBe('user');
+
+        // NEW: systemMessages parameter should be provided and contain all system messages
+        expect(receivedSystemMessages).toBeDefined();
+        expect(receivedSystemMessages).toHaveLength(3);
+
+        // Verify system messages content
+        const systemTexts = receivedSystemMessages!.map((m: any) => {
+          if (typeof m.content === 'string') return m.content;
+          // Handle structured content format with parts array
+          if (m.content?.parts?.[0]?.text) return m.content.parts[0].text;
+          return m.content;
+        });
+        expect(systemTexts).toContain('You are a helpful assistant.');
+        expect(systemTexts).toContain('Remember the user prefers formal language.');
+        expect(systemTexts).toContain('Relevant context from previous conversations.');
+      });
+
+      it('should allow InputProcessor to modify system messages via return value', async () => {
+        // Add system messages
+        messageList.addSystem('Original system prompt with verbose instructions.');
+        messageList.addSystem('Memory context that is too long and needs trimming.', 'memory');
+
+        // Add a user message
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-trimmer',
+            name: 'System Trimmer',
+            processInput: async ({ messages, systemMessages }) => {
+              // Modify system messages - trim them for smaller models
+              if (systemMessages) {
+                const modifiedSystemMessages = systemMessages.map((msg: any) => ({
+                  ...msg,
+                  content: typeof msg.content === 'string' ? msg.content.substring(0, 20) + '...' : msg.content,
+                }));
+                // Return modified system messages somehow (this is what the fix should enable)
+                return { messages, systemMessages: modifiedSystemMessages };
+              }
+              return messages;
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        // After processing, the system messages should be modified
+        const allMessages = await result.get.all.aiV5.prompt();
+        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
+
+        // Verify system messages were trimmed
+        expect(systemMessages).toHaveLength(2);
+        systemMessages.forEach((msg: any) => {
+          const content = typeof msg.content === 'string' ? msg.content : msg.content[0]?.text;
+          expect(content.length).toBeLessThanOrEqual(24); // 20 chars + '...'
+        });
+      });
+
+      it('should continue to allow adding new system messages via return array (existing behavior)', async () => {
+        // This test verifies existing behavior that MUST NOT break
+        // Processors can currently add system messages by including them in the return array
+
+        messageList.add([createMessage('Hello', 'user')], 'input');
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'system-adder',
+            name: 'System Adder',
+            processInput: async ({ messages }) => {
+              // Add a new system message by including it in the return array
+              const newSystemMessage = {
+                id: `msg-${Math.random()}`,
+                role: 'system' as const,
+                content: {
+                  format: 2 as const,
+                  parts: [{ type: 'text' as const, text: 'New system instruction added by processor.' }],
+                },
+                createdAt: new Date(),
+                threadId: 'test-thread',
+              };
+              return [...messages, newSystemMessage];
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        const result = await runner.runInputProcessors(messageList);
+
+        // Verify the system message was added
+        const allMessages = await result.get.all.aiV5.prompt();
+        const systemMessages = allMessages.filter((m: any) => m.role === 'system');
+
+        expect(systemMessages).toHaveLength(1);
+        const content =
+          typeof systemMessages[0].content === 'string'
+            ? systemMessages[0].content
+            : (systemMessages[0].content[0] as { text?: string })?.text;
+        expect(content).toBe('New system instruction added by processor.');
+      });
+    });
   });
 
   describe('Output Processors', () => {
@@ -417,7 +580,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.blocked).toBe(false);
@@ -446,7 +609,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'blocked content', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'blocked content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part).toBe(null); // When aborted, part is null
@@ -474,7 +637,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'test content', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'test content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('test content'); // Should return original text on error
@@ -531,7 +694,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('HELLO!');
@@ -548,7 +711,7 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'original text', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'original text', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('original text');
@@ -590,13 +753,13 @@ describe('ProcessorRunner', () => {
 
       // Process chunks
       const result1 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'Hello world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'Hello world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result1.part).toBe(null); // No period, so no emission
 
       const result2 = await runner.processPart(
-        { type: 'text-delta', payload: { text: '.', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '.', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result2.part?.type === 'text-delta' ? result2.part?.payload.text : '').toBe('Hello world.'); // Complete sentence, should emit
@@ -631,20 +794,20 @@ describe('ProcessorRunner', () => {
 
       // Process harmless chunks
       const result1 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'i want to ', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'i want to ', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result1.part?.type === 'text-delta' ? result1.part?.payload.text : '').toBe('i want to ');
 
       const result2 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'punch', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'punch', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result2.part?.type === 'text-delta' ? result2.part?.payload.text : '').toBe('punch');
 
       // This part should trigger the violence detection
       const result3 = await runner.processPart(
-        { type: 'text-delta', payload: { text: ' you in the face', id: '3' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' you in the face', id: 'text-3' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result3.part).toBe(null); // When aborted, part is null
@@ -690,13 +853,13 @@ describe('ProcessorRunner', () => {
       const processorStates = new Map();
 
       const result1 = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello world', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result1.part).toBe(null);
 
       const result2 = await runner.processPart(
-        { type: 'text-delta', payload: { text: ' goodbye', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' goodbye', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result2.part?.type === 'text-delta' ? result2.part?.payload.text : '').toBe(' GOODBYE');
@@ -739,18 +902,18 @@ describe('ProcessorRunner', () => {
 
       // Process chunks without emitting
       await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       await runner.processPart(
-        { type: 'text-delta', payload: { text: ' world', id: '2' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'text-2' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
 
       // Simulate stream end by processing an empty part
 
       const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: '', id: '3' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '', id: 'text-3' }, runId: '1', from: ChunkFrom.AGENT },
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('HELLO WORLD');
@@ -854,7 +1017,15 @@ describe('ProcessorRunner', () => {
 
       expect(chunks).toHaveLength(2);
       expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'Hello' } });
-      expect(chunks[1]).toEqual({ type: 'tripwire', tripwireReason: 'Stream aborted' });
+      expect(chunks[1]).toEqual({
+        type: 'tripwire',
+        payload: {
+          reason: 'Stream aborted',
+          retry: undefined,
+          metadata: undefined,
+          processorId: 'abortProcessor',
+        },
+      });
     });
 
     it('should pass through non-text chunks unchanged', async () => {
@@ -909,6 +1080,734 @@ describe('ProcessorRunner', () => {
       expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'HELLO' } });
       expect(chunks[1]).toEqual({ type: 'tool-call', toolCallId: '123' });
       expect(chunks[2]).toEqual({ type: 'finish' });
+    });
+  });
+
+  /**
+   * Regression test for GitHub Issue #7933
+   * @see https://github.com/mastra-ai/mastra/issues/7933
+   *
+   * Users want access to remembered messages in OutputProcessor.processOutputStream,
+   * similar to how Scorers have access to them. This enables use cases like:
+   * - Checking if output is grounded on tool executions from previous messages
+   * - Using OutputProcessor as guardrails that need conversation context
+   */
+  describe('Issue #7933: Remembered messages in OutputProcessor', () => {
+    it('should provide messageList to processOutputStream for accessing remembered messages', async () => {
+      // Create a MessageList with some remembered messages (from memory)
+      const testMessageList = new MessageList({ threadId: 'test-thread' });
+
+      // Add input message (from user)
+      testMessageList.add([createMessage('current user message', 'user')], 'input');
+
+      // Add remembered messages (from memory - simulating conversation history)
+      const rememberedMsg1 = createMessage('previous user question', 'user');
+      const rememberedMsg2 = createMessage('previous assistant answer with tool call', 'assistant');
+      testMessageList.add([rememberedMsg1, rememberedMsg2], 'memory');
+
+      let receivedMessageList: MessageList | undefined;
+      let rememberedMessagesCount: number | undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'grounding-check-processor',
+          name: 'Grounding Check Processor',
+          processOutputStream: async ({ part, messageList }) => {
+            // Store the messageList received for assertion
+            receivedMessageList = messageList;
+
+            // Try to access remembered messages (this is what Issue #7933 requests)
+            if (messageList) {
+              const rememberedMessages = messageList.get.remembered.db();
+              rememberedMessagesCount = rememberedMessages.length;
+            }
+
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      // Process a stream chunk - this should pass the messageList
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'test response', id: 'text-1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined, // tracingContext
+        undefined, // requestContext
+        testMessageList, // messageList - this parameter needs to be added to processPart
+      );
+
+      // Assert that messageList was passed to processOutputStream
+      expect(receivedMessageList).toBeDefined();
+      expect(receivedMessageList).toBe(testMessageList);
+
+      // Assert that remembered messages are accessible
+      expect(rememberedMessagesCount).toBe(2);
+    });
+
+    it('should allow processOutputStream to check if output is grounded on previous tool calls', async () => {
+      // This simulates the use case described in Issue #7933:
+      // "checking if the content of the answer is grounded on tool executions
+      // made on previous answers by the assistant"
+
+      const testMessageList = new MessageList({ threadId: 'test-thread' });
+
+      // Add a previous assistant message with tool call (remembered from memory)
+      const previousAssistantMessage = {
+        id: `msg-${Math.random()}`,
+        role: 'assistant' as const,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: 'Let me search for that information.' }],
+          toolInvocations: [
+            {
+              state: 'result' as const,
+              toolCallId: 'tool-call-1',
+              toolName: 'search_documents',
+              args: { query: 'product pricing' },
+              result: { documents: [{ title: 'Pricing Guide', content: 'Product costs $99' }] },
+            },
+          ],
+        },
+        createdAt: new Date(),
+        threadId: 'test-thread',
+      };
+      testMessageList.add([previousAssistantMessage], 'memory');
+
+      // Add current user input
+      testMessageList.add([createMessage('What is the price?', 'user')], 'input');
+
+      let groundingCheckPassed = false;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'grounding-validator',
+          name: 'Grounding Validator',
+          processOutputStream: async ({ part, messageList, abort }) => {
+            if (!messageList) {
+              abort('messageList not available - cannot verify grounding');
+            }
+
+            // Get remembered messages to find previous tool calls
+            const rememberedMessages = messageList!.get.remembered.db();
+            const previousToolCalls = rememberedMessages
+              .filter(m => m.role === 'assistant')
+              .flatMap(m => m.content.toolInvocations || []);
+
+            // Check if there are previous tool calls to ground the response
+            if (previousToolCalls.length > 0) {
+              groundingCheckPassed = true;
+            }
+
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'The product costs $99', id: 'text-1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined,
+        undefined,
+        testMessageList,
+      );
+
+      expect(groundingCheckPassed).toBe(true);
+    });
+  });
+
+  describe('abort() with options', () => {
+    it('should pass retry option through TripWire', async () => {
+      const inputProcessors: Processor[] = [
+        {
+          id: 'retry-processor',
+          name: 'Retry Processor',
+          processInput: async ({ abort }) => {
+            abort('Please retry with better input', { retry: true });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      try {
+        await runner.runInputProcessors(messageList);
+        expect.fail('Should have thrown TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+        const tripwire = error as TripWire;
+        expect(tripwire.message).toBe('Please retry with better input');
+        expect(tripwire.options.retry).toBe(true);
+      }
+    });
+
+    it('should pass metadata option through TripWire', async () => {
+      interface PIIMetadata {
+        detectedTypes: string[];
+        severity: 'low' | 'high';
+      }
+
+      const inputProcessors: Processor[] = [
+        {
+          id: 'pii-processor',
+          name: 'PII Processor',
+          processInput: async ({ abort }) => {
+            abort<PIIMetadata>('PII detected', {
+              metadata: {
+                detectedTypes: ['email', 'phone'],
+                severity: 'high',
+              },
+            });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      try {
+        await runner.runInputProcessors(messageList);
+        expect.fail('Should have thrown TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+        const tripwire = error as TripWire<PIIMetadata>;
+        expect(tripwire.message).toBe('PII detected');
+        expect(tripwire.options.metadata).toEqual({
+          detectedTypes: ['email', 'phone'],
+          severity: 'high',
+        });
+      }
+    });
+
+    it('should pass both retry and metadata options through TripWire', async () => {
+      interface ToneMetadata {
+        issue: string;
+        suggestion: string;
+      }
+
+      const inputProcessors: Processor[] = [
+        {
+          id: 'tone-processor',
+          name: 'Tone Processor',
+          processInput: async ({ abort }) => {
+            abort<ToneMetadata>('Tone is too informal', {
+              retry: true,
+              metadata: {
+                issue: 'informal language',
+                suggestion: 'Use professional tone',
+              },
+            });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      try {
+        await runner.runInputProcessors(messageList);
+        expect.fail('Should have thrown TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+        const tripwire = error as TripWire<ToneMetadata>;
+        expect(tripwire.message).toBe('Tone is too informal');
+        expect(tripwire.options.retry).toBe(true);
+        expect(tripwire.options.metadata).toEqual({
+          issue: 'informal language',
+          suggestion: 'Use professional tone',
+        });
+      }
+    });
+
+    it('should receive retryCount in processor context', async () => {
+      let receivedRetryCount: number | undefined;
+
+      const inputProcessors: Processor[] = [
+        {
+          id: 'count-processor',
+          name: 'Count Processor',
+          processInput: async ({ messages, retryCount }) => {
+            receivedRetryCount = retryCount;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      // Test with default retryCount (0)
+      await runner.runInputProcessors(messageList);
+      expect(receivedRetryCount).toBe(0);
+
+      // Test with explicit retryCount
+      await runner.runInputProcessors(messageList, undefined, undefined, 3);
+      expect(receivedRetryCount).toBe(3);
+    });
+
+    it('should pass tripwire options through processPart for output processors', async () => {
+      interface ContentMetadata {
+        category: string;
+        confidence: number;
+      }
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'content-filter',
+          name: 'Content Filter',
+          processOutputStream: async ({ abort }) => {
+            abort<ContentMetadata>('Inappropriate content detected', {
+              retry: true,
+              metadata: {
+                category: 'violence',
+                confidence: 0.95,
+              },
+            });
+            return null;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      const result = await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'test content', id: '1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+      );
+
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe('Inappropriate content detected');
+      expect(result.tripwireOptions?.retry).toBe(true);
+      expect(result.tripwireOptions?.metadata).toEqual({
+        category: 'violence',
+        confidence: 0.95,
+      });
+      expect(result.processorId).toBe('content-filter');
+    });
+
+    it('should receive retryCount in processOutputStream context', async () => {
+      let receivedRetryCount: number | undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'stream-processor',
+          name: 'Stream Processor',
+          processOutputStream: async ({ part, retryCount }) => {
+            receivedRetryCount = retryCount;
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      // Test with default retryCount (0)
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'test', id: '1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+      );
+      expect(receivedRetryCount).toBe(0);
+
+      // Test with explicit retryCount
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'test', id: '2' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        undefined,
+        undefined,
+        undefined,
+        5,
+      );
+      expect(receivedRetryCount).toBe(5);
+    });
+  });
+
+  describe('processOutputStep', () => {
+    it('should run output step processors in order', async () => {
+      const executionOrder: string[] = [];
+      const outputProcessors: Processor[] = [
+        {
+          id: 'processor1',
+          name: 'Processor 1',
+          processOutputStep: async ({ messages }) => {
+            executionOrder.push('processor1');
+            return messages;
+          },
+        },
+        {
+          id: 'processor2',
+          name: 'Processor 2',
+          processOutputStep: async ({ messages }) => {
+            executionOrder.push('processor2');
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+      messageList.add([createMessage('assistant response', 'assistant')], 'response');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        finishReason: 'stop',
+        text: 'assistant response',
+      });
+
+      expect(executionOrder).toEqual(['processor1', 'processor2']);
+    });
+
+    it('should receive step context in processOutputStep', async () => {
+      let receivedContext: {
+        stepNumber?: number;
+        finishReason?: string;
+        toolCalls?: unknown[];
+        text?: string;
+        retryCount?: number;
+      } = {};
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'context-processor',
+          name: 'Context Processor',
+          processOutputStep: async ({ messages, stepNumber, finishReason, toolCalls, text, retryCount }) => {
+            receivedContext = { stepNumber, finishReason, toolCalls, text, retryCount };
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      const toolCalls = [{ toolName: 'search', toolCallId: 'call-1', args: { query: 'test' } }];
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 2,
+        finishReason: 'tool-use',
+        toolCalls,
+        text: 'Let me search for that',
+        retryCount: 1,
+      });
+
+      expect(receivedContext.stepNumber).toBe(2);
+      expect(receivedContext.finishReason).toBe('tool-use');
+      expect(receivedContext.toolCalls).toEqual(toolCalls);
+      expect(receivedContext.text).toBe('Let me search for that');
+      expect(receivedContext.retryCount).toBe(1);
+    });
+
+    it('should abort with retry option in processOutputStep', async () => {
+      interface ToneMetadata {
+        issue: string;
+        suggestion: string;
+      }
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'tone-checker',
+          name: 'Tone Checker',
+          processOutputStep: async ({ abort, retryCount }) => {
+            if (retryCount < 3) {
+              abort('Response tone is too informal', {
+                retry: true,
+                metadata: {
+                  issue: 'informal language',
+                  suggestion: 'Use professional tone',
+                } as ToneMetadata,
+              });
+            }
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      try {
+        await runner.runProcessOutputStep({
+          steps: [],
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber: 0,
+          text: 'hey whats up',
+          retryCount: 0,
+        });
+        expect.fail('Should have thrown TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+        const tripwire = error as TripWire<ToneMetadata>;
+        expect(tripwire.message).toBe('Response tone is too informal');
+        expect(tripwire.options.retry).toBe(true);
+        expect(tripwire.options.metadata).toEqual({
+          issue: 'informal language',
+          suggestion: 'Use professional tone',
+        });
+      }
+    });
+
+    it('should not abort when retryCount exceeds threshold', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'conditional-retry',
+          name: 'Conditional Retry',
+          processOutputStep: async ({ messages, abort, retryCount }) => {
+            if (retryCount < 3) {
+              abort('Need to retry', { retry: true });
+            }
+            // After 3 retries, let it pass
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      // Should pass when retryCount is 3 or higher
+      const result = await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        retryCount: 3,
+      });
+
+      expect(result).toBe(messageList);
+    });
+
+    it('should stop execution after tripwire in processOutputStep', async () => {
+      const executionOrder: string[] = [];
+      const outputProcessors: Processor[] = [
+        {
+          id: 'processor1',
+          name: 'Processor 1',
+          processOutputStep: async ({ abort }) => {
+            executionOrder.push('processor1');
+            abort('Blocked by processor1');
+            return [];
+          },
+        },
+        {
+          id: 'processor2',
+          name: 'Processor 2',
+          processOutputStep: async ({ messages }) => {
+            executionOrder.push('processor2');
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      try {
+        await runner.runProcessOutputStep({
+          steps: [],
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber: 0,
+        });
+      } catch {
+        // Expected
+      }
+
+      // processor2 should not have run
+      expect(executionOrder).toEqual(['processor1']);
+    });
+
+    it('should skip processors that do not implement processOutputStep', async () => {
+      const executionOrder: string[] = [];
+      const outputProcessors: Processor[] = [
+        {
+          id: 'stream-only',
+          name: 'Stream Only Processor',
+          // Only implements processOutputStream, not processOutputStep
+          processOutputStream: async ({ part }) => {
+            executionOrder.push('stream-only');
+            return part;
+          },
+        },
+        {
+          id: 'step-processor',
+          name: 'Step Processor',
+          processOutputStep: async ({ messages }) => {
+            executionOrder.push('step-processor');
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+      });
+
+      // Only step-processor should have run
+      expect(executionOrder).toEqual(['step-processor']);
+    });
+
+    it('should be able to modify messages in processOutputStep', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'message-modifier',
+          name: 'Message Modifier',
+          processOutputStep: async ({ messages }) => {
+            // Add a new message
+            return [...messages, createMessage('Added by processor', 'assistant')];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      const result = await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+      });
+
+      const allMessages = result.get.all.db();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[1].role).toBe('assistant');
     });
   });
 });

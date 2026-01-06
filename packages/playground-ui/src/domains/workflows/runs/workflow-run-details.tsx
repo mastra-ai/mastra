@@ -5,11 +5,14 @@ import { useWorkflowRunExecutionResult } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
-import { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunState } from '@mastra/core/workflows';
+import { useContext } from 'react';
 
-export interface WorkflowRunDetailProps
-  extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId' | 'observeWorkflowStream'> {
+export interface WorkflowRunDetailProps extends Omit<
+  WorkflowTriggerProps,
+  'paramsRunId' | 'workflowId' | 'observeWorkflowStream'
+> {
   workflowId: string;
   runId?: string;
   observeWorkflowStream?: ({
@@ -29,9 +32,9 @@ export const WorkflowRunDetail = ({
   observeWorkflowStream,
   ...triggerProps
 }: WorkflowRunDetailProps) => {
-  const { isLoading, data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId, runId ?? '');
+  const { runSnapshot, isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
 
-  if (isLoading) {
+  if (isLoadingRunExecutionResult) {
     return (
       <div className="p-4">
         <Skeleton className="h-[600px]" />
@@ -39,7 +42,7 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  if (!runExecutionResult || !runId) {
+  if (!runSnapshot || !runId) {
     return (
       <div className="p-4">
         <Txt variant="ui-md" className="text-icon6 text-center">
@@ -49,16 +52,7 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  const runResult = convertWorkflowRunStateToStreamResult({
-    context: {
-      input: runExecutionResult.payload,
-      ...runExecutionResult.steps,
-    } as any,
-    status: runExecutionResult.status,
-    result: runExecutionResult.result,
-    error: runExecutionResult.error,
-    runId,
-  } as WorkflowRunState);
+  const runResult = convertWorkflowRunStateToStreamResult(runSnapshot);
   const runStatus = runResult?.status;
 
   if (runId) {

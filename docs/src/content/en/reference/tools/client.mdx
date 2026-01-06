@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraMCPClient (Deprecated) | Tools & MCP"
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # MastraMCPClient (Deprecated)
@@ -230,7 +233,6 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { MastraMCPClient } from "@mastra/mcp";
-import { openai } from "@ai-sdk/openai";
 
 // Initialize the MCP client using mcp/fetch as an example https://hub.docker.com/r/mcp/fetch
 // Visit https://github.com/docker/mcp-servers for other reference docker mcp servers
@@ -250,7 +252,7 @@ const agent = new Agent({
   name: "Fetch agent",
   instructions:
     "You are able to fetch data from URLs on demand and discuss the response data with the user.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
 });
 
 try {

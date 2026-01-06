@@ -1,6 +1,11 @@
 ---
 title: "Observability Overview | Observability"
 description: Monitor and debug applications with Mastra's Observability features.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
+  - "@mastra/observability"
 ---
 
 # Observability Overview
@@ -29,7 +34,6 @@ import { LibSqlStorage } from "@mastra/libsql";
 import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   logger: new PinoLogger(),
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -43,11 +47,10 @@ export const mastra = new Mastra({
 
 With this basic setup, you will see Traces and Logs in both Studio and in Mastra Cloud.
 
-We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [Tracing](/docs/v1/observability/tracing/overview) documentation.
+We also support various external tracing providers like MLflow, Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [Tracing](/docs/v1/observability/tracing/overview) documentation.
 
 ## What's Next?
 
 - **[Set up Tracing](/docs/v1/observability/tracing/overview)**: Configure tracing for your application
-- **[Configure Logging](/docs/v1/logging)**: Add structured logging
-- **[View Examples](/examples/v1/observability/basic-ai-tracing)**: See observability in action
+- **[Configure Logging](/docs/v1/observability/logging)**: Add structured logging
 - **[API Reference](/reference/v1/observability/tracing/instances)**: Detailed configuration options

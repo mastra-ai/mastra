@@ -17,7 +17,7 @@ In this guide, you're going to create a simple agent that fetches the last day's
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
 
 ## Creating the Agent
 
@@ -29,8 +29,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
 
-```ts copy title="src/mastra/agents/stockAgent.ts"
-import { openai } from "@ai-sdk/openai";
+```ts title="src/mastra/agents/stockAgent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
@@ -38,7 +37,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
 });
 ```
 
@@ -48,7 +47,7 @@ export const stockAgent = new Agent({
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy title="src/mastra/index.ts" {2, 5}
+```ts title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { stockAgent } from "./agents/stockAgent";
 
@@ -104,8 +103,7 @@ export const stockPrices = createTool({
 
 Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
-```ts copy title="src/mastra/agents/stockAgent.ts" {3, 10-12}
-import { openai } from "@ai-sdk/openai";
+```ts title="src/mastra/agents/stockAgent.ts" {9-11}
 import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
@@ -114,7 +112,7 @@ export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     stockPrices,
   },
@@ -135,7 +133,7 @@ Learn how to interact with your agent through Mastra's API.
 
 You can run your agent as a service using the `mastra dev` command:
 
-```bash copy
+```bash
 mastra dev
 ```
 
@@ -157,7 +155,7 @@ POST http://localhost:4111/api/agents/stockAgent/generate
 
 You can interact with the agent using `curl` from the command line:
 
-```bash copy
+```bash
 curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
   -H "Content-Type: application/json" \
   -d '{

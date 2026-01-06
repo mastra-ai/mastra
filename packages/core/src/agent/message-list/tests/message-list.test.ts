@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
 import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
@@ -87,6 +87,104 @@ describe('MessageList', () => {
   });
 
   describe('add message', () => {
+    it('should not filter out reasoning items from OpenAi that contain no content when the message id is the same', () => {
+      // Additional fix for bug detailed in https://github.com/mastra-ai/mastra/issues/9005
+      // pushNewMessagePart calls cacheKeyFromAIV4Parts to check if new message parts need to be appended.
+      // cacheKeyFromAIV4Parts failed to account for 'providerMetadata/openai/itemId'
+      // (which is not part of the UIMessageV4 type), thus filtering out subsequent messages
+
+      const list = new MessageList().add(
+        {
+          id: 'sharedID',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [
+                  {
+                    type: 'text',
+                    text: '',
+                  },
+                ],
+                providerMetadata: {
+                  openai: {
+                    itemId: 'rs_ONE',
+                    reasoningEncryptedContent: null,
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+          threadId: 'thread-123',
+        },
+        'response',
+      );
+
+      let dbMessages = list.get.all.db();
+      expect(dbMessages).toHaveLength(1);
+      expect(dbMessages[0].content.parts).toHaveLength(1);
+      expect(dbMessages[0].content.parts[0].type).toBe('reasoning');
+      expect((dbMessages[0].content.parts[0] as any).providerMetadata?.openai?.itemId).toBe('rs_ONE');
+
+      list.add(
+        {
+          id: 'sharedID',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [
+                  {
+                    type: 'text',
+                    text: '',
+                  },
+                ],
+                providerMetadata: {
+                  openai: {
+                    itemId: 'rs_TWO',
+                    reasoningEncryptedContent: null,
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+          threadId: 'thread-123',
+        },
+        'response',
+      );
+
+      dbMessages = list.get.all.db();
+      expect(dbMessages).toHaveLength(1);
+      expect(dbMessages[0].content.parts).toHaveLength(2);
+
+      const [firstRs, secondRs] = dbMessages[0].content.parts as any[];
+
+      expect(firstRs.type).toBe('reasoning');
+      expect(firstRs.providerMetadata.openai.itemId).toBe('rs_ONE');
+
+      expect(secondRs.type).toBe('reasoning');
+      expect(secondRs.providerMetadata.openai.itemId).toBe('rs_TWO');
+
+      const modelMessages = list.get.all.aiV5.model();
+      expect(modelMessages).toHaveLength(1);
+      const content = modelMessages[0].content;
+      expect(Array.isArray(content)).toBe(true);
+      if (!Array.isArray(content)) {
+        throw new Error('Expected modelMessages[0].content to be an array');
+      }
+      expect(content).toHaveLength(2);
+      expect(content[0].type).toBe('reasoning');
+      expect(content[1].type).toBe('reasoning');
+    });
+
     it('should skip over system messages that are retrieved from the db', async () => {
       // this is to fix a bug detailed in https://github.com/mastra-ai/mastra/issues/6689
       // in the past we accidentally introduced a bug where system messages were saved in memory unintentionally.
@@ -3539,12 +3637,7 @@ describe('MessageList', () => {
 
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
-        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
+        expect(retrievedMessage?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
@@ -3580,53 +3673,16 @@ describe('MessageList', () => {
         });
       });
 
-      it('should preserve providerOptions on user message with multiple content parts', async () => {
+      it('should preserve part-level providerOptions', async () => {
         const messageList = new MessageList();
 
+        // AIV5 ModelMessage with only part-level providerOptions
         const userMessage: AIV5Type.ModelMessage = {
           role: 'user' as const,
           content: [
             {
               type: 'text' as const,
-              text: 'First part with cache',
-              providerOptions: {
-                anthropic: { cacheControl: { type: 'ephemeral' as const } },
-              },
-            },
-            {
-              type: 'text' as const,
-              text: 'Second part without cache',
-            },
-          ],
-        };
-
-        messageList.add(userMessage, 'input');
-
-        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
-        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
-
-        expect(retrievedMessage).toBeDefined();
-        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.providerOptions).toEqual({
-          anthropic: { cacheControl: { type: 'ephemeral' } },
-        });
-
-        const secondPart = (retrievedMessage?.content as any[])?.[1];
-        expect(secondPart?.providerOptions).toBeUndefined();
-      });
-
-      it('should preserve both message-level and part-level providerOptions', async () => {
-        const messageList = new MessageList();
-
-        // AIV5 ModelMessage with BOTH message-level AND part-level providerOptions
-        const userMessage: AIV5Type.ModelMessage = {
-          role: 'user' as const,
-          content: [
-            {
-              type: 'text' as const,
-              text: 'First part with its own cache',
+              text: 'First part with its own providerOptions',
               providerOptions: {
                 anthropic: { cacheControl: { type: 'ephemeral' as const } },
               },
@@ -3636,10 +3692,6 @@ describe('MessageList', () => {
               text: 'Second part without part-level options',
             },
           ],
-          // Message-level providerOptions
-          providerOptions: {
-            openai: { store: true },
-          },
         };
 
         messageList.add(userMessage, 'input');
@@ -3650,19 +3702,14 @@ describe('MessageList', () => {
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
 
-        // First part should have BOTH message-level and part-level providerOptions merged
-        // (message-level is spread first, then part-level overrides)
         const firstPart = (retrievedMessage?.content as any[])?.[0];
         expect(firstPart?.providerOptions).toEqual({
-          openai: { store: true }, // from message-level
           anthropic: { cacheControl: { type: 'ephemeral' } }, // from part-level
         });
 
-        // Second part should inherit message-level providerOptions only
+        // Second part should have no providerOptions
         const secondPart = (retrievedMessage?.content as any[])?.[1];
-        expect(secondPart?.providerOptions).toEqual({
-          openai: { store: true },
-        });
+        expect(secondPart?.providerOptions).toBeUndefined();
       });
     });
 
@@ -3685,12 +3732,7 @@ describe('MessageList', () => {
 
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
-        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
+        expect(retrievedMessage?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
@@ -3712,20 +3754,14 @@ describe('MessageList', () => {
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
-
         expect(retrievedMessage).toBeDefined();
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
-
-        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
-        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
-        const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
+        expect(retrievedMessage?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
 
-      it('should preserve providerOptions on CoreMessage with array content (text + image)', async () => {
+      it('should preserve providerOptions on CoreMessage content parts', async () => {
         const messageList = new MessageList();
 
         const coreMessage: AIV4Type.CoreMessage = {
@@ -3759,6 +3795,8 @@ describe('MessageList', () => {
         expect(textPart?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
+        const secondPart = (retrievedMessage?.content as any[])?.[1];
+        expect(secondPart?.providerOptions).toBeUndefined();
       });
     });
 
@@ -3766,43 +3804,45 @@ describe('MessageList', () => {
       it('should preserve providerOptions across system, user, and assistant messages', async () => {
         const messageList = new MessageList();
 
-        // System message with cache
-        messageList.addSystem({
+        const systemMessage: AIV5Type.ModelMessage = {
           role: 'system' as const,
           content: 'System instructions',
           providerOptions: {
             anthropic: { cacheControl: { type: 'ephemeral' as const } },
           },
-        });
+        };
+        // System message with cache
+        messageList.addSystem(systemMessage);
 
-        // User message with cache on content part
-        messageList.add(
-          {
-            role: 'user' as const,
-            content: [
+        const userMessage: MastraDBMessage = {
+          id: 'user-1',
+          role: 'user' as const,
+          content: {
+            format: 2,
+            parts: [
               {
                 type: 'text' as const,
                 text: 'User context',
-                providerOptions: {
+                providerMetadata: {
                   anthropic: { cacheControl: { type: 'ephemeral' as const } },
                 },
               },
             ],
           },
-          'input',
-        );
+          createdAt: new Date(),
+        };
+        // User message with cache on content part
+        messageList.add(userMessage, 'input');
 
-        // Assistant message with cache
-        messageList.add(
-          {
-            role: 'assistant' as const,
-            content: 'Assistant response',
-            providerOptions: {
-              anthropic: { cacheControl: { type: 'ephemeral' as const } },
-            },
+        const assistantResponseMessage: AIV5Type.ModelMessage = {
+          role: 'assistant' as const,
+          content: 'Assistant response',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
           },
-          'memory',
-        );
+        };
+        // Assistant message with cache
+        messageList.add(assistantResponseMessage, 'memory');
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
 
@@ -3818,10 +3858,10 @@ describe('MessageList', () => {
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
 
-        // Assistant message should have providerOptions on content part (converted from string)
+        // Assistant message should have providerOptions on message
         const assistantMsg = llmPrompt.find((msg: any) => msg.role === 'assistant');
         expect(Array.isArray(assistantMsg?.content)).toBe(true);
-        expect((assistantMsg?.content as any[])?.[0]?.providerOptions).toEqual({
+        expect(assistantMsg?.providerOptions).toEqual({
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
@@ -3862,6 +3902,101 @@ describe('MessageList', () => {
       await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
         'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
       );
+    });
+  });
+
+  describe('getAllSystemMessages', () => {
+    it('should return all untagged system messages when no tag is specified', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant.');
+      list.addSystem('Be concise.');
+
+      const systemMessages = list.getAllSystemMessages();
+
+      expect(systemMessages).toHaveLength(2);
+      expect(systemMessages[0].content).toBe('You are a helpful assistant.');
+      expect(systemMessages[1].content).toBe('Be concise.');
+    });
+
+    it('should return both tagged and untagged system messages', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant.'); // untagged
+      list.addSystem('Remember user preferences.', 'user-provided'); // tagged
+      list.addSystem('Relevant context from memory.', 'memory'); // tagged
+
+      const systemMessages = list.getAllSystemMessages();
+
+      expect(systemMessages).toHaveLength(3);
+      const contents = systemMessages.map(m => m.content);
+      expect(contents).toContain('You are a helpful assistant.');
+      expect(contents).toContain('Remember user preferences.');
+      expect(contents).toContain('Relevant context from memory.');
+    });
+
+    it('should return empty array when no system messages exist', () => {
+      const list = new MessageList();
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+
+      const systemMessages = list.getAllSystemMessages();
+
+      expect(systemMessages).toHaveLength(0);
+    });
+  });
+
+  describe('replaceAllSystemMessages', () => {
+    it('should replace all system messages with new ones', () => {
+      const list = new MessageList();
+      list.addSystem('Original instruction 1');
+      list.addSystem('Original instruction 2', 'memory');
+
+      const newSystemMessages: AIV4Type.CoreSystemMessage[] = [
+        { role: 'system', content: 'New instruction 1' },
+        { role: 'system', content: 'New instruction 2' },
+      ];
+
+      list.replaceAllSystemMessages(newSystemMessages);
+
+      const systemMessages = list.getAllSystemMessages();
+      expect(systemMessages).toHaveLength(2);
+      expect(systemMessages[0].content).toBe('New instruction 1');
+      expect(systemMessages[1].content).toBe('New instruction 2');
+    });
+
+    it('should clear all existing system messages including tagged ones', () => {
+      const list = new MessageList();
+      list.addSystem('Instruction');
+      list.addSystem('Memory context', 'memory');
+      list.addSystem('User provided', 'user-provided');
+
+      list.replaceAllSystemMessages([]);
+
+      const systemMessages = list.getAllSystemMessages();
+      expect(systemMessages).toHaveLength(0);
+    });
+
+    it('should not affect non-system messages', () => {
+      const list = new MessageList();
+      list.addSystem('System instruction');
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+      list.add({ role: 'assistant', content: 'Hi there!' }, 'response');
+
+      list.replaceAllSystemMessages([{ role: 'system', content: 'New instruction' }]);
+
+      const allMessages = list.get.all.db();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[0].role).toBe('user');
+      expect(allMessages[1].role).toBe('assistant');
+
+      const systemMessages = list.getAllSystemMessages();
+      expect(systemMessages).toHaveLength(1);
+      expect(systemMessages[0].content).toBe('New instruction');
+    });
+
+    it('should return this for chaining', () => {
+      const list = new MessageList();
+      const result = list.replaceAllSystemMessages([{ role: 'system', content: 'Test' }]);
+
+      expect(result).toBe(list);
     });
   });
 });

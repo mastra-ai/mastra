@@ -1,23 +1,40 @@
 import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import { AISDKV5LanguageModel } from './aisdk/v5/model';
+import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { parseModelRouterId } from './gateway-resolver.js';
-import type { MastraModelGateway } from './gateways/base.js';
+import type { GatewayLanguageModel, MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { PROVIDER_REGISTRY } from './provider-registry.js';
-import type { OpenAICompatibleConfig } from './shared.types';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
+
+/**
+ * Type guard to check if a model is a LanguageModelV3 (AI SDK v6)
+ */
+function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV3 {
+  return model.specificationVersion === 'v3';
+}
+
+type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
 function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
 
-export class ModelRouterLanguageModel implements LanguageModelV2 {
+/**
+ * @deprecated Use defaultGateways instead. This export will be removed in a future version.
+ */
+export const gateways = defaultGateways;
+
+export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly specificationVersion = 'v2' as const;
   readonly defaultObjectGenerationMode = 'json' as const;
   readonly supportsStructuredOutputs = true;
@@ -30,7 +47,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
 
-  constructor(config: ModelRouterModelId | OpenAICompatibleConfig) {
+  constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGateway[]) {
     // Normalize config to always have an 'id' field for routing
     let normalizedConfig: {
       id: `${string}/${string}`;
@@ -71,9 +88,11 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     };
 
     // Resolve gateway once using the normalized ID
-    this.gateway = findGatewayForModel(normalizedConfig.id, gateways);
+    this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
     // Extract provider from id if present
-    const parsed = parseModelRouterId(normalizedConfig.id, this.gateway.prefix);
+    // Gateway ID is used as prefix (except for models.dev which is a provider registry)
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const parsed = parseModelRouterId(normalizedConfig.id, gatewayPrefix);
 
     this.provider = parsed.providerId || 'openai-compatible';
 
@@ -85,14 +104,49 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     this.config = parsedConfig;
   }
 
-  async doGenerate(): Promise<never> {
-    throw new Error(
-      'doGenerate is not supported by Mastra model router. ' +
-        'Mastra only uses streaming (doStream) for all LLM calls.',
-    );
+  async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
+    let apiKey: string;
+    try {
+      // If custom URL is provided, skip gateway API key resolution
+      // The provider might not be in the registry (e.g., custom providers like ollama)
+      if (this.config.url) {
+        apiKey = this.config.apiKey || '';
+      } else {
+        apiKey = this.config.apiKey || (await this.gateway.getApiKey(this.config.routerId));
+      }
+    } catch (error) {
+      // Return an error stream instead of throwing
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'error',
+              error: error,
+            } as LanguageModelV2StreamPart);
+            controller.close();
+          },
+        }),
+      };
+    }
+
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
+    const model = await this.resolveLanguageModel({
+      apiKey,
+      headers: this.config.headers,
+      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
+    });
+
+    // Handle both V2 and V3 models
+    if (isLanguageModelV3(model)) {
+      const aiSDKV6Model = new AISDKV6LanguageModel(model);
+      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
+      return aiSDKV6Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+    }
+    const aiSDKV5Model = new AISDKV5LanguageModel(model);
+    return aiSDKV5Model.doGenerate(options);
   }
 
-  async doStream(options: LanguageModelV2CallOptions): Promise<Awaited<ReturnType<LanguageModelV2['doStream']>>> {
+  async doStream(options: LanguageModelV2CallOptions): Promise<StreamResult> {
     // Validate API key and return error stream if validation fails
     let apiKey: string;
     try {
@@ -112,30 +166,49 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
               type: 'error',
               error: error,
             } as LanguageModelV2StreamPart);
+            controller.close();
           },
         }),
       };
     }
 
+    const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
     const model = await this.resolveLanguageModel({
       apiKey,
-      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
+      headers: this.config.headers,
+      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
-    return model.doStream(options);
+    // Handle both V2 and V3 models
+    if (isLanguageModelV3(model)) {
+      const aiSDKV6Model = new AISDKV6LanguageModel(model);
+      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
+      return aiSDKV6Model.doStream(options as any) as unknown as Promise<StreamResult>;
+    }
+    const aiSDKV5Model = new AISDKV5LanguageModel(model);
+    return aiSDKV5Model.doStream(options);
   }
 
   private async resolveLanguageModel({
     modelId,
     providerId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
-  }): Promise<LanguageModelV2> {
+    headers?: Record<string, string>;
+  }): Promise<GatewayLanguageModel> {
     const key = createHash('sha256')
-      .update(this.gateway.name + modelId + providerId + apiKey + (this.config.url || ''))
+      .update(
+        this.gateway.id +
+          modelId +
+          providerId +
+          apiKey +
+          (this.config.url || '') +
+          (headers ? JSON.stringify(headers) : ''),
+      )
       .digest('hex');
     if (ModelRouterLanguageModel.modelInstances.has(key)) return ModelRouterLanguageModel.modelInstances.get(key)!;
 
@@ -152,9 +225,9 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
       return modelInstance;
     }
 
-    const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey });
+    const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey, headers });
     ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
     return modelInstance;
   }
-  private static modelInstances = new Map<string, LanguageModelV2>();
+  private static modelInstances = new Map<string, GatewayLanguageModel>();
 }

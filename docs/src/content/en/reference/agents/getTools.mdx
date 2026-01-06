@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.getTools() | Agents"
 description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getTools()
@@ -9,7 +11,7 @@ The `.getTools()` method retrieves the tools configured for an agent, resolving 
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.getTools();
 ```
 
@@ -42,7 +44,7 @@ await agent.getTools();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 await agent.getTools({
   requestContext: new RequestContext(),
 });

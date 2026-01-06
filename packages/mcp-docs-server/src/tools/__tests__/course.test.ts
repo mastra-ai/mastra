@@ -1,6 +1,6 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, test, beforeAll, afterAll, afterEach } from 'vitest';
 import { callTool, mcp, server } from './test-setup';
 
@@ -236,7 +236,7 @@ describe('Course Tools', () => {
 
       test('should handle missing required arguments with an error', async () => {
         const result = await callTool(tools.mastra_startMastraCourseLesson, {});
-        expect(result.toLowerCase()).toContain('tool validation failed');
+        expect(result.toLowerCase()).toContain('tool input validation failed');
       });
       test('should handle corrupted state file gracefully', async () => {
         const statePath = path.join(os.homedir(), '.cache', 'mastra', 'course', 'state.json');

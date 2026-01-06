@@ -1,0 +1,974 @@
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core';
+import { Mock, vi } from 'vitest';
+import { Workflow } from '@mastra/core/workflows';
+import { createScorer } from '@mastra/core/evals';
+import { SpanType } from '@mastra/core/observability';
+import { CompositeVoice } from '@mastra/core/voice';
+import { MockMemory } from '@mastra/core/memory';
+import { MastraVector } from '@mastra/core/vector';
+import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import type { ZodTypeAny } from 'zod';
+import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
+import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
+import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
+import { MCPServer } from '@mastra/mcp';
+import type { Tool } from '@mastra/core/tools';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+vi.mock('@mastra/core/vector');
+
+vi.mock('zod', async importOriginal => {
+  const actual: {} = await importOriginal();
+  return {
+    ...actual,
+  };
+});
+
+const z = require('zod');
+
+/**
+ * Test context for adapter integration tests
+ * Convention: Create entities with IDs that match auto-generated values:
+ * - agentId: 'test-agent'
+ * - workflowId: 'test-workflow'
+ * - toolId: 'test-tool'
+ * - etc.
+ */
+export interface AdapterTestContext {
+  mastra: Mastra;
+  tools?: Record<string, Tool>;
+  taskStore?: InMemoryTaskStore;
+  customRouteAuthConfig?: Map<string, boolean>;
+}
+
+/**
+ * HTTP request to execute through adapter
+ */
+export interface HttpRequest {
+  method: string;
+  path: string;
+  query?: Record<string, string | string[]>;
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+/**
+ * HTTP response from adapter
+ */
+export interface HttpResponse {
+  status: number;
+  type: 'json' | 'stream';
+  data?: unknown;
+  stream?: ReadableStream | AsyncIterable<unknown>;
+  headers: Record<string, string>;
+}
+
+/**
+ * Configuration for adapter integration test suite
+ */
+export interface AdapterTestSuiteConfig {
+  /** Name for the test suite */
+  suiteName?: string;
+
+  /**
+   * Setup adapter and app for testing
+   * Called once before all tests
+   */
+  setupAdapter: (context: AdapterTestContext) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
+
+  /**
+   * Execute HTTP request through the adapter's framework (Express/Hono)
+   */
+  executeHttpRequest: (app: any, request: HttpRequest) => Promise<HttpResponse>;
+
+  /**
+   * Create test context with Mastra instance, agents, etc.
+   * Convention: Create entities with IDs matching auto-generated values
+   * Optional - uses createDefaultTestContext() if not provided
+   */
+  createTestContext?: () => Promise<AdapterTestContext> | AdapterTestContext;
+}
+
+/**
+ * Creates a test agent with all common mocks configured
+ */
+export function createTestAgent(
+  overrides: {
+    id?: string;
+    name?: string;
+    description?: string;
+    instructions?: string;
+    tools?: Record<string, any>;
+    voice?: CompositeVoice;
+    memory?: MockMemory;
+    model?: any;
+  } = {},
+) {
+  const testTool = createTestTool();
+  const mockVoice = createMockVoice();
+  const mockMemory = createMockMemory();
+
+  const agent = new Agent({
+    id: overrides.id || 'test-agent',
+    name: overrides.name || 'test-agent',
+    description: overrides.description || 'A test agent',
+    instructions: overrides.instructions || 'Test instructions',
+    model: overrides.model || 'openai/gpt-4o',
+    tools: overrides.tools || { 'test-tool': testTool },
+    voice: overrides.voice || mockVoice,
+    memory: overrides.memory || mockMemory,
+  });
+
+  return agent;
+}
+
+/**
+ * Creates a mock vector for testing (following handler test pattern)
+ */
+export function createMockVector() {
+  // @ts-expect-error - Mocking for tests
+  const mockVector: MastraVector = new MastraVector();
+  mockVector.upsert = vi.fn().mockResolvedValue(['id1', 'id2']);
+  mockVector.createIndex = vi.fn().mockResolvedValue(undefined);
+  mockVector.query = vi.fn().mockResolvedValue([{ id: '1', score: 0.9, vector: [1, 2, 3] }]);
+  mockVector.listIndexes = vi.fn().mockResolvedValue(['test-index']);
+  mockVector.describeIndex = vi.fn().mockResolvedValue({ dimension: 3, count: 100, metric: 'cosine' });
+  mockVector.deleteIndex = vi.fn().mockResolvedValue(undefined);
+
+  return mockVector;
+}
+
+export function mockAgentMethods(agent: Agent) {
+  // Mock agent methods that would normally require API calls
+  vi.spyOn(agent, 'generate').mockResolvedValue({ text: 'test response' } as any);
+
+  // Create a reusable mock stream that returns a proper ReadableStream
+  const createMockStream = () => {
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: 'text-delta', textDelta: 'test' });
+        controller.close();
+      },
+    });
+  };
+
+  // Mock stream method - returns object with fullStream property
+  vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
+
+  // Mock legacy generate - returns a stream
+  vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
+
+  // Helper to create a mock Response object for datastream-response routes
+  const createMockResponse = () => {
+    const stream = createMockStream();
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+      },
+    });
+  };
+
+  // Mock streamLegacy - needs to return an object with toDataStreamResponse/toTextStreamResponse methods
+  const mockStreamResult = {
+    ...createMockStream(),
+    toDataStreamResponse: vi.fn().mockImplementation(() => createMockResponse()),
+    toTextStreamResponse: vi.fn().mockImplementation(() => createMockResponse()),
+  };
+  vi.spyOn(agent, 'streamLegacy').mockResolvedValue(mockStreamResult as any);
+
+  // Mock approveToolCall method - returns object with fullStream property
+  vi.spyOn(agent, 'approveToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
+
+  // Mock declineToolCall method - returns object with fullStream property
+  vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
+
+  // Mock network method
+  vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
+
+  // Mock getVoice to return the voice object that the handler expects
+  const mockVoice = createMockVoice();
+
+  // Mock voice methods to avoid "No listener/speaker provider configured" errors
+  vi.spyOn(mockVoice, 'getSpeakers').mockResolvedValue([]);
+  vi.spyOn(mockVoice, 'getListener').mockResolvedValue({ enabled: false } as any);
+  vi.spyOn(mockVoice, 'speak').mockResolvedValue(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('mock audio data'));
+        controller.close();
+      },
+    }) as any,
+  );
+  vi.spyOn(mockVoice, 'listen').mockResolvedValue('transcribed text');
+
+  vi.spyOn(agent, 'getVoice').mockResolvedValue(mockVoice);
+
+  // Mock model list methods with proper model data structure
+  vi.spyOn(agent, 'getModelList').mockResolvedValue([
+    {
+      id: 'id1',
+      modelId: 'gpt-4o',
+      provider: 'openai',
+      model: {
+        modelId: 'gpt-4o',
+        provider: 'openai',
+        specificationVersion: 'v1',
+      },
+    },
+    {
+      id: 'id2',
+      modelId: 'gpt-4o-mini',
+      provider: 'openai',
+      model: {
+        modelId: 'gpt-4o-mini',
+        provider: 'openai',
+        specificationVersion: 'v1',
+      },
+    },
+  ] as any);
+
+  return agent;
+}
+
+// Mock legacy workflow stream methods
+const createMockWorkflowStream = () => {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"step-result","result":"test"}\n\n'));
+      controller.close();
+    },
+  });
+};
+
+/**
+ * Create a default test context with mocked Mastra instance, agents, workflows, etc.
+ * This provides everything needed for adapter integration tests.
+ */
+export async function createDefaultTestContext(): Promise<AdapterTestContext> {
+  // Mock OPENAI_API_KEY so that isProviderConnected('openai') returns true
+  // This is needed for routes like ENHANCE_INSTRUCTIONS_ROUTE that check provider connectivity
+  vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
+
+  // Create memory and pre-populate with test thread
+  const memory = createMockMemory();
+  await memory.createThread({
+    threadId: 'test-thread',
+    resourceId: 'test-resource',
+    metadata: {},
+  });
+
+  // Create vector instance
+  const vector = createMockVector();
+
+  // Create test tool
+  const testTool = createTestTool({ id: 'test-tool' });
+
+  // Create test agent with memory and mocks
+  const agent = createTestAgent({ name: 'test-agent', memory });
+  mockAgentMethods(agent);
+
+  // Mock Agent.prototype.generate for routes that create new Agent instances
+  // (e.g., ENHANCE_INSTRUCTIONS_ROUTE creates a systemPromptAgent)
+  // This needs to return both text and object for different use cases
+  vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+    text: 'test response',
+    object: {
+      explanation: 'Enhanced the instructions for clarity and specificity.',
+      new_prompt: 'You are a helpful assistant with enhanced instructions.',
+    },
+  } as any);
+
+  // Create test workflow with mocks
+  const workflow = createTestWorkflow({ id: 'test-workflow' });
+  const mergeTemplateWorkflow = createTestWorkflow({ id: 'merge-template' });
+  const workflowBuilderWorkflow = createTestWorkflow({ id: 'workflow-builder' });
+
+  // Create test scorer
+  const testScorer = createScorer({
+    id: 'test-scorer',
+    name: 'Test Scorer',
+    description: 'Test scorer for observability tests',
+  });
+
+  mockLogger.transports = new Map([
+    ['console', {}],
+    ['file', {}],
+  ]) as unknown as Record<string, unknown>;
+
+  const mockLogs: BaseLogMessage[] = [createLog({})];
+
+  mockLogger.listLogsByRunId.mockResolvedValue({
+    logs: mockLogs,
+    total: 1,
+    page: 1,
+    perPage: 100,
+    hasMore: false,
+  });
+
+  mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+
+  const weatherTool = createTool({
+    id: 'getWeather',
+    description: 'Gets the current weather for a location',
+    inputSchema: z.object({
+      location: z.string().describe('The location to get weather for'),
+    }),
+    outputSchema: z.object({
+      temperature: z.number(),
+      condition: z.string(),
+    }),
+    execute: async ({ location }) => ({
+      temperature: 72,
+      condition: `Sunny in ${location}`,
+    }),
+  });
+
+  const calculatorTool = createTool({
+    id: 'calculate',
+    description: 'Performs basic calculations',
+    inputSchema: z.object({
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+      a: z.number(),
+      b: z.number(),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+    }),
+    execute: async ({ operation, a, b }) => {
+      let result = 0;
+      switch (operation) {
+        case 'add':
+          result = a + b;
+          break;
+        case 'subtract':
+          result = a - b;
+          break;
+        case 'multiply':
+          result = a * b;
+          break;
+        case 'divide':
+          result = b !== 0 ? a / b : Infinity;
+          break;
+      }
+      return { result };
+    },
+  });
+
+  const failingTool = createTool({
+    id: 'failingTool',
+    description: 'A tool that always throws an error for testing error handling',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async () => {
+      throw new Error('Tool execution failed intentionally');
+    },
+  });
+
+  // Create real MCP servers with tools
+  const mcpServer1 = new MCPServer({
+    name: 'Test Server 1',
+    version: '1.0.0',
+    description: 'Test MCP Server 1',
+    tools: {
+      getWeather: weatherTool,
+      calculate: calculatorTool,
+    },
+  });
+
+  const mcpServer2 = new MCPServer({
+    name: 'Test Server 2',
+    version: '1.1.0',
+    description: 'Test MCP Server 2',
+    tools: {
+      failingTool: failingTool,
+    },
+  });
+
+  // Create Mastra instance with all test entities
+  const mastra = new Mastra({
+    logger: mockLogger as unknown as IMastraLogger,
+    storage: new InMemoryStore(),
+    agents: {
+      'test-agent': agent,
+    },
+    workflows: {
+      'test-workflow': workflow,
+    },
+    scorers: { 'test-scorer': testScorer },
+    vectors: { 'test-vector': vector },
+    mcpServers: {
+      'test-server-1': mcpServer1,
+      'test-server-2': mcpServer2,
+    },
+  });
+
+  await mockWorkflowRun(workflow);
+  await setupWorkflowRegistryMocks(
+    {
+      'merge-template': mergeTemplateWorkflow,
+      'workflow-builder': workflowBuilderWorkflow,
+    },
+    mastra,
+  );
+
+  // Add test trace by creating a span with that traceId
+  const storage = mastra.getStorage();
+  if (storage) {
+    const observability = await storage.getStore('observability');
+    if (observability) {
+      await observability.createSpan({
+        span: {
+          spanId: 'test-span-1',
+          traceId: 'test-trace',
+          name: 'test-span',
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          isEvent: false,
+        },
+      });
+    }
+
+    // Add test stored agent for stored agents routes
+    const agents = await storage.getStore('agents');
+    if (agents) {
+      await agents.createAgent({
+        agent: {
+          id: 'test-stored-agent',
+          name: 'Test Stored Agent',
+          description: 'A test stored agent for integration tests',
+          instructions: 'Test instructions for stored agent',
+          model: { provider: 'openai', name: 'gpt-4o' },
+        },
+      });
+    }
+
+    // Add test thread and messages to Mastra's storage for memory routes without agentId
+    // This is needed because when agentId is not provided, the handler falls back to storage directly
+    const memoryStore = await storage.getStore('memory');
+    if (memoryStore) {
+      await memoryStore.saveThread({
+        thread: {
+          id: 'test-thread',
+          resourceId: 'test-resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      await memoryStore.saveMessages({
+        messages: [
+          {
+            id: 'test-message-1',
+            threadId: 'test-thread',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test message' }],
+            },
+            createdAt: new Date(),
+          },
+        ],
+      });
+    }
+  }
+
+  return {
+    mastra,
+    tools: { 'test-tool': testTool },
+  };
+}
+
+async function mockWorkflowRun(workflow: Workflow) {
+  // Mock getWorkflowRunById to return a mock run object
+  // This is needed for routes that require an existing workflow run (restart, resume, etc.)
+  vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
+    runId: 'test-run',
+    workflowName: 'test-workflow',
+    status: 'completed',
+    resourceId: 'test-resource',
+    snapshot: {
+      context: {},
+      value: {},
+      status: 'done',
+      runId: 'test-run',
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as any);
+
+  // Mock getWorkflowRunExecutionResult for execution-result routes
+  vi.spyOn(workflow, 'getWorkflowRunExecutionResult').mockResolvedValue({
+    results: { step1: { output: 'test-output' } },
+    status: 'success',
+  } as any);
+
+  // Mock createRun to return a mocked run object with all required methods
+  const originalCreateRun = workflow.createRun.bind(workflow);
+  vi.spyOn(workflow, 'createRun').mockImplementation(async (options?: any) => {
+    const run = await originalCreateRun(options);
+
+    // Mock stream methods
+    vi.spyOn(run, 'streamLegacy').mockReturnValue({
+      stream: createMockWorkflowStream(),
+    } as any);
+    vi.spyOn(run, 'observeStreamLegacy').mockReturnValue({
+      stream: createMockWorkflowStream(),
+    } as any);
+
+    // Mock start to return a successful result
+    vi.spyOn(run, 'start').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    // Mock restart to return a successful result
+    vi.spyOn(run, 'restart').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    // Mock resume to return a successful result
+    vi.spyOn(run, 'resume').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    // Mock timeTravel to return a successful result
+    vi.spyOn(run, 'timeTravel').mockResolvedValue({
+      results: {},
+      status: 'success',
+    } as any);
+
+    return run;
+  });
+}
+
+/**
+ * Creates a mock voice provider
+ */
+export function createMockVoice() {
+  return new CompositeVoice({});
+}
+
+/**
+ * Creates a test tool with basic schema
+ */
+export function createTestTool(
+  overrides: {
+    id?: string;
+    description?: string;
+    inputSchema?: ZodTypeAny;
+    outputSchema?: ZodTypeAny;
+    execute?: (input: any) => Promise<any>;
+  } = {},
+) {
+  return createTool({
+    id: overrides.id || 'test-tool',
+    description: overrides.description || 'A test tool',
+    inputSchema: overrides.inputSchema || z.object({ key: z.string() }),
+    outputSchema: overrides.outputSchema || z.object({ result: z.string() }),
+    execute: overrides.execute || (async _inputData => ({ result: 'success' })),
+  });
+}
+
+/**
+ * Creates a mock memory instance with InMemoryStore
+ * Following the pattern from handler tests - uses actual MockMemory implementation
+ */
+export function createMockMemory() {
+  const storage = new InMemoryStore();
+  const mockMemory = new MockMemory({ storage });
+  (mockMemory as any).__registerMastra = vi.fn();
+  return mockMemory;
+}
+
+/**
+ * Creates a test workflow with a suspending step
+ * Following the pattern from handler tests - always includes suspend for resume tests
+ */
+export function createTestWorkflow(
+  overrides: {
+    id?: string;
+    description?: string;
+  } = {},
+) {
+  const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+  const stepA = createStep({
+    id: 'test-step',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async ({ suspend }: any) => {
+      await suspend({ test: 'data' });
+    },
+  });
+  const stepB = createStep({
+    id: 'test-step2',
+    inputSchema: z.object({ name: z.string() }),
+    outputSchema: z.object({ result: z.string() }),
+    execute,
+  });
+
+  return createWorkflow({
+    id: overrides.id || 'test-workflow',
+    description: overrides.description || 'A test workflow',
+    steps: [stepA, stepB],
+    inputSchema: z.object({}),
+    outputSchema: z.object({ result: z.string() }),
+  })
+    .then(stepA)
+    .then(stepB)
+    .commit();
+}
+
+/**
+ * Recursively converts ISO date strings to Date objects in response data.
+ * This is needed because HTTP responses serialize dates to strings via JSON.stringify(),
+ * but schemas expect Date objects for validation.
+ *
+ * @param data - The response data from HTTP (with dates as ISO strings)
+ * @returns The same data with ISO date strings converted to Date objects
+ */
+/**
+ * Check if a Zod schema expects a Date type at a given path
+ */
+function schemaExpectsDate(schema: any, path: string[] = []): boolean {
+  if (!schema) return false;
+
+  // Unwrap effects, optional, nullable, default to get to the base type
+  while (
+    schema._def?.typeName === 'ZodEffects' ||
+    schema._def?.typeName === 'ZodOptional' ||
+    schema._def?.typeName === 'ZodNullable' ||
+    schema._def?.typeName === 'ZodDefault'
+  ) {
+    if (schema._def.typeName === 'ZodEffects') {
+      schema = schema._def.schema;
+    } else if (schema._def.typeName === 'ZodOptional' || schema._def.typeName === 'ZodNullable') {
+      schema = schema._def.innerType;
+    } else if (schema._def.typeName === 'ZodDefault') {
+      schema = schema._def.innerType;
+    }
+  }
+
+  // If we have a path, navigate to that field
+  if (path.length > 0) {
+    if (schema._def?.typeName === 'ZodObject') {
+      const shape = schema._def.shape();
+      const fieldSchema = shape[path[0]];
+      return schemaExpectsDate(fieldSchema, path.slice(1));
+    } else if (schema._def?.typeName === 'ZodArray') {
+      // For arrays, check the element type (ignore the array index in path)
+      return schemaExpectsDate(schema._def.type, path.slice(1));
+    }
+    return false;
+  }
+
+  // Check if this is a Date type
+  return schema._def?.typeName === 'ZodDate';
+}
+
+export function parseDatesInResponse(data: any, schema?: any, currentPath: string[] = []): any {
+  if (data === null || data === undefined) {
+    return data;
+  }
+
+  if (typeof data === 'string') {
+    // Only parse dates if the schema expects a Date at this path
+    if (schema && schemaExpectsDate(schema, currentPath)) {
+      const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
+      if (isoDateRegex.test(data)) {
+        const parsed = new Date(data);
+        if (!isNaN(parsed.getTime())) {
+          return parsed;
+        }
+      }
+    }
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map((item, index) => parseDatesInResponse(item, schema, [...currentPath, String(index)]));
+  }
+
+  if (typeof data === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = parseDatesInResponse(value, schema, [...currentPath, key]);
+    }
+    return result;
+  }
+
+  return data;
+}
+
+async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
+  for (const workflow of Object.values(workflows)) {
+    workflow.__registerMastra(mastra);
+    workflow.__registerPrimitives({
+      logger: mastra.getLogger(),
+      storage: mastra.getStorage(),
+      agents: mastra.listAgents(),
+      tts: mastra.getTTS(),
+      vectors: mastra.listVectors(),
+    });
+    await mockWorkflowRun(workflow);
+  }
+
+  // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
+  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
+    for (const [id, workflow] of Object.entries(workflows)) {
+      // Register Mastra instance with the workflow
+      if (mastra) {
+        workflow.__registerMastra(mastra);
+        workflow.__registerPrimitives({
+          logger: mastra.getLogger(),
+          storage: mastra.getStorage(),
+          agents: mastra.listAgents(),
+          tts: mastra.getTTS(),
+          vectors: mastra.listVectors(),
+        });
+      }
+      WorkflowRegistry['additionalWorkflows'][id] = workflow;
+    }
+  });
+}
+
+export function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
+  return {
+    msg: 'test log',
+    level: LogLevel.INFO,
+    time: new Date(),
+    ...args,
+    pid: 1,
+    hostname: 'test-host',
+    name: 'test-name',
+    runId: 'test-run',
+  };
+}
+
+type MockedLogger = {
+  listLogsByRunId: Mock<IMastraLogger['listLogsByRunId']>;
+  listLogs: Mock<IMastraLogger['listLogs']>;
+};
+
+const mockLogger = {
+  listLogsByRunId: vi.fn(),
+  listLogs: vi.fn(),
+  transports: new Map<string, unknown>(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+  cleanup: vi.fn(),
+  trackException: vi.fn(),
+  getTransports: vi.fn(() => mockLogger.transports ?? new Map<string, unknown>()),
+} as unknown as MockedLogger & {
+  transports: Record<string, unknown>;
+  getTransports: () => Map<string, unknown>;
+};
+
+export interface RouteRequestPayload {
+  method: ServerRoute['method'];
+  path: string;
+  query?: Record<string, string | string[]>;
+  body?: unknown;
+}
+
+export interface RouteRequestOverrides {
+  pathParams?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+}
+
+export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
+  const method = route.method;
+  let path = route.path;
+
+  if (route.pathParamSchema) {
+    const defaults = getDefaultValidPathParams(route);
+    const params = { ...defaults, ...(overrides.pathParams ?? {}) };
+    for (const [key, value] of Object.entries(params)) {
+      path = path.replace(`:${key}`, encodeURIComponent(String(value)));
+    }
+  }
+
+  let query: Record<string, string | string[]> | undefined;
+  if (route.queryParamSchema) {
+    const generated = generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>;
+    query = convertQueryValues({ ...generated, ...(overrides.query ?? {}) });
+  } else if (overrides.query) {
+    query = convertQueryValues(overrides.query);
+  }
+
+  let body: Record<string, unknown> | undefined;
+  if (route.bodySchema) {
+    const generated = generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>;
+    body = { ...generated, ...(overrides.body ?? {}) };
+  } else if (overrides.body) {
+    body = { ...overrides.body };
+  }
+
+  return {
+    method,
+    path,
+    query,
+    body,
+  };
+}
+
+export function convertQueryValues(values: Record<string, unknown>): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  const appendValue = (prefix: string, value: unknown) => {
+    if (value === undefined || value === null) return;
+    if (Array.isArray(value)) {
+      query[prefix] = value.map(item => convertQueryValue(item));
+      return;
+    }
+    if (value instanceof Date) {
+      query[prefix] = value.toISOString();
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+        appendValue(`${prefix}[${key}]`, nested);
+      }
+      return;
+    }
+    query[prefix] = convertQueryValue(value);
+  };
+
+  for (const [key, value] of Object.entries(values)) {
+    appendValue(key, value);
+  }
+  return query;
+}
+
+function convertQueryValue(value: unknown): string {
+  return String(value);
+}
+
+/**
+ * Creates a ReadableStream that emits chunks with sensitive data.
+ * This simulates what an agent.stream() call would return with request metadata.
+ *
+ * @param format - The stream format version ('v1' for legacy, 'v2' for current)
+ * @returns A ReadableStream with chunks containing sensitive request data
+ */
+export function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2'): ReadableStream {
+  const sensitiveRequest = {
+    body: JSON.stringify({
+      model: 'gpt-4',
+      messages: [{ role: 'system', content: 'SECRET_SYSTEM_PROMPT' }],
+      tools: [{ name: 'secret_tool', description: 'Internal tool' }],
+    }),
+  };
+
+  const chunks =
+    format === 'v2'
+      ? [
+          {
+            type: 'step-start',
+            runId: 'run-123',
+            from: 'AGENT',
+            payload: {
+              messageId: 'msg-123',
+              request: sensitiveRequest,
+              warnings: [],
+            },
+          },
+          { type: 'text-delta', textDelta: 'Hello' },
+          {
+            type: 'step-finish',
+            runId: 'run-123',
+            from: 'AGENT',
+            payload: {
+              messageId: 'msg-123',
+              metadata: { request: sensitiveRequest },
+              output: {
+                text: 'Hello',
+                steps: [{ request: sensitiveRequest, response: { id: 'resp-1' } }],
+              },
+            },
+          },
+          {
+            type: 'finish',
+            runId: 'run-123',
+            from: 'AGENT',
+            payload: {
+              messageId: 'msg-123',
+              metadata: { request: sensitiveRequest },
+              output: {
+                text: 'Hello',
+                steps: [{ request: sensitiveRequest }],
+              },
+            },
+          },
+        ]
+      : [
+          {
+            type: 'step-start',
+            messageId: 'msg-123',
+            request: sensitiveRequest,
+            warnings: [],
+          },
+          { type: 'text-delta', textDelta: 'Hello' },
+          {
+            type: 'step-finish',
+            finishReason: 'stop',
+            request: sensitiveRequest,
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            request: sensitiveRequest,
+          },
+        ];
+
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(chunk);
+      }
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Helper to consume a stream and parse SSE chunks.
+ * Reads all chunks from a stream and parses them from SSE format.
+ *
+ * @param stream - The ReadableStream to consume (typically response.body)
+ * @returns Array of parsed JSON objects from the SSE data lines
+ */
+export async function consumeSSEStream(stream: ReadableStream<Uint8Array> | null): Promise<any[]> {
+  if (!stream) return [];
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const chunks: any[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    // Parse SSE format: "data: {...}\n\n"
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+        try {
+          chunks.push(JSON.parse(line.slice(6)));
+        } catch {
+          // Skip non-JSON lines
+        }
+      }
+    }
+  }
+
+  return chunks;
+}

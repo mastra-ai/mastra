@@ -1,6 +1,9 @@
 ---
 title: "Scorers overview | Evals"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Scorers overview
@@ -23,7 +26,7 @@ There are different kinds of scorers, each serving a specific purpose. Here are 
 
 To access Mastra's scorers feature install the `@mastra/evals` package.
 
-```bash copy
+```bash
 npm install @mastra/evals@beta
 ```
 
@@ -35,23 +38,21 @@ npm install @mastra/evals@beta
 
 You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/v1/evals/built-in-scorers) for all available options.
 
-```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/evaluated-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import {
   createAnswerRelevancyScorer,
   createToxicityScorer,
 } from "@mastra/evals/scorers/prebuilt";
 
 export const evaluatedAgent = new Agent({
-  // ...
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
       sampling: { type: "ratio", rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
+      scorer: createToxicityScorer({ model: "openai/gpt-4.1-nano" }),
       sampling: { type: "ratio", rate: 1 },
     },
   },
@@ -62,13 +63,12 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
 
-```typescript title="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/content-generation.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
 
 const contentStep = createStep({
-  // ...
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
@@ -116,7 +116,6 @@ To score traces, you first need to register your scorers with your Mastra instan
 
 ```typescript
 const mastra = new Mastra({
-  // ...
   scorers: {
     answerRelevancy: myAnswerRelevancyScorer,
     responseQuality: myResponseQualityScorer,

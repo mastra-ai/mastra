@@ -2,13 +2,14 @@
 // Adjusted from https://github.com/vercel/ai/blob/main/packages/codemod/src/test/test-utils.ts
 // License: Apache-2.0
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { API, FileInfo } from 'jscodeshift';
 import jscodeshift from 'jscodeshift';
 import ts from 'typescript';
-import { expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { BUNDLE } from '../lib/bundle';
+import { EDGE_CASES_FIXTURES } from './__fixtures__/edge-cases';
 
 /**
  * Applies a codemod transform to the input code.
@@ -295,4 +296,26 @@ export async function testUpgrade(version: string, fixtureName: string) {
     // Compare actual output to expected output
     expect(actualOutput).toBe(expectedOutput);
   }
+}
+
+/**
+ * Test edge cases that should not be transformed by codemods.
+ * Loops over EDGE_CASES_FIXTURES and ensures that applying the transformer does not change the code.
+ */
+export function testEdgeCases(
+  transformer: (fileInfo: FileInfo, api: API, options: Record<string, unknown>) => string | null,
+) {
+  describe('codemod edge cases', () => {
+    for (const fixture of EDGE_CASES_FIXTURES) {
+      it(`does not transform edge case: ${fixture.name}`, () => {
+        const input = fixture.code;
+
+        // Apply the transformer to the input code
+        const actualOutput = applyTransform(transformer, input);
+
+        // Expect no changes to be made
+        expect(actualOutput).toBe(input);
+      });
+    }
+  });
 }

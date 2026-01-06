@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.listTools() | Agents"
 description: "Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.listTools()
@@ -9,7 +11,7 @@ The `.listTools()` method retrieves the tools configured for an agent, resolving
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.listTools();
 ```
 
@@ -42,7 +44,7 @@ await agent.listTools();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 await agent.listTools({
   requestContext: new RequestContext(),
 });

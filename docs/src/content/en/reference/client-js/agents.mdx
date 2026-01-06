@@ -1,6 +1,10 @@
 ---
 title: "Reference: Agents API | Client SDK"
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 # Agents API
@@ -15,19 +19,25 @@ Retrieve a list of all available agents:
 const agents = await mastraClient.listAgents();
 ```
 
-Returns a record of agent IDs to their serialized agent configurations. See the [Agent class reference](/reference/v1/agents/agent) for details on agent properties.
+Returns a record of agent IDs to their serialized agent configurations.
 
 ## Working with a Specific Agent
 
-Get an instance of a specific agent:
+Get an instance of a specific agent by its ID:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+export const myAgent = new Agent({
+  id: "my-agent",
+});
+```
 
 ```typescript
-const agent = mastraClient.getAgent("agent-id");
+const agent = mastraClient.getAgent("my-agent");
 ```
 
 ## Agent Methods
 
-### Get Agent Details
+### details()
 
 Retrieve detailed information about an agent:
 
@@ -35,9 +45,7 @@ Retrieve detailed information about an agent:
 const details = await agent.details();
 ```
 
-Returns the serialized agent configuration. See the [Agent class reference](/reference/v1/agents/agent) for details on agent properties.
-
-### Generate Response
+### generate()
 
 Generate a response from the agent:
 
@@ -55,7 +63,16 @@ const response = await agent.generate({
 });
 ```
 
-### Stream Response
+You can also use the simplified string format:
+
+```typescript
+const response = await agent.generate("Hello, how are you?", {
+  threadId: "thread-1",
+  resourceId: "resource-1",
+});
+```
+
+### stream()
 
 Stream responses from the agent for real-time interactions:
 
@@ -75,8 +92,28 @@ response.processDataStream({
     console.log(chunk);
   },
 });
+```
 
-// You can also read from response body directly
+You can also use the simplified string format:
+
+```typescript
+const response = await agent.stream("Tell me a story", {
+  threadId: "thread-1",
+  clientTools: { colorChangeTool },
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    if (chunk.type === "text-delta") {
+      console.log(chunk.payload.text);
+    }
+  },
+});
+```
+
+You can also read from response body directly:
+
+```typescript
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
@@ -85,11 +122,119 @@ while (true) {
 }
 ```
 
-### Client tools
+#### AI SDK compatible format
+
+To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkStream`:
+
+```typescript title="client-ai-sdk-transform.ts"
+import { createUIMessageStream } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+
+const response = await agent.stream({ messages: "Tell me a story" });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response
+      .processDataStream({
+        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+      })
+      .finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkStream(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+### getTool()
+
+Retrieve information about a specific tool available to the agent:
+
+```typescript
+const tool = await agent.getTool("tool-id");
+```
+
+### executeTool()
+
+Execute a specific tool for the agent:
+
+```typescript
+const result = await agent.executeTool("tool-id", {
+  data: { input: "value" },
+});
+```
+
+### network()
+
+Stream responses from an agent network for multi-agent interactions:
+
+```typescript
+const response = await agent.network({
+  messages: [
+    {
+      role: "user",
+      content: "Research this topic and write a summary",
+    },
+  ],
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### approveToolCall()
+
+Approve a pending tool call that requires human confirmation:
+
+```typescript
+const response = await agent.approveToolCall({
+  runId: "run-123",
+  toolCallId: "tool-call-456",
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### declineToolCall()
+
+Decline a pending tool call that requires human confirmation:
+
+```typescript
+const response = await agent.declineToolCall({
+  runId: "run-123",
+  toolCallId: "tool-call-456",
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+## Client Tools
 
 Client-side tools allow you to execute custom functions on the client side when the agent requests them.
-
-#### Basic Usage
 
 ```typescript
 import { createTool } from "@mastra/client-js";
@@ -132,90 +277,132 @@ response.processDataStream({
 });
 ```
 
-### Get Agent Tool
+## Stored Agents
 
-Retrieve information about a specific tool available to the agent:
+Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
+
+### listStoredAgents()
+
+Retrieve a paginated list of all stored agents:
 
 ```typescript
-const tool = await agent.getTool("tool-id");
+const result = await mastraClient.listStoredAgents();
+console.log(result.agents); // Array of stored agents
+console.log(result.total); // Total count
 ```
 
-### Get Agent Evaluations
-
-Get evaluation results for the agent:
+With pagination and ordering:
 
 ```typescript
-// Get CI evaluations
-const evals = await agent.evals();
-
-// Get live evaluations
-const liveEvals = await agent.liveEvals();
-```
-
-### Stream
-
-Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for Mastra's native format.
-
-```typescript
-const response = await agent.stream("Tell me a story", {
-  threadId: "thread-1",
-  clientTools: { colorChangeTool },
-});
-
-// Process the stream
-response.processDataStream({
-  onChunk: async (chunk) => {
-    if (chunk.type === "text-delta") {
-      console.log(chunk.payload.text);
-    }
+const result = await mastraClient.listStoredAgents({
+  page: 0,
+  perPage: 20,
+  orderBy: {
+    field: "createdAt",
+    direction: "DESC",
   },
 });
 ```
 
-#### AI SDK compatible format
+### createStoredAgent()
 
-To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkFormat`:
-
-```typescript title="client-ai-sdk-transform.ts" copy
-import { createUIMessageStream } from "ai";
-import { toAISdkFormat } from "@mastra/ai-sdk";
-import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
-
-const response = await agent.stream({ messages: "Tell me a story" });
-
-const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
-  start(controller) {
-    response
-      .processDataStream({
-        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
-      })
-      .finally(() => controller.close());
-  },
-});
-
-const uiMessageStream = createUIMessageStream({
-  execute: async ({ writer }) => {
-    for await (const part of toAISdkFormat(
-      chunkStream as unknown as MastraModelOutput,
-      { from: "agent" },
-    )) {
-      writer.write(part);
-    }
-  },
-});
-
-for await (const part of uiMessageStream) {
-  console.log(part);
-}
-```
-
-### Generate
-
-Generate a response using the enhanced API with improved method signatures and AI SDK v5 compatibility:
+Create a new stored agent:
 
 ```typescript
-const response = await agent.generate("Hello, how are you?", {
-  threadId: "thread-1",
-  resourceId: "resource-1",
+const agent = await mastraClient.createStoredAgent({
+  id: "my-agent",
+  name: "My Assistant",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4",
+  },
 });
+```
+
+With all options:
+
+```typescript
+const agent = await mastraClient.createStoredAgent({
+  id: "full-agent",
+  name: "Full Agent",
+  description: "A fully configured agent",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4",
+  },
+  tools: ["calculator", "weather"],
+  workflows: ["data-processing"],
+  agents: ["sub-agent-1"],
+  memory: "my-memory",
+  scorers: {
+    "quality-scorer": {
+      sampling: { type: "ratio", rate: 0.1 },
+    },
+  },
+  defaultOptions: {
+    maxSteps: 10,
+  },
+  metadata: {
+    version: "1.0",
+    team: "engineering",
+  },
+});
+```
+
+### getStoredAgent()
+
+Get an instance of a specific stored agent:
+
+```typescript
+const storedAgent = mastraClient.getStoredAgent("my-agent");
+```
+
+## Stored Agent Methods
+
+### details()
+
+Retrieve the stored agent configuration:
+
+```typescript
+const details = await storedAgent.details();
+console.log(details.name);
+console.log(details.instructions);
+console.log(details.model);
+```
+
+### update()
+
+Update specific fields of a stored agent. All fields are optional:
+
+```typescript
+const updated = await storedAgent.update({
+  name: "Updated Agent Name",
+  instructions: "New instructions for the agent.",
+});
+```
+
+```typescript
+// Update just the tools
+await storedAgent.update({
+  tools: ["new-tool-1", "new-tool-2"],
+});
+
+// Update metadata
+await storedAgent.update({
+  metadata: {
+    version: "2.0",
+    lastModifiedBy: "admin",
+  },
+});
+```
+
+### delete()
+
+Delete a stored agent:
+
+```typescript
+const result = await storedAgent.delete();
+console.log(result.success); // true
 ```

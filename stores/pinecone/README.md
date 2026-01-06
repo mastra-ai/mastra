@@ -62,6 +62,9 @@ Optional:
 - `createIndex({indexName, dimension, metric?})`: Create a new index
 - `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
 - `query({indexName, queryVector, topK?, filter?, includeVector?})`: Search for similar vectors
+- `updateVector({ indexName, id?, filter?, namespace?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter?, namespace? })`: Delete multiple vectors by IDs or metadata filter
 - `listIndexes()`: List all indexes
 - `describeIndex(indexName)`: Get index statistics
 - `deleteIndex(indexName)`: Delete an index

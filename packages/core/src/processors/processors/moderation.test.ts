@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -562,7 +562,7 @@ describe('ModerationProcessor', () => {
 
       const part: ChunkType = {
         type: 'text-delta' as const,
-        payload: { text: 'Flagged content', id: '1' },
+        payload: { text: 'Flagged content', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -594,15 +594,20 @@ describe('ModerationProcessor', () => {
       const previousChunks: ChunkType[] = [
         {
           type: 'text-delta' as const,
-          payload: { text: 'Previous content ', id: '1' },
+          payload: { text: 'Previous content ', id: 'text-1' },
           runId: '1',
           from: ChunkFrom.AGENT,
         },
-        { type: 'text-delta' as const, payload: { text: 'more context ', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        {
+          type: 'text-delta' as const,
+          payload: { text: 'more context ', id: 'text-1' },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        },
       ];
       const currentChunk: ChunkType = {
         type: 'text-delta' as const,
-        payload: { text: 'current part', id: '1' },
+        payload: { text: 'current part', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -659,7 +664,7 @@ describe('ModerationProcessor', () => {
 
       const currentChunk: ChunkType = {
         type: 'text-delta' as const,
-        payload: { text: 'Safe content', id: '1' },
+        payload: { text: 'Safe content', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };

@@ -4,9 +4,8 @@ import type {
   LanguageModelV1 as LanguageModel,
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
-  Schema,
 } from '@internal/ai-sdk-v4';
-import type { JSONSchema7 } from '@mastra/schema-compat';
+import type { JSONSchema7, Schema } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -18,14 +17,16 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { ZodSchema, z } from 'zod';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
+import { executeWithContext, executeWithContextSync } from '../../observability/utils';
+import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
+import { isZodArray, getZodDef } from '../../utils/zod-utils';
 
 import type {
   GenerateObjectWithMessagesArgs,
@@ -109,7 +110,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     return applyCompatLayer({
-      schema: schema as Schema | ZodSchema,
+      schema: schema,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -150,16 +151,15 @@ export class MastraLLMV1 extends MastraBase {
 
       if (isZodType(experimental_output)) {
         schema = experimental_output as z.ZodType<inferOutput<Z>>;
-        if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<inferOutput<Z>>;
+        if (isZodArray(schema)) {
+          schema = getZodDef(schema).type as z.ZodType<inferOutput<Z>>;
         }
 
-        let jsonSchemaToUse;
-        jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7') as JSONSchema7;
+        const jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7');
 
-        schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
+        schema = jsonSchema<inferOutput<Z>>(jsonSchemaToUse);
       } else {
-        schema = jsonSchema(experimental_output as JSONSchema7) as Schema<inferOutput<Z>>;
+        schema = jsonSchema<inferOutput<Z>>(experimental_output);
       }
     }
 
@@ -235,10 +235,8 @@ export class MastraLLMV1 extends MastraBase {
           runId,
         });
 
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
+        const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+        if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
@@ -251,7 +249,10 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     try {
-      const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
+      const result: GenerateTextResult<Tools, Z> = await executeWithContext({
+        span: llmSpan,
+        fn: () => generateText(argsForExecute),
+      });
 
       if (schema && result.finishReason === 'stop') {
         result.object = (result as any).experimental_output;
@@ -268,7 +269,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         attributes: {
           finishReason: result.finishReason,
-          usage: result.usage,
+          usage: convertV4Usage(result.usage),
         },
       });
 
@@ -336,9 +337,9 @@ export class MastraLLMV1 extends MastraBase {
 
     try {
       let output: 'object' | 'array' = 'object';
-      if (structuredOutput instanceof z.ZodArray) {
+      if (isZodArray(structuredOutput)) {
         output = 'array';
-        structuredOutput = structuredOutput._def.type;
+        structuredOutput = getZodDef(structuredOutput).type;
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
@@ -369,7 +370,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: result.finishReason,
-            usage: result.usage,
+            usage: convertV4Usage(result.usage),
           },
         });
 
@@ -452,8 +453,8 @@ export class MastraLLMV1 extends MastraBase {
       });
       if (typeof (experimental_output as any).parse === 'function') {
         schema = experimental_output as z.ZodType<Z>;
-        if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<Z>;
+        if (isZodArray(schema)) {
+          schema = getZodDef(schema).type as z.ZodType<Z>;
         }
       } else {
         schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
@@ -531,10 +532,8 @@ export class MastraLLMV1 extends MastraBase {
           runId,
         });
 
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
+        const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+        if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
@@ -553,7 +552,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: props?.finishReason,
-            usage: props?.usage,
+            usage: convertV4Usage(props?.usage),
           },
         });
 
@@ -605,7 +604,7 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     try {
-      return streamText(argsForExecute);
+      return executeWithContextSync({ span: llmSpan, fn: () => streamText(argsForExecute) });
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {
@@ -672,9 +671,9 @@ export class MastraLLMV1 extends MastraBase {
 
     try {
       let output: 'object' | 'array' = 'object';
-      if (structuredOutput instanceof z.ZodArray) {
+      if (isZodArray(structuredOutput)) {
         output = 'array';
-        structuredOutput = structuredOutput._def.type;
+        structuredOutput = getZodDef(structuredOutput).type;
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);

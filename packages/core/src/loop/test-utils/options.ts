@@ -4,14 +4,14 @@ import type {
   LanguageModelV2FunctionTool,
   LanguageModelV2ProviderDefinedTool,
 } from '@ai-sdk/provider-v5';
-import { stepCountIs, tool } from 'ai-v5';
+import { stepCountIs, tool } from '@internal/ai-sdk-v5';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
   mockId,
-  MockLanguageModelV2,
   mockValues,
-} from 'ai-v5/test';
+} from '@internal/ai-sdk-v5/test';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';
@@ -35,6 +35,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: createTestModels({
           stream: convertArrayToReadableStream([
@@ -74,7 +75,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           abortSignal: abortController.signal,
           toolCallId: 'call-1',
           messages: expect.any(Array),
-          writableStream: expect.any(Object),
+          outputWriter: expect.any(Function),
           resumeData: undefined,
           suspend: expect.any(Function),
         },
@@ -89,6 +90,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const result: Array<{ error: unknown }> = [];
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -124,6 +126,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -137,13 +140,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
                 return {
                   stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
                     {
                       type: 'text-delta',
-                      id: '1',
+                      id: 'text-1',
                       delta: 'provider metadata test',
                     },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -173,6 +176,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let tools: (LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool)[] | undefined;
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -184,11 +188,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
                 return {
                   stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
@@ -211,9 +215,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           },
         },
         messageList,
-        options: {
-          activeTools: ['tool1'],
-        },
+        activeTools: ['tool1'],
         agentId: 'agent-id',
       });
 
@@ -266,6 +268,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         let responseCount = 0;
         result = await loopFn({
+          methodType: 'stream',
           runId,
           models: [
             {
@@ -313,10 +316,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             modelId: 'mock-model-id',
                             timestamp: new Date(1000),
                           },
-                          { type: 'text-start', id: '1' },
-                          { type: 'text-delta', id: '1', delta: 'Hello, ' },
-                          { type: 'text-delta', id: '1', delta: `world!` },
-                          { type: 'text-end', id: '1' },
+                          { type: 'text-start', id: 'text-1' },
+                          { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+                          { type: 'text-delta', id: 'text-1', delta: `world!` },
+                          { type: 'text-end', id: 'text-1' },
                           {
                             type: 'finish',
                             finishReason: 'stop',
@@ -550,24 +553,24 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "warnings": [],
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-start",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "Hello, ",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "world!",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-end",
             },
@@ -1337,21 +1340,21 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start-step",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "type": "text-start",
             },
             {
               "delta": "Hello, ",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
               "delta": "world!",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "type": "text-end",
             },
             {
@@ -1369,6 +1372,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result: any;
       let doStreamCalls: Array<LanguageModelV2CallOptions>;
       let prepareStepCalls: Array<{
+        model: {
+          modelId: string;
+          provider: string;
+          specificationVersion: string;
+        };
         stepNumber: number;
         steps: Array<any>;
         messages: Array<any>;
@@ -1376,11 +1384,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       beforeEach(async () => {
         const messageList = createMessageListWithUserMessage();
-
         doStreamCalls = [];
         prepareStepCalls = [];
 
-        result = await loopFn({
+        result = loopFn({
+          ...defaultSettings(),
+          methodType: 'stream',
           runId,
           models: [
             {
@@ -1422,10 +1431,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             modelId: 'mock-model-id',
                             timestamp: new Date(1000),
                           },
-                          { type: 'text-start', id: '2' },
-                          { type: 'text-delta', id: '2', delta: 'Hello, ' },
-                          { type: 'text-delta', id: '2', delta: `world!` },
-                          { type: 'text-end', id: '2' },
+                          { type: 'text-start', id: 'text-2' },
+                          { type: 'text-delta', id: 'text-2', delta: 'Hello, ' },
+                          { type: 'text-delta', id: 'text-2', delta: `world!` },
+                          { type: 'text-end', id: 'text-2' },
                           {
                             type: 'finish',
                             finishReason: 'stop',
@@ -1451,8 +1460,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           messageList,
           stopWhen: stepCountIs(3),
           options: {
-            prepareStep: async ({ stepNumber, steps, messages }) => {
-              prepareStepCalls.push({ stepNumber, steps, messages });
+            prepareStep: async ({ model, stepNumber, steps, messages }) => {
+              prepareStepCalls.push({
+                model: {
+                  modelId: model.modelId,
+                  provider: model.provider,
+                  specificationVersion: model.specificationVersion,
+                },
+                stepNumber,
+                steps,
+                messages,
+              });
 
               if (stepNumber === 0) {
                 return {
@@ -1460,11 +1478,24 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     type: 'tool',
                     toolName: 'tool1' as const,
                   },
-                  system: 'system-message-0',
                   messages: [
                     {
-                      role: 'user',
-                      content: 'new input from prepareStep',
+                      id: 'sys-0',
+                      role: 'system' as const,
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'system-message-0' }],
+                      },
+                    },
+                    {
+                      id: 'user-0',
+                      role: 'user' as const,
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'new input from prepareStep' }],
+                      },
                     },
                   ],
                 };
@@ -1473,9 +1504,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               if (stepNumber === 1) {
                 return {
                   activeTools: [],
-                  system: 'system-message-1',
+                  messages: [
+                    {
+                      id: 'sys-1',
+                      role: 'system' as const,
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'system-message-1' }],
+                      },
+                    },
+                    {
+                      id: 'user-1',
+                      role: 'user' as const,
+                      createdAt: new Date(),
+                      content: {
+                        format: 2 as const,
+                        parts: [{ type: 'text' as const, text: 'another new input from prepareStep 222' }],
+                      },
+                    },
+                  ],
                 };
               }
+              return {};
             },
           },
         });
@@ -1619,15 +1670,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               "messages": [
                 {
-                  "content": [
-                    {
-                      "text": "test-input",
-                      "type": "text",
-                    },
-                  ],
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "text": "test-input",
+                        "type": "text",
+                      },
+                    ],
+                  },
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "id": "msg-1",
+                  "resourceId": undefined,
                   "role": "user",
+                  "threadId": undefined,
                 },
               ],
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "specificationVersion": "v2",
+              },
               "stepNumber": 0,
               "steps": [
                 DefaultStepResult {
@@ -1663,6 +1726,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1684,34 +1748,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       {
                         "content": [
                           {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
-                      {
-                        "content": [
-                          {
                             "text": "Hello, world!",
                             "type": "text",
                           },
@@ -1722,6 +1758,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:01.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "cachedInputTokens": 3,
                     "inputTokens": 3,
@@ -1736,43 +1773,60 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             {
               "messages": [
                 {
-                  "content": [
-                    {
-                      "text": "test-input",
-                      "type": "text",
-                    },
-                  ],
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "text": "new input from prepareStep",
+                        "type": "text",
+                      },
+                    ],
+                  },
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "id": "user-0",
                   "role": "user",
                 },
                 {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "toolInvocation": {
+                          "args": {
+                            "value": "value",
+                          },
+                          "result": "result1",
+                          "state": "result",
+                          "step": undefined,
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                        },
+                        "type": "tool-invocation",
                       },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
+                    ],
+                    "toolInvocations": [
+                      {
+                        "args": {
+                          "value": "value",
+                        },
+                        "result": "result1",
+                        "state": "result",
+                        "step": undefined,
+                        "toolCallId": "call-1",
+                        "toolName": "tool1",
+                      },
+                    ],
+                  },
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "id": "msg-0",
                   "role": "assistant",
                 },
-                {
-                  "content": [
-                    {
-                      "output": {
-                        "type": "text",
-                        "value": "result1",
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                  ],
-                  "role": "tool",
-                },
               ],
+              "model": {
+                "modelId": "mock-model-id",
+                "provider": "mock-provider",
+                "specificationVersion": "v2",
+              },
               "stepNumber": 1,
               "steps": [
                 DefaultStepResult {
@@ -1808,6 +1862,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1829,34 +1884,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       {
                         "content": [
                           {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
-                      {
-                        "content": [
-                          {
                             "text": "Hello, world!",
                             "type": "text",
                           },
@@ -1867,6 +1894,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:01.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
                     "cachedInputTokens": 3,
                     "inputTokens": 3,
@@ -1906,6 +1934,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
     //     let responseCount = 0;
     //     result = await loopFn({
+    //   methodType: 'stream',
     //       runId,
     //       model: new MockLanguageModelV2({
     //         doStream: async ({ prompt, tools, toolChoice }) => {
@@ -1950,10 +1979,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     //                     modelId: 'mock-model-id',
     //                     timestamp: new Date(1000),
     //                   },
-    //                   { type: 'text-start', id: '1' },
-    //                   { type: 'text-delta', id: '1', delta: 'Hello, ' },
-    //                   { type: 'text-delta', id: '1', delta: `world!` },
-    //                   { type: 'text-end', id: '1' },
+    //                   { type: 'text-start', id: 'text-1' },
+    //                   { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+    //                   { type: 'text-delta', id: 'text-1', delta: `world!` },
+    //                   { type: 'text-end', id: 'text-1' },
     //                   {
     //                     type: 'finish',
     //                     finishReason: 'stop',
@@ -2885,6 +2914,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         let responseCount = 0;
         result = await loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: [
@@ -2947,11 +2977,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           },
           messageList,
           stopWhen: [
-            ({ steps }) => {
+            ({ steps }: { steps: any }) => {
               stopConditionCalls.push({ number: 0, steps });
               return false;
             },
-            ({ steps }) => {
+            ({ steps }: { steps: any }) => {
               stopConditionCalls.push({ number: 1, steps });
               return true;
             },
@@ -3164,6 +3194,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result!: any;
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         messageList,
         models: createTestModels({
@@ -3174,17 +3205,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-delta', id: '1', delta: ', ' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
             {
               type: 'tool-call',
               toolCallId: 'call-1',
               toolName: 'tool1',
               input: `{ "value": "value" }`,
             },
-            { type: 'text-delta', id: '1', delta: `world!` },
-            { type: 'text-end', id: '1' },
+            { type: 'text-delta', id: 'text-1', delta: `world!` },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -3432,6 +3463,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result!: any;
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         messageList,
         models: [{ id: 'test-model', maxRetries: 0, model: modelWithSources }],
@@ -3617,6 +3649,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let result!: any;
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: [{ id: 'test-model', maxRetries: 0, model: modelWithFiles }],
@@ -3802,6 +3835,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: [
@@ -3854,13 +3888,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       result = [];
 
       const resultObject = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             { type: 'tool-input-start', id: '2', toolName: 'tool1' },
             { type: 'tool-input-delta', id: '2', delta: '{"value": "' },
             { type: 'reasoning-start', id: '3' },
@@ -3884,9 +3919,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               input: `{ "value": "test" }`,
               providerMetadata: { provider: { custom: 'value' } },
             },
-            { type: 'text-start', id: '4' },
-            { type: 'text-delta', id: '4', delta: ' World' },
-            { type: 'text-end', id: '4' },
+            { type: 'text-start', id: 'text-4' },
+            { type: 'text-delta', id: 'text-4', delta: ' World' },
+            { type: 'text-end', id: 'text-4' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -3917,7 +3952,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "Hello",
             },
@@ -4017,7 +4052,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
-              "id": "4",
+              "id": "text-4",
               "providerMetadata": undefined,
               "text": " World",
             },
@@ -4146,9 +4181,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -4189,9 +4224,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'length',
@@ -4220,10 +4255,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'world!' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'tool-call',
   //                 toolCallId: 'call-1',
@@ -4269,10 +4304,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'world!' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'tool-call',
   //                 toolCallId: 'call-1',
@@ -4325,10 +4360,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //                 modelId: 'mock-model-id',
   //                 timestamp: new Date(0),
   //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'world!' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'tool-call',
   //                 toolCallId: 'call-1',
@@ -4453,9 +4488,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //                 modelId: 'mock-model-id',
   //                 timestamp: new Date(0),
   //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -4485,9 +4520,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //                 modelId: 'mock-model-id',
   //                 timestamp: new Date(0),
   //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -4528,17 +4563,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //                 modelId: 'mock-model-id',
   //                 timestamp: new Date(0),
   //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-delta', id: '1', delta: ', ' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //               { type: 'text-delta', id: 'text-1', delta: ', ' },
   //               {
   //                 type: 'tool-call',
   //                 toolCallId: 'call-1',
   //                 toolName: 'tool1',
   //                 input: `{ "value": "value" }`,
   //               },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'world!' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -4802,17 +4837,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //                 modelId: 'mock-model-id',
   //                 timestamp: new Date(0),
   //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-delta', id: '1', delta: ', ' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //               { type: 'text-delta', id: 'text-1', delta: ', ' },
   //               {
   //                 type: 'tool-call',
   //                 toolCallId: 'call-1',
   //                 toolName: 'tool1',
   //                 input: `{ "value": "value" }`,
   //               },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'world!' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -4953,8 +4988,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const resultObject = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello' },
   //               { type: 'reasoning-start', id: '2' },
   //               { type: 'reasoning-delta', id: '2', delta: 'Feeling clever' },
   //               { type: 'reasoning-end', id: '2' },
@@ -4969,8 +5004,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //                 toolName: 'tool1',
   //                 input: `{ "value": "test" }`,
   //               },
-  //               { type: 'text-delta', id: '1', delta: ' World' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-delta', id: 'text-1', delta: ' World' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5165,11 +5200,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
-  //               { type: 'text-delta', id: '1', delta: 'STOP' },
-  //               { type: 'text-delta', id: '1', delta: ' World' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'STOP' },
+  //               { type: 'text-delta', id: 'text-1', delta: ' World' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5245,11 +5280,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const resultObject = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
-  //               { type: 'text-delta', id: '1', delta: 'STOP' },
-  //               { type: 'text-delta', id: '1', delta: ' World' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'STOP' },
+  //               { type: 'text-delta', id: 'text-1', delta: ' World' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5315,14 +5350,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: '{ ' },
-  //               { type: 'text-delta', id: '1', delta: '"value": ' },
-  //               { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //               { type: 'text-delta', id: '1', delta: `world` },
-  //               { type: 'text-delta', id: '1', delta: `!"` },
-  //               { type: 'text-delta', id: '1', delta: ' }' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //               { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //               { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //               { type: 'text-delta', id: 'text-1', delta: `world` },
+  //               { type: 'text-delta', id: 'text-1', delta: `!"` },
+  //               { type: 'text-delta', id: 'text-1', delta: ' }' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5344,11 +5379,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
-  //               { type: 'text-delta', id: '1', delta: ',' },
-  //               { type: 'text-delta', id: '1', delta: ' world!' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: 'Hello, ' },
+  //               { type: 'text-delta', id: 'text-1', delta: ',' },
+  //               { type: 'text-delta', id: 'text-1', delta: ' world!' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5378,14 +5413,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //               callOptions = args;
   //               return {
   //                 stream: convertArrayToReadableStream([
-  //                   { type: 'text-start', id: '1' },
-  //                   { type: 'text-delta', id: '1', delta: '{ ' },
-  //                   { type: 'text-delta', id: '1', delta: '"value": ' },
-  //                   { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //                   { type: 'text-delta', id: '1', delta: `world` },
-  //                   { type: 'text-delta', id: '1', delta: `!"` },
-  //                   { type: 'text-delta', id: '1', delta: ' }' },
-  //                   { type: 'text-end', id: '1' },
+  //                   { type: 'text-start', id: 'text-1' },
+  //                   { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //                   { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //                   { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //                   { type: 'text-delta', id: 'text-1', delta: `world` },
+  //                   { type: 'text-delta', id: 'text-1', delta: `!"` },
+  //                   { type: 'text-delta', id: 'text-1', delta: ' }' },
+  //                   { type: 'text-end', id: 'text-1' },
   //                   {
   //                     type: 'finish',
   //                     finishReason: 'stop',
@@ -5455,14 +5490,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: '{ ' },
-  //               { type: 'text-delta', id: '1', delta: '"value": ' },
-  //               { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //               { type: 'text-delta', id: '1', delta: `world` },
-  //               { type: 'text-delta', id: '1', delta: `!"` },
-  //               { type: 'text-delta', id: '1', delta: ' }' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //               { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //               { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //               { type: 'text-delta', id: 'text-1', delta: `world` },
+  //               { type: 'text-delta', id: 'text-1', delta: `!"` },
+  //               { type: 'text-delta', id: 'text-1', delta: ' }' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5490,14 +5525,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: '{ ' },
-  //               { type: 'text-delta', id: '1', delta: '"value": ' },
-  //               { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //               { type: 'text-delta', id: '1', delta: `world` },
-  //               { type: 'text-delta', id: '1', delta: `!"` },
-  //               { type: 'text-delta', id: '1', delta: ' }' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //               { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //               { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //               { type: 'text-delta', id: 'text-1', delta: `world` },
+  //               { type: 'text-delta', id: 'text-1', delta: `!"` },
+  //               { type: 'text-delta', id: 'text-1', delta: ' }' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5523,12 +5558,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: '{ ' },
-  //               { type: 'text-delta', id: '1', delta: '"value": ' },
-  //               { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //               { type: 'text-delta', id: '1', delta: `world!" }` },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //               { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //               { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //               { type: 'text-delta', id: 'text-1', delta: `world!" }` },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5553,13 +5588,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const result = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: '{ ' },
-  //               { type: 'text-delta', id: '1', delta: '"value": ' },
-  //               { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //               { type: 'text-delta', id: '1', delta: `world!" ` },
-  //               { type: 'text-delta', id: '1', delta: '}' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //               { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //               { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //               { type: 'text-delta', id: 'text-1', delta: `world!" ` },
+  //               { type: 'text-delta', id: 'text-1', delta: '}' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5584,13 +5619,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         const resultObject = streamText({
   //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: '{ ' },
-  //               { type: 'text-delta', id: '1', delta: '"value": ' },
-  //               { type: 'text-delta', id: '1', delta: `"Hello, ` },
-  //               { type: 'text-delta', id: '1', delta: `world!" ` },
-  //               { type: 'text-delta', id: '1', delta: '}' },
-  //               { type: 'text-end', id: '1' },
+  //               { type: 'text-start', id: 'text-1' },
+  //               { type: 'text-delta', id: 'text-1', delta: '{ ' },
+  //               { type: 'text-delta', id: 'text-1', delta: '"value": ' },
+  //               { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+  //               { type: 'text-delta', id: 'text-1', delta: `world!" ` },
+  //               { type: 'text-delta', id: 'text-1', delta: '}' },
+  //               { type: 'text-end', id: 'text-1' },
   //               {
   //                 type: 'finish',
   //                 finishReason: 'stop',
@@ -5732,11 +5767,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //             },
   //             doStream: async () => ({
   //               stream: convertArrayToReadableStream([
-  //                 { type: 'text-start', id: '1' },
-  //                 { type: 'text-delta', id: '1', delta: 'Hello' },
-  //                 { type: 'text-delta', id: '1', delta: ', ' },
-  //                 { type: 'text-delta', id: '1', delta: 'world!' },
-  //                 { type: 'text-end', id: '1' },
+  //                 { type: 'text-start', id: 'text-1' },
+  //                 { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+  //                 { type: 'text-delta', id: 'text-1', delta: ', ' },
+  //                 { type: 'text-delta', id: 'text-1', delta: 'world!' },
+  //                 { type: 'text-end', id: 'text-1' },
   //               ]),
   //             }),
   //           });
@@ -5745,6 +5780,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       const model = new MockLanguageModelWithImageSupport();
   //       const result = await loopFn({
+  //         methodType: 'stream',
   //         runId,
   //         model,
   //         messages: [
@@ -5782,9 +5818,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             modelId: 'test-model',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -5794,6 +5830,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
@@ -5835,9 +5872,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             modelId: 'test-model',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -5847,6 +5884,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
@@ -5883,6 +5921,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -5932,9 +5971,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             modelId: 'test-model',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -5944,6 +5983,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: modelWithRawChunks,
@@ -6009,7 +6049,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "Hello, world!",
             },
@@ -6040,9 +6080,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     modelId: 'test-model',
                     timestamp: new Date(0),
                   },
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Hello' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -6056,6 +6096,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -6067,6 +6108,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(true);
 
       const result2 = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -6078,6 +6120,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(false);
 
       const result3 = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models,
@@ -6096,29 +6139,30 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       beforeEach(async () => {
         result = await loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'reasoning-start', id: '0' },
-              { type: 'text-start', id: '1' },
+              { type: 'text-start', id: 'text-1' },
               { type: 'reasoning-delta', id: '0', delta: 'Thinking...' },
-              { type: 'text-delta', id: '1', delta: 'Hello' },
-              { type: 'text-delta', id: '1', delta: ', ' },
-              { type: 'text-start', id: '2' },
-              { type: 'text-delta', id: '2', delta: `This ` },
-              { type: 'text-delta', id: '2', delta: `is ` },
+              { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+              { type: 'text-delta', id: 'text-1', delta: ', ' },
+              { type: 'text-start', id: 'text-2' },
+              { type: 'text-delta', id: 'text-2', delta: `This ` },
+              { type: 'text-delta', id: 'text-2', delta: `is ` },
               { type: 'reasoning-start', id: '3' },
               { type: 'reasoning-delta', id: '0', delta: `I'm thinking...` },
               { type: 'reasoning-delta', id: '3', delta: `Separate thoughts` },
-              { type: 'text-delta', id: '2', delta: `a` },
-              { type: 'text-delta', id: '1', delta: `world!` },
+              { type: 'text-delta', id: 'text-2', delta: `a` },
+              { type: 'text-delta', id: 'text-1', delta: `world!` },
               { type: 'reasoning-end', id: '0' },
-              { type: 'text-delta', id: '2', delta: ` test.` },
-              { type: 'text-end', id: '2' },
+              { type: 'text-delta', id: 'text-2', delta: ` test.` },
+              { type: 'text-end', id: 'text-2' },
               { type: 'reasoning-end', id: '3' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -6151,7 +6195,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "reasoning-start",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-start",
             },
@@ -6162,30 +6206,30 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "reasoning-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "Hello",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": ", ",
               "type": "text-delta",
             },
             {
-              "id": "2",
+              "id": "text-2",
               "providerMetadata": undefined,
               "type": "text-start",
             },
             {
-              "id": "2",
+              "id": "text-2",
               "providerMetadata": undefined,
               "text": "This ",
               "type": "text-delta",
             },
             {
-              "id": "2",
+              "id": "text-2",
               "providerMetadata": undefined,
               "text": "is ",
               "type": "text-delta",
@@ -6208,13 +6252,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "reasoning-delta",
             },
             {
-              "id": "2",
+              "id": "text-2",
               "providerMetadata": undefined,
               "text": "a",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "world!",
               "type": "text-delta",
@@ -6225,13 +6269,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "reasoning-end",
             },
             {
-              "id": "2",
+              "id": "text-2",
               "providerMetadata": undefined,
               "text": " test.",
               "type": "text-delta",
             },
             {
-              "id": "2",
+              "id": "text-2",
               "providerMetadata": undefined,
               "type": "text-end",
             },
@@ -6241,7 +6285,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "reasoning-end",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-end",
             },
@@ -6404,6 +6448,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let pullCalls = 0;
 
         result = await loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           options: {
@@ -6489,18 +6534,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "warnings": [],
             },
             {
-              "id": "1",
+              "id": "id-2",
               "providerMetadata": undefined,
               "type": "text-start",
             },
             {
-              "id": "1",
+              "id": "id-2",
               "providerMetadata": undefined,
               "text": "Hello",
               "type": "text-delta",
             },
             {
               "type": "abort",
+            },
+            {
+              "finishReason": "tripwire",
+              "totalUsage": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0,
+              },
+              "type": "finish",
             },
           ]
         `);
@@ -6517,16 +6571,19 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start-step",
             },
             {
-              "id": "1",
+              "id": "id-2",
               "type": "text-start",
             },
             {
               "delta": "Hello",
-              "id": "1",
+              "id": "id-2",
               "type": "text-delta",
             },
             {
               "type": "abort",
+            },
+            {
+              "type": "finish",
             },
           ]
         `);
@@ -6547,6 +6604,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let streamCalls = 0;
 
         result = loopFn({
+          methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
           models: [
@@ -6789,18 +6847,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "warnings": [],
             },
             {
-              "id": "1",
+              "id": "id-2",
               "providerMetadata": undefined,
               "type": "text-start",
             },
             {
-              "id": "1",
+              "id": "id-2",
               "providerMetadata": undefined,
               "text": "Hello",
               "type": "text-delta",
             },
             {
               "type": "abort",
+            },
+            {
+              "finishReason": "tripwire",
+              "totalUsage": {
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "totalTokens": 13,
+              },
+              "type": "finish",
             },
           ]
         `);
@@ -6836,16 +6903,19 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start-step",
             },
             {
-              "id": "1",
+              "id": "id-2",
               "type": "text-start",
             },
             {
               "delta": "Hello",
-              "id": "1",
+              "id": "id-2",
               "type": "text-delta",
             },
             {
               "type": "abort",
+            },
+            {
+              "type": "finish",
             },
           ]
         `);

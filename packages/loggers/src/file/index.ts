@@ -1,5 +1,5 @@
-import type { WriteStream } from 'fs';
-import { createWriteStream, existsSync, readFileSync } from 'fs';
+import type { WriteStream } from 'node:fs';
+import { createWriteStream, existsSync, readFileSync } from 'node:fs';
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 

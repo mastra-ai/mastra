@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from './default';
-import { CloudExporter, DefaultExporter } from './exporters';
+import { CloudExporter, DefaultExporter, TestExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -32,6 +32,7 @@ describe('Observability Registry', () => {
         serviceName: 'registry-test',
         name: 'registry-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('my-tracing', tracing);
@@ -43,6 +44,7 @@ describe('Observability Registry', () => {
         serviceName: 'registry-test',
         name: 'registry-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
       observability.registerInstance('test', tracing);
 
@@ -56,11 +58,13 @@ describe('Observability Registry', () => {
         serviceName: 'test-1',
         name: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
       const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'test-2',
         name: 'instance-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('first', tracing1);
@@ -75,11 +79,13 @@ describe('Observability Registry', () => {
         serviceName: 'test-1',
         name: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
       const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'test-2',
         name: 'instance-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('duplicate', tracing1);
@@ -94,6 +100,7 @@ describe('Observability Registry', () => {
         serviceName: 'test-1',
         name: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('test', tracing);
@@ -112,6 +119,7 @@ describe('Observability Registry', () => {
         serviceName: 'enabled-test',
         name: 'enabled-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('enabled', enabledTracing);
@@ -125,6 +133,7 @@ describe('Observability Registry', () => {
         serviceName: 'config-test',
         name: 'config-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('config-test', tracing);
@@ -140,11 +149,13 @@ describe('Observability Registry', () => {
         serviceName: 'console-tracing',
         name: 'console-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
       const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'langfuse-tracing',
         name: 'langfuse-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('console', tracing1);
@@ -176,6 +187,7 @@ describe('Observability Registry', () => {
         serviceName: 'default-tracing',
         name: 'default-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability.registerInstance('default', tracing1, true); // Explicitly set as default
@@ -195,11 +207,13 @@ describe('Observability Registry', () => {
         serviceName: 'first-tracing',
         name: 'first-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
       const tracing2 = new DefaultObservabilityInstance({
         serviceName: 'second-tracing',
         name: 'second-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       // First registered becomes default automatically
@@ -219,7 +233,7 @@ describe('Observability Registry', () => {
       const tracingConfig: ObservabilityInstanceConfig = {
         serviceName: 'test-service',
         name: 'test-instance',
-        exporters: [],
+        exporters: [new TestExporter()],
       };
 
       observability = new Observability({
@@ -240,6 +254,7 @@ describe('Observability Registry', () => {
       const tracingConfig: ObservabilityInstanceConfig = {
         serviceName: 'default-sampling-test',
         name: 'default-sampling-instance',
+        exporters: [new TestExporter()],
       };
 
       observability = new Observability({
@@ -283,6 +298,7 @@ describe('Observability Registry', () => {
         serviceName: 'custom-service',
         name: 'custom-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability = new Observability({
@@ -309,13 +325,14 @@ describe('Observability Registry', () => {
         serviceName: 'custom-service',
         name: 'custom-instance',
         sampling: { type: SamplingStrategyType.NEVER },
+        exporters: [new TestExporter()],
       });
 
       observability = new Observability({
         configs: {
           standard: {
             serviceName: 'standard-service',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
           custom: customInstance,
         },
@@ -353,6 +370,7 @@ describe('Observability Registry', () => {
         serviceName: 'test-service',
         name: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
       });
 
       observability = new Observability({
@@ -382,15 +400,15 @@ describe('Observability Registry', () => {
         configs: {
           console: {
             serviceName: 'console-service',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
           langfuse: {
             serviceName: 'langfuse-service',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
           datadog: {
             serviceName: 'datadog-service',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
         },
         configSelector: selector,
@@ -457,15 +475,15 @@ describe('Observability Registry', () => {
       }).not.toThrow();
     });
 
-    it('should handle minimal config with just selector', () => {
+    it('should reject config with just selector (no configs or default)', () => {
       const selector: ConfigSelector = () => undefined;
 
       expect(() => {
         observability = new Observability({
           configSelector: selector,
-          // No default, no configs
+          // No default, no configs - this should throw
         });
-      }).not.toThrow();
+      }).toThrow('A "configSelector" requires at least one config or default observability to be configured');
     });
 
     it('should handle config with null configs property', () => {
@@ -522,7 +540,7 @@ describe('Observability Registry', () => {
           configs: {
             test: {
               serviceName: 'test-service',
-              exporters: [],
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -536,7 +554,7 @@ describe('Observability Registry', () => {
           configs: {
             test: {
               serviceName: 'test-service',
-              exporters: [],
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -550,7 +568,7 @@ describe('Observability Registry', () => {
           configs: {
             test: {
               serviceName: 'test-service',
-              exporters: [],
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -564,7 +582,7 @@ describe('Observability Registry', () => {
           configs: {
             test: {
               serviceName: 'test-service',
-              exporters: [],
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -625,7 +643,7 @@ describe('Observability Registry', () => {
         configs: {
           custom: {
             serviceName: 'custom-service',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
         },
       });
@@ -643,7 +661,7 @@ describe('Observability Registry', () => {
         configs: {
           custom: {
             serviceName: 'custom-service',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
         },
       });
@@ -659,7 +677,7 @@ describe('Observability Registry', () => {
           configs: {
             myConfig: {
               serviceName: 'my-custom-service',
-              exporters: [],
+              exporters: [new TestExporter()],
             },
           },
         });
@@ -672,7 +690,7 @@ describe('Observability Registry', () => {
         configs: {
           default: {
             serviceName: 'my-custom-default',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
         },
       });
@@ -687,11 +705,11 @@ describe('Observability Registry', () => {
         configs: {
           custom1: {
             serviceName: 'custom-service-1',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
           custom2: {
             serviceName: 'custom-service-2',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
         },
         configSelector: () => 'custom1', // Required when multiple configs are present
@@ -722,11 +740,11 @@ describe('Observability Registry', () => {
         configs: {
           config1: {
             serviceName: 'service-1',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
           config2: {
             serviceName: 'service-2',
-            exporters: [],
+            exporters: [new TestExporter()],
           },
         },
         configSelector: selector,
@@ -768,9 +786,7 @@ describe('Observability Registry', () => {
           'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
         ),
       );
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
-      );
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Sign up at https://cloud.mastra.ai'));
 
       // Verify exporter is disabled but doesn't throw
       const event = {

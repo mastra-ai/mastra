@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
@@ -83,7 +83,10 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
+
+const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
+const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai'];
 
 interface ProviderInfo {
   id: string;
@@ -138,6 +141,10 @@ async function parseProviders(): Promise<GroupedProviders> {
   const other: ProviderInfo[] = [];
 
   for (const [id, config] of Object.entries<ProviderConfig>(PROVIDER_REGISTRY)) {
+    if (MANUALLY_DOCUMENTED_PROVIDERS.includes(id)) {
+      continue;
+    }
+
     // Check if it's a standalone gateway (like vercel, netlify, etc.)
     const isGateway = GATEWAY_PROVIDERS.includes(id);
 
@@ -182,6 +189,14 @@ async function parseProviders(): Promise<GroupedProviders> {
 
   // Sort other providers alphabetically
   other.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Ensure manually documented gateways are present in the grouped map so that
+  // navigation pages can still reference them without generating files.
+  for (const gatewayId of MANUALLY_DOCUMENTED_GATEWAYS) {
+    if (!gateways.has(gatewayId)) {
+      gateways.set(gatewayId, []);
+    }
+  }
 
   return { gateways, popular, other };
 }
@@ -567,7 +582,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 
 <Tabs>
   <TabItem value="OpenAI" label="OpenAI">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -579,7 +594,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="Anthropic" label="Anthropic">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -591,7 +606,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="Google Gemini" label="Google Gemini">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -603,7 +618,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="xAI" label="xAI">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -615,7 +630,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="OpenRouter" label="OpenRouter">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -713,7 +728,7 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
@@ -734,9 +749,9 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server-db/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server/request-context), variables, or any other logic.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 const agent = new Agent({
   id: "dynamic-assistant",
   name: "Dynamic Assistant",
@@ -758,7 +773,7 @@ This enables powerful patterns:
 
 Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 // Agent level (apply to all future messages)
 const planner = new Agent({
   id: "planner",
@@ -793,7 +808,7 @@ const highEffort = await planner.generate([
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
 
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 const agent = new Agent({
   id: "custom-agent",
   name: "Custom Agent",
@@ -818,7 +833,7 @@ Configuration differs by provider. See the provider pages in the left navigation
 Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
 
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
@@ -850,7 +865,7 @@ Your users never experience the disruption - the response comes back with the sa
 Mastra supports AI SDK provider modules, should you need to use them directly.
 
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core/agent";
 
@@ -883,9 +898,27 @@ import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";${
 
 Gateway providers aggregate multiple model providers and add features like caching, rate limiting, analytics, and automatic failover. Use gateways when you need observability, cost management, or simplified multi-provider access.
 
+## Custom Gateways
+
+Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/v1/gateways/custom-gateways) for implementation details.
+
+## Built-in Gateways
+
 <CardGrid>
 ${gatewaysList
   .map(g => {
+    // Custom descriptions for manually documented gateways
+    if (MANUALLY_DOCUMENTED_GATEWAYS.includes(g)) {
+      if (g === 'azure-openai') {
+        return `    <CardGridItem
+      title="Azure OpenAI"
+      description="Use your private Azure OpenAI deployments with associated deployment names"
+      href="/models/v1/gateways/${g}"
+      logo="${getLogoUrl(g)}"
+    />`;
+      }
+    }
+
     if (g === 'netlify') {
       return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
@@ -1011,11 +1044,16 @@ function generateGatewaysSidebarItems(grouped: GroupedProviders): any[] {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  const items = [{ type: 'doc', id: 'gateways/index', label: 'Gateways' }];
+  const items = [
+    { type: 'doc', id: 'gateways/index', label: 'Gateways' },
+    { type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' },
+  ];
 
   for (const gatewayId of gatewaysList) {
     const providers = grouped.gateways.get(gatewayId);
-    if (providers && providers.length > 0) {
+    // Include manually documented gateways even if they have no providers
+    const isManuallyDocumented = MANUALLY_DOCUMENTED_GATEWAYS.includes(gatewayId);
+    if ((providers && providers.length > 0) || isManuallyDocumented) {
       const name = formatProviderName(gatewayId);
       items.push({
         type: 'doc',
@@ -1130,11 +1168,13 @@ async function generateDocs() {
 
   // Generate individual provider pages (parallelized)
   await Promise.all(
-    [...grouped.popular, ...grouped.other].map(async provider => {
-      const content = await generateProviderPage(provider, providerRegistry);
-      await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-      console.info(`✅ Generated providers/${provider.id}.mdx`);
-    }),
+    [...grouped.popular, ...grouped.other]
+      .filter(provider => !MANUALLY_DOCUMENTED_PROVIDERS.includes(provider.id))
+      .map(async provider => {
+        const content = await generateProviderPage(provider, providerRegistry);
+        await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+        console.info(`✅ Generated providers/${provider.id}.mdx`);
+      }),
   );
 
   // Generate individual AI SDK provider pages (parallelized, only if they have AI SDK docs)
@@ -1156,11 +1196,13 @@ async function generateDocs() {
 
   // Generate individual gateway pages (parallelized)
   await Promise.all(
-    Array.from(grouped.gateways.entries()).map(async ([gatewayName, providers]) => {
-      const content = generateGatewayPage(gatewayName, providers, providerRegistry);
-      await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
-      console.info(`✅ Generated gateways/${gatewayName}.mdx`);
-    }),
+    Array.from(grouped.gateways.entries())
+      .filter(([gatewayName]) => !MANUALLY_DOCUMENTED_GATEWAYS.includes(gatewayName))
+      .map(async ([gatewayName, providers]) => {
+        const content = generateGatewayPage(gatewayName, providers, providerRegistry);
+        await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
+        console.info(`✅ Generated gateways/${gatewayName}.mdx`);
+      }),
   );
 
   // Generate sidebars.js (including AI SDK providers with docs)

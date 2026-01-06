@@ -1,16 +1,6 @@
-import { ThreadMessageLike, MessageStatus, CompleteAttachment } from '@assistant-ui/react';
-import { MastraUIMessage } from '../types';
+import { ThreadMessageLike, MessageStatus, DataMessagePart } from '@assistant-ui/react';
+import { ExtendedMastraUIMessage, MastraUIMessage } from '../types';
 import { ReadonlyJSONObject } from '@mastra/core/stream';
-
-/**
- * Extended type for MastraUIMessage that may include additional properties
- * from different sources (generate, toUIMessage, toNetworkUIMessage)
- */
-type ExtendedMastraUIMessage = MastraUIMessage & {
-  createdAt?: Date;
-  metadata?: Record<string, unknown>;
-  experimental_attachments?: readonly CompleteAttachment[];
-};
 
 type ContentPart = { metadata?: Record<string, unknown> } & (Exclude<
   ThreadMessageLike['content'],
@@ -127,13 +117,14 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
     // Handle typed tool parts (tool-{NAME} pattern from AI SDK)
     if (part.type.startsWith('tool-') && (part as any).state !== 'input-available') {
       const toolName = 'toolName' in part && typeof part.toolName === 'string' ? part.toolName : part.type.substring(5);
+      const { suspendedToolRunId, ...cleanInput } = 'input' in part ? (part.input as any) : {};
 
       const baseToolCall: ContentPart = {
         type: 'tool-call' as const,
         toolCallId: 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : '',
         toolName,
-        argsText: 'input' in part ? JSON.stringify(part.input) : '{}',
-        args: 'input' in part ? part.input : {},
+        argsText: JSON.stringify(cleanInput ?? {}),
+        args: cleanInput ?? {},
         metadata: message.metadata,
       };
 
@@ -145,6 +136,45 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
       }
 
       return baseToolCall;
+    }
+
+    const toolName =
+      'toolName' in part && typeof part.toolName === 'string'
+        ? part.toolName
+        : part.type.startsWith('tool-')
+          ? part.type.substring(5)
+          : '';
+    // Extract requireApprovalMetadata from message metadata (if any)
+    const requireApprovalMetadata = extendedMessage.metadata?.requireApprovalMetadata as
+      | Record<string, any>
+      | undefined;
+    const suspendedTools = extendedMessage.metadata?.suspendedTools as Record<string, any> | undefined;
+
+    // Check if this part has a toolCallId that matches requireApprovalMetadata
+    const partToolCallId = 'toolCallId' in part && typeof part.toolCallId === 'string' ? part.toolCallId : undefined;
+    const suspensionData = toolName ? (requireApprovalMetadata?.[toolName] ?? suspendedTools?.[toolName]) : undefined;
+    if (suspensionData) {
+      const { suspendedToolRunId, ...cleanInput } = 'input' in part ? (part.input as any) : {};
+      return {
+        type: 'tool-call' as const,
+        toolCallId: partToolCallId!,
+        toolName,
+        argsText: JSON.stringify(cleanInput ?? {}),
+        args: cleanInput as ReadonlyJSONObject,
+        metadata: extendedMessage.metadata,
+      };
+    }
+
+    // Handle data parts (persisted from data-* chunks via writer.custom())
+    // These parts have type: 'data-*' (e.g., 'data-progress') and contain data field
+    // Convert to DataMessagePart format: { type: 'data', name: 'progress', data: ... }
+    if (part.type.startsWith('data-')) {
+      return {
+        type: 'data',
+        name: part.type.substring(5), // Extract name from 'data-{name}'
+        data: (part as any).data,
+        metadata: message.metadata,
+      };
     }
 
     // For any other part types, return a minimal text part

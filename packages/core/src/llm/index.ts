@@ -14,7 +14,7 @@ import type {
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from '@internal/ai-sdk-v4';
-import type { SystemModelMessage } from 'ai-v5';
+import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
@@ -148,6 +148,8 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
 
-export type { ProviderConfig } from './model/gateways/base';
+export type { ProviderConfig, GatewayLanguageModel } from './model/gateways/base';
+export { MastraModelGateway, NetlifyGateway, ModelsDevGateway, AzureOpenAIGateway } from './model/gateways';
+export type { AzureOpenAIGatewayConfig } from './model/gateways';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId } from './model';

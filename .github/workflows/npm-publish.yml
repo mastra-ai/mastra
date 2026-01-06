@@ -1,0 +1,351 @@
+name: Publish to npm
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_type:
+        description: 'Type of publish'
+        required: true
+        type: choice
+        options:
+          - prerelease
+          - stable
+          - snapshot
+        default: prerelease
+      tag:
+        description: 'npm tag (for snapshot: custom tag, otherwise auto-determined)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (no actual publish)'
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+      - 0.x
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  # ===========================================
+  # PRERELEASE: Triggered on push to main/0.x
+  # ===========================================
+  prerelease:
+    if: |
+      github.repository == 'mastra-ai/mastra' && 
+      (
+        (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: version packages') && github.event.head_commit.author.username == 'dane-ai-mastra[bot]') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_type == 'prerelease')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run build
+        run: pnpm build
+
+      - name: Determine publish tag
+        id: determine-tag
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [[ "$BRANCH_NAME" == "main" ]]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH_NAME" == "0.x" ]]; then
+            echo "tag=alpha" >> $GITHUB_OUTPUT
+          else
+            echo "tag=alpha" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish packages
+        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+  # ===========================================
+  # STABLE RELEASE: Manual trigger only
+  # ===========================================
+  stable:
+    if: |
+      github.repository == 'mastra-ai/mastra' && 
+      github.event_name == 'workflow_dispatch' && 
+      github.event.inputs.publish_type == 'stable'
+    runs-on: ubuntu-latest
+    outputs:
+      exited_prerelease: ${{ steps.exit-prerelease-mode.outputs.executed }}
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Check for pre.json file existence
+        id: check_files
+        uses: andstor/file-existence-action@v3.0.0
+        with:
+          files: '.changeset/pre.json'
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Exit prerelease mode
+        id: exit-prerelease-mode
+        if: steps.check_files.outputs.files_exists == 'true'
+        run: |
+          pnpm changeset-cli pre exit
+          pnpm changeset-cli version
+          git pull
+          git add -A
+          git commit -m 'chore: version - exit prerelease mode' --no-verify
+          git push
+          echo "executed=true" >> "$GITHUB_OUTPUT"
+          pnpm install
+          pnpm build
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+      - name: Push version changes
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git push
+          pnpm install
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+      - name: Publish packages
+        if: ${{ !inputs.dry_run }}
+        run: pnpm publish -r --access public --no-git-checks
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Updated alpha versions
+        if: ${{ !inputs.dry_run }}
+        run: node .github/scripts/publish-alpha-tags.js alpha
+
+      - name: Publish packages - dry run
+        if: ${{ inputs.dry_run }}
+        run: pnpm publish -r --dry-run --access public --no-git-checks
+
+      - name: Add tags
+        run: |
+          pnpm changeset-cli tag;
+          git push --follow-tags
+
+  enter_prerelease:
+    needs: stable
+    if: |
+      github.repository == 'mastra-ai/mastra' && 
+      needs.stable.outputs.exited_prerelease == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Enter prerelease mode
+        run: |
+          git pull
+          pnpm changeset-cli pre enter alpha
+          git add -A
+          git commit -m 'chore: version - enter prerelease mode' --no-verify
+
+      - name: Push prerelease changes
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git push --follow-tags
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+  # ===========================================
+  # SNAPSHOT: Manual trigger only (non-main branches)
+  # ===========================================
+  snapshot:
+    if: |
+      github.repository == 'mastra-ai/mastra' && 
+      github.event_name == 'workflow_dispatch' && 
+      github.event.inputs.publish_type == 'snapshot' &&
+      github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Ensure npm 11.5.1+ for OIDC
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Generate slugified branch name
+        id: slugify
+        run: |
+          BRANCH_NAME="$GITHUB_REF_NAME"
+          SLUG=$(echo "$BRANCH_NAME" | iconv -t ascii//TRANSLIT | sed -r 's/[^a-zA-Z0-9]+/-/g' | sed -r 's/^-+\|-+$//g' | tr 'A-Z' 'a-z')
+          echo "SLUG_BRANCH_NAME=$SLUG" >> "$GITHUB_ENV"
+          echo "Slugified branch name: $SLUG"
+
+      - name: Determine final tag
+        id: determine_tag
+        run: |
+          if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+            echo "Using slugified branch name as tag: ${{ env.SLUG_BRANCH_NAME }}"
+            echo "FINAL_TAG=${{ env.SLUG_BRANCH_NAME }}" >> "$GITHUB_ENV"
+          else
+            echo "Using provided tag: ${{ github.event.inputs.tag }}"
+            echo "FINAL_TAG=${{ github.event.inputs.tag }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Update workspace dependencies
+        run: |
+          for file in $(find . -type f -name package.json -not -path "./node_modules/*" -not -path "./package.json"); do
+            content="$(< "$file")"
+            updated="$(echo "$content" | sed -E 's/"workspace:\^"/"workspace:*"/g')"
+            updated="$(echo "$updated" | sed 's/"@mastra\/\([^"]*\)":[[:space:]]"[^"]*"/"@mastra\/\1": "workspace:*"/g')"
+            if [ "$content" != "$updated" ]; then
+              echo "Updating $file"
+              echo "$updated" > "$file"
+              changed_count=$((changed_count + 1))
+            fi
+          done
+          echo "Finished updating workspace dependencies. $changed_count files updated."
+        shell: bash
+
+      - name: Build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+
+      - name: Run Changeset Pre Exit
+        run: pnpm changeset-cli pre exit
+
+      - name: Run Changeset Version Snapshot
+        run: pnpm changeset-cli version --snapshot ${{ env.FINAL_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+      - name: Publish to npm
+        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true

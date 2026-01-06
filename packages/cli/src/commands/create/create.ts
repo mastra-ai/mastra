@@ -1,6 +1,7 @@
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-
 import pkgJson from '../../../package.json';
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
@@ -11,7 +12,7 @@ import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import type { Component, LLMProvider } from '../init/utils';
 import { LLM_PROVIDERS } from '../init/utils';
-import { getPackageManager } from '../utils.js';
+import { getPackageManager, gitInit } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
@@ -309,6 +310,19 @@ async function createFromTemplate(args: {
     llmProvider = providerResponse as LLMProvider;
   }
 
+  // Handle git initialization for templates
+  let initGit = false;
+  const gitConfirmResult = await p.confirm({
+    message: 'Initialize a new git repository?',
+    initialValue: true,
+  });
+
+  if (!p.isCancel(gitConfirmResult)) {
+    initGit = gitConfirmResult;
+  }
+
+  let projectPath: string | null = null;
+
   try {
     // Track template usage
     const analytics = args.injectedAnalytics || getAnalytics();
@@ -332,7 +346,7 @@ async function createFromTemplate(args: {
     const branch = isBeta && isMastraTemplate ? 'beta' : undefined;
 
     // Clone the template
-    const projectPath = await cloneTemplate({
+    projectPath = await cloneTemplate({
       template: selectedTemplate,
       projectName,
       branch,
@@ -341,6 +355,19 @@ async function createFromTemplate(args: {
 
     // Install dependencies
     await installDependencies(projectPath);
+
+    if (initGit) {
+      const s = p.spinner();
+      try {
+        s.start('Initializing git repository');
+
+        await gitInit({ cwd: projectPath });
+
+        s.stop('Git repository initialized');
+      } catch {
+        s.stop();
+      }
+    }
 
     p.note(`
       ${color.green('Mastra template installed!')}
@@ -352,6 +379,19 @@ async function createFromTemplate(args: {
     // Show completion message
     postCreate({ projectName });
   } catch (error) {
+    // Clean up: remove the created directory on failure
+    if (projectPath) {
+      try {
+        if (fsSync.existsSync(projectPath)) {
+          await fs.rm(projectPath, { recursive: true, force: true });
+        }
+      } catch (cleanupError) {
+        // Log but don't throw - we want to exit with the original error
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
+      }
+    }
     p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     throw error;
   }

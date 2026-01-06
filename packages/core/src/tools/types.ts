@@ -1,4 +1,4 @@
-import type { WritableStream } from 'stream/web';
+import type { WritableStream } from 'node:stream/web';
 import type {
   Tool,
   ToolV5,
@@ -14,7 +14,8 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
+import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
+import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -34,7 +35,7 @@ export interface AgentToolExecutionContext<
   // Always present when called from agent context
   toolCallId: string;
   messages: any[];
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
 
   // Optional - memory identifiers
   threadId?: string;
@@ -57,7 +58,7 @@ export interface WorkflowToolExecutionContext<
   workflowId: string;
   state: any;
   setState: (state: any) => void;
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
 
   // Optional - only present if workflow step was previously suspended
   resumeData?: InferZodLikeSchema<TResumeSchema>;
@@ -86,9 +87,9 @@ export interface MCPToolExecutionContext {
  * - Returns: Results back to AI SDK
  */
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
-  suspend?: (suspendPayload: any) => Promise<any>;
+  suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
   resumeData?: any;
-  writableStream?: WritableStream<any> | ToolStream<any>;
+  outputWriter?: OutputWriter;
   tracingContext?: TracingContext;
   /**
    * Optional MCP-specific context passed when tool is executed in MCP server.
@@ -132,6 +133,10 @@ export type CoreTool = {
   outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
+   * Provider-specific options passed to the model when this tool is used.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
+  /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
    */
@@ -159,6 +164,10 @@ export type InternalCoreTool = {
   parameters: Schema;
   outputSchema?: Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
+  /**
+   * Provider-specific options passed to the model when this tool is used.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
@@ -189,7 +198,7 @@ export interface ToolExecutionContext<
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
-  writer?: ToolStream<any>;
+  writer?: ToolStream;
 
   // ============ Context-specific nested properties ============
 
@@ -212,8 +221,9 @@ export interface ToolAction<
     TSuspendSchema,
     TResumeSchema
   >,
+  TId extends string = string,
 > {
-  id: string;
+  id: TId;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
@@ -224,12 +234,29 @@ export interface ToolAction<
   // Second parameter: unified execution context with all metadata
   // Returns: The expected output OR a validation error if input validation fails
   // Note: When no outputSchema is provided, returns any to allow property access
+  // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
+  // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (
     inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
     context?: TContext,
-  ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any) | ValidationError>;
+  ) => Promise<
+    (TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> & { error?: never } : any) | ValidationError
+  >;
   mastra?: Mastra;
   requireApproval?: boolean;
+  /**
+   * Provider-specific options passed to the model when this tool is used.
+   * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
+   * @example
+   * ```typescript
+   * providerOptions: {
+   *   anthropic: {
+   *     cacheControl: { type: 'ephemeral' }
+   *   }
+   * }
+   * ```
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {
@@ -240,5 +267,11 @@ export interface ToolAction<
     options: {
       input: InferZodLikeSchema<TSchemaIn>;
     } & ToolCallOptions,
+  ) => void | PromiseLike<void>;
+  onOutput?: (
+    options: {
+      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+      toolName: string;
+    } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
 }

@@ -1,6 +1,8 @@
 ---
 title: "Reference: voice.updateConfig() | Voice"
 description: "Documentation for the updateConfig() method available in voice providers, which updates the configuration of a voice provider at runtime."
+packages:
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.updateConfig()
@@ -15,7 +17,7 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
   speaker: "alloy",

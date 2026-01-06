@@ -1,6 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { WorkflowInfo } from '@mastra/core/workflows';
-import type { ClientOptions } from '../types';
+import type { ClientOptions, ListWorkflowRunsParams } from '../types';
 import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
@@ -315,41 +315,10 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Streams agent builder action progress in real-time using VNext streaming.
-   * This calls `/api/agent-builder/:actionId/streamVNext`.
-   */
-  async streamVNext(params: AgentBuilderActionRequest, runId?: string) {
-    const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
-    }
-
-    const requestContext = parseClientRequestContext(params.requestContext);
-    const { requestContext: _, ...actionParams } = params;
-
-    const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      body: { ...actionParams, requestContext },
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to stream agent builder action VNext: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
    * Observes an existing agent builder action run stream.
    * Replays cached execution from the beginning, then continues with live stream.
    * This is the recommended method for recovery after page refresh/hot reload.
-   * This calls `/api/agent-builder/:actionId/observe` (which delegates to observeStreamVNext).
+   * This calls `/api/agent-builder/:actionId/observe`
    */
   async observeStream(params: { runId: string }) {
     const searchParams = new URLSearchParams();
@@ -363,32 +332,6 @@ export class AgentBuilder extends BaseResource {
 
     if (!response.ok) {
       throw new Error(`Failed to observe agent builder action stream: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
-   * Observes an existing agent builder action run stream using VNext streaming API.
-   * Replays cached execution from the beginning, then continues with live stream.
-   * This calls `/api/agent-builder/:actionId/observe-streamVNext`.
-   */
-  async observeStreamVNext(params: { runId: string }) {
-    const searchParams = new URLSearchParams();
-    searchParams.set('runId', params.runId);
-
-    const url = `/api/agent-builder/${this.actionId}/observe-streamVNext?${searchParams.toString()}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to observe agent builder action stream VNext: ${response.statusText}`);
     }
 
     if (!response.body) {
@@ -482,7 +425,7 @@ export class AgentBuilder extends BaseResource {
    * Gets all runs for this agent builder action.
    * This calls `/api/agent-builder/:actionId/runs`.
    */
-  async runs(params?: { fromDate?: Date; toDate?: Date; perPage?: number; page?: number; resourceId?: string }) {
+  async runs(params?: ListWorkflowRunsParams) {
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -495,6 +438,17 @@ export class AgentBuilder extends BaseResource {
     }
     if (params?.page !== undefined) {
       searchParams.set('page', String(params.page));
+    }
+    // Legacy support: also send limit/offset if provided (for older servers)
+    if (params?.limit !== null && params?.limit !== undefined) {
+      if (params.limit === false) {
+        searchParams.set('limit', 'false');
+      } else if (typeof params.limit === 'number' && params.limit > 0 && Number.isInteger(params.limit)) {
+        searchParams.set('limit', String(params.limit));
+      }
+    }
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
+      searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);

@@ -1,4 +1,3 @@
-import { removeAllOptionsExceptBundler } from './babel/remove-all-options-bundler';
 import type { Config } from '@mastra/core/mastra';
 import { extractMastraOption, extractMastraOptionBundler } from './shared/extract-mastra-option';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -9,7 +8,7 @@ export function getBundlerOptionsBundler(
     hasCustomConfig: false;
   },
 ) {
-  return extractMastraOptionBundler('bundler', entryFile, removeAllOptionsExceptBundler, result);
+  return extractMastraOptionBundler('bundler', entryFile, result);
 }
 
 export async function getBundlerOptions(
@@ -17,13 +16,7 @@ export async function getBundlerOptions(
   outputDir: string,
   logger?: IMastraLogger,
 ): Promise<Config['bundler'] | null> {
-  const result = await extractMastraOption<Config['bundler']>(
-    'bundler',
-    entryFile,
-    removeAllOptionsExceptBundler,
-    outputDir,
-    logger,
-  );
+  const result = await extractMastraOption('bundler', entryFile, outputDir, logger);
 
   if (!result) {
     return null;

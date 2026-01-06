@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
 import {
   CreateTableCommand,
   DeleteTableCommand,
@@ -8,9 +8,19 @@ import {
   waitUntilTableExists,
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
-import { createTestSuite } from '@internal/storage-test-utils';
-import { beforeAll, describe } from 'vitest';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import {
+  createTestSuite,
+  createClientAcceptanceTests,
+  createConfigValidationTests,
+  createDomainDirectTests,
+} from '@internal/storage-test-utils';
+import { beforeAll, describe, expect, it } from 'vitest';
+
 import { DynamoDBStore } from '..';
+import { MemoryStorageDynamoDB } from './domains/memory';
+import { ScoresStorageDynamoDB } from './domains/scores';
+import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
 const LOCAL_ENDPOINT = 'http://localhost:8000';
@@ -21,6 +31,19 @@ let dynamodbProcess: ReturnType<typeof spawn>;
 
 // AWS SDK Client for setup/teardown
 let setupClient: DynamoDBClient;
+
+// Helper to create a pre-configured DynamoDB client
+const createTestClient = () => {
+  const dynamoClient = new DynamoDBClient({
+    endpoint: LOCAL_ENDPOINT,
+    region: LOCAL_REGION,
+    credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+    maxAttempts: 5,
+  });
+  return DynamoDBDocumentClient.from(dynamoClient, {
+    marshallOptions: { removeUndefinedValues: true },
+  });
+};
 
 // Function to wait for DynamoDB Local to be ready
 async function waitForDynamoDBLocal(client: DynamoDBClient, timeoutMs = 90000): Promise<void> {
@@ -234,4 +257,140 @@ describe('DynamoDBStore', () => {
       },
     }),
   );
+
+  // Pre-configured client acceptance tests
+  createClientAcceptanceTests({
+    storeName: 'DynamoDBStore',
+    expectedStoreName: 'DynamoDBStoreWithClient',
+    createStoreWithClient: () =>
+      new DynamoDBStore({
+        name: 'DynamoDBStoreWithClient',
+        config: {
+          id: 'dynamodb-client-test',
+          tableName: TEST_TABLE_NAME,
+          client: createTestClient(),
+        },
+      }),
+  });
+
+  // Configuration validation tests
+  createConfigValidationTests({
+    storeName: 'DynamoDBStore',
+    createStore: config =>
+      new DynamoDBStore({
+        name: 'test',
+        config: config as any,
+      }),
+    validConfigs: [
+      {
+        description: 'region, endpoint, and credentials',
+        config: {
+          id: 'test-store',
+          tableName: 'test-table',
+          region: 'us-east-1',
+          endpoint: 'http://localhost:8000',
+          credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+        },
+      },
+      {
+        description: 'minimal config with just tableName',
+        config: { id: 'test-store', tableName: 'test-table' },
+      },
+      {
+        description: 'pre-configured DynamoDBDocumentClient',
+        config: { id: 'test-store', tableName: 'test-table', client: createTestClient() },
+      },
+      {
+        description: 'disableInit: true',
+        config: { id: 'test-store', tableName: 'test-table', disableInit: true },
+      },
+      {
+        description: 'disableInit: false',
+        config: { id: 'test-store', tableName: 'test-table', disableInit: false },
+      },
+    ],
+    invalidConfigs: [
+      {
+        description: 'empty tableName',
+        config: { id: 'test-store', tableName: '' },
+        expectedError: /tableName must be provided/,
+      },
+      {
+        description: 'tableName with invalid characters',
+        config: { id: 'test-store', tableName: 'invalid@table#name' },
+        expectedError: /invalid characters/,
+      },
+      {
+        description: 'tableName too short',
+        config: { id: 'test-store', tableName: 'ab' },
+        expectedError: /invalid characters|not between 3 and 255/,
+      },
+    ],
+  });
+
+  // Domain-level pre-configured client tests
+  createDomainDirectTests({
+    storeName: 'DynamoDB',
+    createMemoryDomain: () =>
+      new MemoryStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+    createWorkflowsDomain: () =>
+      new WorkflowStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+    createScoresDomain: () =>
+      new ScoresStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+  });
+
+  // DynamoDB-specific: ElectroDB service integration test
+  describe('DynamoDB ElectroDB Service Integration', () => {
+    it('should allow using domains with pre-configured ElectroDB service', async () => {
+      // Create a DynamoDB client and ElectroDB service
+      const dynamoClient = new DynamoDBClient({
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+      const documentClient = DynamoDBDocumentClient.from(dynamoClient, {
+        marshallOptions: { removeUndefinedValues: true },
+      });
+
+      // Import the service factory
+      const { getElectroDbService } = await import('../entities');
+      const service = getElectroDbService(documentClient, TEST_TABLE_NAME);
+
+      const memoryDomain = new MemoryStorageDynamoDB({ service });
+
+      expect(memoryDomain).toBeDefined();
+      await memoryDomain.init();
+
+      // Test a basic operation to verify it works
+      const thread = {
+        id: `thread-service-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Service Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      // Clean up
+      await memoryDomain.deleteThread({ threadId: thread.id });
+    });
+  });
 });

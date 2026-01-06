@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { MastraError } from '@mastra/core/error';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 

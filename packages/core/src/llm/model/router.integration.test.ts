@@ -24,6 +24,8 @@ const testConfigs = [
     model: 'openai/gpt-4o-mini',
     envVar: 'OPENROUTER_API_KEY',
   },
+  // Note: Azure OpenAI is tested separately in azure.integration.test.ts
+  // It requires an AzureOpenAIGateway instance and can't use ModelsDevGateway
 ];
 
 // Simple tool for testing tool calling
@@ -50,7 +52,9 @@ describe('ModelRouter Integration Tests', () => {
 
     if (availableProviders.length === 0) {
       console.log('\n⚠️  No API keys configured. Set one or more of:');
-      testConfigs.forEach(({ envVar }) => console.log(`   - ${envVar}`));
+      testConfigs.forEach(({ envVar }) => {
+        console.log(`   - ${envVar}`);
+      });
       console.log('\nSkipping all integration tests.\n');
     } else {
       console.log('\n✅ Testing with providers:', availableProviders.join(', '));

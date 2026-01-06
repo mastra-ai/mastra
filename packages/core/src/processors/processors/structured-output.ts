@@ -1,7 +1,9 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { ProviderOptions } from '../../llm/model/provider-options';
+import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -25,7 +27,7 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Configurable error handling strategies
  * - Automatic instruction generation based on schema
  */
-export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
+export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor<'structured-output'> {
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
@@ -35,6 +37,8 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean;
+  private providerOptions?: ProviderOptions;
+  private logger?: IMastraLogger;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -58,6 +62,8 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
+    this.providerOptions = options.providerOptions;
+    this.logger = options.logger;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
@@ -70,14 +76,15 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   async processOutputStream(args: {
     part: ChunkType;
     streamParts: ChunkType[];
-    state: {
-      controller: TransformStreamDefaultController<ChunkType<OUTPUT>>;
+    state: Record<string, unknown> & {
+      controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
     };
-    abort: (reason?: string) => never;
+    abort: (reason?: string, options?: unknown) => never;
     tracingContext?: TracingContext;
+    retryCount: number;
   }): Promise<ChunkType | null | undefined> {
     const { part, state, streamParts, abort, tracingContext } = args;
-    const controller = state.controller;
+    const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
 
     switch (part.type) {
       case 'finish':
@@ -111,6 +118,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
           jsonPromptInjection: this.jsonPromptInjection,
         },
+        providerOptions: this.providerOptions,
         tracingContext,
       });
 
@@ -260,14 +268,14 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
 
     switch (this.errorStrategy) {
       case 'strict':
-        console.error(message);
+        this.logger?.error(message);
         abort(message);
         break;
       case 'warn':
-        console.warn(message);
+        this.logger?.warn(message);
         break;
       case 'fallback':
-        console.info(`${message} (using fallback)`);
+        this.logger?.info(`${message} (using fallback)`);
         break;
     }
   }
