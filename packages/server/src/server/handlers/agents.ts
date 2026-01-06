@@ -1060,6 +1060,8 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
   return null;
 }
 
+type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSchema>;
+
 export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/instructions/enhance',
@@ -1101,7 +1103,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
         },
       );
 
-      return await result.object;
+      return (await result.object) as unknown as EnhanceInstructionsResponse;
     } catch (error) {
       return handleError(error, 'Error enhancing instructions');
     }
