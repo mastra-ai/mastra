@@ -53,7 +53,7 @@ export async function setupStreamingMemoryTest({
         for await (const chunk of stream1.fullStream) {
           if (chunk.type === `text-delta`) {
             // Handle both v5+ (payload.text) and legacy (textDelta) formats
-            const text = (chunk as any).payload?.text ?? (chunk as any).textDelta;
+            const text = 'payload' in chunk ? chunk.payload.text : chunk.textDelta;
             if (text) chunks1.push(text);
           }
         }
@@ -229,7 +229,7 @@ export async function setupStreamingMemoryTest({
         ];
 
         // Save messages to storage
-        await memory.saveMessages({ messages: messagesWithDataParts as any });
+        await memory.saveMessages({ messages: messagesWithDataParts });
 
         // Recall messages from storage
         const recallResult = await memory.recall({
@@ -240,53 +240,46 @@ export async function setupStreamingMemoryTest({
         expect(recallResult.messages.length).toBe(3);
 
         // Verify data-* parts are present in recalled messages (DB format)
-        const assistantMessages = recallResult.messages.filter((m: any) => m.role === 'assistant');
+        const assistantMessages = recallResult.messages.filter(m => m.role === 'assistant');
         expect(assistantMessages.length).toBe(2);
 
         // Check first assistant message has data-upload-progress
-        const uploadProgressMsg = assistantMessages.find((m: any) =>
-          m.content.parts.some((p: any) => p.type === 'data-upload-progress'),
+        const uploadProgressMsg = assistantMessages.find(m =>
+          m.content.parts.some(p => p.type === 'data-upload-progress'),
         );
         expect(uploadProgressMsg).toBeDefined();
-        const uploadProgressPart = uploadProgressMsg!.content.parts.find((p: any) => p.type === 'data-upload-progress');
+        const uploadProgressPart = uploadProgressMsg!.content.parts.find(p => p.type === 'data-upload-progress');
         expect(uploadProgressPart).toBeDefined();
         expect((uploadProgressPart as any).data.progress).toBe(50);
 
         // Check second assistant message has data-file-reference
-        const fileRefMsg = assistantMessages.find((m: any) =>
-          m.content.parts.some((p: any) => p.type === 'data-file-reference'),
-        );
+        const fileRefMsg = assistantMessages.find(m => m.content.parts.some(p => p.type === 'data-file-reference'));
         expect(fileRefMsg).toBeDefined();
-        const fileRefPart = fileRefMsg!.content.parts.find((p: any) => p.type === 'data-file-reference');
+        const fileRefPart = fileRefMsg!.content.parts.find(p => p.type === 'data-file-reference');
         expect(fileRefPart).toBeDefined();
         expect((fileRefPart as any).data.fileId).toBe('file-123');
 
         // Now convert to AIV5 UI format (this is what the frontend would receive)
-        const { MessageList } = await import('@mastra/core/agent');
-        const uiMessages = recallResult.messages.map((m: any) => AIV5Adapter.toUIMessage(m));
+        const uiMessages = recallResult.messages.map(m => AIV5Adapter.toUIMessage(m));
 
         expect(uiMessages.length).toBe(3);
 
         // Verify data-* parts are preserved in UI format
-        const uiAssistantMessages = uiMessages.filter((m: any) => m.role === 'assistant');
+        const uiAssistantMessages = uiMessages.filter(m => m.role === 'assistant');
         expect(uiAssistantMessages.length).toBe(2);
 
         // Check data-upload-progress is preserved in UI format
-        const uiUploadProgressMsg = uiAssistantMessages.find((m: any) =>
-          m.parts.some((p: any) => p.type === 'data-upload-progress'),
-        );
+        const uiUploadProgressMsg = uiAssistantMessages.find(m => m.parts.some(p => p.type === 'data-upload-progress'));
         expect(uiUploadProgressMsg).toBeDefined();
-        const uiUploadProgressPart = uiUploadProgressMsg!.parts.find((p: any) => p.type === 'data-upload-progress');
+        const uiUploadProgressPart = uiUploadProgressMsg!.parts.find(p => p.type === 'data-upload-progress');
         expect(uiUploadProgressPart).toBeDefined();
         expect((uiUploadProgressPart as any).data.progress).toBe(50);
         expect((uiUploadProgressPart as any).data.fileName).toBe('document.pdf');
 
         // Check data-file-reference is preserved in UI format
-        const uiFileRefMsg = uiAssistantMessages.find((m: any) =>
-          m.parts.some((p: any) => p.type === 'data-file-reference'),
-        );
+        const uiFileRefMsg = uiAssistantMessages.find(m => m.parts.some(p => p.type === 'data-file-reference'));
         expect(uiFileRefMsg).toBeDefined();
-        const uiFileRefPart = uiFileRefMsg!.parts.find((p: any) => p.type === 'data-file-reference');
+        const uiFileRefPart = uiFileRefMsg!.parts.find(p => p.type === 'data-file-reference');
         expect(uiFileRefPart).toBeDefined();
         expect((uiFileRefPart as any).data.fileId).toBe('file-123');
         expect((uiFileRefPart as any).data.fileName).toBe('document.pdf');
