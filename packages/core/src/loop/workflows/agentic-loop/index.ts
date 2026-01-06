@@ -1,5 +1,6 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
+import { analyzeStep, emitStepAnalysis, emitBacktrack } from '../../../observability/instrumentation';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -30,6 +31,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     modelSettings,
     controller,
     outputWriter,
+    runStateTracker,
+    logger,
+    agentId,
     ...rest
   } = params;
 
@@ -48,6 +52,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     outputWriter,
     messageList,
     runId,
+    runStateTracker,
+    logger,
+    agentId,
     ...rest,
   });
 
@@ -107,6 +114,51 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       accumulatedSteps.push(currentStep);
 
+      // Record step metrics via the run state tracker
+      const stepNumber = accumulatedSteps.length;
+      const toolCallCount = currentStep.toolCalls?.length || 0;
+      const toolNames = (currentStep.toolCalls || []).map(tc => tc.toolName);
+      const hasToolCalls = toolCallCount > 0;
+      const hasReasoning = !!currentStep.reasoningText;
+      const hasText = !!currentStep.text;
+
+      // Determine step type
+      const stepType = analyzeStep({
+        hasToolCalls,
+        toolCallCount,
+        toolNames,
+        hasReasoning,
+        hasText,
+      });
+
+      // Build full step analysis
+      const stepAnalysis = {
+        stepNumber,
+        stepType,
+        hasToolCalls,
+        toolCallCount,
+        toolNames,
+        durationMs: 0, // Duration not tracked per-step at this level
+        tokenUsage: currentStep.usage
+          ? {
+              inputTokens: currentStep.usage.inputTokens || 0,
+              outputTokens: currentStep.usage.outputTokens || 0,
+            }
+          : undefined,
+      };
+
+      // Record to tracker for aggregation
+      runStateTracker?.recordStep(stepAnalysis);
+
+      // Emit step analysis event for real-time observability
+      if (runStateTracker) {
+        emitStepAnalysis({
+          context: runStateTracker.getContext(),
+          analysis: stepAnalysis,
+          logger,
+        });
+      }
+
       // Only call stopWhen if we're continuing (not on the final step)
       if (rest.stopWhen && typedInputData.stepResult?.isContinued && accumulatedSteps.length > 0) {
         // Cast steps to any for v5/v6 StopCondition compatibility
@@ -147,6 +199,24 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       const reason = typedInputData.stepResult?.reason;
+
+      // Detect backtrack/retry scenario
+      if (reason === 'retry' && runStateTracker) {
+        runStateTracker.recordBacktrack();
+        // Access retry metadata from stepResult (set by llm-execution-step)
+        const stepResult = typedInputData.stepResult as {
+          retryReason?: string;
+          retryProcessorId?: string;
+        };
+        emitBacktrack({
+          context: runStateTracker.getContext(),
+          fromStep: stepNumber,
+          toStep: stepNumber, // Retrying the same step
+          reason: stepResult?.retryReason || 'Processor requested retry',
+          processorId: stepResult?.retryProcessorId,
+          logger,
+        });
+      }
 
       if (reason === undefined) {
         return false;
