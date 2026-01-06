@@ -2703,6 +2703,61 @@ export const weatherAgent = new Agent({
 });
 ```
 
+## Using workflows as tools
+
+Workflows can be added to agents through the `workflows` configuration. When you add a workflow, Mastra automatically converts it to a tool that the agent can call. The generated tool is named `workflow-<workflowName>` and uses the workflow's `inputSchema` and `outputSchema`.
+
+```typescript {14-16} title="src/mastra/agents/research-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { researchWorkflow } from "../workflows/research-workflow";
+
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: `
+      You are a research assistant.
+      Use the research workflow to gather and compile information on topics.`,
+  model: "openai/gpt-5.1",
+  tools: {
+    weatherTool,
+  },
+  workflows: {
+    researchWorkflow,
+  },
+});
+```
+
+The workflow should include a `description` to help the agent understand when to use it:
+
+```typescript title="src/mastra/workflows/research-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const researchWorkflow = createWorkflow({
+  id: "research-workflow",
+  description: "Gathers information on a topic and compiles a summary report.",
+  inputSchema: z.object({
+    topic: z.string(),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+    sources: z.array(z.string()),
+  }),
+})
+  .then(gatherSourcesStep)
+  .then(compileReportStep)
+  .commit();
+```
+
+When the agent calls the workflow tool, it receives a response containing the workflow result and a `runId` that can be used to track the execution:
+
+```typescript
+{
+  result: { summary: "...", sources: ["..."] },
+  runId: "abc-123"
+}
+```
+
 ## Related
 
 - [MCP Overview](/docs/v1/mcp/overview)
@@ -29537,7 +29592,51 @@ npx @mastra/codemod@beta v1/client-get-memory-thread .
 
 :::
 
+### Unified `runById` API for workflow runs
+
+The `runById()` method now returns a unified `WorkflowState` object containing both metadata (runId, workflowName, resourceId, createdAt, updatedAt) and processed execution state (status, result, error, payload, steps). This unifies the previously separate `runById()` and `runExecutionResult()` methods.
+
+The method also accepts an options object with optional `fields` and `withNestedWorkflows` parameters for performance optimization.
+
+```diff
+  const workflow = client.getWorkflow('my-workflow');
+
+- // Previously: runById returned raw WorkflowRun with snapshot
+- const run = await workflow.runById(runId, requestContext);
+- // Separately: runExecutionResult returned processed execution state
+- const result = await workflow.runExecutionResult(runId);
+
++ // Now: Single method returns unified WorkflowState
++ const run = await workflow.runById(runId, {
++   requestContext,  // Optional request context
++   fields: ['status', 'result'],  // Optional: request only specific fields
++   withNestedWorkflows: false,  // Optional: skip nested workflow data for performance
++ });
++ // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+```
+
 ## Removed
+
+### `runExecutionResult` method and `GetWorkflowRunExecutionResultResponse` type
+
+The `runExecutionResult()` method and `GetWorkflowRunExecutionResultResponse` type have been removed from `@mastra/client-js`. The `/execution-result` API endpoints have also been removed.
+
+To migrate, use `runById()` instead, which now returns the same unified `WorkflowState` with both metadata and processed execution state.
+
+```diff
+- import type { GetWorkflowRunExecutionResultResponse } from '@mastra/client-js';
+-
+- const workflow = client.getWorkflow('my-workflow');
+- const result = await workflow.runExecutionResult(runId);
+
++ const workflow = client.getWorkflow('my-workflow');
++ const result = await workflow.runById(runId);
++ // Or with options for performance optimization:
++ const result = await workflow.runById(runId, {
++   fields: ['status', 'result'],  // Only fetch specific fields
++   withNestedWorkflows: false,     // Skip expensive nested workflow data
++ });
+```
 
 ### `toAISdkFormat` function
 
@@ -57935,18 +58034,13 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 # Agent.generate()
 [EN] Source: https://mastra.ai/en/reference/agents/generate
 
-The `.generate()` method enables non-streaming response generation from an agent, with enhanced capabilities and flexible output formats. It accepts messages and optional generation options, supporting both Mastra’s native format and AI SDK v5 compatibility.
+The `.generate()` method enables non-streaming response generation from an agent with enhanced capabilities. It accepts messages and optional generation options.
 
 ## Usage example
 
 ```typescript
-// Default Mastra format
-const mastraResult = await agent.generate("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkResult = await agent.generate("message for agent", {
-  format: "aisdk",
-});
+// Basic usage
+const result = await agent.generate("message for agent");
 
 // With model settings (e.g., limiting output tokens)
 const limitedResult = await agent.generate("Write a short poem about coding", {
@@ -57955,11 +58049,29 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     temperature: 0.7,
   },
 });
+
+// With structured output
+const structuredResult = await agent.generate("Extract the user's name and age", {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+    }),
+  },
+});
+
+// With memory for conversation persistence
+const memoryResult = await agent.generate("Remember my favorite color is blue", {
+  memory: {
+    thread: "user-123-thread",
+    resource: "user-123",
+  },
+});
 ```
 
 :::info
 
-**Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.generateLegacy()`](./generateLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
+**Model Compatibility**: This method requires AI SDK v5+ models. If you're using AI SDK v4 models, use the [`.generateLegacy()`](./generateLegacy) method instead. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
 :::
 
@@ -57987,18 +58099,16 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
 <PropertiesTable
   content={[
     {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
-    {
       name: "maxSteps",
       type: "number",
       isOptional: true,
       description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "stopWhen",
+      type: "LoopOptions['stopWhen']",
+      isOptional: true,
+      description: "Conditions for stopping execution (e.g., step count, token limit).",
     },
     {
       name: "scorers",
@@ -58093,10 +58203,28 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "prepareStep",
-      type: "PrepareStepFunction<any>",
+      type: "PrepareStepFunction",
       isOptional: true,
       description:
         "Callback function called before each step of multi-step execution.",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description: "Require approval for all tool calls before execution.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description: "Automatically resume suspended tools.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
       name: "context",
@@ -58178,6 +58306,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
         {
           parameters: [
             {
+              name: "logger",
+              type: "IMastraLogger",
+              isOptional: true,
+              description:
+                "Optional logger instance for structured logging during output generation.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
               name: "providerOptions",
               type: "ProviderOptions",
               isOptional: true,
@@ -58190,24 +58329,31 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "outputProcessors",
-      type: "Processor[]",
+      type: "OutputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Output processors to use for this execution (overrides agent's default).",
     },
     {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times processors can trigger a retry for this generation. Overrides agent's default maxProcessorRetries.",
+    },
+    {
       name: "inputProcessors",
-      type: "Processor[]",
+      type: "InputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Input processors to use for this execution (overrides agent's default).",
     },
     {
       name: "instructions",
-      type: "string",
+      type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
       isOptional: true,
       description:
-        "Custom instructions that override the agent's default instructions for this execution.",
+        "Custom instructions that override the agent's default instructions for this execution. Can be a single string, message object, or array of either.",
     },
     {
       name: "system",
@@ -58267,17 +58413,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "onFinish",
-      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      type: "LoopConfig['onFinish']",
       isOptional: true,
       description:
-        "Callback fired when generation completes. Type varies by format.",
+        "Callback fired when generation completes.",
     },
     {
       name: "onStepFinish",
-      type: "StreamTextOnStepFinishCallback<any> | never",
+      type: "LoopConfig['onStepFinish']",
       isOptional: true,
       description:
-        "Callback fired after each generation step. Type varies by format.",
+        "Callback fired after each generation step.",
     },
     {
       name: "resourceId",
@@ -58555,6 +58701,13 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
         },
       ],
     },
+    {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "Whether to include raw chunks in the stream output. Not available on all model providers.",
+    },
   ]}
 />
 
@@ -58564,9 +58717,52 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
   content={[
     {
       name: "result",
-      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>> | Awaited<ReturnType<AISDKV5OutputStream<Output>['getFullOutput']>>",
+      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>>",
       description:
-        "Returns the full output of the generation process. When format is 'mastra' (default), returns MastraModelOutput result. When format is 'aisdk', returns AISDKV5OutputStream result for AI SDK v5 compatibility.",
+        "Returns the full output of the generation process including text, object (if structured output), tool calls, tool results, usage statistics, and step information.",
+    },
+    {
+      name: "text",
+      type: "string",
+      description:
+        "The generated text response from the agent.",
+    },
+    {
+      name: "object",
+      type: "Output | undefined",
+      isOptional: true,
+      description:
+        "The structured output object if structuredOutput was provided, validated against the schema.",
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCall[]",
+      description:
+        "Array of tool calls made during generation.",
+    },
+    {
+      name: "toolResults",
+      type: "ToolResult[]",
+      description:
+        "Array of results from tool executions.",
+    },
+    {
+      name: "usage",
+      type: "TokenUsage",
+      description:
+        "Token usage statistics for the generation.",
+    },
+    {
+      name: "steps",
+      type: "Step[]",
+      description:
+        "Array of execution steps, useful for debugging multi-step generations.",
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description:
+        "The reason generation finished (e.g., 'stop', 'tool-calls', 'error').",
     },
     {
       name: "traceId",
