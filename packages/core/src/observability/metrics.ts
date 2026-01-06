@@ -373,6 +373,169 @@ export interface HumanInterventionMetrics {
   timestamp: Date;
 }
 
+// ============================================================================
+// Memory Metrics
+// ============================================================================
+
+/**
+ * Metrics for memory recall operations
+ */
+export interface MemoryRecallMetrics {
+  /** Thread ID being queried */
+  threadId?: string;
+  /** Resource ID (user) */
+  resourceId?: string;
+  /** Agent ID (if applicable) */
+  agentId?: string;
+  /** Number of results requested */
+  topK?: number;
+  /** Number of results returned */
+  resultCount: number;
+  /** Total duration in milliseconds */
+  durationMs: number;
+  /** Duration of embedding generation */
+  embedDurationMs?: number;
+  /** Duration of vector search */
+  vectorSearchDurationMs?: number;
+  /** Whether semantic search was used */
+  semanticSearch: boolean;
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+/**
+ * Metrics for memory save operations
+ */
+export interface MemorySaveMetrics {
+  /** Thread ID where messages are saved */
+  threadId?: string;
+  /** Resource ID (user) */
+  resourceId?: string;
+  /** Agent ID (if applicable) */
+  agentId?: string;
+  /** Number of messages saved */
+  messageCount: number;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Whether embeddings were generated */
+  embeddingsGenerated: boolean;
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+// ============================================================================
+// RAG Metrics
+// ============================================================================
+
+/**
+ * Metrics for RAG query operations
+ */
+export interface RagQueryMetrics {
+  /** Vector store/index name */
+  indexName?: string;
+  /** Vector store type */
+  vectorStoreType?: string;
+  /** Agent ID (if applicable) */
+  agentId?: string;
+  /** Number of results requested */
+  topK?: number;
+  /** Number of results returned */
+  resultCount: number;
+  /** Total duration in milliseconds */
+  durationMs: number;
+  /** Duration of embedding generation */
+  embedDurationMs?: number;
+  /** Duration of vector search */
+  vectorSearchDurationMs?: number;
+  /** Duration of reranking (if applied) */
+  rerankDurationMs?: number;
+  /** Whether reranking was applied */
+  rerankApplied: boolean;
+  /** Top relevance score */
+  topScore?: number;
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+/**
+ * Metrics for embedding generation
+ */
+export interface RagEmbedMetrics {
+  /** Embedding model */
+  model?: string;
+  /** Model provider */
+  provider?: string;
+  /** Agent ID (if applicable) */
+  agentId?: string;
+  /** Number of texts embedded */
+  textCount: number;
+  /** Total characters embedded */
+  totalCharacters?: number;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+/**
+ * Metrics for vector search operations
+ */
+export interface RagVectorSearchMetrics {
+  /** Vector store/index name */
+  indexName?: string;
+  /** Vector store type */
+  vectorStoreType?: string;
+  /** Agent ID (if applicable) */
+  agentId?: string;
+  /** Number of results requested */
+  topK?: number;
+  /** Number of results returned */
+  resultCount: number;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Whether a filter was applied */
+  filterApplied: boolean;
+  /** Min/max similarity scores */
+  minScore?: number;
+  maxScore?: number;
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+/**
+ * Metrics for reranking operations
+ */
+export interface RagRerankMetrics {
+  /** Reranker model */
+  model?: string;
+  /** Reranker provider */
+  provider?: string;
+  /** Agent ID (if applicable) */
+  agentId?: string;
+  /** Number of documents input */
+  inputCount: number;
+  /** Number of documents output */
+  outputCount: number;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Top score after reranking */
+  topScore?: number;
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
 /**
  * Per-step timing breakdown
  */
@@ -544,6 +707,36 @@ export const MetricNames = {
   HUMAN_APPROVALS_GRANTED: 'agent_human_approvals_granted_total',
   HUMAN_APPROVALS_DENIED: 'agent_human_approvals_denied_total',
   HUMAN_OVERRIDES: 'agent_human_overrides_total',
+
+  // Memory metrics
+  MEMORY_RECALL_TOTAL: 'memory_recall_total',
+  MEMORY_RECALL_SUCCESS: 'memory_recall_success_total',
+  MEMORY_RECALL_ERROR: 'memory_recall_error_total',
+  MEMORY_RECALL_DURATION: 'memory_recall_duration_ms',
+  MEMORY_RECALL_RESULTS: 'memory_recall_results_count',
+  MEMORY_SAVE_TOTAL: 'memory_save_total',
+  MEMORY_SAVE_SUCCESS: 'memory_save_success_total',
+  MEMORY_SAVE_ERROR: 'memory_save_error_total',
+  MEMORY_SAVE_DURATION: 'memory_save_duration_ms',
+  MEMORY_SAVE_MESSAGES: 'memory_save_messages_count',
+  MEMORY_EMBED_DURATION: 'memory_embed_duration_ms',
+  MEMORY_VECTOR_SEARCH_DURATION: 'memory_vector_search_duration_ms',
+
+  // RAG metrics
+  RAG_QUERY_TOTAL: 'rag_query_total',
+  RAG_QUERY_SUCCESS: 'rag_query_success_total',
+  RAG_QUERY_ERROR: 'rag_query_error_total',
+  RAG_QUERY_DURATION: 'rag_query_duration_ms',
+  RAG_QUERY_RESULTS: 'rag_query_results_count',
+  RAG_EMBED_TOTAL: 'rag_embed_total',
+  RAG_EMBED_DURATION: 'rag_embed_duration_ms',
+  RAG_EMBED_TOKENS: 'rag_embed_tokens_total',
+  RAG_VECTOR_SEARCH_TOTAL: 'rag_vector_search_total',
+  RAG_VECTOR_SEARCH_DURATION: 'rag_vector_search_duration_ms',
+  RAG_VECTOR_SEARCH_RESULTS: 'rag_vector_search_results_count',
+  RAG_RERANK_TOTAL: 'rag_rerank_total',
+  RAG_RERANK_DURATION: 'rag_rerank_duration_ms',
+  RAG_RELEVANCE_SCORE: 'rag_relevance_score',
 } as const;
 
 // ============================================================================
@@ -638,6 +831,40 @@ export interface IMetricsCollector {
    * Record goal completion state
    */
   recordGoalState(state: 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned', labels?: MetricLabels): void;
+
+  // ---- Memory Methods ----
+
+  /**
+   * Record metrics from a memory recall operation
+   */
+  recordMemoryRecall(metrics: MemoryRecallMetrics): void;
+
+  /**
+   * Record metrics from a memory save operation
+   */
+  recordMemorySave(metrics: MemorySaveMetrics): void;
+
+  // ---- RAG Methods ----
+
+  /**
+   * Record metrics from a RAG query operation
+   */
+  recordRagQuery(metrics: RagQueryMetrics): void;
+
+  /**
+   * Record metrics from an embedding generation
+   */
+  recordRagEmbed(metrics: RagEmbedMetrics): void;
+
+  /**
+   * Record metrics from a vector search
+   */
+  recordRagVectorSearch(metrics: RagVectorSearchMetrics): void;
+
+  /**
+   * Record metrics from a reranking operation
+   */
+  recordRagRerank(metrics: RagRerankMetrics): void;
 
   // ---- Lifecycle ----
 
@@ -948,6 +1175,150 @@ export abstract class BaseMetricsCollector implements IMetricsCollector {
     }
   }
 
+  // ============================================================================
+  // Memory Methods
+  // ============================================================================
+
+  /**
+   * Record memory recall metrics.
+   * Override this method if you need custom behavior.
+   */
+  recordMemoryRecall(metrics: MemoryRecallMetrics): void {
+    const labels: MetricLabels = {
+      threadId: metrics.threadId,
+      resourceId: metrics.resourceId,
+      agentId: metrics.agentId,
+      semanticSearch: String(metrics.semanticSearch),
+    };
+
+    this.incrementCounter(MetricNames.MEMORY_RECALL_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.MEMORY_RECALL_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.MEMORY_RECALL_ERROR, { ...labels, errorType: metrics.errorType });
+    }
+    this.recordHistogram(MetricNames.MEMORY_RECALL_DURATION, labels, metrics.durationMs);
+    this.recordHistogram(MetricNames.MEMORY_RECALL_RESULTS, labels, metrics.resultCount);
+
+    if (metrics.embedDurationMs !== undefined) {
+      this.recordHistogram(MetricNames.MEMORY_EMBED_DURATION, labels, metrics.embedDurationMs);
+    }
+    if (metrics.vectorSearchDurationMs !== undefined) {
+      this.recordHistogram(MetricNames.MEMORY_VECTOR_SEARCH_DURATION, labels, metrics.vectorSearchDurationMs);
+    }
+  }
+
+  /**
+   * Record memory save metrics.
+   * Override this method if you need custom behavior.
+   */
+  recordMemorySave(metrics: MemorySaveMetrics): void {
+    const labels: MetricLabels = {
+      threadId: metrics.threadId,
+      resourceId: metrics.resourceId,
+      agentId: metrics.agentId,
+    };
+
+    this.incrementCounter(MetricNames.MEMORY_SAVE_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.MEMORY_SAVE_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.MEMORY_SAVE_ERROR, { ...labels, errorType: metrics.errorType });
+    }
+    this.recordHistogram(MetricNames.MEMORY_SAVE_DURATION, labels, metrics.durationMs);
+    this.recordHistogram(MetricNames.MEMORY_SAVE_MESSAGES, labels, metrics.messageCount);
+  }
+
+  // ============================================================================
+  // RAG Methods
+  // ============================================================================
+
+  /**
+   * Record RAG query metrics.
+   * Override this method if you need custom behavior.
+   */
+  recordRagQuery(metrics: RagQueryMetrics): void {
+    const labels: MetricLabels = {
+      indexName: metrics.indexName,
+      vectorStoreType: metrics.vectorStoreType,
+      agentId: metrics.agentId,
+      rerankApplied: String(metrics.rerankApplied),
+    };
+
+    this.incrementCounter(MetricNames.RAG_QUERY_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.RAG_QUERY_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.RAG_QUERY_ERROR, { ...labels, errorType: metrics.errorType });
+    }
+    this.recordHistogram(MetricNames.RAG_QUERY_DURATION, labels, metrics.durationMs);
+    this.recordHistogram(MetricNames.RAG_QUERY_RESULTS, labels, metrics.resultCount);
+
+    if (metrics.topScore !== undefined) {
+      this.recordHistogram(MetricNames.RAG_RELEVANCE_SCORE, labels, metrics.topScore);
+    }
+  }
+
+  /**
+   * Record embedding generation metrics.
+   * Override this method if you need custom behavior.
+   */
+  recordRagEmbed(metrics: RagEmbedMetrics): void {
+    const labels: MetricLabels = {
+      model: metrics.model,
+      provider: metrics.provider,
+      agentId: metrics.agentId,
+    };
+
+    this.incrementCounter(MetricNames.RAG_EMBED_TOTAL, labels);
+    this.recordHistogram(MetricNames.RAG_EMBED_DURATION, labels, metrics.durationMs);
+    if (metrics.totalCharacters) {
+      // Rough token estimate (chars / 4)
+      const estimatedTokens = Math.ceil(metrics.totalCharacters / 4);
+      this.incrementCounter(MetricNames.RAG_EMBED_TOKENS, labels, estimatedTokens);
+    }
+  }
+
+  /**
+   * Record vector search metrics.
+   * Override this method if you need custom behavior.
+   */
+  recordRagVectorSearch(metrics: RagVectorSearchMetrics): void {
+    const labels: MetricLabels = {
+      indexName: metrics.indexName,
+      vectorStoreType: metrics.vectorStoreType,
+      agentId: metrics.agentId,
+      filterApplied: String(metrics.filterApplied),
+    };
+
+    this.incrementCounter(MetricNames.RAG_VECTOR_SEARCH_TOTAL, labels);
+    this.recordHistogram(MetricNames.RAG_VECTOR_SEARCH_DURATION, labels, metrics.durationMs);
+    this.recordHistogram(MetricNames.RAG_VECTOR_SEARCH_RESULTS, labels, metrics.resultCount);
+
+    if (metrics.maxScore !== undefined) {
+      this.recordHistogram(MetricNames.RAG_RELEVANCE_SCORE, labels, metrics.maxScore);
+    }
+  }
+
+  /**
+   * Record reranking metrics.
+   * Override this method if you need custom behavior.
+   */
+  recordRagRerank(metrics: RagRerankMetrics): void {
+    const labels: MetricLabels = {
+      model: metrics.model,
+      provider: metrics.provider,
+      agentId: metrics.agentId,
+    };
+
+    this.incrementCounter(MetricNames.RAG_RERANK_TOTAL, labels);
+    this.recordHistogram(MetricNames.RAG_RERANK_DURATION, labels, metrics.durationMs);
+
+    if (metrics.topScore !== undefined) {
+      this.recordHistogram(MetricNames.RAG_RELEVANCE_SCORE, labels, metrics.topScore);
+    }
+  }
+
   /**
    * Record cost.
    * Override this method if you need custom behavior.
@@ -1027,6 +1398,30 @@ export class NoOpMetricsCollector implements IMetricsCollector {
     // No-op
   }
 
+  recordMemoryRecall(_metrics: MemoryRecallMetrics): void {
+    // No-op
+  }
+
+  recordMemorySave(_metrics: MemorySaveMetrics): void {
+    // No-op
+  }
+
+  recordRagQuery(_metrics: RagQueryMetrics): void {
+    // No-op
+  }
+
+  recordRagEmbed(_metrics: RagEmbedMetrics): void {
+    // No-op
+  }
+
+  recordRagVectorSearch(_metrics: RagVectorSearchMetrics): void {
+    // No-op
+  }
+
+  recordRagRerank(_metrics: RagRerankMetrics): void {
+    // No-op
+  }
+
   async flush(): Promise<void> {
     // No-op
   }
@@ -1060,6 +1455,12 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
   private httpRequests: HttpRequestMetrics[] = [];
   private guardrailEvents: GuardrailMetrics[] = [];
   private humanEvents: HumanInterventionMetrics[] = [];
+  private memoryRecalls: MemoryRecallMetrics[] = [];
+  private memorySaves: MemorySaveMetrics[] = [];
+  private ragQueries: RagQueryMetrics[] = [];
+  private ragEmbeds: RagEmbedMetrics[] = [];
+  private ragVectorSearches: RagVectorSearchMetrics[] = [];
+  private ragReranks: RagRerankMetrics[] = [];
 
   private makeKey(name: string, labels?: MetricLabels): string {
     if (!labels) return name;
@@ -1135,6 +1536,36 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
     super.recordHumanIntervention(metrics);
   }
 
+  override recordMemoryRecall(metrics: MemoryRecallMetrics): void {
+    this.memoryRecalls.push(metrics);
+    super.recordMemoryRecall(metrics);
+  }
+
+  override recordMemorySave(metrics: MemorySaveMetrics): void {
+    this.memorySaves.push(metrics);
+    super.recordMemorySave(metrics);
+  }
+
+  override recordRagQuery(metrics: RagQueryMetrics): void {
+    this.ragQueries.push(metrics);
+    super.recordRagQuery(metrics);
+  }
+
+  override recordRagEmbed(metrics: RagEmbedMetrics): void {
+    this.ragEmbeds.push(metrics);
+    super.recordRagEmbed(metrics);
+  }
+
+  override recordRagVectorSearch(metrics: RagVectorSearchMetrics): void {
+    this.ragVectorSearches.push(metrics);
+    super.recordRagVectorSearch(metrics);
+  }
+
+  override recordRagRerank(metrics: RagRerankMetrics): void {
+    this.ragReranks.push(metrics);
+    super.recordRagRerank(metrics);
+  }
+
   // ---- Accessors for testing/debugging ----
 
   getCounter(name: string, labels?: MetricLabels): number {
@@ -1177,6 +1608,30 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
     return [...this.humanEvents];
   }
 
+  getMemoryRecalls(): MemoryRecallMetrics[] {
+    return [...this.memoryRecalls];
+  }
+
+  getMemorySaves(): MemorySaveMetrics[] {
+    return [...this.memorySaves];
+  }
+
+  getRagQueries(): RagQueryMetrics[] {
+    return [...this.ragQueries];
+  }
+
+  getRagEmbeds(): RagEmbedMetrics[] {
+    return [...this.ragEmbeds];
+  }
+
+  getRagVectorSearches(): RagVectorSearchMetrics[] {
+    return [...this.ragVectorSearches];
+  }
+
+  getRagReranks(): RagRerankMetrics[] {
+    return [...this.ragReranks];
+  }
+
   getAllCounters(): Map<string, number> {
     return new Map(this.counters);
   }
@@ -1192,5 +1647,11 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
     this.httpRequests = [];
     this.guardrailEvents = [];
     this.humanEvents = [];
+    this.memoryRecalls = [];
+    this.memorySaves = [];
+    this.ragQueries = [];
+    this.ragEmbeds = [];
+    this.ragVectorSearches = [];
+    this.ragReranks = [];
   }
 }

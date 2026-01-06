@@ -48,6 +48,22 @@ export enum SpanType {
   WORKFLOW_SLEEP = 'workflow_sleep',
   /** Workflow wait for event operation */
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
+
+  // Memory operations
+  /** Memory recall - semantic memory retrieval */
+  MEMORY_RECALL = 'memory_recall',
+  /** Memory save - saving messages/context to memory */
+  MEMORY_SAVE = 'memory_save',
+
+  // RAG operations
+  /** RAG query - full retrieval-augmented generation pipeline */
+  RAG_QUERY = 'rag_query',
+  /** RAG embedding - generating embeddings for text */
+  RAG_EMBED = 'rag_embed',
+  /** RAG vector search - querying vector database */
+  RAG_VECTOR_SEARCH = 'rag_vector_search',
+  /** RAG rerank - reranking retrieved results */
+  RAG_RERANK = 'rag_rerank',
 }
 
 export enum EntityType {
@@ -337,6 +353,136 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
   waitDurationMs?: number;
 }
 
+// ============================================================================
+// Memory Span Attributes
+// ============================================================================
+
+/**
+ * Memory Recall attributes - semantic memory retrieval
+ */
+export interface MemoryRecallAttributes extends AIBaseAttributes {
+  /** Thread ID being queried */
+  threadId?: string;
+  /** Resource ID (user) */
+  resourceId?: string;
+  /** Number of results requested (topK) */
+  topK?: number;
+  /** Number of results returned */
+  resultCount?: number;
+  /** Whether semantic search was used */
+  semanticSearch?: boolean;
+  /** Embedding model used */
+  embeddingModel?: string;
+  /** Duration of embedding generation in ms */
+  embedDurationMs?: number;
+  /** Duration of vector search in ms */
+  vectorSearchDurationMs?: number;
+  /** Whether the operation was successful */
+  success?: boolean;
+}
+
+/**
+ * Memory Save attributes - saving messages/context
+ */
+export interface MemorySaveAttributes extends AIBaseAttributes {
+  /** Thread ID where messages are saved */
+  threadId?: string;
+  /** Resource ID (user) */
+  resourceId?: string;
+  /** Number of messages saved */
+  messageCount?: number;
+  /** Whether embeddings were generated */
+  embeddingsGenerated?: boolean;
+  /** Total tokens in saved content */
+  tokenCount?: number;
+  /** Whether the operation was successful */
+  success?: boolean;
+}
+
+// ============================================================================
+// RAG Span Attributes
+// ============================================================================
+
+/**
+ * RAG Query attributes - full RAG pipeline
+ */
+export interface RagQueryAttributes extends AIBaseAttributes {
+  /** Query text */
+  queryText?: string;
+  /** Vector store/index name */
+  indexName?: string;
+  /** Number of results requested */
+  topK?: number;
+  /** Number of results returned */
+  resultCount?: number;
+  /** Whether reranking was applied */
+  rerankApplied?: boolean;
+  /** Reranker model used */
+  rerankerModel?: string;
+  /** Duration of full RAG pipeline in ms */
+  totalDurationMs?: number;
+  /** Whether the operation was successful */
+  success?: boolean;
+}
+
+/**
+ * RAG Embed attributes - embedding generation
+ */
+export interface RagEmbedAttributes extends AIBaseAttributes {
+  /** Embedding model used */
+  model?: string;
+  /** Model provider */
+  provider?: string;
+  /** Number of texts embedded */
+  textCount?: number;
+  /** Total characters embedded */
+  totalCharacters?: number;
+  /** Embedding dimensions */
+  dimensions?: number;
+  /** Whether the operation was successful */
+  success?: boolean;
+}
+
+/**
+ * RAG Vector Search attributes - vector database query
+ */
+export interface RagVectorSearchAttributes extends AIBaseAttributes {
+  /** Vector store/index name */
+  indexName?: string;
+  /** Vector store type (pinecone, pgvector, etc.) */
+  vectorStoreType?: string;
+  /** Number of results requested */
+  topK?: number;
+  /** Number of results returned */
+  resultCount?: number;
+  /** Whether a filter was applied */
+  filterApplied?: boolean;
+  /** Minimum similarity score in results */
+  minScore?: number;
+  /** Maximum similarity score in results */
+  maxScore?: number;
+  /** Whether the operation was successful */
+  success?: boolean;
+}
+
+/**
+ * RAG Rerank attributes - reranking results
+ */
+export interface RagRerankAttributes extends AIBaseAttributes {
+  /** Reranker model used */
+  model?: string;
+  /** Reranker provider */
+  provider?: string;
+  /** Number of documents to rerank */
+  inputCount?: number;
+  /** Number of documents returned after reranking */
+  outputCount?: number;
+  /** Top score after reranking */
+  topScore?: number;
+  /** Whether the operation was successful */
+  success?: boolean;
+}
+
 /**
  * AI-specific span types mapped to their attributes
  */
@@ -357,6 +503,14 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
   [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
   [SpanType.GENERIC]: AIBaseAttributes;
+  // Memory spans
+  [SpanType.MEMORY_RECALL]: MemoryRecallAttributes;
+  [SpanType.MEMORY_SAVE]: MemorySaveAttributes;
+  // RAG spans
+  [SpanType.RAG_QUERY]: RagQueryAttributes;
+  [SpanType.RAG_EMBED]: RagEmbedAttributes;
+  [SpanType.RAG_VECTOR_SEARCH]: RagVectorSearchAttributes;
+  [SpanType.RAG_RERANK]: RagRerankAttributes;
 }
 
 /**
