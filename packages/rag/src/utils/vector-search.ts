@@ -1,6 +1,7 @@
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
+import { getGlobalMetricsCollector } from '@mastra/core/observability';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
 type VectorQuerySearchParams = {
@@ -42,45 +43,111 @@ export const vectorQuerySearch = async ({
   databaseConfig = {},
   providerOptions,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  let embeddingResult;
+  const startTime = Date.now();
+  let embedDurationMs: number | undefined;
+  let vectorSearchDurationMs: number | undefined;
+  let resultCount = 0;
+  let success = false;
+  let errorType: string | undefined;
+  let embeddingDimension: number | undefined;
+  let embeddingTokens: number | undefined;
 
-  if (model.specificationVersion === 'v3') {
-    embeddingResult = await embedV3({
-      model: model,
-      value: queryText,
-      maxRetries,
-      ...(providerOptions && { providerOptions }),
+  try {
+    // Measure embedding time
+    const embedStart = Date.now();
+    let embeddingResult;
+
+    if (model.specificationVersion === 'v3') {
+      embeddingResult = await embedV3({
+        model: model,
+        value: queryText,
+        maxRetries,
+        ...(providerOptions && { providerOptions }),
+      });
+    } else if (model.specificationVersion === 'v2') {
+      embeddingResult = await embedV2({
+        model: model,
+        value: queryText,
+        maxRetries,
+        ...(providerOptions && { providerOptions }),
+      });
+    } else {
+      embeddingResult = await embedV1({
+        value: queryText,
+        model: model,
+        maxRetries,
+      });
+    }
+    embedDurationMs = Date.now() - embedStart;
+
+    const embedding = embeddingResult.embedding;
+    embeddingDimension = embedding.length;
+    // Extract token usage if available
+    embeddingTokens = (embeddingResult as { usage?: { tokens?: number } })?.usage?.tokens;
+
+    // Build query parameters with database-specific configurations
+    const queryParams: QueryVectorParams = {
+      indexName,
+      queryVector: embedding,
+      topK,
+      filter: queryFilter,
+      includeVector: includeVectors,
+    };
+
+    // Measure vector search time
+    const vectorSearchStart = Date.now();
+    // Get relevant chunks from the vector database
+    const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
+    vectorSearchDurationMs = Date.now() - vectorSearchStart;
+
+    resultCount = results.length;
+    success = true;
+
+    return { results, queryEmbedding: embedding };
+  } catch (error) {
+    errorType = error instanceof Error ? error.name : 'UnknownError';
+    throw error;
+  } finally {
+    // Record RAG query metrics
+    const durationMs = Date.now() - startTime;
+    const metrics = getGlobalMetricsCollector();
+    metrics.recordRagQuery({
+      indexName,
+      topK,
+      resultCount,
+      durationMs,
+      embedDurationMs,
+      vectorSearchDurationMs,
+      hasFilter: !!queryFilter,
+      success,
+      errorType,
     });
-  } else if (model.specificationVersion === 'v2') {
-    embeddingResult = await embedV2({
-      model: model,
-      value: queryText,
-      maxRetries,
-      ...(providerOptions && { providerOptions }),
-    });
-  } else {
-    embeddingResult = await embedV1({
-      value: queryText,
-      model: model,
-      maxRetries,
-    });
+
+    // Record embedding metrics separately if we have the data
+    if (embeddingDimension !== undefined && embedDurationMs !== undefined) {
+      metrics.recordRagEmbed({
+        model: model.modelId || 'unknown',
+        inputTokens: embeddingTokens,
+        dimension: embeddingDimension,
+        durationMs: embedDurationMs,
+        success,
+        errorType: success ? undefined : errorType,
+      });
+    }
+
+    // Record vector search metrics separately
+    if (vectorSearchDurationMs !== undefined) {
+      metrics.recordRagVectorSearch({
+        indexName,
+        topK,
+        resultCount,
+        durationMs: vectorSearchDurationMs,
+        hasFilter: !!queryFilter,
+        success,
+        errorType: success ? undefined : errorType,
+      });
+    }
   }
-
-  const embedding = embeddingResult.embedding;
-
-  // Build query parameters with database-specific configurations
-  const queryParams: QueryVectorParams = {
-    indexName,
-    queryVector: embedding,
-    topK,
-    filter: queryFilter,
-    includeVector: includeVectors,
-  };
-
-  // Get relevant chunks from the vector database
-  const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
-
-  return { results, queryEmbedding: embedding };
 };
 
 const databaseSpecificParams = (databaseConfig: DatabaseConfig) => {

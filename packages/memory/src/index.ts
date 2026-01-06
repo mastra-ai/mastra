@@ -13,6 +13,7 @@ import type {
   MessageDeleteInput,
 } from '@mastra/core/memory';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+import { getGlobalMetricsCollector } from '@mastra/core/observability';
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
@@ -107,131 +108,171 @@ export class Memory extends MastraMemory {
       threadId: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }> {
+    const startTime = Date.now();
+    let embedDurationMs: number | undefined;
+    let vectorSearchDurationMs: number | undefined;
+    let semanticSearchUsed = false;
+    let resultCount = 0;
+    let success = false;
+    let errorType: string | undefined;
+
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
-    const config = this.getMergedThreadConfig(threadConfig || {});
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
-    // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-    const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+    try {
+      const config = this.getMergedThreadConfig(threadConfig || {});
+      if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
-    // When limiting messages (perPage !== false) without explicit orderBy, we need to:
-    // 1. Query DESC to get the NEWEST messages (not oldest)
-    // 2. Reverse results to restore chronological order for the LLM
-    // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
-    const shouldGetNewestAndReverse = !orderBy && perPage !== false;
-    const effectiveOrderBy = shouldGetNewestAndReverse
-      ? { field: 'createdAt' as const, direction: 'DESC' as const }
-      : orderBy;
+      // Use perPage from args if provided, otherwise use threadConfig.lastMessages
+      const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
 
-    const vectorResults: {
-      id: string;
-      score: number;
-      metadata?: Record<string, any>;
-      vector?: number[];
-    }[] = [];
+      // When limiting messages (perPage !== false) without explicit orderBy, we need to:
+      // 1. Query DESC to get the NEWEST messages (not oldest)
+      // 2. Reverse results to restore chronological order for the LLM
+      // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
+      const shouldGetNewestAndReverse = !orderBy && perPage !== false;
+      const effectiveOrderBy = shouldGetNewestAndReverse
+        ? { field: 'createdAt' as const, direction: 'DESC' as const }
+        : orderBy;
 
-    // Log memory recall parameters, excluding potentially large schema objects
-    this.logger.debug(`Memory recall() with:`, {
-      threadId,
-      perPage,
-      page,
-      orderBy: effectiveOrderBy,
-      hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
-      workingMemoryEnabled: config.workingMemory?.enabled,
-      semanticRecallEnabled: Boolean(config.semanticRecall),
-    });
+      const vectorResults: {
+        id: string;
+        score: number;
+        metadata?: Record<string, any>;
+        vector?: number[];
+      }[] = [];
 
-    const defaultRange = DEFAULT_MESSAGE_RANGE;
-    const defaultTopK = DEFAULT_TOP_K;
+      // Log memory recall parameters, excluding potentially large schema objects
+      this.logger.debug(`Memory recall() with:`, {
+        threadId,
+        perPage,
+        page,
+        orderBy: effectiveOrderBy,
+        hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
+        workingMemoryEnabled: config.workingMemory?.enabled,
+        semanticRecallEnabled: Boolean(config.semanticRecall),
+      });
 
-    const vectorConfig =
-      typeof config?.semanticRecall === `boolean`
-        ? {
-            topK: defaultTopK,
-            messageRange: defaultRange,
-          }
-        : {
-            topK: config?.semanticRecall?.topK ?? defaultTopK,
-            messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
-          };
+      const defaultRange = DEFAULT_MESSAGE_RANGE;
+      const defaultTopK = DEFAULT_TOP_K;
 
-    const resourceScope =
-      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
-      config.semanticRecall === true;
+      const vectorConfig =
+        typeof config?.semanticRecall === `boolean`
+          ? {
+              topK: defaultTopK,
+              messageRange: defaultRange,
+            }
+          : {
+              topK: config?.semanticRecall?.topK ?? defaultTopK,
+              messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
+            };
 
-    // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
-    if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
-      throw new Error(
-        `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
-      );
-    }
+      const resourceScope =
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
+        config.semanticRecall === true;
 
-    if (config?.semanticRecall && vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
-      const { indexName } = await this.createEmbeddingIndex(dimension, config);
+      // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
+      if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
+        throw new Error(
+          `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
+            `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
+        );
+      }
 
-      await Promise.all(
-        embeddings.map(async embedding => {
-          if (typeof this.vector === `undefined`) {
-            throw new Error(
-              `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+      if (config?.semanticRecall && vectorSearchString && this.vector) {
+        semanticSearchUsed = true;
+
+        // Track embedding time
+        const embedStart = Date.now();
+        const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
+        embedDurationMs = Date.now() - embedStart;
+
+        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+        // Track vector search time
+        const vectorSearchStart = Date.now();
+        await Promise.all(
+          embeddings.map(async embedding => {
+            if (typeof this.vector === `undefined`) {
+              throw new Error(
+                `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+              );
+            }
+
+            vectorResults.push(
+              ...(await this.vector.query({
+                indexName,
+                queryVector: embedding,
+                topK: vectorConfig.topK,
+                filter: resourceScope
+                  ? {
+                      resource_id: resourceId,
+                    }
+                  : {
+                      thread_id: threadId,
+                    },
+              })),
             );
-          }
+          }),
+        );
+        vectorSearchDurationMs = Date.now() - vectorSearchStart;
+      }
 
-          vectorResults.push(
-            ...(await this.vector.query({
-              indexName,
-              queryVector: embedding,
-              topK: vectorConfig.topK,
-              filter: resourceScope
-                ? {
-                    resource_id: resourceId,
-                  }
-                : {
-                    thread_id: threadId,
-                  },
-            })),
-          );
-        }),
-      );
+      // Get raw messages from storage
+      const memoryStore = await this.getMemoryStore();
+      const paginatedResult = await memoryStore.listMessages({
+        threadId,
+        resourceId,
+        perPage,
+        page,
+        orderBy: effectiveOrderBy,
+        filter,
+        ...(vectorResults?.length
+          ? {
+              include: vectorResults.map(r => ({
+                id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
+            }
+          : {}),
+      });
+      // Reverse to restore chronological order if we queried DESC to get newest messages
+      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+
+      const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+
+      // Always return mastra-db format (V2)
+      const messages = list.get.all.db();
+      resultCount = messages.length;
+      success = true;
+
+      return { messages };
+    } catch (error) {
+      errorType = error instanceof Error ? error.name : 'UnknownError';
+      throw error;
+    } finally {
+      // Record metrics
+      const durationMs = Date.now() - startTime;
+      const metrics = getGlobalMetricsCollector();
+      metrics.recordMemoryRecall({
+        threadId,
+        resourceId,
+        resultCount,
+        durationMs,
+        embedDurationMs,
+        vectorSearchDurationMs,
+        semanticSearch: semanticSearchUsed,
+        success,
+        errorType,
+      });
     }
-
-    // Get raw messages from storage
-    const memoryStore = await this.getMemoryStore();
-    const paginatedResult = await memoryStore.listMessages({
-      threadId,
-      resourceId,
-      perPage,
-      page,
-      orderBy: effectiveOrderBy,
-      filter,
-      ...(vectorResults?.length
-        ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              threadId: r.metadata?.thread_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
-          }
-        : {}),
-    });
-    // Reverse to restore chronological order if we queried DESC to get newest messages
-    const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
-
-    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
-
-    // Always return mastra-db format (V2)
-    const messages = list.get.all.db();
-
-    return { messages };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -604,102 +645,140 @@ ${workingMemory}`;
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
   }): Promise<{ messages: MastraDBMessage[] }> {
-    // Then strip working memory tags from all messages
-    const updatedMessages = messages
-      .map(m => {
-        return this.updateMessageToHideWorkingMemoryV2(m);
+    const startTime = Date.now();
+    let embedDurationMs: number | undefined;
+    let vectorizationDurationMs: number | undefined;
+    let vectorized = false;
+    let success = false;
+    let errorType: string | undefined;
+    const messageCount = messages.length;
+    let threadId: string | undefined;
+
+    try {
+      // Then strip working memory tags from all messages
+      const updatedMessages = messages
+        .map(m => {
+          return this.updateMessageToHideWorkingMemoryV2(m);
+        })
+        .filter((m): m is MastraDBMessage => Boolean(m));
+
+      // Capture threadId from first message if available
+      threadId = updatedMessages[0]?.threadId;
+
+      const config = this.getMergedThreadConfig(memoryConfig);
+
+      // Convert messages to MastraDBMessage format if needed
+      const dbMessages = new MessageList({
+        generateMessageId: () => this.generateId(),
       })
-      .filter((m): m is MastraDBMessage => Boolean(m));
+        .add(updatedMessages, 'memory')
+        .get.all.db();
 
-    const config = this.getMergedThreadConfig(memoryConfig);
+      const memoryStore = await this.getMemoryStore();
+      const result = await memoryStore.saveMessages({
+        messages: dbMessages,
+      });
 
-    // Convert messages to MastraDBMessage format if needed
-    const dbMessages = new MessageList({
-      generateMessageId: () => this.generateId(),
-    })
-      .add(updatedMessages, 'memory')
-      .get.all.db();
+      if (this.vector && config.semanticRecall) {
+        vectorized = true;
+        const embedStart = Date.now();
 
-    const memoryStore = await this.getMemoryStore();
-    const result = await memoryStore.saveMessages({
-      messages: dbMessages,
-    });
+        // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
+        const embeddingData: Array<{
+          embeddings: number[][];
+          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+        }> = [];
+        let dimension: number | undefined;
 
-    if (this.vector && config.semanticRecall) {
-      // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
-      const embeddingData: Array<{
-        embeddings: number[][];
-        metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
-      }> = [];
-      let dimension: number | undefined;
+        // Process embeddings concurrently - this doesn't use DB connections
+        await Promise.all(
+          updatedMessages.map(async message => {
+            let textForEmbedding: string | null = null;
 
-      // Process embeddings concurrently - this doesn't use DB connections
-      await Promise.all(
-        updatedMessages.map(async message => {
-          let textForEmbedding: string | null = null;
+            if (
+              message.content.content &&
+              typeof message.content.content === 'string' &&
+              message.content.content.trim() !== ''
+            ) {
+              textForEmbedding = message.content.content;
+            } else if (message.content.parts && message.content.parts.length > 0) {
+              // Extract text from all text parts, concatenate
+              const joined = message.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => (part as TextPart).text)
+                .join(' ')
+                .trim();
+              if (joined) textForEmbedding = joined;
+            }
 
-          if (
-            message.content.content &&
-            typeof message.content.content === 'string' &&
-            message.content.content.trim() !== ''
-          ) {
-            textForEmbedding = message.content.content;
-          } else if (message.content.parts && message.content.parts.length > 0) {
-            // Extract text from all text parts, concatenate
-            const joined = message.content.parts
-              .filter(part => part.type === 'text')
-              .map(part => (part as TextPart).text)
-              .join(' ')
-              .trim();
-            if (joined) textForEmbedding = joined;
+            if (!textForEmbedding) return;
+
+            const result = await this.embedMessageContent(textForEmbedding);
+            dimension = result.dimension;
+
+            embeddingData.push({
+              embeddings: result.embeddings,
+              metadata: result.chunks.map(() => ({
+                message_id: message.id,
+                thread_id: message.threadId,
+                resource_id: message.resourceId,
+              })),
+            });
+          }),
+        );
+        embedDurationMs = Date.now() - embedStart;
+
+        // Batch all vectors into a single upsert call to avoid pool exhaustion
+        if (embeddingData.length > 0 && dimension !== undefined) {
+          if (typeof this.vector === `undefined`) {
+            throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
           }
 
-          if (!textForEmbedding) return;
+          const vectorizationStart = Date.now();
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
-          const result = await this.embedMessageContent(textForEmbedding);
-          dimension = result.dimension;
+          // Flatten all embeddings and metadata into single arrays
+          const allVectors: number[][] = [];
+          const allMetadata: Array<{
+            message_id: string;
+            thread_id: string | undefined;
+            resource_id: string | undefined;
+          }> = [];
 
-          embeddingData.push({
-            embeddings: result.embeddings,
-            metadata: result.chunks.map(() => ({
-              message_id: message.id,
-              thread_id: message.threadId,
-              resource_id: message.resourceId,
-            })),
+          for (const data of embeddingData) {
+            allVectors.push(...data.embeddings);
+            allMetadata.push(...data.metadata);
+          }
+
+          await this.vector.upsert({
+            indexName,
+            vectors: allVectors,
+            metadata: allMetadata,
           });
-        }),
-      );
-
-      // Batch all vectors into a single upsert call to avoid pool exhaustion
-      if (embeddingData.length > 0 && dimension !== undefined) {
-        if (typeof this.vector === `undefined`) {
-          throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
+          vectorizationDurationMs = Date.now() - vectorizationStart;
         }
-
-        const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-        // Flatten all embeddings and metadata into single arrays
-        const allVectors: number[][] = [];
-        const allMetadata: Array<{
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
-        }> = [];
-
-        for (const data of embeddingData) {
-          allVectors.push(...data.embeddings);
-          allMetadata.push(...data.metadata);
-        }
-
-        await this.vector.upsert({
-          indexName,
-          vectors: allVectors,
-          metadata: allMetadata,
-        });
       }
-    }
 
-    return result;
+      success = true;
+      return result;
+    } catch (error) {
+      errorType = error instanceof Error ? error.name : 'UnknownError';
+      throw error;
+    } finally {
+      // Record metrics
+      const durationMs = Date.now() - startTime;
+      const metrics = getGlobalMetricsCollector();
+      metrics.recordMemorySave({
+        threadId,
+        messageCount,
+        durationMs,
+        embedDurationMs,
+        vectorizationDurationMs,
+        vectorized,
+        success,
+        errorType,
+      });
+    }
   }
 
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {

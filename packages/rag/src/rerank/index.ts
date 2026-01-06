@@ -1,4 +1,5 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { getGlobalMetricsCollector } from '@mastra/core/observability';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
 import { Big } from 'big.js';
@@ -88,71 +89,97 @@ async function executeRerank({
   query,
   scorer,
   options,
+  model,
 }: {
   results: QueryResult[];
   query: string;
   scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
+  model?: string;
 }) {
-  const { queryEmbedding, topK = 3 } = options;
-  const weights = {
-    ...DEFAULT_WEIGHTS,
-    ...options.weights,
-  };
+  const startTime = Date.now();
+  let success = false;
+  let errorType: string | undefined;
 
-  //weights must add up to 1
-  const sum = Object.values(weights).reduce((acc: Big, w: number) => acc.plus(w.toString()), new Big(0));
-  if (!sum.eq(1)) {
-    throw new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+  try {
+    const { queryEmbedding, topK = 3 } = options;
+    const weights = {
+      ...DEFAULT_WEIGHTS,
+      ...options.weights,
+    };
+
+    //weights must add up to 1
+    const sum = Object.values(weights).reduce((acc: Big, w: number) => acc.plus(w.toString()), new Big(0));
+    if (!sum.eq(1)) {
+      throw new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+    }
+
+    const resultLength = results.length;
+
+    const queryAnalysis = queryEmbedding ? analyzeQueryEmbedding(queryEmbedding) : null;
+
+    // Get scores for each result
+    const scoredResults = await Promise.all(
+      results.map(async (result, index) => {
+        // Get semantic score from chosen provider
+        let semanticScore = 0;
+        if (result?.metadata?.text) {
+          semanticScore = await scorer.getRelevanceScore(query, result?.metadata?.text);
+        }
+
+        // Get existing vector score from result
+        const vectorScore = result.score;
+
+        // Get score of vector based on position in original list
+        const positionScore = calculatePositionScore(index, resultLength);
+
+        // Combine scores using weights for each component
+        let finalScore =
+          weights.semantic * semanticScore + weights.vector * vectorScore + weights.position * positionScore;
+
+        if (queryAnalysis) {
+          finalScore = adjustScores(finalScore, queryAnalysis);
+        }
+
+        return {
+          result,
+          score: finalScore,
+          details: {
+            semantic: semanticScore,
+            vector: vectorScore,
+            position: positionScore,
+            ...(queryAnalysis && {
+              queryAnalysis: {
+                magnitude: queryAnalysis.magnitude,
+                dominantFeatures: queryAnalysis.dominantFeatures,
+              },
+            }),
+          },
+        };
+      }),
+    );
+
+    // Sort by score and take top K
+    const rerankedResults = scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
+    success = true;
+
+    return rerankedResults;
+  } catch (error) {
+    errorType = error instanceof Error ? error.name : 'UnknownError';
+    throw error;
+  } finally {
+    // Record rerank metrics
+    const durationMs = Date.now() - startTime;
+    const metrics = getGlobalMetricsCollector();
+    metrics.recordRagRerank({
+      model,
+      inputCount: results.length,
+      outputCount: success ? (options.topK ?? 3) : 0,
+      durationMs,
+      success,
+      errorType,
+    });
   }
-
-  const resultLength = results.length;
-
-  const queryAnalysis = queryEmbedding ? analyzeQueryEmbedding(queryEmbedding) : null;
-
-  // Get scores for each result
-  const scoredResults = await Promise.all(
-    results.map(async (result, index) => {
-      // Get semantic score from chosen provider
-      let semanticScore = 0;
-      if (result?.metadata?.text) {
-        semanticScore = await scorer.getRelevanceScore(query, result?.metadata?.text);
-      }
-
-      // Get existing vector score from result
-      const vectorScore = result.score;
-
-      // Get score of vector based on position in original list
-      const positionScore = calculatePositionScore(index, resultLength);
-
-      // Combine scores using weights for each component
-      let finalScore =
-        weights.semantic * semanticScore + weights.vector * vectorScore + weights.position * positionScore;
-
-      if (queryAnalysis) {
-        finalScore = adjustScores(finalScore, queryAnalysis);
-      }
-
-      return {
-        result,
-        score: finalScore,
-        details: {
-          semantic: semanticScore,
-          vector: vectorScore,
-          position: positionScore,
-          ...(queryAnalysis && {
-            queryAnalysis: {
-              magnitude: queryAnalysis.magnitude,
-              dominantFeatures: queryAnalysis.dominantFeatures,
-            },
-          }),
-        },
-      };
-    }),
-  );
-
-  // Sort by score and take top K
-  return scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
 }
 
 export async function rerankWithScorer({
@@ -171,6 +198,7 @@ export async function rerankWithScorer({
     query,
     scorer,
     options,
+    model: 'custom-scorer',
   });
 }
 
@@ -194,5 +222,6 @@ export async function rerank(
     query,
     scorer: semanticProvider,
     options,
+    model: model.modelId,
   });
 }

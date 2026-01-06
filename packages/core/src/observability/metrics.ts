@@ -419,8 +419,12 @@ export interface MemorySaveMetrics {
   messageCount: number;
   /** Duration in milliseconds */
   durationMs: number;
-  /** Whether embeddings were generated */
-  embeddingsGenerated: boolean;
+  /** Duration of embedding generation in milliseconds */
+  embedDurationMs?: number;
+  /** Duration of vectorization/storage in milliseconds */
+  vectorizationDurationMs?: number;
+  /** Whether vectors were stored */
+  vectorized: boolean;
   /** Whether the operation was successful */
   success: boolean;
   /** Error type if failed */
@@ -454,7 +458,9 @@ export interface RagQueryMetrics {
   /** Duration of reranking (if applied) */
   rerankDurationMs?: number;
   /** Whether reranking was applied */
-  rerankApplied: boolean;
+  rerankApplied?: boolean;
+  /** Whether a filter was applied */
+  hasFilter?: boolean;
   /** Top relevance score */
   topScore?: number;
   /** Whether the operation was successful */
@@ -474,9 +480,13 @@ export interface RagEmbedMetrics {
   /** Agent ID (if applicable) */
   agentId?: string;
   /** Number of texts embedded */
-  textCount: number;
+  textCount?: number;
   /** Total characters embedded */
   totalCharacters?: number;
+  /** Total input tokens (if available from model) */
+  inputTokens?: number;
+  /** Embedding dimension */
+  dimension?: number;
   /** Duration in milliseconds */
   durationMs: number;
   /** Whether the operation was successful */
@@ -501,8 +511,10 @@ export interface RagVectorSearchMetrics {
   resultCount: number;
   /** Duration in milliseconds */
   durationMs: number;
+  /** Whether a filter was applied (alias for filterApplied) */
+  hasFilter?: boolean;
   /** Whether a filter was applied */
-  filterApplied: boolean;
+  filterApplied?: boolean;
   /** Min/max similarity scores */
   minScore?: number;
   maxScore?: number;
