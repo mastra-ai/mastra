@@ -29,35 +29,35 @@ When prompted, choose a provider (e.g. OpenAI) and enter your key:
 <TabItem value="npm" label="npm">
 
 ```bash
-npm create mastra@beta
+npm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash
-pnpm create mastra@beta
+pnpm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash
-yarn create mastra@beta
+yarn create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash
-bun create mastra@beta
+bun create mastra@latest
 ```
 
 :::warning
 
 Due to a [known issue with Bun](https://github.com/oven-sh/bun/issues/25314) you'll need to run these steps after creating the project:
 
-- `bun add @mastra/server@beta`
+- `bun add @mastra/server@latest`
 - Delete your `node_modules` folder
 - Delete your `bun.lock` file
 - Run `bun install` to reinstall your packages

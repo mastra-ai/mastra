@@ -53,7 +53,7 @@ This minimal configuration automatically includes the `DefaultExporter`, `CloudE
 If you need to configure specific exporters (like OTLP), install the exporter package and configure it:
 
 ```bash
-npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
 ```
 
 ```typescript
@@ -134,7 +134,7 @@ The observability functionality has moved to a dedicated `@mastra/observability`
 To migrate, install the package and update your import statements:
 
 ```bash
-npm install @mastra/observability@beta
+npm install @mastra/observability@latest
 ```
 
 ```diff
@@ -274,7 +274,7 @@ npm install @mastra/[exporter-name]-exporter
 
 **OpenTelemetry exporter** (Dash0, Laminar, New Relic, SigNoz, Traceloop):
 ```bash
-npm install @mastra/otel-exporter@beta
+npm install @mastra/otel-exporter@latest
 ```
 
 Plus the required protocol package for your provider (see [OTEL guide](/docs/v1/observability/tracing/exporters/otel#installation)).

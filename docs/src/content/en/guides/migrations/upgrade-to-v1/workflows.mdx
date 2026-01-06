@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/mastra-plural-apis .
+npx @mastra/codemod@latest v1/mastra-plural-apis .
 ```
 
 :::
@@ -52,7 +52,7 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/runtime-context .
+npx @mastra/codemod@latest v1/runtime-context .
 ```
 
 :::
@@ -73,7 +73,7 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-create-run-async .
+npx @mastra/codemod@latest v1/workflow-create-run-async .
 ```
 
 :::
@@ -98,7 +98,7 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-run-count .
+npx @mastra/codemod@latest v1/workflow-run-count .
 ```
 
 :::
@@ -119,7 +119,7 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-list-runs .
+npx @mastra/codemod@latest v1/workflow-list-runs .
 ```
 
 :::
@@ -247,7 +247,7 @@ See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStre
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-stream-vnext .
+npx @mastra/codemod@latest v1/workflow-stream-vnext .
 ```
 
 :::
