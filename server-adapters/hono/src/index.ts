@@ -4,8 +4,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -153,12 +157,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     );
   }
 
-  async getParams(
-    route: ServerRoute,
-    request: HonoRequest,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+  async getParams(route: ServerRoute, request: HonoRequest): Promise<ParsedRequestParams> {
     const urlParams = request.param();
-    const queryParams = request.query();
+    // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
+    const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.header('content-type') || '';
@@ -182,7 +184,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
       }
     }
-    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+    return { urlParams, queryParams, body };
   }
 
   /**
@@ -291,7 +293,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         if (params.queryParams) {
           try {
-            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+            params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
             console.error('Error parsing query params', error);
             // Zod validation errors should return 400 Bad Request with structured issues
