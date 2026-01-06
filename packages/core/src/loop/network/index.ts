@@ -234,6 +234,7 @@ export async function createNetworkLoop({
   agent,
   generateId,
   routingAgentOptions,
+  abortSignal,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -241,6 +242,8 @@ export async function createNetworkLoop({
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: () => string;
+  /** Signal to abort the network execution */
+  abortSignal?: AbortSignal;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -333,6 +336,7 @@ export async function createNetworkLoop({
               },
             },
           },
+          abortSignal,
           ...routingAgentOptions,
         } satisfies AgentExecutionOptions<any>;
 
@@ -520,6 +524,7 @@ export async function createNetworkLoop({
             },
           },
         },
+        abortSignal,
         ...routingAgentOptions,
       };
 
@@ -633,6 +638,7 @@ export async function createNetworkLoop({
       const result = await agentForStep.stream(inputData.prompt, {
         requestContext: requestContext,
         runId,
+        abortSignal,
         ...(agentHasOwnMemory
           ? {
               memory: {
@@ -783,6 +789,13 @@ export async function createNetworkLoop({
         args: inputData,
         runId: stepId,
       };
+
+      // Wire abort signal to cancel workflow run
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', () => {
+          run.cancel();
+        });
+      }
 
       await writer?.write({
         type: 'workflow-execution-start',
@@ -984,6 +997,7 @@ export async function createNetworkLoop({
           // TODO: Pass proper tracing context when network supports tracing
           tracingContext: { currentSpan: undefined },
           writer,
+          abortSignal,
         },
         { toolCallId, messages: [] },
       );
@@ -1181,6 +1195,8 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   threadId,
   resourceId,
   messages,
+  abortSignal,
+  onAbort,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1192,6 +1208,10 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   threadId?: string;
   resourceId?: string;
   messages: MessageListInput;
+  /** Signal to abort the network execution */
+  abortSignal?: AbortSignal;
+  /** Callback fired when network execution is aborted */
+  onAbort?: (event: any) => Promise<void> | void;
 }) {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1217,6 +1237,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
+    abortSignal,
   });
 
   const finalStep = createStep({
@@ -1294,6 +1315,8 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
 
   return new MastraAgentNetworkStream({
     run,
+    abortSignal,
+    onAbort,
     createStream: () => {
       return run.stream({
         inputData: {
