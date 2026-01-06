@@ -27,10 +27,11 @@ Both are optional but at least one must be present for a workspace to be useful.
 │  │  │   │                         │   │                              │    │ │ │
 │  │  │   │  External packages:     │   │  External packages:          │    │ │ │
 │  │  │   │  ┌─────────────────┐    │   │  ┌─────────────────┐         │    │ │ │
-│  │  │   │  │ • AgentFS        │   │   │  │ • ComputeSDK    │         │    │ │ │
-│  │  │   │  │ • RamFilesystem  │   │   │  │   (E2B, Modal,  │         │    │ │ │
-│  │  │   │  └─────────────────┘    │   │  │    Docker...)   │         │    │ │ │
-│  │  │   │                         │   │  └─────────────────┘         │    │ │ │
+│  │  │   │  │ • AgentFilesystem│   │   │  │ • ComputeSDK    │         │    │ │ │
+│  │  │   │  │   (@mastra/     │   │   │  │   (E2B, Modal,  │         │    │ │ │
+│  │  │   │  │   filesystem-   │   │   │  │    Docker...)   │         │    │ │ │
+│  │  │   │  │   agentfs)      │   │   │  │   (planned)     │         │    │ │ │
+│  │  │   │  └─────────────────┘    │   │  └─────────────────┘         │    │ │ │
 │  │  │   └─────────────────────────┘   └──────────────────────────────┘    │ │ │
 │  │  └─────────────────────────────────────────────────────────────────────┘ │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
@@ -355,7 +356,29 @@ const agent = new Agent({
 const response = await agent.generate('Create a hello.txt file with "Hello World" content');
 ```
 
+### ✅ AgentFS Provider Complete
+
+The `@mastra/filesystem-agentfs` package provides SQLite/Turso-backed persistent storage:
+
+```typescript
+import { Workspace } from '@mastra/core';
+import { AgentFilesystem } from '@mastra/filesystem-agentfs';
+
+const workspace = new Workspace({
+  filesystem: new AgentFilesystem({ id: 'my-agent' }),
+});
+
+await workspace.init();
+await workspace.writeFile('/data.json', JSON.stringify({ key: 'value' }));
+```
+
+Features:
+- Persistent storage in SQLite database
+- Works with local SQLite or Turso cloud
+- POSIX-like filesystem semantics
+- Atomic operations
+- Easy backup (single file)
+
 ### 📋 Planned
 
-1. **AgentFS provider** - Using `agentfs-sdk` from Turso
-2. **ComputeSDKSandbox provider** - E2B, Modal, Docker, etc.
+1. **ComputeSDKSandbox provider** - E2B, Modal, Docker, etc.
