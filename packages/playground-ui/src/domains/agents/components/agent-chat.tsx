@@ -3,6 +3,7 @@ import { Thread } from '@/components/assistant-ui/thread';
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
+import { ThreadProvider } from '../context/thread-context';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
@@ -62,7 +63,9 @@ export const AgentChat = ({
       settings={settings}
       requestContext={requestContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      <ThreadProvider threadId={threadId} agentId={agentId} onBranchCreated={refreshThreadList}>
+        <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      </ThreadProvider>
     </MastraRuntimeProvider>
   );
 };

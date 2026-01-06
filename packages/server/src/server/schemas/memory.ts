@@ -411,3 +411,64 @@ export const cloneThreadResponseSchema = z.object({
   thread: threadSchema,
   clonedMessages: z.array(messageSchema),
 });
+
+/**
+ * Body schema for POST /api/memory/threads/:threadId/branch
+ */
+export const branchThreadBodySchema = z.object({
+  branchPointMessageId: z.string().optional().describe('ID of the message to branch from. Defaults to latest message.'),
+  newThreadId: z.string().optional().describe('Custom ID for the new branch thread'),
+  resourceId: z.string().optional().describe('Resource ID for the branch thread'),
+  title: z.string().optional().describe('Title for the branch thread'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the branch'),
+});
+
+/**
+ * Response schema for POST /api/memory/threads/:threadId/branch
+ */
+export const branchThreadResponseSchema = z.object({
+  thread: threadSchema,
+  inheritedMessageCount: z.number().describe('Number of messages inherited from the parent thread'),
+});
+
+/**
+ * Body schema for POST /api/memory/threads/:threadId/promote
+ */
+export const promoteBranchBodySchema = z.object({
+  deleteParentMessages: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('If true, delete divergent parent messages instead of archiving'),
+  archiveThreadTitle: z.string().optional().describe('Custom title for the archive thread'),
+});
+
+/**
+ * Response schema for POST /api/memory/threads/:threadId/promote
+ */
+export const promoteBranchResponseSchema = z.object({
+  promotedThread: threadSchema,
+  archiveThread: threadSchema.optional(),
+  archivedMessageCount: z.number().describe('Number of messages archived or deleted'),
+});
+
+/**
+ * Response schema for GET /api/memory/threads/:threadId/branches
+ */
+export const listBranchesResponseSchema = z.object({
+  branches: z.array(threadSchema),
+});
+
+/**
+ * Response schema for GET /api/memory/threads/:threadId/parent
+ */
+export const getParentThreadResponseSchema = z.object({
+  thread: threadSchema.nullable(),
+});
+
+/**
+ * Response schema for GET /api/memory/threads/:threadId/history
+ */
+export const getBranchHistoryResponseSchema = z.object({
+  history: z.array(threadSchema),
+});

@@ -332,6 +332,44 @@ export type CloneMemoryThreadResponse = {
   clonedMessages: MastraDBMessage[];
 };
 
+export interface BranchMemoryThreadParams {
+  branchPointMessageId?: string;
+  newThreadId?: string;
+  resourceId?: string;
+  title?: string;
+  metadata?: Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type BranchMemoryThreadResponse = {
+  thread: StorageThreadType;
+  inheritedMessageCount: number;
+};
+
+export interface PromoteBranchParams {
+  deleteParentMessages?: boolean;
+  archiveThreadTitle?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type PromoteBranchResponse = {
+  promotedThread: StorageThreadType;
+  archiveThread?: StorageThreadType;
+  archivedMessageCount: number;
+};
+
+export type ListBranchesResponse = {
+  branches: StorageThreadType[];
+};
+
+export type GetParentThreadResponse = {
+  thread: StorageThreadType | null;
+};
+
+export type GetBranchHistoryResponse = {
+  history: StorageThreadType[];
+};
+
 export interface GetLogsParams {
   transportId: string;
   fromDate?: Date;
