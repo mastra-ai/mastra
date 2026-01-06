@@ -48,7 +48,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
 
       const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
-      const filter: Record<string, any> = requestContext?.get('filter') ?? (inputData.filter as Record<string, any>);
+      const filter: unknown = requestContext?.get('filter') ?? inputData.filter;
       const queryText = inputData.queryText;
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
@@ -61,7 +61,11 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
 
         const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
-          throw new Error(`Vector store '${vectorStoreName}' not found`);
+          if (logger) {
+            logger.error(`Vector store '${vectorStoreName}' not found`);
+          }
+          // Return empty results for graceful degradation when store is not found
+          return { relevantContext: [], sources: [] };
         }
         // Get relevant chunks from the vector database
         const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
@@ -142,7 +146,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        throw err;
+        return { relevantContext: [], sources: [] };
       }
     },
     // Use any for output schema as the structure of the output causes type inference issues

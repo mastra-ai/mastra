@@ -207,7 +207,7 @@ describe('createGraphRAGTool', () => {
       );
     });
 
-    it('should propagate error when async vectorStore resolver throws', async () => {
+    it('should return empty results when async vectorStore resolver throws', async () => {
       const resolverError = new Error('Failed to resolve vector store for tenant');
 
       const failingVectorStoreResolver = vi.fn(
@@ -225,10 +225,10 @@ describe('createGraphRAGTool', () => {
 
       const requestContext = new RequestContext();
 
-      await expect(tool.execute({ queryText: 'test query', topK: 5 }, { requestContext })).rejects.toThrow(
-        'Failed to resolve vector store for tenant',
-      );
+      // Error is logged and returns empty results for graceful degradation
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
 
+      expect(result).toEqual({ relevantContext: [], sources: [] });
       expect(failingVectorStoreResolver).toHaveBeenCalled();
       expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
@@ -268,6 +268,53 @@ describe('createGraphRAGTool', () => {
           vectorStore: staticVectorStore,
         }),
       );
+    });
+
+    it('should return empty results when vectorStore resolver returns undefined', async () => {
+      const vectorStoreResolver = vi.fn(({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+        // Simulate a resolver that can't find a store for the given context
+        return undefined;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('schemaId', 'unknown-tenant');
+
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      // Returns empty results for graceful degradation
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(vectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
+    it('should return empty results when async vectorStore resolver returns undefined', async () => {
+      const asyncVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return undefined;
+        },
+      );
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      // Returns empty results for graceful degradation
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
   });
 });
