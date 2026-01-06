@@ -13,7 +13,7 @@ import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-u
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -4002,10 +4002,10 @@ describe('Workflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(run.runId);
+      const workflowRun = await workflow.getWorkflowRunById(run.runId);
 
-      expect(executionResult?.status).toBe('paused');
-      expect(executionResult?.steps).toEqual({
+      expect(workflowRun?.status).toBe('paused');
+      expect(workflowRun?.steps).toEqual({
         step1: {
           status: 'success',
           output: { value: 'step1' },
@@ -4119,7 +4119,7 @@ describe('Workflow', () => {
 
       // Poll until workflow completes
       while (true) {
-        const currentResult = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+        const currentResult = await testParallelWorkflow.getWorkflowRunById(run.runId);
 
         if (!currentResult) {
           allStepsPresentThroughout = false;
@@ -4191,7 +4191,7 @@ describe('Workflow', () => {
       await workflowPromise;
 
       // Get final workflow execution result
-      const result = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const result = await testParallelWorkflow.getWorkflowRunById(run.runId);
 
       // Verify all parallel steps went through running state
       expect(foundAllRunning).toBe(true);
@@ -6189,9 +6189,9 @@ describe('Workflow', () => {
       for await (const data of stream) {
         if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
           setTimeout(async () => {
-            const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
-            expect(currentExecResult?.status).toBe('running');
-            expect(currentExecResult?.steps['final']?.status).toBe('running');
+            const currentRun = await incrementWorkflow.getWorkflowRunById(run.runId);
+            expect(currentRun?.status).toBe('running');
+            expect(currentRun?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }
@@ -6257,7 +6257,7 @@ describe('Workflow', () => {
 
       const run = await incrementWorkflow.createRun();
       await run.start({ inputData: { value: 0 } });
-      const result = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const result = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(result?.status).toBe('success');
       expect(result?.steps).toMatchObject({
         'nested-increment-workflow': {
@@ -6305,6 +6305,116 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should return only requested fields when fields option is specified', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => ({ value: 'result1' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      const testStorage = new MockStore();
+      const workflow = createWorkflow({
+        id: 'fields-filter-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { workflow },
+      });
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      // Request only status field
+      const statusOnly = await workflow.getWorkflowRunById(run.runId, { fields: ['status'] });
+      expect(statusOnly?.status).toBe('success');
+      expect(statusOnly?.steps).toBeUndefined(); // steps not requested, should be omitted
+      expect(statusOnly?.result).toBeUndefined();
+      expect(statusOnly?.payload).toBeUndefined();
+
+      // Request status and steps
+      const withSteps = await workflow.getWorkflowRunById(run.runId, { fields: ['status', 'steps'] });
+      expect(withSteps?.status).toBe('success');
+      expect(withSteps?.steps).toMatchObject({
+        step1: { status: 'success', output: { value: 'result1' } },
+      });
+      expect(withSteps?.result).toBeUndefined();
+
+      // Request all fields (no fields option)
+      const allFields = await workflow.getWorkflowRunById(run.runId);
+      expect(allFields?.status).toBe('success');
+      expect(allFields?.steps).toMatchObject({
+        step1: { status: 'success', output: { value: 'result1' } },
+      });
+      expect(allFields?.result).toBeDefined();
+      expect(allFields?.runId).toBe(run.runId);
+      expect(allFields?.workflowName).toBe('fields-filter-workflow');
+    });
+
+    it('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
+      const innerStep = createStep({
+        id: 'inner-step',
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(innerStep)
+        .commit();
+
+      const outerStep = createStep({
+        id: 'outer-step',
+        execute: async ({ inputData }) => ({ value: inputData.value * 2 }),
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const testStorage = new MockStore();
+      const parentWorkflow = createWorkflow({
+        id: 'parent-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      parentWorkflow.then(nestedWorkflow).then(outerStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { parentWorkflow, nestedWorkflow },
+      });
+
+      const run = await parentWorkflow.createRun();
+      await run.start({ inputData: { value: 1 } });
+
+      // With nested workflows (default) - should include nested step keys
+      const withNested = await parentWorkflow.getWorkflowRunById(run.runId);
+      expect(withNested?.status).toBe('success');
+      expect(withNested?.steps).toHaveProperty('nested-workflow');
+      expect(withNested?.steps).toHaveProperty('nested-workflow.inner-step');
+      expect(withNested?.steps).toHaveProperty('outer-step');
+
+      // Without nested workflows - should only include top-level steps
+      const withoutNested = await parentWorkflow.getWorkflowRunById(run.runId, {
+        withNestedWorkflows: false,
+      });
+      expect(withoutNested?.status).toBe('success');
+      expect(withoutNested?.steps).toHaveProperty('nested-workflow');
+      expect(withoutNested?.steps).not.toHaveProperty('nested-workflow.inner-step');
+      expect(withoutNested?.steps).toHaveProperty('outer-step');
     });
   }, 10000); //we have a 5 second timeout for the final step in the workflow
 
@@ -6518,7 +6628,7 @@ describe('Workflow', () => {
       // Verify status is suspended in storage
       const beforeCancel = await workflow.getWorkflowRunById(runId);
       expect(beforeCancel).not.toBeNull();
-      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
+      expect(beforeCancel!.status).toBe('suspended');
 
       // Cancel the suspended workflow
       await run.cancel();
@@ -6526,7 +6636,7 @@ describe('Workflow', () => {
       // Check status IMMEDIATELY after cancel() returns
       const afterCancel = await workflow.getWorkflowRunById(runId);
       expect(afterCancel).not.toBeNull();
-      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
+      expect(afterCancel!.status).toBe('canceled');
     });
   });
 
@@ -9164,7 +9274,7 @@ describe('Workflow', () => {
         expect(errMessage).toBe('Invalid resume data: \n- value: Required');
       }
 
-      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(wflowRun?.status).toBe('suspended');
 
       const resumeResult = await run.resume({
@@ -10176,7 +10286,7 @@ describe('Workflow', () => {
         expect(errMessage).toBe('Invalid resume data: \n- value: Invalid input: expected number, received undefined');
       }
 
-      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(wflowRun?.status).toBe('suspended');
 
       const resumeResult = await run.resume({
@@ -16582,10 +16692,12 @@ describe('Workflow', () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
 
-      const run3 = await workflow.getWorkflowRunById(run1.runId);
-      expect(run3?.runId).toBe(run1.runId);
-      expect(run3?.workflowName).toBe('test-workflow');
-      expect(run3?.snapshot).toEqual(runs[0].snapshot);
+      const workflowRun = await workflow.getWorkflowRunById(run1.runId);
+      expect(workflowRun?.runId).toBe(run1.runId);
+      expect(workflowRun?.workflowName).toBe('test-workflow');
+      // getWorkflowRunById now returns WorkflowState with processed execution state
+      expect(workflowRun?.status).toBe('success');
+      expect(workflowRun?.steps).toBeDefined();
 
       await workflow.deleteWorkflowRunById(run1.runId);
       const deleted = await workflow.getWorkflowRunById(run1.runId);
@@ -20799,7 +20911,7 @@ describe('Workflow', () => {
       // Poll for completion
       let result;
       for (let i = 0; i < 10; i++) {
-        result = await workflow.getWorkflowRunExecutionResult(runId);
+        result = await workflow.getWorkflowRunById(runId);
         if (result?.status === 'success') break;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
