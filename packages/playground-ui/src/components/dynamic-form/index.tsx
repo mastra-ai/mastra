@@ -1,7 +1,6 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import { useMemo, useRef, useCallback } from 'react';
 import { Button } from '../../ds/components/Button';
 import { AutoForm } from '@/components/ui/autoform';
 import type { ExtendableAutoFormProps } from '@autoform/react';
@@ -48,70 +47,40 @@ export function DynamicForm<T extends z.ZodSchema>({
   children,
 }: DynamicFormProps<T>) {
   const isNotZodObject = !(schema instanceof ZodObject);
-
-  // Use refs to store callbacks so they don't cause re-renders
-  const onChangeRef = useRef(onChange);
-  const onSubmitRef = useRef(onSubmit);
-  onChangeRef.current = onChange;
-  onSubmitRef.current = onSubmit;
-
-  // Memoize the schema provider to prevent form remounting
-  const schemaProvider = useMemo(() => {
-    const normalizedSchema = (s: z.ZodSchema) => {
-      if (isEmptyZodObject(s)) {
-        return z.object({});
-      }
-      if (!(s instanceof ZodObject)) {
-        // using a non-printable character to avoid conflicts with the form data
-        return z.object({
-          '\u200B': s,
-        });
-      }
-      return s;
-    };
-    return new CustomZodProvider(normalizedSchema(schema) as any);
-  }, [schema]);
-
-  // Memoize onFormInit to prevent useEffect re-runs in CustomAutoForm
-  const onFormInit = useCallback(
-    (form: any) => {
-      // Subscribe to form changes using ref to get latest onChange
-      const subscription = form.watch((values: any) => {
-        const currentOnChange = onChangeRef.current;
-        if (currentOnChange) {
-          currentOnChange(isNotZodObject ? values['\u200B'] || {} : values);
-        }
-      });
-      // Return cleanup function
-      return () => subscription.unsubscribe();
-    },
-    [isNotZodObject],
-  );
-
-  // Memoize submit handler
-  const handleSubmit = useCallback(
-    async (values: any) => {
-      const currentOnSubmit = onSubmitRef.current;
-      await currentOnSubmit?.(isNotZodObject ? values['\u200B'] || {} : values);
-    },
-    [isNotZodObject],
-  );
-
-  // Memoize default values
-  const normalizedDefaultValues = useMemo(() => {
-    return isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any);
-  }, [isNotZodObject, defaultValues]);
-
   if (!schema) {
     console.error('no form schema found');
     return null;
   }
 
+  const normalizedSchema = (schema: z.ZodSchema) => {
+    if (isEmptyZodObject(schema)) {
+      return z.object({});
+    }
+    if (isNotZodObject) {
+      // using a non-printable character to avoid conflicts with the form data
+      return z.object({
+        '\u200B': schema,
+      });
+    }
+    return schema;
+  };
+
+  const schemaProvider = new CustomZodProvider(normalizedSchema(schema) as any);
+
   const formProps: ExtendableAutoFormProps<any> = {
     schema: schemaProvider,
-    onSubmit: handleSubmit,
-    onFormInit,
-    defaultValues: normalizedDefaultValues,
+    onSubmit: async (values: any) => {
+      await onSubmit?.(isNotZodObject ? values['\u200B'] || {} : values);
+    },
+    onFormInit: onChange
+      ? (form: any) => {
+          const subscription = form.watch((values: any) => {
+            onChange(isNotZodObject ? values['\u200B'] || {} : values);
+          });
+          return () => subscription.unsubscribe();
+        }
+      : undefined,
+    defaultValues: isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any),
     formProps: {
       className,
       noValidate: true,
