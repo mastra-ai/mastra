@@ -421,7 +421,7 @@ export async function setupStreamingMemoryTest({
       it('REAL WORKFLOW: should capture workflow execution events during streaming and preserve them in memory recall', async () => {
         // Skip if model is not V5+ (stream() requires V5+ models)
         if (!isV5PlusModel(model)) {
-          console.log('Skipping REAL WORKFLOW test - requires AI SDK v5+ model');
+          console.info('Skipping REAL WORKFLOW test - requires AI SDK v5+ model');
           return;
         }
 
@@ -506,31 +506,31 @@ export async function setupStreamingMemoryTest({
 
         // Wait for stream to complete
         const response = await streamResult.response;
-        console.log('Stream completed, response text length:', (response as any)?.text?.length);
+        console.info('Stream completed, response text length:', (response as any)?.text?.length);
 
         // Analyze all streamed chunk types
         const allChunkTypes = [...new Set(streamedChunks.map(c => c.type))].sort();
-        console.log('\n=== STREAMED CHUNK TYPES ===');
-        console.log(allChunkTypes.join('\n'));
-        console.log(`\nTotal chunks: ${streamedChunks.length}`);
+        console.info('\n=== STREAMED CHUNK TYPES ===');
+        console.info(allChunkTypes.join('\n'));
+        console.info(`\nTotal chunks: ${streamedChunks.length}`);
 
         // Log step-related chunks in detail (these are workflow step events)
         const stepChunks = streamedChunks.filter(c => c.type?.includes('step'));
-        console.log(`\n=== STEP-RELATED CHUNKS (${stepChunks.length}) ===`);
+        console.info(`\n=== STEP-RELATED CHUNKS (${stepChunks.length}) ===`);
         stepChunks.forEach((c, i) => {
-          console.log(`${i + 1}. type: ${c.type}`);
+          console.info(`${i + 1}. type: ${c.type}`);
           if (c.payload) {
-            console.log(`   payload: ${JSON.stringify(c.payload).slice(0, 200)}`);
+            console.info(`   payload: ${JSON.stringify(c.payload).slice(0, 200)}`);
           }
         });
 
         // Log tool-related chunks (workflow called as tool)
         const toolChunks = streamedChunks.filter(c => c.type?.includes('tool'));
-        console.log(`\n=== TOOL-RELATED CHUNKS (${toolChunks.length}) ===`);
+        console.info(`\n=== TOOL-RELATED CHUNKS (${toolChunks.length}) ===`);
         toolChunks.forEach((c, i) => {
-          console.log(`${i + 1}. type: ${c.type}`);
+          console.info(`${i + 1}. type: ${c.type}`);
           if (c.payload?.toolName) {
-            console.log(`   toolName: ${c.payload.toolName}`);
+            console.info(`   toolName: ${c.payload.toolName}`);
           }
         });
 
@@ -540,19 +540,19 @@ export async function setupStreamingMemoryTest({
           resourceId,
         });
 
-        console.log('\n=== RECALLED MESSAGES ===');
-        console.log(`Total messages recalled: ${recallResult.messages.length}`);
+        console.info('\n=== RECALLED MESSAGES ===');
+        console.info(`Total messages recalled: ${recallResult.messages.length}`);
 
         // Analyze what parts are in the recalled messages
         const allRecalledParts: string[] = [];
         recallResult.messages.forEach((msg: any, i: number) => {
-          console.log(`\nMessage ${i + 1} (${msg.role}):`);
+          console.info(`\nMessage ${i + 1} (${msg.role}):`);
           if (msg.content?.parts) {
             msg.content.parts.forEach((p: any) => {
               allRecalledParts.push(p.type);
-              console.log(`  - ${p.type}`);
+              console.info(`  - ${p.type}`);
               if (p.type === 'tool-invocation') {
-                console.log(`    toolName: ${p.toolInvocation?.toolName}`);
+                console.info(`    toolName: ${p.toolInvocation?.toolName}`);
               }
             });
           }
@@ -562,31 +562,31 @@ export async function setupStreamingMemoryTest({
         const streamedTypes = new Set(allChunkTypes);
         const recalledTypes = new Set(allRecalledParts);
 
-        console.log('\n=== COMPARISON: STREAMED vs RECALLED ===');
-        console.log(`Streamed chunk types (${streamedTypes.size}): ${[...streamedTypes].join(', ')}`);
-        console.log(`Recalled part types (${recalledTypes.size}): ${[...recalledTypes].join(', ')}`);
+        console.info('\n=== COMPARISON: STREAMED vs RECALLED ===');
+        console.info(`Streamed chunk types (${streamedTypes.size}): ${[...streamedTypes].join(', ')}`);
+        console.info(`Recalled part types (${recalledTypes.size}): ${[...recalledTypes].join(', ')}`);
 
         // Check what step events were streamed vs recalled
         // Note: step-finish is now persisted as data-step-finish, tool-output as data-tool-output
         const streamedStepTypes = allChunkTypes.filter(t => t?.includes('step'));
         const recalledStepTypes = allRecalledParts.filter(t => t?.includes('step'));
-        console.log(`\nStep events streamed: ${streamedStepTypes.join(', ') || 'none'}`);
-        console.log(`Step events recalled: ${recalledStepTypes.join(', ') || 'none'}`);
+        console.info(`\nStep events streamed: ${streamedStepTypes.join(', ') || 'none'}`);
+        console.info(`Step events recalled: ${recalledStepTypes.join(', ') || 'none'}`);
 
         // Check for data-step-finish and data-tool-output (the persisted versions)
         const hasDataStepFinish = allRecalledParts.some(t => t === 'data-step-finish');
         const hasDataToolOutput = allRecalledParts.some(t => t === 'data-tool-output');
-        console.log(`\nPersisted workflow events in recall:`);
-        console.log(`  data-step-finish: ${hasDataStepFinish ? 'YES ✓' : 'NO'}`);
-        console.log(`  data-tool-output: ${hasDataToolOutput ? 'YES ✓' : 'NO'}`);
+        console.info(`\nPersisted workflow events in recall:`);
+        console.info(`  data-step-finish: ${hasDataStepFinish ? 'YES ✓' : 'NO'}`);
+        console.info(`  data-tool-output: ${hasDataToolOutput ? 'YES ✓' : 'NO'}`);
 
         // Verify the fix: step-finish should now be persisted as data-step-finish
         if (streamedStepTypes.includes('step-finish')) {
-          console.log(`\n=== FIX VERIFICATION (issue #11640) ===`);
+          console.info(`\n=== FIX VERIFICATION (issue #11640) ===`);
           if (hasDataStepFinish) {
-            console.log('✓ step-finish is now persisted as data-step-finish');
+            console.info('✓ step-finish is now persisted as data-step-finish');
           } else {
-            console.log('✗ step-finish was streamed but data-step-finish is NOT in recall');
+            console.info('✗ step-finish was streamed but data-step-finish is NOT in recall');
           }
         }
 
