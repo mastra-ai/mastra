@@ -15,6 +15,7 @@ import {
 } from '../workflows/content-moderation';
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
+import { createScorer } from '@mastra/core/evals';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -22,17 +23,12 @@ export const weatherInfo = createTool({
   suspendSchema: z.object({
     message: z.string(),
   }),
-  resumeSchema: z.object({
+  inputSchema: z.object({
     city: z.string(),
   }),
-  execute: async (_inputData, context) => {
-    if (!context?.agent?.resumeData) {
-      return context?.agent?.suspend({
-        message: 'What city do you want to know the weather for?',
-      });
-    }
+  execute: async inputData => {
     return {
-      city: context?.agent?.resumeData?.city,
+      city: inputData.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -148,6 +144,27 @@ export const networkAgent = new Agent({
   //   weatherInfo,
   // },
   memory,
+  defaultNetworkOptions: {
+    completion: {
+      scorers: [
+        createScorer({
+          id: 'scorer12',
+          name: 'My Scorer 2',
+          description: 'Scorer 2',
+        }).generateScore(() => {
+          return 1;
+        }),
+        createScorer({
+          id: 'scorer15',
+          name: 'My Scorer 5',
+          description: 'Scorer 5',
+        }).generateScore(() => {
+          return 1;
+        }),
+      ],
+      strategy: 'all',
+    },
+  },
 });
 
 // =============================================================================

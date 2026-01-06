@@ -26,16 +26,10 @@
  * ```
  */
 
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
 import { z } from 'zod';
 
 import type { MastraDBMessage, Agent } from '../../agent';
 import type { MastraScorer } from '../../evals/base';
-import { createTool } from '../../tools';
-
-const execAsync = promisify(exec);
 
 // ============================================================================
 // Core Types
@@ -314,10 +308,10 @@ export async function runValidation(
 /**
  * Formats scorer results into a message for the LLM
  */
-export function formatCompletionFeedback(result: CompletionRunResult): string {
+export function formatCompletionFeedback(result: CompletionRunResult, maxIterationReached: boolean): string {
   const lines: string[] = [];
 
-  lines.push('## Completion Check Results');
+  lines.push('#### Completion Check Results');
   lines.push('');
   lines.push(`Overall: ${result.complete ? '✅ COMPLETE' : '❌ NOT COMPLETE'}`);
   lines.push(`Duration: ${result.totalDuration}ms`);
@@ -327,12 +321,20 @@ export function formatCompletionFeedback(result: CompletionRunResult): string {
   lines.push('');
 
   for (const scorer of result.scorers) {
-    lines.push(`### ${scorer.scorerName} (${scorer.scorerId})`);
+    lines.push(`###### ${scorer.scorerName} (${scorer.scorerId})`);
     lines.push(`Score: ${scorer.score} ${scorer.passed ? '✅' : '❌'}`);
     if (scorer.reason) {
       lines.push(`Reason: ${scorer.reason}`);
     }
     lines.push('');
+  }
+
+  if (maxIterationReached) {
+    lines.push('\n\n⚠️ Max iterations reached.');
+  } else if (result.complete) {
+    lines.push('\n\n✅ The task is complete.');
+  } else {
+    lines.push('\n\n🔄 Will continue working on the task.');
   }
 
   return lines.join('\n');
@@ -413,48 +415,3 @@ export async function runDefaultCompletionCheck(agent: Agent, context: Completio
 
 // Re-export for users who want to create custom scorers
 export { createScorer } from '../../evals/base';
-
-// ============================================================================
-// Tools
-// ============================================================================
-
-/**
- * Creates a tool that lets agents run shell commands.
- *
- * @example
- * ```typescript
- * const agent = new Agent({
- *   tools: { runCommand: createRunCommandTool() },
- * });
- * ```
- */
-export function createRunCommandTool() {
-  return createTool({
-    id: 'run-command',
-    description: 'Execute a shell command and return the result.',
-    inputSchema: z.object({
-      command: z.string().describe('The shell command to execute'),
-      timeout: z.number().default(60000).describe('Timeout in milliseconds'),
-      cwd: z.string().optional().describe('Working directory'),
-    }),
-    execute: async ({ command, timeout, cwd }) => {
-      try {
-        const { stdout, stderr } = await execAsync(command, { timeout, cwd });
-        return {
-          success: true,
-          exitCode: 0,
-          stdout: stdout.slice(-3000),
-          stderr: stderr.slice(-1000),
-        };
-      } catch (error: any) {
-        return {
-          success: false,
-          exitCode: error.code,
-          stdout: error.stdout?.slice(-2000),
-          stderr: error.stderr?.slice(-2000),
-          message: error.message,
-        };
-      }
-    },
-  });
-}

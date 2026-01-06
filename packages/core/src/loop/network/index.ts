@@ -1173,6 +1173,8 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         };
       }
 
+      const maxIterationReached = maxIterations && inputData.iteration >= maxIterations;
+
       await writer?.write({
         type: 'network-validation-end',
         payload: {
@@ -1181,6 +1183,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
           passed: completionResult.complete,
           results: completionResult.scorers,
           duration: completionResult.totalDuration,
+          timedOut: completionResult.timedOut,
+          reason: completionResult.completionReason,
+          maxIterationReached: !!maxIterationReached,
         },
         from: ChunkFrom.NETWORK,
         runId,
@@ -1200,6 +1205,41 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         });
       }
 
+      // Not complete - inject feedback for next iteration
+      const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
+
+      // Save feedback to memory so the next iteration can see it
+      const memoryInstance = await routingAgent.getMemory({ requestContext });
+      if (memoryInstance) {
+        await memoryInstance.saveMessages({
+          messages: [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: feedback,
+                  },
+                ],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                  completionResult: {
+                    passed: completionResult.complete,
+                  },
+                },
+              },
+              createdAt: new Date(),
+              threadId: inputData.threadId || runId,
+              resourceId: inputData.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+        });
+      }
+
       if (isComplete) {
         // Task is complete - the result is the primitive's output
         return {
@@ -1209,35 +1249,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
           completionReason: completionResult.completionReason || 'Task complete',
         };
       } else {
-        // Not complete - inject feedback for next iteration
-        const feedback = formatCompletionFeedback(completionResult);
-
-        // Save feedback to memory so the next iteration can see it
-        const memoryInstance = await routingAgent.getMemory({ requestContext });
-        if (memoryInstance) {
-          await memoryInstance.saveMessages({
-            messages: [
-              {
-                id: generateId(),
-                type: 'text',
-                role: 'user',
-                content: {
-                  parts: [
-                    {
-                      type: 'text',
-                      text: `[NOT COMPLETE]\n\n${feedback}\n\nPlease continue working on the task.`,
-                    },
-                  ],
-                  format: 2,
-                },
-                createdAt: new Date(),
-                threadId: inputData.threadId || runId,
-                resourceId: inputData.threadResourceId || networkName,
-              },
-            ] as MastraDBMessage[],
-          });
-        }
-
         return {
           ...inputData,
           isComplete: false,
