@@ -572,6 +572,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 steps: self.#bufferedSteps,
                 totalUsage: self.#usageCount,
                 content: [],
+                suspendPayload: undefined, // Tripwire doesn't suspend, so resolve to undefined
               });
 
               // Emit the tripwire chunk for listeners

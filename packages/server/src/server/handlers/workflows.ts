@@ -1,5 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
+import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
@@ -15,13 +15,13 @@ import {
   startAsyncWorkflowBodySchema,
   streamWorkflowBodySchema,
   workflowControlResponseSchema,
-  workflowExecutionResultQuerySchema,
   workflowExecutionResultSchema,
   workflowIdPathParams,
   workflowInfoSchema,
   workflowRunPathParams,
-  workflowRunResponseSchema,
   workflowRunsResponseSchema,
+  workflowRunResultQuerySchema,
+  workflowRunResultSchema,
 } from '../schemas/workflows';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -197,11 +197,13 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   path: '/api/workflows/:workflowId/runs/:runId',
   responseType: 'json',
   pathParamSchema: workflowRunPathParams,
-  responseSchema: workflowRunResponseSchema,
+  queryParamSchema: workflowRunResultQuerySchema,
+  responseSchema: workflowRunResultSchema,
   summary: 'Get workflow run by ID',
-  description: 'Returns details for a specific workflow run',
+  description:
+    'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result,metadata)',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId }) => {
+  handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -217,7 +219,13 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const run = await workflow.getWorkflowRunById(runId);
+      // Parse fields parameter (comma-separated string)
+      const fieldList = fields ? (fields.split(',').map((f: string) => f.trim()) as WorkflowStateField[]) : undefined;
+
+      const run = await workflow.getWorkflowRunById(runId, {
+        withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
+        fields: fieldList,
+      });
 
       if (!run) {
         throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -394,52 +402,6 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       return stream;
     } catch (error) {
       return handleError(error, 'Error resuming workflow');
-    }
-  },
-});
-
-export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
-  method: 'GET',
-  path: '/api/workflows/:workflowId/runs/:runId/execution-result',
-  responseType: 'json',
-  pathParamSchema: workflowRunPathParams,
-  queryParamSchema: workflowExecutionResultQuerySchema,
-  responseSchema: workflowExecutionResultSchema,
-  summary: 'Get workflow execution result',
-  description:
-    'Returns the final execution result of a completed workflow run. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result)',
-  tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
-    try {
-      if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
-      }
-
-      if (!runId) {
-        throw new HTTPException(400, { message: 'Run ID is required' });
-      }
-
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-
-      if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
-      }
-
-      // Parse fields parameter (comma-separated string)
-      const fieldList = fields ? fields.split(',').map((f: string) => f.trim()) : undefined;
-
-      const executionResult = await workflow.getWorkflowRunExecutionResult(runId, {
-        withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
-        fields: fieldList,
-      });
-
-      if (!executionResult) {
-        throw new HTTPException(404, { message: 'Workflow run execution result not found' });
-      }
-
-      return executionResult;
-    } catch (error) {
-      return handleError(error, 'Error getting workflow run execution result');
     }
   },
 });
