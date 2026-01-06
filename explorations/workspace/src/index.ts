@@ -1,85 +1,71 @@
 /**
  * @mastra/workspace
  *
- * Workspace abstraction for Mastra agents.
- * Provides filesystem and executor capabilities at agent and thread levels.
+ * Workspace providers for Mastra agents.
+ *
+ * The core Workspace class is exported from @mastra/core.
+ * This package provides filesystem and sandbox provider implementations.
  *
  * ## Usage
  *
- * Consumers should use factory functions which return interface types:
- *
  * ```typescript
- * import { createMemoryWorkspace, type Workspace } from '@mastra/workspace';
+ * import { Workspace } from '@mastra/core';
+ * import { LocalFilesystem, LocalSandbox } from '@mastra/workspace';
  *
- * const workspace: Workspace = await createMemoryWorkspace({
- *   id: 'my-workspace',
- *   scope: 'thread',
+ * // Create a workspace with local filesystem (folder on disk)
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ *   sandbox: new LocalSandbox(),
  * });
  *
+ * await workspace.init();
  * await workspace.writeFile('/hello.txt', 'Hello World!');
+ * const result = await workspace.executeCode('console.log("Hi")', { runtime: 'node' });
  * ```
  *
- * For creating new providers, extend the base classes:
+ * ## Available Providers
  *
- * ```typescript
- * import { BaseFilesystem, BaseExecutor } from '@mastra/workspace';
- * ```
+ * ### Filesystem
+ * - `LocalFilesystem` - Folder on disk (recommended for development)
+ * - `RamFilesystem` - In-memory (ephemeral, for testing)
+ *
+ * ### Sandbox
+ * - `LocalSandbox` - Runs on host machine (development only)
+ *
+ * ## Planned Providers
+ *
+ * ### Filesystem
+ * - `AgentFS` - Turso-backed with audit trail
+ *
+ * ### Sandbox (via ComputeSDK)
+ * - `ComputeSDKSandbox` - Access to E2B, Modal, Docker, etc.
  */
 
 // =============================================================================
-// Workspace (Main API)
+// Filesystem Providers
 // =============================================================================
 
-// Interfaces & Types
-export type {
-  Workspace,
-  WorkspaceFactory,
-  WorkspaceAudit,
-  WorkspaceScope,
-  WorkspaceOwner,
-  WorkspaceStatus,
-  WorkspaceInfo,
-  SyncResult,
-  SnapshotOptions,
-  WorkspaceSnapshot,
-  RestoreOptions,
-  WorkspaceAuditEntry,
-  WorkspaceAuditOptions,
-  WorkspaceConfig,
-  ThreadWorkspaceConfig,
-  ThreadFilesystemConfig,
-  ThreadExecutorConfig,
-  AgentWorkspaceConfig,
-  AgentLevelWorkspaceConfig,
-  ThreadLevelWorkspaceConfig,
-  HybridWorkspaceConfig,
-} from './workspace/types';
+export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem/providers/local';
+export { RamFilesystem, type RamFilesystemOptions } from './filesystem/providers/ram';
 
-// Errors
+// Backwards compatibility alias
 export {
-  WorkspaceError,
-  WorkspaceNotFoundError,
-  WorkspaceNotReadyError,
-  FilesystemNotAvailableError,
-  ExecutorNotAvailableError,
-  WorkspaceLimitError,
-} from './workspace/types';
-
-// Factory Functions (primary API)
-export { createWorkspace, createLocalWorkspace, createMemoryWorkspace } from './workspace/workspace';
-
-// Base class for implementers
-export { BaseWorkspace } from './workspace/workspace';
+  RamFilesystem as MemoryFilesystem,
+  type RamFilesystemOptions as MemoryFilesystemOptions,
+} from './filesystem/providers/ram';
 
 // =============================================================================
-// Filesystem
+// Sandbox Providers
 // =============================================================================
 
-// Interfaces & Types
+export { LocalSandbox, type LocalSandboxOptions } from './sandbox/providers/local';
+
+// =============================================================================
+// Types
+// =============================================================================
+
 export type {
-  WorkspaceFilesystem,
-  WorkspaceState,
-  WorkspaceFilesystemAudit,
+  // Filesystem types
   FileContent,
   FileStat,
   FileEntry,
@@ -88,22 +74,25 @@ export type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  WatchEvent,
-  WatchCallback,
-  WatchOptions,
-  WatchHandle,
-  AuditEntry,
-  AuditOptions,
-  FilesystemConfig,
-  FilesystemProviderConfig,
-  AgentFSProviderConfig,
-  LocalFSProviderConfig,
-  MemoryFSProviderConfig,
-  S3FSProviderConfig,
-} from './filesystem/types';
+  // Sandbox types
+  SandboxRuntime,
+  ExecutionResult,
+  CommandResult,
+  CodeResult,
+  StreamingExecutionResult,
+  ExecuteCodeOptions,
+  ExecuteCommandOptions,
+  InstallPackageOptions,
+  SandboxStatus,
+  SandboxInfo,
+} from './types';
 
+// =============================================================================
 // Errors
+// =============================================================================
+
 export {
+  // Filesystem errors
   FilesystemError,
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -112,59 +101,9 @@ export {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
-} from './filesystem/types';
-
-// Factory Functions
-export { createFilesystem, createMemoryFilesystem, createLocalFilesystem } from './filesystem/factory';
-
-// Base class for implementers
-export { BaseFilesystem } from './filesystem/base';
-
-// Concrete providers (for advanced use cases)
-export { MemoryFilesystem, type MemoryFilesystemOptions } from './filesystem/providers/memory';
-export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem/providers/local';
-
-// =============================================================================
-// Executor
-// =============================================================================
-
-// Interfaces & Types
-export type {
-  WorkspaceExecutor,
-  Runtime,
-  ExecutionResult,
-  CommandResult,
-  CodeResult,
-  StreamingExecutionResult,
-  ExecuteCodeOptions,
-  ExecuteCommandOptions,
-  InstallPackageOptions,
-  ExecutorStatus,
-  ExecutorInfo,
-  ExecutorConfig,
-  ExecutorProviderConfig,
-  E2BExecutorConfig,
-  ModalExecutorConfig,
-  DockerExecutorConfig,
-  LocalExecutorConfig,
-  DaytonaExecutorConfig,
-  ComputeSDKExecutorConfig,
-} from './executor/types';
-
-// Errors
-export {
-  ExecutorError,
-  ExecutionError,
-  TimeoutError,
-  ExecutorNotReadyError,
+  // Sandbox errors
+  SandboxError,
+  SandboxExecutionError,
+  SandboxNotReadyError,
   UnsupportedRuntimeError,
-} from './executor/types';
-
-// Factory Functions
-export { createExecutor, createLocalExecutor } from './executor/factory';
-
-// Base class for implementers
-export { BaseExecutor } from './executor/base';
-
-// Concrete providers (for advanced use cases)
-export { LocalExecutor, type LocalExecutorOptions } from './executor/providers/local';
+} from './types';

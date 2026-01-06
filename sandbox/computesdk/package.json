@@ -1,0 +1,52 @@
+{
+  "name": "@mastra/sandbox-computesdk",
+  "version": "0.0.1",
+  "description": "ComputeSDK sandbox provider for Mastra workspaces - secure cloud execution via E2B, Modal, Railway, and more",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mastra",
+    "workspace",
+    "sandbox",
+    "computesdk",
+    "e2b",
+    "modal",
+    "railway",
+    "daytona",
+    "cloud",
+    "code-execution"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "computesdk": "^1.10.3"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.0.1"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "catalog:"
+  }
+}

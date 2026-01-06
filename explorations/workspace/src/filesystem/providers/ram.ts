@@ -1,12 +1,14 @@
 /**
- * Memory Filesystem Provider
+ * RAM Filesystem Provider
  *
- * An in-memory filesystem implementation.
- * Perfect for testing, ephemeral thread workspaces, and fast operations.
+ * An in-memory (RAM) filesystem implementation.
+ * Perfect for testing, ephemeral workspaces, and fast operations.
  * Data is lost when the process exits.
+ *
+ * NOTE: This is different from LocalFilesystem which stores files on disk.
+ * Use LocalFilesystem for persistent storage on the user's machine.
  */
 
-import { BaseFilesystem } from '../base';
 import type {
   FileContent,
   FileStat,
@@ -16,8 +18,7 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  MemoryFSProviderConfig,
-} from '../types';
+} from '../../types';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -25,53 +26,74 @@ import {
   IsDirectoryError,
   NotDirectoryError,
   DirectoryNotEmptyError,
-} from '../types';
+} from '../../types';
 
 /**
  * Internal node representation for the in-memory tree.
  */
-interface MemoryNode {
+interface RamNode {
   type: 'file' | 'directory';
   content?: Buffer;
   mimeType?: string;
   createdAt: Date;
   modifiedAt: Date;
-  children?: Map<string, MemoryNode>;
+  children?: Map<string, RamNode>;
 }
 
 /**
- * Memory filesystem provider configuration.
+ * RAM filesystem provider configuration.
  */
-export interface MemoryFilesystemOptions {
-  id: string;
+export interface RamFilesystemOptions {
+  /** Unique identifier for this filesystem instance */
+  id?: string;
+  /** Initial files to populate */
   initialFiles?: Record<string, FileContent>;
 }
 
 /**
- * In-memory filesystem implementation.
+ * In-memory (RAM) filesystem implementation.
+ *
+ * Use this for testing or ephemeral workspaces where persistence is not needed.
+ * For persistent storage on disk, use LocalFilesystem instead.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace } from '@mastra/core';
+ * import { RamFilesystem } from '@mastra/workspace-fs-ram';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new RamFilesystem({
+ *     initialFiles: {
+ *       '/config.json': '{"initialized": true}',
+ *     },
+ *   }),
+ * });
+ * ```
  */
-export class MemoryFilesystem extends BaseFilesystem {
+export class RamFilesystem implements WorkspaceFilesystem {
   readonly id: string;
-  readonly name = 'MemoryFilesystem';
-  readonly provider = 'memory';
+  readonly name = 'RamFilesystem';
+  readonly provider = 'ram';
 
-  private root: MemoryNode;
+  private root: RamNode;
 
-  constructor(config: MemoryFSProviderConfig | MemoryFilesystemOptions) {
-    super();
-    this.id = config.id;
+  constructor(options: RamFilesystemOptions = {}) {
+    this.id = options.id ?? this.generateId();
     this.root = this.createEmptyRoot();
 
     // Initialize with initial files if provided
-    const initialFiles = 'initialFiles' in config ? config.initialFiles : undefined;
-    if (initialFiles) {
-      for (const [path, content] of Object.entries(initialFiles)) {
+    if (options.initialFiles) {
+      for (const [path, content] of Object.entries(options.initialFiles)) {
         this.writeFileSync(path, content);
       }
     }
   }
 
-  private createEmptyRoot(): MemoryNode {
+  private generateId(): string {
+    return `ram-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private createEmptyRoot(): RamNode {
     return {
       type: 'directory',
       createdAt: new Date(),
@@ -84,7 +106,38 @@ export class MemoryFilesystem extends BaseFilesystem {
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private getNode(path: string): MemoryNode | null {
+  private parsePath(path: string): string[] {
+    const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/');
+    return normalized.split('/').filter((p) => p && p !== '.');
+  }
+
+  private toBuffer(content: FileContent): Buffer {
+    if (Buffer.isBuffer(content)) return content;
+    if (content instanceof Uint8Array) return Buffer.from(content);
+    return Buffer.from(content, 'utf-8');
+  }
+
+  private getMimeType(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      txt: 'text/plain',
+      html: 'text/html',
+      css: 'text/css',
+      js: 'application/javascript',
+      ts: 'application/typescript',
+      json: 'application/json',
+      xml: 'application/xml',
+      md: 'text/markdown',
+      py: 'text/x-python',
+      rb: 'text/x-ruby',
+      go: 'text/x-go',
+      rs: 'text/x-rust',
+      sh: 'text/x-sh',
+    };
+    return mimeTypes[ext ?? ''] ?? 'application/octet-stream';
+  }
+
+  private getNode(path: string): RamNode | null {
     const parts = this.parsePath(path);
 
     let current = this.root;
@@ -102,7 +155,7 @@ export class MemoryFilesystem extends BaseFilesystem {
     return current;
   }
 
-  private getParentNode(path: string): { parent: MemoryNode; name: string } | null {
+  private getParentNode(path: string): { parent: RamNode; name: string } | null {
     const parts = this.parsePath(path);
     if (parts.length === 0) {
       return null; // Root has no parent
@@ -449,9 +502,7 @@ export class MemoryFilesystem extends BaseFilesystem {
 
     for (const [name, child] of node.children) {
       if (options?.extension && child.type === 'file') {
-        const extensions = Array.isArray(options.extension)
-          ? options.extension
-          : [options.extension];
+        const extensions = Array.isArray(options.extension) ? options.extension : [options.extension];
         const ext = '.' + name.split('.').pop();
         if (!extensions.some((e) => e === ext || '.' + e === ext)) {
           continue;
@@ -528,7 +579,11 @@ export class MemoryFilesystem extends BaseFilesystem {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  override async destroy(): Promise<void> {
+  async init(): Promise<void> {
+    // No initialization needed for RAM filesystem
+  }
+
+  async destroy(): Promise<void> {
     this.root = this.createEmptyRoot();
   }
 }

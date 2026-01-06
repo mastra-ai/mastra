@@ -1,0 +1,49 @@
+{
+  "name": "@mastra/filesystem-agentfs",
+  "version": "0.0.1",
+  "description": "AgentFS filesystem provider for Mastra workspaces - SQLite/Turso-backed persistent storage",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mastra",
+    "workspace",
+    "filesystem",
+    "agentfs",
+    "turso",
+    "sqlite",
+    "agent"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "agentfs-sdk": "^0.4.1"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.0.1"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "catalog:"
+  }
+}

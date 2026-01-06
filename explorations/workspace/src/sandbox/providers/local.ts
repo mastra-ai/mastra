@@ -1,34 +1,32 @@
 /**
- * Local Executor Provider
+ * Local Sandbox Provider
  *
- * An executor that runs code on the local machine.
+ * A sandbox that runs code on the local machine.
  *
- * ⚠️ WARNING: This executor runs code directly on the host machine.
+ * ⚠️ WARNING: This sandbox runs code directly on the host machine.
  * It should only be used for development and testing, never in production
  * with untrusted code.
+ *
+ * For production, use ComputeSDKSandbox with providers like E2B, Modal, or Docker.
  */
 
 import { spawn, execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
+import * as nodePath from 'node:path';
 import * as os from 'node:os';
-import { v4 as uuidv4 } from 'uuid';
-import { BaseExecutor } from '../base';
 import type {
-  Runtime,
+  SandboxRuntime,
+  SandboxStatus,
+  SandboxInfo,
   CodeResult,
   CommandResult,
   ExecuteCodeOptions,
   ExecuteCommandOptions,
   InstallPackageOptions,
   StreamingExecutionResult,
-  LocalExecutorConfig,
-} from '../types';
-import {
-  ExecutorNotReadyError,
-  UnsupportedRuntimeError,
-  ExecutionError,
-} from '../types';
+  ExecutionResult,
+} from '../../types';
+import { SandboxNotReadyError, UnsupportedRuntimeError, SandboxExecutionError } from '../../types';
 
 /**
  * Runtime configuration.
@@ -40,7 +38,7 @@ interface RuntimeConfig {
   packageManager?: string;
 }
 
-const RUNTIME_CONFIGS: Record<Runtime, RuntimeConfig> = {
+const RUNTIME_CONFIGS: Record<SandboxRuntime, RuntimeConfig> = {
   python: {
     command: 'python3',
     args: (file) => [file],
@@ -89,27 +87,53 @@ const RUNTIME_CONFIGS: Record<Runtime, RuntimeConfig> = {
 };
 
 /**
- * Local executor configuration options.
+ * Local sandbox configuration options.
  */
-export interface LocalExecutorOptions {
-  id: string;
+export interface LocalSandboxOptions {
+  /** Unique identifier for this sandbox instance */
+  id?: string;
+  /** Working directory for executions */
   cwd?: string;
+  /** Use a shell for command execution */
   shell?: boolean;
+  /** Restrict commands (security) */
   allowedCommands?: string[];
+  /** Default timeout in milliseconds */
   timeout?: number;
+  /** Environment variables to set in all executions */
   env?: Record<string, string>;
-  defaultRuntime?: Runtime;
+  /** Default runtime */
+  defaultRuntime?: SandboxRuntime;
 }
 
 /**
- * Local executor implementation.
+ * Local sandbox implementation.
+ *
+ * Runs code directly on the host machine. Use only for development.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace } from '@mastra/core';
+ * import { LocalSandbox } from '@mastra/workspace-sandbox-local';
+ *
+ * const workspace = new Workspace({
+ *   sandbox: new LocalSandbox({ cwd: './workspace' }),
+ * });
+ *
+ * await workspace.init();
+ * const result = await workspace.executeCode('console.log("Hello!")', { runtime: 'node' });
+ * ```
  */
-export class LocalExecutor extends BaseExecutor {
+export class LocalSandbox implements WorkspaceSandbox {
   readonly id: string;
-  readonly name = 'LocalExecutor';
+  readonly name = 'LocalSandbox';
   readonly provider = 'local';
-  readonly supportedRuntimes: readonly Runtime[];
-  readonly defaultRuntime: Runtime;
+  readonly supportedRuntimes: readonly SandboxRuntime[];
+  readonly defaultRuntime: SandboxRuntime;
+
+  private _status: SandboxStatus = 'pending';
+  private _createdAt?: Date;
+  private _lastUsedAt?: Date;
 
   private readonly cwd: string;
   private readonly shell: boolean;
@@ -118,23 +142,30 @@ export class LocalExecutor extends BaseExecutor {
   private readonly env: Record<string, string>;
   private tempDir?: string;
 
-  constructor(config: LocalExecutorConfig | LocalExecutorOptions) {
-    super();
-    this.id = config.id;
-    this.cwd = config.cwd ?? process.cwd();
-    this.shell = config.shell ?? false;
-    this.allowedCommands = config.allowedCommands;
-    this.defaultTimeout = config.timeout ?? 30000;
-    this.env = config.env ?? {};
-    this.defaultRuntime = config.defaultRuntime ?? 'node';
+  constructor(options: LocalSandboxOptions = {}) {
+    this.id = options.id ?? this.generateId();
+    this.cwd = options.cwd ?? process.cwd();
+    this.shell = options.shell ?? false;
+    this.allowedCommands = options.allowedCommands;
+    this.defaultTimeout = options.timeout ?? 30000;
+    this.env = options.env ?? {};
+    this.defaultRuntime = options.defaultRuntime ?? 'node';
     this.supportedRuntimes = this.detectRuntimes();
+  }
+
+  private generateId(): string {
+    return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  get status(): SandboxStatus {
+    return this._status;
   }
 
   /**
    * Detect which runtimes are available on the system.
    */
-  private detectRuntimes(): Runtime[] {
-    const available: Runtime[] = [];
+  private detectRuntimes(): SandboxRuntime[] {
+    const available: SandboxRuntime[] = [];
 
     for (const [runtime, config] of Object.entries(RUNTIME_CONFIGS)) {
       try {
@@ -143,7 +174,7 @@ export class LocalExecutor extends BaseExecutor {
         } else {
           execSync(`command -v ${config.command}`, { stdio: 'ignore', shell: '/bin/sh' });
         }
-        available.push(runtime as Runtime);
+        available.push(runtime as SandboxRuntime);
       } catch {
         // Runtime not available
       }
@@ -158,7 +189,7 @@ export class LocalExecutor extends BaseExecutor {
 
   async executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult> {
     if (this._status !== 'running') {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
     const runtime = options?.runtime ?? this.defaultRuntime;
@@ -169,22 +200,18 @@ export class LocalExecutor extends BaseExecutor {
 
     const config = RUNTIME_CONFIGS[runtime];
     const startTime = Date.now();
-    const tempFile = path.join(this.tempDir!, `code_${uuidv4()}${config.extension}`);
+    const tempFile = nodePath.join(this.tempDir!, `code_${this.generateId()}${config.extension}`);
 
     await fs.writeFile(tempFile, code);
 
     try {
-      const result = await this.runProcess(
-        config.command,
-        config.args(tempFile),
-        {
-          timeout: options?.timeout ?? this.defaultTimeout,
-          env: { ...this.env, ...options?.env },
-          cwd: options?.cwd ?? this.cwd,
-        },
-      );
+      const result = await this.runProcess(config.command, config.args(tempFile), {
+        timeout: options?.timeout ?? this.defaultTimeout,
+        env: { ...this.env, ...options?.env },
+        cwd: options?.cwd ?? this.cwd,
+      });
 
-      this.updateLastUsed();
+      this._lastUsedAt = new Date();
 
       return {
         ...result,
@@ -196,12 +223,9 @@ export class LocalExecutor extends BaseExecutor {
     }
   }
 
-  override async executeCodeStream(
-    code: string,
-    options?: ExecuteCodeOptions,
-  ): Promise<StreamingExecutionResult> {
+  async executeCodeStream(code: string, options?: ExecuteCodeOptions): Promise<StreamingExecutionResult> {
     if (this._status !== 'running') {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
     const runtime = options?.runtime ?? this.defaultRuntime;
@@ -211,7 +235,7 @@ export class LocalExecutor extends BaseExecutor {
     }
 
     const config = RUNTIME_CONFIGS[runtime];
-    const tempFile = path.join(this.tempDir!, `code_${uuidv4()}${config.extension}`);
+    const tempFile = nodePath.join(this.tempDir!, `code_${this.generateId()}${config.extension}`);
 
     await fs.writeFile(tempFile, code);
 
@@ -233,17 +257,13 @@ export class LocalExecutor extends BaseExecutor {
   // Command Execution
   // ---------------------------------------------------------------------------
 
-  async executeCommand(
-    command: string,
-    args?: string[],
-    options?: ExecuteCommandOptions,
-  ): Promise<CommandResult> {
+  async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     if (this._status !== 'running') {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
     if (this.allowedCommands && !this.allowedCommands.includes(command)) {
-      throw new ExecutionError(
+      throw new SandboxExecutionError(
         `Command '${command}' is not in the allowed list`,
         1,
         '',
@@ -259,7 +279,7 @@ export class LocalExecutor extends BaseExecutor {
       shell: options?.shell ?? this.shell,
     });
 
-    this.updateLastUsed();
+    this._lastUsedAt = new Date();
 
     return {
       ...result,
@@ -269,17 +289,17 @@ export class LocalExecutor extends BaseExecutor {
     };
   }
 
-  override async executeCommandStream(
+  async executeCommandStream(
     command: string,
     args?: string[],
     options?: ExecuteCommandOptions,
   ): Promise<StreamingExecutionResult> {
     if (this._status !== 'running') {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
     if (this.allowedCommands && !this.allowedCommands.includes(command)) {
-      throw new ExecutionError(
+      throw new SandboxExecutionError(
         `Command '${command}' is not in the allowed list`,
         1,
         '',
@@ -299,9 +319,9 @@ export class LocalExecutor extends BaseExecutor {
   // Package Management
   // ---------------------------------------------------------------------------
 
-  override async installPackage(packageName: string, options?: InstallPackageOptions): Promise<void> {
+  async installPackage(packageName: string, options?: InstallPackageOptions): Promise<void> {
     if (this._status !== 'running') {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
     let pm = options?.packageManager;
@@ -313,69 +333,69 @@ export class LocalExecutor extends BaseExecutor {
     const version = options?.version ? `${packageName}@${options.version}` : packageName;
 
     let cmd: string;
-    let args: string[];
+    let cmdArgs: string[];
 
     switch (pm) {
       case 'npm':
         cmd = 'npm';
-        args = ['install', options?.dev ? '-D' : '', version].filter(Boolean);
+        cmdArgs = ['install', options?.dev ? '-D' : '', version].filter(Boolean);
         break;
       case 'pip':
         cmd = 'pip';
-        args = ['install', version];
+        cmdArgs = ['install', version];
         break;
       case 'cargo':
         cmd = 'cargo';
-        args = ['install', version];
+        cmdArgs = ['install', version];
         break;
       case 'go':
         cmd = 'go';
-        args = ['install', version];
+        cmdArgs = ['install', version];
         break;
       default:
-        throw new ExecutionError(`Unknown package manager: ${pm}`, 1, '', '');
+        throw new SandboxExecutionError(`Unknown package manager: ${pm}`, 1, '', '');
     }
 
-    await this.executeCommand(cmd, args, { timeout: options?.timeout ?? 120000 });
+    await this.executeCommand(cmd, cmdArgs, { timeout: options?.timeout ?? 120000 });
+  }
+
+  async installPackages(packages: string[], options?: InstallPackageOptions): Promise<void> {
+    for (const pkg of packages) {
+      await this.installPackage(pkg, options);
+    }
   }
 
   // ---------------------------------------------------------------------------
   // File Operations
   // ---------------------------------------------------------------------------
 
-  override async writeFile(filePath: string, content: string | Buffer): Promise<void> {
+  async writeFile(filePath: string, content: string | Buffer): Promise<void> {
     if (!this.tempDir) {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
-    const absolutePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(this.tempDir, filePath);
+    const absolutePath = nodePath.isAbsolute(filePath) ? filePath : nodePath.join(this.tempDir, filePath);
 
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.mkdir(nodePath.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, content);
   }
 
-  override async readFile(filePath: string): Promise<string> {
+  async readFile(filePath: string): Promise<string> {
     if (!this.tempDir) {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
-    const absolutePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(this.tempDir, filePath);
+    const absolutePath = nodePath.isAbsolute(filePath) ? filePath : nodePath.join(this.tempDir, filePath);
 
     return fs.readFile(absolutePath, 'utf-8');
   }
 
-  override async listFiles(dirPath: string): Promise<string[]> {
+  async listFiles(dirPath: string): Promise<string[]> {
     if (!this.tempDir) {
-      throw new ExecutorNotReadyError(this._status);
+      throw new SandboxNotReadyError(this._status);
     }
 
-    const absolutePath = path.isAbsolute(dirPath)
-      ? dirPath
-      : path.join(this.tempDir, dirPath);
+    const absolutePath = nodePath.isAbsolute(dirPath) ? dirPath : nodePath.join(this.tempDir, dirPath);
 
     return fs.readdir(absolutePath);
   }
@@ -385,36 +405,46 @@ export class LocalExecutor extends BaseExecutor {
   // ---------------------------------------------------------------------------
 
   async start(): Promise<void> {
-    this.setStatus('starting');
+    this._status = 'starting';
 
     try {
-      this.tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-executor-'));
+      this.tempDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'mastra-sandbox-'));
       this._createdAt = new Date();
-      this.setStatus('running');
+      this._status = 'running';
     } catch (error) {
-      this.setStatus('error');
+      this._status = 'error';
       throw error;
     }
   }
 
-  override async stop(): Promise<void> {
-    this.setStatus('stopped');
+  async stop(): Promise<void> {
+    this._status = 'stopped';
   }
 
   async destroy(): Promise<void> {
-    this.setStatus('destroying');
+    this._status = 'destroying';
 
     try {
       if (this.tempDir) {
         await fs.rm(this.tempDir, { recursive: true, force: true });
       }
     } finally {
-      this.setStatus('destroyed');
+      this._status = 'destroyed';
     }
   }
 
   async isReady(): Promise<boolean> {
     return this._status === 'running';
+  }
+
+  async getInfo(): Promise<SandboxInfo> {
+    return {
+      id: this.id,
+      provider: this.provider,
+      status: this._status,
+      createdAt: this._createdAt ?? new Date(),
+      lastUsedAt: this._lastUsedAt,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -468,7 +498,7 @@ export class LocalExecutor extends BaseExecutor {
 
       proc.on('error', (error) => {
         clearTimeout(timer);
-        reject(new ExecutionError(error.message, 1, '', error.message));
+        reject(new SandboxExecutionError(error.message, 1, '', error.message));
       });
     });
   }
@@ -514,9 +544,7 @@ export class LocalExecutor extends BaseExecutor {
       });
     });
 
-    async function* streamToAsyncIterable(
-      stream: NodeJS.ReadableStream,
-    ): AsyncIterable<string> {
+    async function* streamToAsyncIterable(stream: NodeJS.ReadableStream): AsyncIterable<string> {
       for await (const chunk of stream) {
         yield chunk.toString('utf-8');
       }
@@ -536,7 +564,7 @@ export class LocalExecutor extends BaseExecutor {
         killed = true;
         proc.kill('SIGKILL');
       },
-      wait: async () => {
+      wait: async (): Promise<ExecutionResult> => {
         const exitCode = await exitPromise;
         return {
           exitCode,

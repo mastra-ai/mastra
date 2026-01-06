@@ -1,8 +1,22 @@
 /**
  * Workspace Filesystem Interface
  *
- * Provides a unified interface for filesystem operations.
- * Implementations can be backed by AgentFS, local disk, S3, memory, etc.
+ * Defines the contract for filesystem providers that can be used with Workspace.
+ * Users pass filesystem provider instances to the Workspace constructor.
+ *
+ * Built-in providers:
+ * - LocalFilesystem: A folder on the user's machine
+ * - AgentFS: Turso-backed filesystem with audit trail
+ *
+ * @example
+ * ```typescript
+ * import { Workspace } from '@mastra/core';
+ * import { LocalFilesystem } from '@mastra/workspace-fs-local';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ * ```
  */
 
 // =============================================================================
@@ -98,6 +112,9 @@ export interface WatchHandle {
 /**
  * Abstract filesystem interface for workspace storage.
  *
+ * Providers implement this interface to provide file storage capabilities.
+ * Users instantiate providers and pass them to the Workspace constructor.
+ *
  * All paths are absolute within the filesystem's namespace.
  * Implementations handle path normalization.
  */
@@ -105,7 +122,7 @@ export interface WorkspaceFilesystem {
   /** Unique identifier for this filesystem instance */
   readonly id: string;
 
-  /** Human-readable name (e.g., 'AgentFS', 'LocalFS') */
+  /** Human-readable name (e.g., 'LocalFilesystem', 'AgentFS') */
   readonly name: string;
 
   /** Provider type identifier */
@@ -232,7 +249,7 @@ export interface WorkspaceFilesystem {
 }
 
 // =============================================================================
-// State Storage Interface (Optional KV layer on top of FS)
+// State Storage Interface (Optional KV layer)
 // =============================================================================
 
 /**
@@ -274,10 +291,10 @@ export interface WorkspaceState {
 }
 
 // =============================================================================
-// Audit Interface (Optional)
+// Audit Interface (Optional - for providers like AgentFS)
 // =============================================================================
 
-export interface AuditEntry {
+export interface FilesystemAuditEntry {
   /** Unique ID for this entry */
   id: string;
   /** Timestamp of the operation */
@@ -294,9 +311,9 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>;
 }
 
-export interface AuditOptions {
+export interface FilesystemAuditOptions {
   /** Filter by operation type */
-  operations?: AuditEntry['operation'][];
+  operations?: FilesystemAuditEntry['operation'][];
   /** Filter by path prefix */
   pathPrefix?: string;
   /** Start time */
@@ -317,61 +334,13 @@ export interface WorkspaceFilesystemAudit {
   /**
    * Get audit history for filesystem operations.
    */
-  getHistory(options?: AuditOptions): Promise<AuditEntry[]>;
+  getHistory(options?: FilesystemAuditOptions): Promise<FilesystemAuditEntry[]>;
 
   /**
    * Get the total count of audit entries matching the filter.
    */
-  count(options?: Omit<AuditOptions, 'limit' | 'offset'>): Promise<number>;
+  count(options?: Omit<FilesystemAuditOptions, 'limit' | 'offset'>): Promise<number>;
 }
-
-// =============================================================================
-// Provider Configuration
-// =============================================================================
-
-export interface FilesystemProviderConfig {
-  /** Unique ID for this filesystem instance */
-  id: string;
-}
-
-export interface AgentFSProviderConfig extends FilesystemProviderConfig {
-  provider: 'agentfs';
-  /** Path to the AgentFS database file */
-  path: string;
-  /** Optional: Create if doesn't exist (default: true) */
-  create?: boolean;
-}
-
-export interface LocalFSProviderConfig extends FilesystemProviderConfig {
-  provider: 'local';
-  /** Base directory path */
-  basePath: string;
-  /** Restrict operations to basePath (default: true) */
-  sandbox?: boolean;
-}
-
-export interface MemoryFSProviderConfig extends FilesystemProviderConfig {
-  provider: 'memory';
-  /** Optional: Initial files to populate */
-  initialFiles?: Record<string, FileContent>;
-}
-
-export interface S3FSProviderConfig extends FilesystemProviderConfig {
-  provider: 's3';
-  bucket: string;
-  region?: string;
-  prefix?: string;
-  credentials?: {
-    accessKeyId: string;
-    secretAccessKey: string;
-  };
-}
-
-export type FilesystemConfig =
-  | AgentFSProviderConfig
-  | LocalFSProviderConfig
-  | MemoryFSProviderConfig
-  | S3FSProviderConfig;
 
 // =============================================================================
 // Errors
