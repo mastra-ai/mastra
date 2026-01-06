@@ -125,9 +125,6 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, ID preservation, provider options restoration, and Anthropic compatibility.
  *
- * Returns AIV5ModelMessageWithId[] because we restore the `id` field that convertToModelMessages strips.
- * This ensures message IDs are accessible in onFinish callbacks (fixes issue #11615).
- *
  * @param messages - AIV5 UI messages to convert
  * @param dbMessages - MastraDB messages used to look up tool call args for Anthropic compatibility
  * @param filterIncompleteToolCalls - Whether to filter out incomplete tool calls

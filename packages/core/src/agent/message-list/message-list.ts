@@ -498,7 +498,6 @@ export class MessageList {
     aiV5: {
       ui: (): AIV5Type.UIMessage[] => this.response.db().map(AIV5Adapter.toUIMessage),
       model: (): AIV5ResponseMessage[] => {
-        // Filter to only assistant/tool messages (response messages have id from conversion)
         return convertAIV5UIToModelMessages(this.response.aiV5.ui(), this.messages).filter(
           m => m.role === 'tool' || m.role === 'assistant',
         ) as AIV5ResponseMessage[];
