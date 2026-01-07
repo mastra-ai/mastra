@@ -65,27 +65,6 @@ This configuration includes:
   - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Span Output Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
 
-### Shorthand Config
-
-For convenience, a shorthand configuration is also available that expands to the same config as above:
-
-```ts title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    default: { enabled: true },
-  }),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: "file:./mastra.db", // Storage is required for tracing
-  }),
-});
-```
-
-The explicit configuration is recommended as it makes clear exactly what exporters and processors are being used.
-
 ## Exporters
 
 Exporters determine where your trace data is sent and how it's stored. Choosing the right exporters allows you to integrate with your existing observability stack, comply with data residency requirements, and optimize for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
