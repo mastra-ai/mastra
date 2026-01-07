@@ -8,7 +8,7 @@ import {
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
@@ -73,25 +73,10 @@ export interface ThreadWelcomeProps {
 }
 
 const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
-  const safeAgentName = agentName ?? '';
-  const words = safeAgentName.split(' ') ?? [];
-
-  let initials = 'A';
-
-  if (words.length === 2) {
-    initials = `${words[0][0]}${words[1][0]}`;
-  } else if (safeAgentName.length > 0) {
-    initials = `${safeAgentName[0]}`;
-  } else {
-    initials = 'A';
-  }
-
   return (
     <ThreadPrimitive.Empty>
       <div className="flex w-full flex-grow flex-col items-center justify-center">
-        <Avatar>
-          <AvatarFallback>{initials}</AvatarFallback>
-        </Avatar>
+        <Avatar name={agentName || 'Agent'} size="lg" />
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>
     </ThreadPrimitive.Empty>
