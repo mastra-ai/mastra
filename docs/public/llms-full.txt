@@ -2703,6 +2703,61 @@ export const weatherAgent = new Agent({
 });
 ```
 
+## Using workflows as tools
+
+Workflows can be added to agents through the `workflows` configuration. When you add a workflow, Mastra automatically converts it to a tool that the agent can call. The generated tool is named `workflow-<workflowName>` and uses the workflow's `inputSchema` and `outputSchema`.
+
+```typescript {14-16} title="src/mastra/agents/research-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { researchWorkflow } from "../workflows/research-workflow";
+
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: `
+      You are a research assistant.
+      Use the research workflow to gather and compile information on topics.`,
+  model: "openai/gpt-5.1",
+  tools: {
+    weatherTool,
+  },
+  workflows: {
+    researchWorkflow,
+  },
+});
+```
+
+The workflow should include a `description` to help the agent understand when to use it:
+
+```typescript title="src/mastra/workflows/research-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const researchWorkflow = createWorkflow({
+  id: "research-workflow",
+  description: "Gathers information on a topic and compiles a summary report.",
+  inputSchema: z.object({
+    topic: z.string(),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+    sources: z.array(z.string()),
+  }),
+})
+  .then(gatherSourcesStep)
+  .then(compileReportStep)
+  .commit();
+```
+
+When the agent calls the workflow tool, it receives a response containing the workflow result and a `runId` that can be used to track the execution:
+
+```typescript
+{
+  result: { summary: "...", sources: ["..."] },
+  runId: "abc-123"
+}
+```
+
 ## Related
 
 - [MCP Overview](/docs/v1/mcp/overview)
@@ -28046,11 +28101,11 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "openai/gpt-5.1",
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "openai/gpt-5.1",
     });
     ```
 
@@ -28061,11 +28116,11 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "google/gemini-2.5-flash",
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "google/gemini-2.5-flash",
     });
     ```
 
@@ -28082,40 +28137,40 @@ Setup the tool:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-12}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {1,9-12}
     import { openai } from "@ai-sdk/openai";
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "openai/gpt-5.1",
-        tools: {
-            webSearch: openai.tools.webSearch()
-        }
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "openai/gpt-5.1",
+      tools: {
+        webSearch: openai.tools.webSearch()
+      }
     });
     ```
 
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-14}
+    ```ts copy title="src/mastra/agents/searchAgent.ts" {1,9-14}
     import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "google/gemini-2.5-flash",
-        tools: {
-          webSearch: google.tools.googleSearch({
-            mode: "MODE_DYNAMIC"
-          })
-        }
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "google/gemini-2.5-flash",
+      tools: {
+        webSearch: google.tools.googleSearch({
+          mode: "MODE_DYNAMIC"
+        })
+      }
     });
     ```
 
@@ -29537,7 +29592,51 @@ npx @mastra/codemod@beta v1/client-get-memory-thread .
 
 :::
 
+### Unified `runById` API for workflow runs
+
+The `runById()` method now returns a unified `WorkflowState` object containing both metadata (runId, workflowName, resourceId, createdAt, updatedAt) and processed execution state (status, result, error, payload, steps). This unifies the previously separate `runById()` and `runExecutionResult()` methods.
+
+The method also accepts an options object with optional `fields` and `withNestedWorkflows` parameters for performance optimization.
+
+```diff
+  const workflow = client.getWorkflow('my-workflow');
+
+- // Previously: runById returned raw WorkflowRun with snapshot
+- const run = await workflow.runById(runId, requestContext);
+- // Separately: runExecutionResult returned processed execution state
+- const result = await workflow.runExecutionResult(runId);
+
++ // Now: Single method returns unified WorkflowState
++ const run = await workflow.runById(runId, {
++   requestContext,  // Optional request context
++   fields: ['status', 'result'],  // Optional: request only specific fields
++   withNestedWorkflows: false,  // Optional: skip nested workflow data for performance
++ });
++ // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+```
+
 ## Removed
+
+### `runExecutionResult` method and `GetWorkflowRunExecutionResultResponse` type
+
+The `runExecutionResult()` method and `GetWorkflowRunExecutionResultResponse` type have been removed from `@mastra/client-js`. The `/execution-result` API endpoints have also been removed.
+
+To migrate, use `runById()` instead, which now returns the same unified `WorkflowState` with both metadata and processed execution state.
+
+```diff
+- import type { GetWorkflowRunExecutionResultResponse } from '@mastra/client-js';
+-
+- const workflow = client.getWorkflow('my-workflow');
+- const result = await workflow.runExecutionResult(runId);
+
++ const workflow = client.getWorkflow('my-workflow');
++ const result = await workflow.runById(runId);
++ // Or with options for performance optimization:
++ const result = await workflow.runById(runId, {
++   fields: ['status', 'result'],  // Only fetch specific fields
++   withNestedWorkflows: false,     // Skip expensive nested workflow data
++ });
+```
 
 ### `toAISdkFormat` function
 
@@ -33420,7 +33519,7 @@ ANTHROPIC_API_KEY=ant-...
 | `anthropic/claude-opus-4-20250514` |
 | `anthropic/claude-opus-4-5` |
 | `anthropic/claude-opus-4-5-20251101` |
-| `anthropic/claude-sonnet-4` |
+| `anthropic/claude-sonnet-4-0` |
 | `anthropic/claude-sonnet-4-20250514` |
 | `anthropic/claude-sonnet-4-5` |
 | `anthropic/claude-sonnet-4-5-20250929` |
@@ -33797,7 +33896,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 66+ AI providers and 1606+ models through Mastra's model router."
+description: "Access 66+ AI providers and 1635+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33810,7 +33909,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1606 models from 66 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1635 models from 66 providers through a single API.
 
 ## Features
 
@@ -37275,7 +37374,7 @@ const agent = new Agent({
 
 ---
 title: "Cerebras | Models | Mastra"
-description: "Use Cerebras models with Mastra. 3 models available."
+description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -37286,7 +37385,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 [EN] Source: https://mastra.ai/en/models/providers/cerebras
 
-Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
+Access 4 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
@@ -37359,6 +37458,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 40960,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "cerebras/zai-glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 40000,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -37391,7 +37502,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cerebras/zai-glm-4.6"
+      ? "cerebras/zai-glm-4.7"
       : "cerebras/gpt-oss-120b";
   }
 });
@@ -44062,7 +44173,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
-      description="3 models"
+      description="4 models"
       href="/models/v1/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
@@ -44252,7 +44363,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
-      description="26 models"
+      description="25 models"
       href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
@@ -44297,7 +44408,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
       title="ZenMux"
-      description="22 models"
+      description="51 models"
       href="/models/v1/providers/zenmux"
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
@@ -54285,7 +54396,7 @@ const agent = new Agent({
 
 ---
 title: "Synthetic | Models | Mastra"
-description: "Use Synthetic models with Mastra. 26 models available."
+description: "Use Synthetic models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54295,7 +54406,7 @@ description: "Use Synthetic models with Mastra. 26 models available."
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 [EN] Source: https://mastra.ai/en/models/providers/synthetic
 
-Access 26 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 25 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -54512,18 +54623,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.55,
     "outputCost": 2.19
-  },
-  {
-    "model": "synthetic/hf:moonshotai/Kimi-K2-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.6,
-    "outputCost": 2.5
   },
   {
     "model": "synthetic/hf:moonshotai/Kimi-K2-Instruct-0905",
@@ -56607,7 +56706,7 @@ const agent = new Agent({
 
 ---
 title: "ZenMux | Models | Mastra"
-description: "Use ZenMux models with Mastra. 22 models available."
+description: "Use ZenMux models with Mastra. 51 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -56617,7 +56716,7 @@ description: "Use ZenMux models with Mastra. 22 models available."
 # <img src="https://models.dev/logos/zenmux.svg" alt="ZenMux logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ZenMux
 [EN] Source: https://mastra.ai/en/models/providers/zenmux
 
-Access 22 ZenMux models through Mastra's model router. Authentication is handled automatically using the `ZENMUX_API_KEY` environment variable.
+Access 51 ZenMux models through Mastra's model router. Authentication is handled automatically using the `ZENMUX_API_KEY` environment variable.
 
 Learn more in the [ZenMux documentation](https://docs.zenmux.ai).
 
@@ -56668,6 +56767,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
+    "model": "zenmux/anthropic/claude-opus-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
     "model": "zenmux/anthropic/claude-opus-4.1",
     "imageInput": true,
     "audioInput": false,
@@ -56678,6 +56789,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 15,
     "outputCost": 75
+  },
+  {
+    "model": "zenmux/anthropic/claude-opus-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "zenmux/anthropic/claude-sonnet-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
     "model": "zenmux/anthropic/claude-sonnet-4.5",
@@ -56692,16 +56827,88 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "zenmux/baidu/ernie-5.0-thinking-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.84,
+    "outputCost": 3.37
+  },
+  {
     "model": "zenmux/deepseek/deepseek-chat",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.28,
+    "outputCost": 0.42
+  },
+  {
+    "model": "zenmux/deepseek/deepseek-reasoner",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 8000,
-    "inputCost": 0.56,
-    "outputCost": 1.68
+    "maxOutput": 64000,
+    "inputCost": 0.28,
+    "outputCost": 0.42
+  },
+  {
+    "model": "zenmux/deepseek/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.28,
+    "outputCost": 0.43
+  },
+  {
+    "model": "zenmux/deepseek/deepseek-v3.2-exp",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 64000,
+    "inputCost": 0.22,
+    "outputCost": 0.33
+  },
+  {
+    "model": "zenmux/google/gemini-2.5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "zenmux/google/gemini-2.5-flash-lite",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": 0.1,
+    "outputCost": 0.4
   },
   {
     "model": "zenmux/google/gemini-2.5-pro",
@@ -56716,14 +56923,50 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
-    "model": "zenmux/inclusionai/lint-1t",
+    "model": "zenmux/google/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": 0.5,
+    "outputCost": 3
+  },
+  {
+    "model": "zenmux/google/gemini-3-flash-preview-free",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/google/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 12
+  },
+  {
+    "model": "zenmux/inclusionai/ling-1t",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 128000,
-    "maxOutput": 32000,
+    "maxOutput": 64000,
     "inputCost": 0.56,
     "outputCost": 2.24
   },
@@ -56735,7 +56978,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 32000,
+    "maxOutput": 64000,
     "inputCost": 0.56,
     "outputCost": 2.24
   },
@@ -56745,11 +56988,23 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 256000,
-    "maxOutput": 32000,
-    "inputCost": 0.6,
-    "outputCost": 2.4
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/kuaishou/kat-coder-pro-v1-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "zenmux/minimax/minimax-m2",
@@ -56759,7 +57014,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 204800,
-    "maxOutput": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "zenmux/minimax/minimax-m2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 64000,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -56770,8 +57037,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 16384,
+    "contextWindow": 262100,
+    "maxOutput": 64000,
     "inputCost": 0.6,
     "outputCost": 2.5
   },
@@ -56783,7 +57050,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 262144,
+    "maxOutput": 64000,
     "inputCost": 0.6,
     "outputCost": 2.5
   },
@@ -56795,7 +57062,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 262144,
+    "maxOutput": 64000,
     "inputCost": 1.15,
     "outputCost": 8
   },
@@ -56807,7 +57074,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 400000,
-    "maxOutput": 128000,
+    "maxOutput": 64000,
     "inputCost": 1.25,
     "outputCost": 10
   },
@@ -56819,9 +57086,69 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 400000,
-    "maxOutput": 128000,
+    "maxOutput": 64000,
     "inputCost": 1.25,
     "outputCost": 10
+  },
+  {
+    "model": "zenmux/openai/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 64000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "zenmux/openai/gpt-5.1-chat",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "zenmux/openai/gpt-5.1-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 64000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "zenmux/openai/gpt-5.1-codex-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 64000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "zenmux/openai/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 64000,
+    "inputCost": 1.75,
+    "outputCost": 14
   },
   {
     "model": "zenmux/qwen/qwen3-coder-plus",
@@ -56831,9 +57158,45 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 1000000,
-    "maxOutput": 66540,
+    "maxOutput": 64000,
     "inputCost": 1,
     "outputCost": 5
+  },
+  {
+    "model": "zenmux/stepfun/step-3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 64000,
+    "inputCost": 0.21,
+    "outputCost": 0.57
+  },
+  {
+    "model": "zenmux/volcengine/doubao-seed-1.8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": 0.11,
+    "outputCost": 0.28
+  },
+  {
+    "model": "zenmux/volcengine/doubao-seed-code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": 0.17,
+    "outputCost": 1.12
   },
   {
     "model": "zenmux/x-ai/grok-4",
@@ -56843,7 +57206,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
-    "maxOutput": 256000,
+    "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -56855,19 +57218,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 2000000,
-    "maxOutput": 30000,
+    "maxOutput": 64000,
     "inputCost": 0.2,
     "outputCost": 0.5
   },
   {
-    "model": "zenmux/x-ai/grok-4-fast-non-reasoning",
+    "model": "zenmux/x-ai/grok-4.1-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 64000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "zenmux/x-ai/grok-4.1-fast-non-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 2000000,
-    "maxOutput": 30000,
+    "maxOutput": 64000,
     "inputCost": 0.2,
     "outputCost": 0.5
   },
@@ -56879,7 +57254,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
-    "maxOutput": 10000,
+    "maxOutput": 64000,
     "inputCost": 0.2,
     "outputCost": 1.5
   },
@@ -56890,10 +57265,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 32000,
-    "inputCost": 0.07,
-    "outputCost": 0.21
+    "contextWindow": 262144,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/xiaomi/mimo-v2-flash-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.35,
+    "outputCost": 1.54
   },
   {
     "model": "zenmux/z-ai/glm-4.5-air",
@@ -56903,7 +57302,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 96000,
+    "maxOutput": 64000,
     "inputCost": 0.11,
     "outputCost": 0.56
   },
@@ -56918,6 +57317,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.35,
     "outputCost": 1.54
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 0.14,
+    "outputCost": 0.42
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.6v-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.6v-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zenmux/z-ai/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 0.28,
+    "outputCost": 1.14
   }
 ]}
 />
@@ -56950,7 +57397,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zenmux/z-ai/glm-4.6"
+      ? "zenmux/z-ai/glm-4.7"
       : "zenmux/anthropic/claude-haiku-4.5";
   }
 });
@@ -57599,18 +58046,13 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 # Agent.generate()
 [EN] Source: https://mastra.ai/en/reference/agents/generate
 
-The `.generate()` method enables non-streaming response generation from an agent, with enhanced capabilities and flexible output formats. It accepts messages and optional generation options, supporting both Mastra’s native format and AI SDK v5 compatibility.
+The `.generate()` method enables non-streaming response generation from an agent with enhanced capabilities. It accepts messages and optional generation options.
 
 ## Usage example
 
 ```typescript
-// Default Mastra format
-const mastraResult = await agent.generate("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkResult = await agent.generate("message for agent", {
-  format: "aisdk",
-});
+// Basic usage
+const result = await agent.generate("message for agent");
 
 // With model settings (e.g., limiting output tokens)
 const limitedResult = await agent.generate("Write a short poem about coding", {
@@ -57619,11 +58061,29 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     temperature: 0.7,
   },
 });
+
+// With structured output
+const structuredResult = await agent.generate("Extract the user's name and age", {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+    }),
+  },
+});
+
+// With memory for conversation persistence
+const memoryResult = await agent.generate("Remember my favorite color is blue", {
+  memory: {
+    thread: "user-123-thread",
+    resource: "user-123",
+  },
+});
 ```
 
 :::info
 
-**Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.generateLegacy()`](./generateLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
+**Model Compatibility**: This method requires AI SDK v5+ models. If you're using AI SDK v4 models, use the [`.generateLegacy()`](./generateLegacy) method instead. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
 :::
 
@@ -57651,18 +58111,16 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
 <PropertiesTable
   content={[
     {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
-    {
       name: "maxSteps",
       type: "number",
       isOptional: true,
       description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "stopWhen",
+      type: "LoopOptions['stopWhen']",
+      isOptional: true,
+      description: "Conditions for stopping execution (e.g., step count, token limit).",
     },
     {
       name: "scorers",
@@ -57757,10 +58215,28 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "prepareStep",
-      type: "PrepareStepFunction<any>",
+      type: "PrepareStepFunction",
       isOptional: true,
       description:
         "Callback function called before each step of multi-step execution.",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description: "Require approval for all tool calls before execution.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description: "Automatically resume suspended tools.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
       name: "context",
@@ -57842,6 +58318,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
         {
           parameters: [
             {
+              name: "logger",
+              type: "IMastraLogger",
+              isOptional: true,
+              description:
+                "Optional logger instance for structured logging during output generation.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
               name: "providerOptions",
               type: "ProviderOptions",
               isOptional: true,
@@ -57854,24 +58341,31 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "outputProcessors",
-      type: "Processor[]",
+      type: "OutputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Output processors to use for this execution (overrides agent's default).",
     },
     {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times processors can trigger a retry for this generation. Overrides agent's default maxProcessorRetries.",
+    },
+    {
       name: "inputProcessors",
-      type: "Processor[]",
+      type: "InputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Input processors to use for this execution (overrides agent's default).",
     },
     {
       name: "instructions",
-      type: "string",
+      type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
       isOptional: true,
       description:
-        "Custom instructions that override the agent's default instructions for this execution.",
+        "Custom instructions that override the agent's default instructions for this execution. Can be a single string, message object, or array of either.",
     },
     {
       name: "system",
@@ -57931,17 +58425,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "onFinish",
-      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      type: "LoopConfig['onFinish']",
       isOptional: true,
       description:
-        "Callback fired when generation completes. Type varies by format.",
+        "Callback fired when generation completes.",
     },
     {
       name: "onStepFinish",
-      type: "StreamTextOnStepFinishCallback<any> | never",
+      type: "LoopConfig['onStepFinish']",
       isOptional: true,
       description:
-        "Callback fired after each generation step. Type varies by format.",
+        "Callback fired after each generation step.",
     },
     {
       name: "resourceId",
@@ -58219,6 +58713,13 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
         },
       ],
     },
+    {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "Whether to include raw chunks in the stream output. Not available on all model providers.",
+    },
   ]}
 />
 
@@ -58228,9 +58729,52 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
   content={[
     {
       name: "result",
-      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>> | Awaited<ReturnType<AISDKV5OutputStream<Output>['getFullOutput']>>",
+      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>>",
       description:
-        "Returns the full output of the generation process. When format is 'mastra' (default), returns MastraModelOutput result. When format is 'aisdk', returns AISDKV5OutputStream result for AI SDK v5 compatibility.",
+        "Returns the full output of the generation process including text, object (if structured output), tool calls, tool results, usage statistics, and step information.",
+    },
+    {
+      name: "text",
+      type: "string",
+      description:
+        "The generated text response from the agent.",
+    },
+    {
+      name: "object",
+      type: "Output | undefined",
+      isOptional: true,
+      description:
+        "The structured output object if structuredOutput was provided, validated against the schema.",
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCall[]",
+      description:
+        "Array of tool calls made during generation.",
+    },
+    {
+      name: "toolResults",
+      type: "ToolResult[]",
+      description:
+        "Array of results from tool executions.",
+    },
+    {
+      name: "usage",
+      type: "TokenUsage",
+      description:
+        "Token usage statistics for the generation.",
+    },
+    {
+      name: "steps",
+      type: "Step[]",
+      description:
+        "Array of execution steps, useful for debugging multi-step generations.",
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description:
+        "The reason generation finished (e.g., 'stop', 'tool-calls', 'error').",
     },
     {
       name: "traceId",
@@ -61186,7 +61730,7 @@ Converts messages from various input formats to AI SDK V5 UI message format. Thi
 ## Usage example
 
 ```typescript title="app/chat/page.tsx"
-import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 import { useChat } from "ai/react";
 
 // Stored messages from your database, memory or API
@@ -61262,7 +61806,7 @@ Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
 ### Converting simple text messages
 
 ```typescript
-import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 
 const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
 // Returns array of UIMessage objects with user role
@@ -61272,7 +61816,7 @@ const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
 
 ```typescript
 import { MastraClient } from "@mastra/client-js";
-import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 
 const client = new MastraClient();
 
