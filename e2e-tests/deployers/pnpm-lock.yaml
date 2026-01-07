@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  ssri: '>=6.0.2'
+
 importers:
 
   .:
@@ -924,6 +927,10 @@ packages:
       picomatch:
         optional: true
 
+  figgy-pudding@3.5.2:
+    resolution: {integrity: sha512-0btnI/H8f2pavGMN8w40mlSKOfTK2SVJmBfBeVIj3kNw0swwgzyRq0d5TJVOwodFmtvpPeWPN/MCcfuWF0Ezbw==}
+    deprecated: This module is no longer supported.
+
   figures@6.1.0:
     resolution: {integrity: sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg==}
     engines: {node: '>=18'}
@@ -1768,8 +1775,8 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
-  ssri@5.3.0:
-    resolution: {integrity: sha512-XRSIPqLij52MtgoQavH/x/dU1qVKtWUAAZeOHsR9c2Ddi4XerFy3mc1alf+dLJKl9EUIm/Ht+EowFkTUOA6GAQ==}
+  ssri@6.0.2:
+    resolution: {integrity: sha512-cepbSq/neFK7xB6A50KHN0xHDotYzq58wWCa5LeWqnPrHG8GzfEjO/4O8kpmcGW+oaxkvhEJCWgbgNk4/ZV93Q==}
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
@@ -2968,6 +2975,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.3
 
+  figgy-pudding@3.5.2: {}
+
   figures@6.1.0:
     dependencies:
       is-unicode-supported: 2.1.0
@@ -3448,7 +3457,7 @@ snapshots:
       safe-buffer: 5.2.1
       semver: 5.7.2
       slide: 1.1.6
-      ssri: 5.3.0
+      ssri: 6.0.2
     optionalDependencies:
       npmlog: 4.1.2
 
@@ -3875,9 +3884,9 @@ snapshots:
       safer-buffer: 2.1.2
       tweetnacl: 0.14.5
 
-  ssri@5.3.0:
+  ssri@6.0.2:
     dependencies:
-      safe-buffer: 5.2.1
+      figgy-pudding: 3.5.2
 
   stackback@0.0.2: {}
 

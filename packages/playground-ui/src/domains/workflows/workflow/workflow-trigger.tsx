@@ -18,7 +18,7 @@ import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
-import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
@@ -46,12 +46,14 @@ export interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
+    initialState,
     requestContext,
     perStep,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
+    initialState?: Record<string, unknown>;
     requestContext: Record<string, unknown>;
     perStep?: boolean;
   }) => Promise<void>;
@@ -100,6 +102,7 @@ export function WorkflowTrigger({
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const triggerSchema = workflow?.inputSchema;
+  const stateSchema = workflow?.stateSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -115,8 +118,11 @@ export function WorkflowTrigger({
       setRunId?.(run.runId);
       setInnerRunId(run.runId);
       setContextRunId(run.runId);
+      const { initialState, inputData: dataInputData } = data ?? {};
 
-      streamWorkflow({ workflowId, runId: run.runId, inputData: data, requestContext });
+      const inputData = stateSchema ? dataInputData : data;
+
+      streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -192,6 +198,14 @@ export function WorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
+  const zodStateSchema = stateSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stateSchema))) : null;
+
+  const zodSchemaToUse = zodStateSchema
+    ? z.object({
+        inputData: zodInputSchema,
+        initialState: zodStateSchema,
+      })
+    : zodInputSchema;
 
   const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
@@ -212,9 +226,9 @@ export function WorkflowTrigger({
 
         {!isSuspendedSteps && (
           <>
-            {zodInputSchema ? (
+            {zodSchemaToUse ? (
               <WorkflowInputData
-                schema={zodInputSchema}
+                schema={zodSchemaToUse}
                 defaultValues={payload}
                 isSubmitLoading={isStreamingWorkflow}
                 submitButtonLabel="Run"
@@ -394,7 +408,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
           <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-surface2">
             <DialogTitle>Workflow Execution (JSON)</DialogTitle>
             <div className="w-full h-full overflow-x-scroll">
-              <SyntaxHighlighter data={result} className="p-4" />
+              <CodeEditor data={result} className="p-4" />
             </div>
           </DialogContent>
         </DialogPortal>

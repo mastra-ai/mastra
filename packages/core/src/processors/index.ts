@@ -73,8 +73,9 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
 /**
  * Arguments for processOutputResult method
  */
-export interface ProcessOutputResultArgs<TTripwireMetadata = unknown>
-  extends ProcessorMessageContext<TTripwireMetadata> {}
+export interface ProcessOutputResultArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
  * Arguments for processInputStep method
@@ -201,6 +202,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
+  /** Index of this processor in the workflow (set at runtime when combining processors) */
+  processorIndex?: number;
 
   /**
    * Process input messages before they are sent to the LLM

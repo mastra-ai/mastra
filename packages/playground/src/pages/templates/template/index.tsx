@@ -57,9 +57,9 @@ export default function Template() {
   });
 
   // Fetch agent builder workflow info for step pre-population
-  const { data: workflowInfo } = useAgentBuilderWorkflow();
-  const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
-  const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
+  const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
+  const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
+  const { mutateAsync: getTemplateInstallRun, isPending: isGettingRun } = useGetTemplateInstallRun();
   const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
   const {
     observeInstall,
@@ -393,7 +393,8 @@ export default function Template() {
                   setErrors={setErrors}
                   handleInstallTemplate={handleInstallTemplate}
                   handleVariableChange={handleVariableChange}
-                  isLoadingEnvVars={isLoadingEnvVars}
+                  isLoadingEnvVars={isLoadingEnvVars || isLoadingWorkflow}
+                  isInstalling={isCreatingRun}
                   defaultModelProvider={selectedModelProvider}
                   defaultModelId={selectedModelId}
                   onModelUpdate={handleModelUpdate}

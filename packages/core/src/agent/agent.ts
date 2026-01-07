@@ -33,7 +33,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { EntityType, SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
@@ -50,7 +50,12 @@ import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
-import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
+import type {
+  AgentExecutionOptions,
+  InnerAgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
+  NetworkOptions,
+} from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -123,6 +128,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
@@ -216,6 +222,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || {};
+    this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -383,14 +390,26 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
-      options: { validateInputs: false },
+      options: {
+        validateInputs: false,
+        tracingPolicy: {
+          // mark all workflow spans related to processor execution as internal
+          internal: InternalSpans.WORKFLOW,
+        },
+      },
     });
 
-    for (const processorOrWorkflow of validProcessors) {
+    for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
-      const step = isProcessorWorkflow(processorOrWorkflow)
-        ? processorOrWorkflow
-        : createStep(processorOrWorkflow as Exclude<T, ProcessorWorkflow>);
+      let step;
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        step = processorOrWorkflow;
+      } else {
+        // Set processorIndex on the processor for span attributes
+        const processor = processorOrWorkflow as Exclude<T, ProcessorWorkflow>;
+        processor.processorIndex = index;
+        step = createStep(processor);
+      }
       workflow = workflow.then(step);
     }
 
@@ -896,6 +915,48 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             agentName: this.name,
           },
           text: `[Agent:${this.name}] - Function-based default options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
+  }
+
+  /**
+   * Gets the default NetworkOptions for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling `network()` without explicit options.
+   *
+   * @returns NetworkOptions containing maxSteps, completion (CompletionConfig), and other network settings
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultNetworkOptions();
+   * console.log(options.maxSteps); // 20
+   * console.log(options.completion?.scorers); // [testsScorer, buildScorer]
+   * ```
+   */
+  public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+    | NetworkOptions
+    | Promise<NetworkOptions> {
+    if (typeof this.#defaultNetworkOptions !== 'function') {
+      return this.#defaultNetworkOptions;
+    }
+
+    const result = this.#defaultNetworkOptions({ requestContext, mastra: this.#mastra });
+
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_NETWORK_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default network options returned empty value`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
@@ -2983,8 +3044,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * ```
    */
   async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
-    const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
     const requestContextToUse = options?.requestContext || new RequestContext();
+
+    // Merge default network options with call-specific options
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const mergedOptions = {
+      ...defaultNetworkOptions,
+      ...options,
+      // Deep merge nested objects
+      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+    };
+
+    const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
@@ -2994,8 +3066,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const threadId =
       threadIdFromContext ||
-      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || options?.memory?.resource;
+      (typeof mergedOptions?.memory?.thread === 'string'
+        ? mergedOptions?.memory?.thread
+        : mergedOptions?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
 
     return await networkLoop({
       networkName: this.name,
@@ -3003,14 +3077,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       runId,
       routingAgent: this,
       routingAgentOptions: {
-        modelSettings: options?.modelSettings,
-        memory: options?.memory,
+        modelSettings: mergedOptions?.modelSettings,
+        memory: mergedOptions?.memory,
       },
       generateId: () => this.#mastra?.generateId() || randomUUID(),
-      maxIterations: options?.maxSteps || 1,
+      maxIterations: mergedOptions?.maxSteps || 1,
       messages,
       threadId,
       resourceId,
+      validation: mergedOptions?.completion,
+      routing: mergedOptions?.routing,
+      onIterationComplete: mergedOptions?.onIterationComplete,
     });
   }
 

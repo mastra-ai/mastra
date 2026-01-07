@@ -1,16 +1,16 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt';
 
-import { useWorkflowRunExecutionResult } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
-import { WorkflowRunState } from '@mastra/core/workflows';
 import { useContext } from 'react';
 
-export interface WorkflowRunDetailProps
-  extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId' | 'observeWorkflowStream'> {
+export interface WorkflowRunDetailProps extends Omit<
+  WorkflowTriggerProps,
+  'paramsRunId' | 'workflowId' | 'observeWorkflowStream'
+> {
   workflowId: string;
   runId?: string;
   observeWorkflowStream?: ({

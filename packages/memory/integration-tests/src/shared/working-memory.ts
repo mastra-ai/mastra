@@ -2011,5 +2011,5 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(memoryToolRoutes).toBe(1);
 
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
-  });
+  }, 120000);
 }

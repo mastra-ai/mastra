@@ -44,6 +44,9 @@ export type MastraUIMessageMetadata = {
       from?: 'AGENT' | 'WORKFLOW';
       selectionReason?: string;
       agentInput?: string | object | Array<object>;
+      completionResult?: {
+        passed: boolean;
+      };
     }
 );
 

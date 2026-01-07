@@ -3,7 +3,7 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.7",
+    "@changesets/cli": "^2.29.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -16,7 +16,7 @@
     "prettier": "^3.6.2",
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vite": "^7.3.0",
     "vitest": "catalog:"
   },
@@ -96,11 +96,12 @@
     "pnpm": ">=10.18.0"
   },
   "resolutions": {
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "@types/node": "22.13.17",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
-    "jsondiffpatch": ">=0.7.3"
+    "jsondiffpatch": ">=0.7.3",
+    "ssri": ">=6.0.2"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.2",
