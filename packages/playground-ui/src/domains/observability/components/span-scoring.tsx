@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';

@@ -3,7 +3,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { ZodType } from 'zod';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { MCPToolType } from '@mastra/core/mcp';
 import { MainContentContent } from '@/components/ui/containers/MainContent';

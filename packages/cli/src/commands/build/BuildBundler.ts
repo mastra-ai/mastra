@@ -13,6 +13,8 @@ export class BuildBundler extends Bundler {
   constructor({ studio }: { studio?: boolean } = {}) {
     super('Build');
     this.studio = studio ?? false;
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
   protected async getUserBundlerOptions(

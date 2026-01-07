@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
-import { MessageList } from '../../agent/message-list';
+import { coreContentToString } from '../../agent/message-list';
+import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
@@ -266,6 +267,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
+                    createSpan: true,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
@@ -571,6 +573,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 steps: self.#bufferedSteps,
                 totalUsage: self.#usageCount,
                 content: [],
+                suspendPayload: undefined, // Tripwire doesn't suspend, so resolve to undefined
               });
 
               // Emit the tripwire chunk for listeners
@@ -658,9 +661,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   // Get text from the latest response message (the last assistant message)
                   const responseMessages = self.messageList.get.response.aiV4.core();
                   const lastResponseMessage = responseMessages[responseMessages.length - 1];
-                  const outputText = lastResponseMessage
-                    ? MessageList.coreContentToString(lastResponseMessage.content)
-                    : '';
+                  const outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct
@@ -746,7 +747,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
                   providerMetadata: baseFinishStep.providerMetadata,
-                  text: baseFinishStep.text,
+                  text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),

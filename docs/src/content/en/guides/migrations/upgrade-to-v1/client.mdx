@@ -85,7 +85,51 @@ npx @mastra/codemod@beta v1/client-get-memory-thread .
 
 :::
 
+### Unified `runById` API for workflow runs
+
+The `runById()` method now returns a unified `WorkflowState` object containing both metadata (runId, workflowName, resourceId, createdAt, updatedAt) and processed execution state (status, result, error, payload, steps). This unifies the previously separate `runById()` and `runExecutionResult()` methods.
+
+The method also accepts an options object with optional `fields` and `withNestedWorkflows` parameters for performance optimization.
+
+```diff
+  const workflow = client.getWorkflow('my-workflow');
+
+- // Previously: runById returned raw WorkflowRun with snapshot
+- const run = await workflow.runById(runId, requestContext);
+- // Separately: runExecutionResult returned processed execution state
+- const result = await workflow.runExecutionResult(runId);
+
++ // Now: Single method returns unified WorkflowState
++ const run = await workflow.runById(runId, {
++   requestContext,  // Optional request context
++   fields: ['status', 'result'],  // Optional: request only specific fields
++   withNestedWorkflows: false,  // Optional: skip nested workflow data for performance
++ });
++ // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+```
+
 ## Removed
+
+### `runExecutionResult` method and `GetWorkflowRunExecutionResultResponse` type
+
+The `runExecutionResult()` method and `GetWorkflowRunExecutionResultResponse` type have been removed from `@mastra/client-js`. The `/execution-result` API endpoints have also been removed.
+
+To migrate, use `runById()` instead, which now returns the same unified `WorkflowState` with both metadata and processed execution state.
+
+```diff
+- import type { GetWorkflowRunExecutionResultResponse } from '@mastra/client-js';
+-
+- const workflow = client.getWorkflow('my-workflow');
+- const result = await workflow.runExecutionResult(runId);
+
++ const workflow = client.getWorkflow('my-workflow');
++ const result = await workflow.runById(runId);
++ // Or with options for performance optimization:
++ const result = await workflow.runById(runId, {
++   fields: ['status', 'result'],  // Only fetch specific fields
++   withNestedWorkflows: false,     // Skip expensive nested workflow data
++ });
+```
 
 ### `toAISdkFormat` function
 
