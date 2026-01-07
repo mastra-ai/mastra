@@ -53,7 +53,7 @@ export interface CompletionContext {
   /** Which primitive was selected this iteration */
   selectedPrimitive: {
     id: string;
-    type: 'agent' | 'workflow' | 'tool';
+    type: 'agent' | 'workflow' | 'tool' | 'none';
   };
   /** The prompt/input sent to the selected primitive */
   primitivePrompt: string;

@@ -5,4 +5,4 @@
 'create-mastra': patch
 ---
 
-Add network completion information to studio
+Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers

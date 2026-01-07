@@ -101,7 +101,7 @@ export type NetworkOptions = {
   onIterationComplete?: (context: {
     iteration: number;
     primitiveId: string;
-    primitiveType: 'agent' | 'workflow' | 'tool';
+    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
     result: string;
     isComplete: boolean;
   }) => void | Promise<void>;

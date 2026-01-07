@@ -914,14 +914,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Gets the default network options for this agent, resolving function-based options if necessary.
+   * Gets the default NetworkOptions for this agent, resolving function-based options if necessary.
    * These options are used as defaults when calling `network()` without explicit options.
+   *
+   * @returns NetworkOptions containing maxSteps, completion (CompletionConfig), and other network settings
    *
    * @example
    * ```typescript
    * const options = await agent.getDefaultNetworkOptions();
    * console.log(options.maxSteps); // 20
-   * console.log(options.validation?.checks); // [testsCheck, buildCheck]
+   * console.log(options.completion?.scorers); // [testsScorer, buildScorer]
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):

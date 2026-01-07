@@ -1104,7 +1104,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   onIterationComplete?: (context: {
     iteration: number;
     primitiveId: string;
-    primitiveType: 'agent' | 'workflow' | 'tool';
+    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
     result: string;
     isComplete: boolean;
   }) => void | Promise<void>;
@@ -1167,7 +1167,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         originalTask: inputData.task,
         selectedPrimitive: {
           id: inputData.primitiveId,
-          type: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
+          type: inputData.primitiveType,
         },
         primitivePrompt: inputData.prompt,
         primitiveResult: inputData.result,
@@ -1282,7 +1282,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         await onIterationComplete({
           iteration: inputData.iteration,
           primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
+          primitiveType: inputData.primitiveType,
           result: inputData.result,
           isComplete,
         });

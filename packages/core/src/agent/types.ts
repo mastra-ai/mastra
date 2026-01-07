@@ -185,11 +185,11 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    *       verboseIntrospection: true,
    *     },
    *     completion: {
-   *       additionalInstructions: 'Only mark complete when all tests pass.',
+   *       scorers: [testsScorer, buildScorer],
+   *       strategy: 'all',
    *     },
-   *     validation: {
-   *       checks: [testsCheck, buildCheck],
-   *       mode: 'verify',
+   *     onIterationComplete: ({ iteration, isComplete }) => {
+   *       console.log(`Iteration ${iteration} complete: ${isComplete}`);
    *     },
    *   },
    * });

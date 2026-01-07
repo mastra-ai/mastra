@@ -53,7 +53,7 @@ export const ErrorAwareText = () => {
         </button>
         {!collapsedCompletionCheck && (
           <Alert variant="info">
-            <AlertTitle as="h5">{metadata.completionResult.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
+            <AlertTitle as="h5">{metadata.completionResult?.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
             <MarkdownText />
           </Alert>
         )}
