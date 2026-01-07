@@ -7,7 +7,7 @@ packages:
 
 # Sensitive Data Filter
 
-The Sensitive Data Filter is a span processor that automatically redacts sensitive information from your traces before they're exported. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
+The Sensitive Data Filter is a span processor that redacts sensitive information from your traces during the processing pipeline before export. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
 
 ## Default Configuration
 
@@ -31,7 +31,7 @@ export const mastra = new Mastra({
           new CloudExporter(),
         ],
         spanOutputProcessors: [
-          new SensitiveDataFilter(), // Automatically redacts sensitive fields
+          new SensitiveDataFilter(), // Redacts sensitive fields before export
         ],
       },
     },
@@ -43,7 +43,7 @@ export const mastra = new Mastra({
 });
 ```
 
-With the default configuration, the filter automatically redacts these common sensitive field names:
+With the default configuration, the filter redacts these common sensitive field names:
 
 - `password`
 - `token`
