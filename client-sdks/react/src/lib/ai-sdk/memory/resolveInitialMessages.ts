@@ -150,9 +150,9 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
               from:
                 primitiveType === 'agent'
                   ? ('AGENT' as const)
-                  : primitiveType === 'workflow'
-                    ? ('WORKFLOW' as const)
-                    : ('TOOL' as const),
+                  : primitiveType === 'tool'
+                    ? ('TOOL' as const)
+                    : ('WORKFLOW' as const),
             },
           } as MastraUIMessage;
 
