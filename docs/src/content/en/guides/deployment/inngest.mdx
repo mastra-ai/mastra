@@ -344,6 +344,7 @@ import { mastra, inngest } from "./mastra";
 
 const fastify = Fastify();
 
+// JSON parsing is handled by Fastify's default content-type parser
 const handler = createServe(fastifyAdapter)({ mastra, inngest });
 
 fastify.route({
