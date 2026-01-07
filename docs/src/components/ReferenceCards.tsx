@@ -31,7 +31,7 @@ function extractReferenceSections() {
           if (subItem.type === "doc") {
             sections[label].push({
               title: subItem.label,
-              href: `/reference/${subItem.id}`,
+              href: `/reference/v0/${subItem.id}`,
             });
           } else if (subItem.type === "category") {
             // Handle nested categories by including their items
@@ -40,7 +40,7 @@ function extractReferenceSections() {
                 if (nestedItem.type === "doc") {
                   sections[label].push({
                     title: nestedItem.label,
-                    href: `/reference/${nestedItem.id}`,
+                    href: `/reference/v0/${nestedItem.id}`,
                   });
                 }
               });

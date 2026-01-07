@@ -16,32 +16,32 @@ const docsTabs = [
   {
     id: "Docs",
     label: msg("Docs"),
-    href: "/docs",
-    basePath: "/docs",
+    href: "/docs/v0",
+    basePath: "/docs/v0",
   },
   {
     id: "Models",
     label: msg("Models"),
-    href: "/models",
-    basePath: "/models",
+    href: "/models/v0",
+    basePath: "/models/v0",
   },
   {
     id: "Examples",
     label: msg("Examples"),
-    href: "/examples",
-    basePath: "/examples",
+    href: "/examples/v0",
+    basePath: "/examples/v0",
   },
   {
     id: "Guides",
     label: msg("Guides & Migrations"),
-    href: "/guides",
-    basePath: "/guides",
+    href: "/guides/v0",
+    basePath: "/guides/v0",
   },
   {
     id: "Reference",
     label: msg("Reference"),
-    href: "/reference",
-    basePath: "/reference",
+    href: "/reference/v0",
+    basePath: "/reference/v0",
   },
   {
     id: "Showcase",
@@ -62,7 +62,7 @@ export function MobileDocsDropdown() {
         pathname.startsWith(tab.basePath + "/") ||
         pathname === tab.basePath
       ) {
-        if (tab.basePath === "/docs") {
+        if (tab.basePath === "/docs/v0") {
           const otherTabPaths = docsTabs
             .filter((t) => t.id !== "Docs")
             .map((t) => t.basePath);
