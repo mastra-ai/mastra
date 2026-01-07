@@ -22,10 +22,16 @@ export const weatherInfo = createTool({
   suspendSchema: z.object({
     message: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
   resumeSchema: z.object({
     city: z.string(),
   }),
   execute: async (_inputData, context) => {
+    // Access validated userId from request context
+    const userId = context?.requestContext?.get('userId');
+    console.log('[weatherInfo] Processing request for user:', userId);
     if (!context?.agent?.resumeData) {
       return context?.agent?.suspend({
         message: 'What city do you want to know the weather for?',
@@ -115,6 +121,9 @@ export const chefModelV2Agent = new Agent({
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
 });
 
 const weatherAgent = new Agent({

@@ -42,6 +42,22 @@ import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
 
 /**
+ * Serializes an agent's request context schema to a JSON string.
+ * Returns undefined if the agent has no request context schema or if serialization fails.
+ */
+function serializeAgentRequestContextSchema(agent: Agent): string | undefined {
+  const agentRequestContextSchema = agent.getRequestContextSchema();
+  if (!agentRequestContextSchema) return undefined;
+
+  try {
+    return stringify(zodToJsonSchema(agentRequestContextSchema as Parameters<typeof zodToJsonSchema>[0]));
+  } catch (error) {
+    console.error(`Error serializing agent requestContextSchema`, { agentId: agent.id, error });
+    return undefined;
+  }
+}
+
+/**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * @param providerId - The provider identifier (may include a suffix like ".chat")
@@ -67,6 +83,7 @@ export interface SerializedTool {
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
+  requestContextSchema?: string;
   requireApproval?: boolean;
 }
 
@@ -75,6 +92,7 @@ interface SerializedToolInput {
   description?: string;
   inputSchema?: { jsonSchema?: unknown } | unknown;
   outputSchema?: { jsonSchema?: unknown } | unknown;
+  requestContextSchema?: { jsonSchema?: unknown } | unknown;
 }
 
 export interface SerializedWorkflow {
@@ -107,6 +125,7 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  requestContextSchema?: string;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -122,6 +141,7 @@ export async function getSerializedAgentTools(
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
+    let requestContextSchemaForReturn: string | undefined = undefined;
 
     // Only process schemas if not in partial mode
     if (!partial) {
@@ -155,6 +175,25 @@ export async function getSerializedAgentTools(
             );
           }
         }
+
+        if (tool.requestContextSchema) {
+          if (
+            tool.requestContextSchema &&
+            typeof tool.requestContextSchema === 'object' &&
+            'jsonSchema' in tool.requestContextSchema
+          ) {
+            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
+          } else if (typeof tool.requestContextSchema === 'function') {
+            const requestContextSchema = tool.requestContextSchema();
+            if (requestContextSchema && requestContextSchema.jsonSchema) {
+              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
+            }
+          } else if (tool.requestContextSchema) {
+            requestContextSchemaForReturn = stringify(
+              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
+          }
+        }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
           toolId: tool.id,
@@ -168,6 +207,7 @@ export async function getSerializedAgentTools(
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
+      requestContextSchema: requestContextSchemaForReturn,
     };
     return acc;
   }, {});
@@ -280,6 +320,8 @@ async function formatAgentList({
     },
   }));
 
+  const requestContextSchemaForReturn = serializeAgentRequestContextSchema(agent);
+
   return {
     id: agent.id || id,
     name: agent.name,
@@ -297,6 +339,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: requestContextSchemaForReturn,
   };
 }
 
@@ -436,6 +479,8 @@ async function formatAgent({
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
+  const requestContextSchemaForReturn = serializeAgentRequestContextSchema(agent);
+
   return {
     name: agent.name,
     description,
@@ -452,6 +497,7 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: requestContextSchemaForReturn,
   };
 }
 

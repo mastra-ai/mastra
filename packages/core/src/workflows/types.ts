@@ -10,6 +10,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
+import type { ZodLikeSchema } from '../types/zod-compat';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
@@ -173,7 +174,7 @@ export type TimeTravelContext<P, R, S, T> = Record<
 
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
-export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
+export type StepsRecord<T extends readonly Step<any, any, any, any, any, any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
 };
 
@@ -200,12 +201,12 @@ export type PathsToStringProps<T> =
 export type ExtractSchemaType<T extends z.ZodType<any>> = T extends z.ZodObject<infer V> ? V : never;
 
 export type ExtractSchemaFromStep<
-  TStep extends Step<any, any, any>,
+  TStep extends Step<any, any, any, any, any, any, any, any>,
   TKey extends 'inputSchema' | 'outputSchema',
 > = TStep[TKey];
 
 export type VariableReference<
-  TStep extends Step<string, any, any> = Step<string, any, any>,
+  TStep extends Step<string, any, any, any, any, any, any, any> = Step<string, any, any, any, any, any, any, any>,
   TVarPath extends PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.' =
     | PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>>
     | ''
@@ -397,6 +398,8 @@ export type WorkflowInfo = {
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
+  /** Optional schema for runtime request context validation */
+  requestContextSchema: string | undefined;
   stateSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
@@ -436,7 +439,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
     };
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
-  Step<any, any, any, any, any, any, TEngineType>,
+  Step<any, any, any, any, any, any, TEngineType, any>,
   'id' | 'description'
 > & {
   component?: string;
@@ -491,7 +494,7 @@ export type SerializedStepFlowEntry =
       };
     };
 
-export type StepWithComponent = Step<string, any, any, any, any, any> & {
+export type StepWithComponent = Step<string, any, any, any, any, any, any, any> & {
   component?: string;
   steps?: Record<string, StepWithComponent>;
 };
@@ -503,6 +506,7 @@ export type StepParams<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
 > = {
   id: TStepId;
   description?: string;
@@ -511,6 +515,27 @@ export type StepParams<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TState;
+  /**
+   * Schema for validating and typing the requestContext.
+   * When provided, the requestContext will be validated at runtime using .parse()
+   * and the execute function will receive a typed RequestContext.
+   *
+   * @example
+   * ```typescript
+   * const myStep = createStep({
+   *   id: 'my-step',
+   *   requestContextSchema: z.object({
+   *     userId: z.string(),
+   *     tenantId: z.string(),
+   *   }),
+   *   execute: async ({ requestContext }) => {
+   *     // requestContext is typed!
+   *     const userId = requestContext.get('userId'); // string
+   *   }
+   * });
+   * ```
+   */
+  requestContextSchema?: TRequestContextSchema;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
@@ -519,7 +544,8 @@ export type StepParams<
     z.infer<TStepOutput>,
     z.infer<TResumeSchema>,
     z.infer<TSuspendSchema>,
-    DefaultEngineType
+    DefaultEngineType,
+    TRequestContextSchema
   >;
 };
 
@@ -539,7 +565,7 @@ export type WorkflowResult<
   TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
-  TSteps extends Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, any, any>[],
 > =
   | ({
       status: 'success';
@@ -632,7 +658,7 @@ export type WorkflowStreamResult<
   TState extends z.ZodObject<any>,
   TInput extends z.ZodType<any>,
   TOutput extends z.ZodType<any>,
-  TSteps extends Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, any, any>[],
 > =
   | WorkflowResult<TState, TInput, TOutput, TSteps>
   | {
@@ -655,7 +681,8 @@ export type WorkflowConfig<
   TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, any, any>[] = Step<string, any, any, any, any, any, any, any>[],
+  TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -672,6 +699,11 @@ export type WorkflowConfig<
   options?: WorkflowOptions;
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
+  /**
+   * Optional schema for runtime request context validation.
+   * If provided, the requestContext passed to workflow execution will be validated against this schema.
+   */
+  requestContextSchema?: TRequestContextSchema;
 };
 
 /**
@@ -766,7 +798,7 @@ export type EntryExecutionResult = {
 export type StepExecutionStartParams = {
   workflowId: string;
   runId: string;
-  step: Step<any, any, any>;
+  step: Step<any, any, any, any, any, any, any, any>;
   inputData: any;
   pubsub: PubSub;
   executionContext: ExecutionContext;
@@ -778,7 +810,7 @@ export type StepExecutionStartParams = {
  * Parameters for executing a regular (non-workflow) step
  */
 export type RegularStepExecutionParams = {
-  step: Step<any, any, any>;
+  step: Step<any, any, any, any, any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   executionContext: ExecutionContext;
   resume?: {

@@ -10,6 +10,9 @@ export const myWorkflow = createWorkflow({
   outputSchema: z.object({
     result: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
 });
 
 const step = createStep({
@@ -57,8 +60,14 @@ const addLetterStep = createStep({
   outputSchema: z.object({
     text: z.string(),
   }),
-  execute: async ({ inputData }) => {
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
+  execute: async ({ inputData, requestContext }) => {
     const { text } = inputData;
+    // Access validated userId from request context
+    const userId = requestContext.userId;
+    console.log(`[addLetterAStep] Processing text for user: ${userId}`);
     await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + 'A' };
   },

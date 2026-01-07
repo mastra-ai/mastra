@@ -34,6 +34,36 @@ export const tool = createTool({
 });
 ```
 
+### With Request Context Validation
+
+```typescript title="src/mastra/tools/authenticated-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const tool = createTool({
+  id: "authenticated-tool",
+  description: "A tool that requires user authentication",
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+    organizationId: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    // Access validated request context
+    const userId = context.requestContext.get("userId");
+    const orgId = context.requestContext.get("organizationId");
+
+    console.log(`Processing query for user ${userId} in org ${orgId}`);
+
+    return {
+      result: "Authenticated operation completed",
+    };
+  },
+});
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -77,6 +107,13 @@ export const tool = createTool({
       type: "Zod schema",
       description:
         "A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.",
+      isOptional: true,
+    },
+    {
+      name: "requestContextSchema",
+      type: "Zod schema",
+      description:
+        "A Zod schema defining the expected structure of request context values. When provided, the framework validates that the required context is present before tool execution. Access validated values via `context.requestContext` in the execute function.",
       isOptional: true,
     },
     {

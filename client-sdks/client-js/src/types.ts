@@ -107,6 +107,7 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  requestContextSchema?: string;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -163,6 +164,7 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  requestContextSchema: string;
 }
 
 export interface ListWorkflowRunsParams {
@@ -193,6 +195,7 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      requestContextSchema?: string;
       stateSchema: string;
     };
   };
@@ -204,6 +207,7 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      requestContextSchema?: string;
       stateSchema: string;
       isWorkflow: boolean;
     };
@@ -211,6 +215,8 @@ export interface GetWorkflowResponse {
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  /** Optional schema for runtime request context validation */
+  requestContextSchema?: string;
   stateSchema: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;

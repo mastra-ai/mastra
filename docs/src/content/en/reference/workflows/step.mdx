@@ -34,6 +34,39 @@ const step1 = createStep({
 });
 ```
 
+### With Request Context Validation
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const authenticatedStep = createStep({
+  id: "authenticated-step",
+  description: "A step that requires user authentication",
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+    organizationId: z.string(),
+  }),
+  execute: async ({ inputData, requestContext }) => {
+    // Access validated request context
+    const userId = requestContext.userId;
+    const orgId = requestContext.organizationId;
+
+    console.log(`Processing query for user ${userId} in org ${orgId}`);
+
+    return {
+      result: `Processed: ${inputData.query}`,
+    };
+  },
+});
+```
+
 ## Creating steps from agents
 
 You can create a step directly from an agent. The step will use the agent's name as its ID.
@@ -130,6 +163,13 @@ const agentStep = createStep(testAgent, {
       type: "z.ZodObject<any>",
       description:
         "Optional Zod schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
+      required: false,
+    },
+    {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      description:
+        "Optional Zod schema defining the expected structure of request context values for this step. When provided, the framework validates that the required context is present before step execution. The validated requestContext is passed to the execute function and can be accessed via the `requestContext` parameter.",
       required: false,
     },
     {

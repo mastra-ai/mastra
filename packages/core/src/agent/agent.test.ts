@@ -7318,6 +7318,220 @@ describe('Agent Tests', () => {
   agentTests({ version: 'v2' });
 });
 
+describe('requestContextSchema validation', () => {
+  it('should validate requestContext when schema is provided on generate()', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Hello!' }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        throw new Error('Not implemented');
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test instructions',
+      model: mockModel,
+      requestContextSchema: z.object({
+        userId: z.string(),
+        tenantId: z.string(),
+      }),
+    });
+    agent.__setLogger(noopLogger);
+
+    const requestContext = new RequestContext<{ userId: string; tenantId: string }>([
+      ['userId', 'user-123'],
+      ['tenantId', 'tenant-456'],
+    ]);
+
+    // Should not throw
+    const result = await agent.generate('Hello', { requestContext });
+    expect(result.text).toBe('Hello!');
+  });
+
+  it('should fail validation when requestContext is missing required fields on generate()', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Hello!' }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        throw new Error('Not implemented');
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test instructions',
+      model: mockModel,
+      requestContextSchema: z.object({
+        userId: z.string(),
+        tenantId: z.string(),
+      }),
+    });
+    agent.__setLogger(noopLogger);
+
+    // Missing tenantId
+    const requestContext = new RequestContext([['userId', 'user-123']]);
+
+    await expect(agent.generate('Hello', { requestContext })).rejects.toThrow('requestContext validation failed');
+  });
+
+  it('should validate requestContext when schema is provided on stream()', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Not implemented');
+      },
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test instructions',
+      model: mockModel,
+      requestContextSchema: z.object({
+        userId: z.string(),
+      }),
+    });
+    agent.__setLogger(noopLogger);
+
+    const requestContext = new RequestContext<{ userId: string }>([['userId', 'user-123']]);
+
+    // Should not throw
+    const result = await agent.stream('Hello', { requestContext });
+    const output = await result.getFullOutput();
+    expect(output.text).toBe('Hello!');
+  });
+
+  it('should fail validation when requestContext has wrong types on stream()', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Not implemented');
+      },
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test instructions',
+      model: mockModel,
+      requestContextSchema: z.object({
+        userId: z.string(),
+        count: z.number(),
+      }),
+    });
+    agent.__setLogger(noopLogger);
+
+    // Wrong types
+    const requestContext = new RequestContext([
+      ['userId', 123], // Should be string
+      ['count', 'not-a-number'], // Should be number
+    ]);
+
+    await expect(agent.stream('Hello', { requestContext })).rejects.toThrow('requestContext validation failed');
+  });
+
+  it('should work without requestContextSchema (backward compatibility)', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Hello!' }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        throw new Error('Not implemented');
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test instructions',
+      model: mockModel,
+      // No requestContextSchema
+    });
+    agent.__setLogger(noopLogger);
+
+    // Can pass any requestContext
+    const requestContext = new RequestContext([
+      ['anyKey', 'anyValue'],
+      ['anotherKey', 12345],
+    ]);
+
+    // Should not throw
+    const result = await agent.generate('Hello', { requestContext });
+    expect(result.text).toBe('Hello!');
+  });
+
+  it('should not validate when no requestContext is passed', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Hello!' }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        throw new Error('Not implemented');
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test instructions',
+      model: mockModel,
+      requestContextSchema: z.object({
+        userId: z.string(),
+      }),
+    });
+    agent.__setLogger(noopLogger);
+
+    // No requestContext passed - should not throw even though schema requires userId
+    const result = await agent.generate('Hello');
+    expect(result.text).toBe('Hello!');
+  });
+});
+
 //     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
 //       const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
 //       const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });
