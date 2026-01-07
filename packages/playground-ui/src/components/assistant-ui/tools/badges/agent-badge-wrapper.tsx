@@ -3,6 +3,7 @@ import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { AgentBadge, AgentMessage } from './agent-badge';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { LoadingBadge } from './loading-badge';
 
 interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
@@ -17,11 +18,16 @@ export const AgentBadgeWrapper = ({
   toolCallId,
   toolApprovalMetadata,
 }: AgentBadgeWrapperProps) => {
-  const { data } = useAgentMessages({
+  const { data, isLoading } = useAgentMessages({
     threadId: result?.subAgentThreadId,
     agentId,
     memory: true,
   });
+
+  if (isLoading) {
+    return <LoadingBadge />;
+  }
+
   const convertedMessages = data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : [];
   const childMessages = result?.childMessages ?? resolveToChildMessages(convertedMessages);
 
