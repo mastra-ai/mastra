@@ -27,7 +27,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 
-  const isNotAssistantTextResponse = (data.content as ContentItem[]).every(
+  const isNotAssistantTextResponse = (data.content as readonly ContentItem[]).every(
     ({ type, metadata }) =>
       type === 'tool-call' ||
       type === 'reasoning' ||
