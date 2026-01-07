@@ -58,7 +58,6 @@ export function MCPServerCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
     />
   );
 }

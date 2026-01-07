@@ -5,7 +5,7 @@ import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
-import { MessageList } from '@mastra/core/agent';
+import { AIV4Adapter, AIV5Adapter } from '@mastra/core/agent/message-list';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai-v5';
@@ -169,7 +169,7 @@ export function setupUseChatV4() {
       const agentMemory = (await weatherAgent.getMemory())!;
       // Get initial messages from memory and convert to AI SDK v4 format
       const { messages } = await agentMemory.recall({ threadId });
-      const initialMessages = messages.map(m => MessageList.mastraDBMessageToAIV4UIMessage(m)) as Message[];
+      const initialMessages = messages.map(m => AIV4Adapter.toUIMessage(m)) as Message[];
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
@@ -396,7 +396,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
 
       const agentMemory = (await weatherAgentV5.getMemory())!;
       const dbMessages = (await agentMemory.recall({ threadId: localThreadId })).messages;
-      const initialMessages = dbMessages.map(m => MessageList.mastraDBMessageToAIV5UIMessage(m));
+      const initialMessages = dbMessages.map(m => AIV5Adapter.toUIMessage(m));
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChatFunc({
@@ -501,7 +501,12 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
         responseContains: [state.clipboard],
       });
 
-      const messagesResult = await agentMemory.recall({ threadId: localThreadId, resourceId });
+      // Use MastraClient to recall messages from the server's memory (not the test's local memory)
+      // This is necessary because the server and test run in different processes with different databases
+      const mastraClient = new MastraClient({ baseUrl: `http://localhost:${port}` });
+      const messagesResult = await mastraClient
+        .getMemoryThread({ threadId: localThreadId, agentId: 'test' })
+        .listMessages({ resourceId });
 
       const clipboardToolInvocation = messagesResult.messages.filter(
         m =>

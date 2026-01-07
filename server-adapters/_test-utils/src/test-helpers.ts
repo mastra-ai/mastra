@@ -497,27 +497,27 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 }
 
 async function mockWorkflowRun(workflow: Workflow) {
-  // Mock getWorkflowRunById to return a mock run object
-  // This is needed for routes that require an existing workflow run (restart, resume, etc.)
+  // Mock getWorkflowRunById to return a mock WorkflowState object
+  // This is the unified format that includes both metadata and processed execution state
   vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
     runId: 'test-run',
     workflowName: 'test-workflow',
-    status: 'completed',
     resourceId: 'test-resource',
-    snapshot: {
-      context: {},
-      value: {},
-      status: 'done',
-      runId: 'test-run',
-    },
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as any);
-
-  // Mock getWorkflowRunExecutionResult for execution-result routes
-  vi.spyOn(workflow, 'getWorkflowRunExecutionResult').mockResolvedValue({
-    results: { step1: { output: 'test-output' } },
     status: 'success',
+    result: { output: 'test-output' },
+    payload: {},
+    steps: {
+      step1: {
+        status: 'success',
+        output: { result: 'test-output' },
+        startedAt: Date.now() - 1000,
+        endedAt: Date.now(),
+      },
+    },
+    activeStepsPath: {},
+    serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
   } as any);
 
   // Mock createRun to return a mocked run object with all required methods
