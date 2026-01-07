@@ -9,42 +9,46 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "@docusaurus/router";
 import { cn } from "../lib/utils";
-import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
+import {
+  LabelFilledIcon,
+  LabelOutlineIcon,
+  TriggerIcon,
+  VersionLabel,
+} from "./icons/icon";
 
 import FeatureVersioning from "../../feature-versioning.json";
 
-/** Available documentation versions with their display labels */
 const versions = [
-  { value: "stable", label: "Stable (v0)" },
-  { value: "beta", label: "Beta (v1)" },
+  { value: "v1", label: "Latest Version" },
+  { value: "v0", label: "v0" },
 ] as const;
 
-type Version = "beta" | "stable";
+type Version = "v1" | "v0";
 
 /**
  * Extracts the current documentation version from a URL pathname.
  *
- * Checks if the third segment of the path is "v1" to determine if viewing beta docs.
- * Example: "/docs/v1/agents" -> "beta", "/docs/agents" -> "stable"
+ * Checks if the third segment of the path is "v0" to determine if viewing legacy docs.
+ * Example: "/docs/v0/agents" -> "v0", "/docs/agents" -> "v1"
  */
 const getVersionFromPath = (pathname: string): Version => {
   const pathChunks = pathname.split("/");
-  return pathChunks?.[2] === "v1" ? "beta" : "stable";
+  return pathChunks?.[2] === "v0" ? "v0" : "v1";
 };
 
 /**
  * Transforms a URL pathname to point to the equivalent page in a different version.
  *
- * For beta: inserts "v1" as the third path segment if not already present.
- * For stable: removes "v1" from the third path segment if present.
+ * For v0 (legacy): inserts "v0" as the third path segment if not already present.
+ * For v1 (stable): removes "v0" from the third path segment if present.
  *
  * @example
- * // Switching from stable to beta
- * getPathForVersion("/docs/agents", "beta") // Returns "/docs/v1/agents"
+ * // Switching from stable (v1) to legacy (v0)
+ * getPathForVersion("/docs/agents", "v0") // Returns "/docs/v0/agents"
  *
  * @example
- * // Switching from beta to stable
- * getPathForVersion("/docs/v1/agents", "stable") // Returns "/docs/agents"
+ * // Switching from legacy (v0) to stable (v1)
+ * getPathForVersion("/docs/v0/agents", "v1") // Returns "/docs/agents"
  */
 const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   const pathChunks = pathname.split("/");
@@ -53,12 +57,12 @@ const getPathForVersion = (pathname: string, nextVersion: Version): string => {
     return pathname;
   }
 
-  if (nextVersion === "beta") {
-    if (pathChunks?.[2] !== "v1") {
-      pathChunks.splice(2, 0, "v1");
+  if (nextVersion === "v0") {
+    if (pathChunks?.[2] !== "v0") {
+      pathChunks.splice(2, 0, "v0");
     }
   } else {
-    if (pathChunks?.[2] === "v1") {
+    if (pathChunks?.[2] === "v0") {
       pathChunks.splice(2, 1);
     }
   }
@@ -103,7 +107,7 @@ export default function VersionControl({
         >
           <div className="flex items-center gap-2">
             <VersionLabel />
-            {currentVersion === "beta" ? "Beta" : "Stable"}
+            {currentVersion === "v1" ? "Latest Version" : "Legacy"}
           </div>
           <TriggerIcon />
         </Button>
@@ -116,7 +120,14 @@ export default function VersionControl({
         {versions.map((version) => {
           const isActive = version.value === currentVersion;
           const href = getPathForVersion(pathname, version.value as Version);
-          const exists = !Object.keys(FeatureVersioning).includes(href);
+          // Get the base path without version prefix for checking FeatureVersioning
+          const basePath = pathname.replace(/^(\/docs)\/v0/, "$1");
+          // Check if page is exclusive to a specific version
+          const exclusiveVersion =
+            FeatureVersioning[basePath as keyof typeof FeatureVersioning];
+          // Page exists if it's not exclusive to another version
+          const exists =
+            !exclusiveVersion || exclusiveVersion === version.value;
 
           return (
             <DropdownMenuItem
@@ -133,7 +144,11 @@ export default function VersionControl({
                   className="flex w-full items-center no-underline! justify-between"
                 >
                   <div className="inline-flex dark:text-white text-black gap-2">
-                    {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                    {version.value === "v1" ? (
+                      <LabelOutlineIcon />
+                    ) : (
+                      <LabelFilledIcon />
+                    )}
                     <span>{version.label}</span>
                   </div>
                   {isActive && (
@@ -143,7 +158,7 @@ export default function VersionControl({
               ) : (
                 <div>
                   <div className="inline-flex dark:text-white text-black gap-2">
-                    {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                    <LabelFilledIcon />
                     <span>Not available in {version.label}</span>
                   </div>
                 </div>

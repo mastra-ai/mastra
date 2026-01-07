@@ -63,7 +63,7 @@ export function VersionLabel() {
   );
 }
 
-export function StableIcon() {
+export function LabelOutlineIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -95,7 +95,7 @@ export function StableIcon() {
   );
 }
 
-export function BetaIcon() {
+export function LabelFilledIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
