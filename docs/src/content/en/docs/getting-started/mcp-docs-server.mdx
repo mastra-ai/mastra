@@ -67,11 +67,7 @@ Install by clicking the button below:
 
 If you followed the automatic installation, you'll see a popup when you open cursor in the bottom left corner to prompt you to enable the Mastra Docs MCP Server.
 
-<img
-  src="/img/enable-mastra-docs-cursor.png"
-  alt="Diagram showing cursor prompt to enable Mastra docs MCP server"
-  width={800}
-/>
+![Diagram showing cursor prompt to enable Mastra docs MCP server](/img/enable-mastra-docs-cursor.png)
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
 
@@ -80,47 +76,34 @@ If you followed the automatic installation, you'll see a popup when you open cur
 Google Antigravity is an agent-first development platform that supports MCP servers for accessing external documentation, APIs, and project context.
 
 1. Open your Antigravity MCP configuration file:
-   - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
-   - You can access it through the MCP Store interface in Antigravity
+    - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
+    - You can access it through the MCP Store interface in Antigravity
 
-   <img
-     src="/img/antigravity_mcp_server.png"
-     alt="Antigravity interface showing configured Mastra MCP server"
-     width={800}
-     className="rounded-lg"
-   />
+    ![Antigravity interface showing configured Mastra MCP server](/img/antigravity_mcp_server.png)
 
-2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
-   <img
-     src="/img/antigravity_managed_mcp.png"
-     alt="Antigravity interface showing configured Mastra MCP server"
-     width={800}
-     className="rounded-lg"
-   />
+1. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.
 
-3. Add the Mastra MCP server configuration:
+    ![Antigravity interface showing configured Mastra MCP server](/img/antigravity_managed_mcp.png)
 
-   ```json copy
-   {
+1. Add the Mastra MCP server configuration:
+
+    ```json copy
+    {
       "mcpServers": {
-          "mastra-docs": {
-              "command": "npx",
-              "args": [
-                  "-y",
-                  "@mastra/mcp-docs-server"
-              ]
-          }
+        "mastra-docs": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "@mastra/mcp-docs-server"
+          ]
+        }
       }
-  }
-   ```
+    }
+    ```
 
-4. Save the configuration and restart Antigravity
-    <img
-      src="/img/antigravity_final_interface_mcp.png"
-      alt="Antigravity interface showing configured Mastra MCP server"
-      width={800}
-      className="rounded-lg"
-   />
+1. Save the configuration and restart Antigravity
+
+    ![Antigravity interface showing configured Mastra MCP server](/img/antigravity_final_interface_mcp.png)
 
 Once configured, the Mastra MCP server exposes the following to Antigravity agents:
 - Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
@@ -155,30 +138,15 @@ Once you installed the MCP server, you can use it like so:
 2. Navigate to MCP settings.
 3. Click "enable" on the Chat > MCP option.
 
-   <img
-     src="/img/vscode-mcp-setting.png"
-     alt="Settings page of VSCode to enable MCP"
-     width={800}
-     className="rounded-lg"
-   />
+    ![Settings page of VSCode to enable MCP](/img/vscode-mcp-setting.png)
 
 MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and click the "start" button. Note that the "start" button will only appear if the `.vscode` folder containing `mcp.json` is in your workspace root, or the highest level of the in-editor file explorer.
 
-<img
-  src="/img/vscode-start-mcp.png"
-  alt="Settings page of VSCode to enable MCP"
-  width={800}
-  className="rounded-lg"
-/>
+![Settings page of VSCode to enable MCP](/img/vscode-start-mcp.png)
 
 After starting the MCP server, click the tools button in the Copilot pane to see available tools.
 
-<img
-  src="/img/vscode-mcp-running.png"
-  alt="Tools page of VSCode to see available tools"
-  width={800}
-  className="rounded-lg"
-/>
+![Tools page of VSCode to see available tools](/img/vscode-mcp-running.png)
 
 [More info on using MCP servers with Visual Studio Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
 
