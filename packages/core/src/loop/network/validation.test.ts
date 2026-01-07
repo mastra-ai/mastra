@@ -268,12 +268,12 @@ describe('formatCompletionFeedback', () => {
       timedOut: false,
     };
 
-    const feedback = formatCompletionFeedback(result);
+    const feedback = formatCompletionFeedback(result, false);
 
-    expect(feedback).toContain('## Completion Check Results');
+    expect(feedback).toContain('#### Completion Check Results');
     expect(feedback).toContain('✅ COMPLETE');
     expect(feedback).toContain('Duration: 150ms');
-    expect(feedback).toContain('### Test Scorer (test-scorer)');
+    expect(feedback).toContain('###### Test Scorer (test-scorer)');
     expect(feedback).toContain('Score: 1 ✅');
     expect(feedback).toContain('Reason: Test passed');
     expect(feedback).not.toContain('timed out');
@@ -297,11 +297,38 @@ describe('formatCompletionFeedback', () => {
       timedOut: false,
     };
 
-    const feedback = formatCompletionFeedback(result);
+    const feedback = formatCompletionFeedback(result, false);
 
     expect(feedback).toContain('❌ NOT COMPLETE');
     expect(feedback).toContain('Score: 0 ❌');
     expect(feedback).toContain('Reason: Test failed');
+    expect(feedback).toContain('🔄 Will continue working on the task.');
+  });
+
+  it('formats max iterations reached result', () => {
+    const result: CompletionRunResult = {
+      complete: false,
+      completionReason: 'Check failed',
+      scorers: [
+        {
+          score: 0,
+          passed: false,
+          reason: 'Test failed',
+          scorerId: 'test-scorer',
+          scorerName: 'Test Scorer',
+          duration: 100,
+        },
+      ],
+      totalDuration: 150,
+      timedOut: false,
+    };
+
+    const feedback = formatCompletionFeedback(result, true);
+
+    expect(feedback).toContain('❌ NOT COMPLETE');
+    expect(feedback).toContain('Score: 0 ❌');
+    expect(feedback).toContain('Reason: Test failed');
+    expect(feedback).toContain('⚠️ Max iterations reached');
   });
 
   it('formats timeout indication', () => {
@@ -312,7 +339,7 @@ describe('formatCompletionFeedback', () => {
       timedOut: true,
     };
 
-    const feedback = formatCompletionFeedback(result);
+    const feedback = formatCompletionFeedback(result, false);
 
     expect(feedback).toContain('⚠️ Scoring timed out');
   });
@@ -342,10 +369,10 @@ describe('formatCompletionFeedback', () => {
       timedOut: false,
     };
 
-    const feedback = formatCompletionFeedback(result);
+    const feedback = formatCompletionFeedback(result, false);
 
-    expect(feedback).toContain('### Scorer One (scorer-1)');
-    expect(feedback).toContain('### Scorer Two (scorer-2)');
+    expect(feedback).toContain('##### Scorer One (scorer-1)');
+    expect(feedback).toContain('##### Scorer Two (scorer-2)');
     expect(feedback).toContain('First passed');
     expect(feedback).toContain('Second failed');
   });

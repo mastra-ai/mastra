@@ -147,7 +147,12 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
               mode: 'network' as const,
               selectionReason: selectionReason,
               agentInput: json.input,
-              from: primitiveType === 'agent' ? ('AGENT' as const) : ('WORKFLOW' as const),
+              from:
+                primitiveType === 'agent'
+                  ? ('AGENT' as const)
+                  : primitiveType === 'workflow'
+                    ? ('WORKFLOW' as const)
+                    : ('TOOL' as const),
             },
           } as MastraUIMessage;
 

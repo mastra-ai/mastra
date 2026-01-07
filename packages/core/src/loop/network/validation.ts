@@ -360,7 +360,10 @@ export const formatValidationFeedback = formatCompletionFeedback;
 const defaultCompletionSchema = z.object({
   isComplete: z.boolean().describe('Whether the task is complete'),
   completionReason: z.string().describe('Explanation of why the task is or is not complete'),
-  finalResult: z.string().describe('The final result text to return to the user'),
+  finalResult: z
+    .string()
+    .optional()
+    .describe('The final result text to return to the user. omit if primitive result is sufficient'),
 });
 
 /**
@@ -382,12 +385,21 @@ export async function runDefaultCompletionCheck(
 
   const completionPrompt = `
     The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} has contributed to the task.
-    This is the result: ${context.primitiveResult}
+    This is the result: ${JSON.stringify(context.primitiveResult)}
 
-    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions.
+    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. 
+    Only return true if the task is complete according to the system instructions.
     Original task: ${context.originalTask}
 
     If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.
+
+    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.
+    
+    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.
+    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.
+
+    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.
+    The finalResult field should be written in natural language.
 
     You must return this JSON shape:
     {
@@ -395,9 +407,6 @@ export async function runDefaultCompletionCheck(
       "completionReason": string,
       "finalResult": string,
     }
-
-    The 'finalResult' field is the result of the task. It can either be the value of the last primitive that was run, depending on why it was run. Or it could be a combination of primitive results.
-    If the last primitive result is the result, then omit the finalResult field.
   `;
 
   try {
@@ -501,14 +510,19 @@ export async function generateFinalResult(
     Original task: ${context.originalTask}
 
     The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} produced this result:
-    ${context.primitiveResult}
+    ${JSON.stringify(context.primitiveResult)}
 
-    Generate a final result summary for the user. Return JSON:
+    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.
+    You should evaluate if the above result is comprehensive enough to accomplish the user's original task.
+    Otherwise, generate the finalResult object. If the result is not from an AGENT PRIMITIVE, always generate a finalResult.
+
+    The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.
+    The response should be written in natural language.
+
+    Return JSON:
     {
-      "finalResult": string
+      "finalResult": string,
     }
-
-    If the primitive result above is already a suitable final result, omit the finalResult field.
   `;
 
   const stream = await agent.stream(prompt, {
