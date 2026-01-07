@@ -171,6 +171,16 @@
         "default": "./dist/agent/message-list/index.cjs"
       }
     },
+    "./loop/server": {
+      "import": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.js"
+      },
+      "require": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.cjs"
+      }
+    },
     "./storage/constants": {
       "import": {
         "types": "./dist/storage/constants.d.ts",
