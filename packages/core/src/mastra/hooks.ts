@@ -1,4 +1,3 @@
-import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
@@ -68,30 +67,22 @@ export function createOnScorerHook(mastra: Mastra) {
       };
       await validateAndSaveScore(storage, payload);
 
-      if (currentSpan && spanId && traceId) {
-        await pMap(
-          currentSpan.observabilityInstance.getExporters(),
-          async exporter => {
-            if (exporter.addScoreToTrace) {
-              try {
-                await exporter.addScoreToTrace({
-                  traceId: traceId,
-                  spanId: spanId,
-                  score: runResult.score as number,
-                  reason: runResult.reason as string,
-                  scorerName: scorerToUse.scorer.id,
-                  metadata: {
-                    ...(currentSpan.metadata ?? {}),
-                  },
-                });
-              } catch (error) {
-                // Log error but don't fail the hook if exporter fails
-                mastra.getLogger()?.error(`Failed to add score to trace via exporter: ${error}`);
-              }
-            }
+      // Add score to span - it will automatically flow through the pipeline when span ends
+      if (currentSpan && currentSpan.isValid) {
+        currentSpan.addScore({
+          scorerName: scorerToUse.scorer.id,
+          score: runResult.score as number,
+          reason: runResult.reason as string,
+          metadata: {
+            // Include all scorer step results and prompts for transparency
+            preprocessStepResult: runResult.preprocessStepResult,
+            preprocessPrompt: runResult.preprocessPrompt,
+            analyzeStepResult: runResult.analyzeStepResult,
+            analyzePrompt: runResult.analyzePrompt,
+            generateScorePrompt: runResult.generateScorePrompt,
+            generateReasonPrompt: runResult.generateReasonPrompt,
           },
-          { concurrency: 3 },
-        );
+        });
       }
     } catch (error) {
       const mastraError = new MastraError(

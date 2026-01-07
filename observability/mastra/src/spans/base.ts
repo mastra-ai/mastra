@@ -14,6 +14,8 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  SpanScore,
+  AddScoreArgs,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
@@ -139,6 +141,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
+  /** Scores attached to this span */
+  public scores: SpanScore[] = [];
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     // Get serialization options from observability instance config
@@ -208,6 +212,20 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return !this.parent;
   }
 
+  /** Add an evaluation score to this span */
+  addScore(args: AddScoreArgs): void {
+    if (!this.isValid) {
+      return; // Don't add scores to invalid/ended spans
+    }
+    this.scores.push({
+      scorerName: args.scorerName,
+      score: args.score,
+      reason: args.reason,
+      metadata: args.metadata,
+      timestamp: Date.now(),
+    });
+  }
+
   /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
   abstract get isValid(): boolean;
 
@@ -257,6 +275,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      scores: this.scores.length > 0 ? this.scores : undefined,
       // Tags are only included for root spans
       ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };

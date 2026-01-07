@@ -369,6 +369,37 @@ export interface SpanTypeMap {
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 
 // ============================================================================
+// Score Types
+// ============================================================================
+
+/**
+ * Score data attached to a span
+ */
+export interface SpanScore {
+  /** Name/ID of the scorer that generated this score */
+  scorerName: string;
+  /** Numeric score value */
+  score: number;
+  /** Optional explanation for the score */
+  reason?: string;
+  /** Scorer-specific metadata from runResult */
+  metadata?: Record<string, any>;
+  /** Timestamp when score was added */
+  timestamp: number;
+}
+
+/**
+ * Arguments for adding a score to a span
+ */
+export interface AddScoreArgs {
+  scorerName: string;
+  score: number;
+  reason?: string;
+  /** Scorer-specific metadata (from runResult, not span metadata) */
+  metadata?: Record<string, any>;
+}
+
+// ============================================================================
 // Span Interfaces
 // ============================================================================
 
@@ -430,6 +461,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   observabilityInstance: ObservabilityInstance;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
+
+  /** Scores attached to this span */
+  scores: SpanScore[];
+
+  /** Add an evaluation score to this span */
+  addScore(args: AddScoreArgs): void;
 
   // Methods for span lifecycle
   /** End the span */
@@ -567,6 +604,8 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
    * Tags are string labels used to categorize and filter traces.
    */
   tags?: string[];
+  /** Scores attached to this span */
+  scores?: SpanScore[];
 }
 
 /**

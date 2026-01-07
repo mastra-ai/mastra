@@ -598,6 +598,166 @@ describe('Span', () => {
     });
   });
 
+  describe('scores', () => {
+    it('should add scores to span via addScore()', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+      });
+
+      expect(span.scores).toHaveLength(0);
+
+      span.addScore({
+        scorerName: 'relevance-scorer',
+        score: 0.85,
+        reason: 'Relevant response',
+        metadata: { analyzeStepResult: { relevance: 'high' } },
+      });
+
+      expect(span.scores).toHaveLength(1);
+      expect(span.scores[0].scorerName).toBe('relevance-scorer');
+      expect(span.scores[0].score).toBe(0.85);
+      expect(span.scores[0].reason).toBe('Relevant response');
+      expect(span.scores[0].metadata).toEqual({ analyzeStepResult: { relevance: 'high' } });
+      expect(span.scores[0].timestamp).toBeDefined();
+
+      span.end();
+    });
+
+    it('should support adding multiple scores to a span', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      span.addScore({ scorerName: 'relevance-scorer', score: 0.9, reason: 'Relevant' });
+      span.addScore({ scorerName: 'safety-scorer', score: 1.0, reason: 'Safe' });
+
+      expect(span.scores).toHaveLength(2);
+      expect(span.scores[0].scorerName).toBe('relevance-scorer');
+      expect(span.scores[1].scorerName).toBe('safety-scorer');
+
+      span.end();
+    });
+
+    it('should include scores in exportSpan()', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+      });
+
+      span.addScore({
+        scorerName: 'test-scorer',
+        score: 0.85,
+        reason: 'Test reason',
+        metadata: { preprocessPrompt: 'test prompt' },
+      });
+
+      const exported = span.exportSpan();
+
+      expect(exported).toBeDefined();
+      expect(exported?.scores).toHaveLength(1);
+      expect(exported?.scores?.[0].scorerName).toBe('test-scorer');
+      expect(exported?.scores?.[0].score).toBe(0.85);
+      expect(exported?.scores?.[0].metadata).toEqual({ preprocessPrompt: 'test prompt' });
+
+      span.end();
+    });
+
+    it('should not include scores in exportSpan() when no scores added', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+      });
+
+      const exported = span.exportSpan();
+
+      expect(exported).toBeDefined();
+      expect(exported?.scores).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should not add scores to NoOpSpan (sampling NEVER)', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.NEVER },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+      });
+
+      expect(span.isValid).toBe(false);
+
+      span.addScore({ scorerName: 'test-scorer', score: 0.85, reason: 'Should not be added' });
+
+      expect(span.scores).toHaveLength(0);
+
+      span.end();
+    });
+
+    it('should include scores in exported tracing events', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      span.addScore({ scorerName: 'quality-scorer', score: 0.92, reason: 'Good' });
+
+      span.end();
+
+      const endEvent = testExporter.events.find(e => e.type === 'span_ended');
+      expect(endEvent).toBeDefined();
+      expect(endEvent?.exportedSpan.scores).toHaveLength(1);
+      expect(endEvent?.exportedSpan.scores?.[0].scorerName).toBe('quality-scorer');
+    });
+  });
+
   describe('serializationOptions', () => {
     it('should use custom maxStringLength from config', () => {
       const tracing = new DefaultObservabilityInstance({
