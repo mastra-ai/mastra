@@ -1,5 +1,3 @@
-'use client';
-
 import { Button as DSButton, ButtonProps as DSButtonProps } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';

@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '@/lib/utils';
 import { type SidebarState } from './main-sidebar-context';
 import { NavLink } from './main-sidebar-nav-link';

@@ -1,5 +1,3 @@
-'use client';
-
 import { forwardRef } from 'react';
 
 import { Button, ButtonProps } from '@/ds/components/Button/Button';

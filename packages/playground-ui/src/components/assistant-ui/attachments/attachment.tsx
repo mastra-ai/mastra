@@ -1,5 +1,3 @@
-'use client';
-
 import { AttachmentPrimitive, AttachmentState, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon, PaperclipIcon } from 'lucide-react';
