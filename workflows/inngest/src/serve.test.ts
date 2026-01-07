@@ -4,7 +4,7 @@ import { Inngest } from 'inngest';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-import { init, serve, serveExpress, serveFastify, serveHono } from './index';
+import { init, serve, createServe } from './index';
 
 // Mock the inngest framework-specific serve functions
 vi.mock('inngest/hono', () => ({
@@ -19,26 +19,18 @@ vi.mock('inngest/fastify', () => ({
   serve: vi.fn(() => () => Promise.resolve()),
 }));
 
-describe('Multi-framework serve exports', () => {
+describe('Multi-framework serve', () => {
   describe('Export availability', () => {
-    it('should export serve (default/Hono for backwards compatibility)', () => {
+    it('should export serve (default Hono for backwards compatibility)', () => {
       expect(typeof serve).toBe('function');
     });
 
-    it('should export serveHono', () => {
-      expect(typeof serveHono).toBe('function');
-    });
-
-    it('should export serveExpress', () => {
-      expect(typeof serveExpress).toBe('function');
-    });
-
-    it('should export serveFastify', () => {
-      expect(typeof serveFastify).toBe('function');
+    it('should export createServe factory function', () => {
+      expect(typeof createServe).toBe('function');
     });
   });
 
-  describe('Serve function behavior', () => {
+  describe('serve() default behavior', () => {
     let mastra: Mastra;
     let inngest: Inngest;
 
@@ -72,7 +64,7 @@ describe('Multi-framework serve exports', () => {
       });
     });
 
-    it('should call inngest/hono serve with correct options when using serve()', async () => {
+    it('should call inngest/hono serve with correct options', async () => {
       const { serve: honoServe } = await import('inngest/hono');
 
       serve({ mastra, inngest });
@@ -89,22 +81,107 @@ describe('Multi-framework serve exports', () => {
       expect(callArgs.functions.length).toBeGreaterThan(0);
     });
 
-    it('should call inngest/hono serve with correct options when using serveHono()', async () => {
+    it('should pass additional user functions', async () => {
       const { serve: honoServe } = await import('inngest/hono');
 
-      serveHono({ mastra, inngest });
+      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
 
-      expect(honoServe).toHaveBeenCalledWith(
+      serve({ mastra, inngest, functions: [userFunction] });
+
+      const callArgs = vi.mocked(honoServe).mock.calls[0][0];
+      expect(callArgs.functions).toContain(userFunction);
+    });
+
+    it('should pass registerOptions', async () => {
+      const { serve: honoServe } = await import('inngest/hono');
+
+      const registerOptions = { servePath: '/custom/inngest' };
+
+      serve({ mastra, inngest, registerOptions });
+
+      const callArgs = vi.mocked(honoServe).mock.calls[0][0];
+      expect(callArgs.servePath).toBe('/custom/inngest');
+    });
+  });
+
+  describe('createServe() factory function', () => {
+    let mastra: Mastra;
+    let inngest: Inngest;
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+
+      inngest = new Inngest({ id: 'test-app' });
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => ({ result: 'done' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      mastra = new Mastra({
+        storage: new MockStore(),
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+    });
+
+    it('should work with a custom serve adapter', async () => {
+      const customServe = vi.fn(() => () => 'custom-handler');
+
+      const serveWithCustom = createServe(customServe);
+      serveWithCustom({ mastra, inngest });
+
+      expect(customServe).toHaveBeenCalledWith(
         expect.objectContaining({
           client: inngest,
           functions: expect.any(Array),
         }),
       );
+
+      // Verify workflow functions were collected
+      const callArgs = customServe.mock.calls[0][0];
+      expect(callArgs.functions.length).toBeGreaterThan(0);
     });
 
-    it('should call inngest/express serve with correct options when using serveExpress()', async () => {
+    it('should pass user functions to custom adapter', async () => {
+      const customServe = vi.fn(() => () => 'custom-handler');
+      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
+
+      const serveWithCustom = createServe(customServe);
+      serveWithCustom({ mastra, inngest, functions: [userFunction] });
+
+      const callArgs = customServe.mock.calls[0][0];
+      expect(callArgs.functions).toContain(userFunction);
+    });
+
+    it('should pass registerOptions to custom adapter', async () => {
+      const customServe = vi.fn(() => () => 'custom-handler');
+      const registerOptions = { servePath: '/custom/path' };
+
+      const serveWithCustom = createServe(customServe);
+      serveWithCustom({ mastra, inngest, registerOptions });
+
+      const callArgs = customServe.mock.calls[0][0];
+      expect(callArgs.servePath).toBe('/custom/path');
+    });
+
+    it('should work with inngest/express adapter', async () => {
       const { serve: expressServe } = await import('inngest/express');
 
+      const serveExpress = createServe(expressServe);
       serveExpress({ mastra, inngest });
 
       expect(expressServe).toHaveBeenCalledWith(
@@ -113,15 +190,12 @@ describe('Multi-framework serve exports', () => {
           functions: expect.any(Array),
         }),
       );
-
-      // Verify workflow functions were collected
-      const callArgs = vi.mocked(expressServe).mock.calls[0][0];
-      expect(callArgs.functions.length).toBeGreaterThan(0);
     });
 
-    it('should call inngest/fastify serve with correct options when using serveFastify()', async () => {
+    it('should work with inngest/fastify adapter', async () => {
       const { serve: fastifyServe } = await import('inngest/fastify');
 
+      const serveFastify = createServe(fastifyServe);
       serveFastify({ mastra, inngest });
 
       expect(fastifyServe).toHaveBeenCalledWith(
@@ -130,64 +204,6 @@ describe('Multi-framework serve exports', () => {
           functions: expect.any(Array),
         }),
       );
-
-      // Verify workflow functions were collected
-      const callArgs = vi.mocked(fastifyServe).mock.calls[0][0];
-      expect(callArgs.functions.length).toBeGreaterThan(0);
-    });
-
-    it('should pass additional user functions to all serve variants', async () => {
-      const { serve: honoServe } = await import('inngest/hono');
-      const { serve: expressServe } = await import('inngest/express');
-      const { serve: fastifyServe } = await import('inngest/fastify');
-
-      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
-
-      serveHono({ mastra, inngest, functions: [userFunction] });
-      serveExpress({ mastra, inngest, functions: [userFunction] });
-      serveFastify({ mastra, inngest, functions: [userFunction] });
-
-      // All should include user functions
-      for (const mockServe of [honoServe, expressServe, fastifyServe]) {
-        const callArgs = vi.mocked(mockServe).mock.calls[0][0];
-        expect(callArgs.functions).toContain(userFunction);
-      }
-    });
-
-    it('should pass registerOptions to all serve variants', async () => {
-      const { serve: honoServe } = await import('inngest/hono');
-      const { serve: expressServe } = await import('inngest/express');
-      const { serve: fastifyServe } = await import('inngest/fastify');
-
-      const registerOptions = { servePath: '/custom/inngest' };
-
-      serveHono({ mastra, inngest, registerOptions });
-      serveExpress({ mastra, inngest, registerOptions });
-      serveFastify({ mastra, inngest, registerOptions });
-
-      // All should include registerOptions
-      for (const mockServe of [honoServe, expressServe, fastifyServe]) {
-        const callArgs = vi.mocked(mockServe).mock.calls[0][0];
-        expect(callArgs.servePath).toBe('/custom/inngest');
-      }
-    });
-
-    it('should collect workflow functions consistently across all serve variants', async () => {
-      const { serve: honoServe } = await import('inngest/hono');
-      const { serve: expressServe } = await import('inngest/express');
-      const { serve: fastifyServe } = await import('inngest/fastify');
-
-      serveHono({ mastra, inngest });
-      serveExpress({ mastra, inngest });
-      serveFastify({ mastra, inngest });
-
-      const honoFunctions = vi.mocked(honoServe).mock.calls[0][0].functions;
-      const expressFunctions = vi.mocked(expressServe).mock.calls[0][0].functions;
-      const fastifyFunctions = vi.mocked(fastifyServe).mock.calls[0][0].functions;
-
-      // All should have collected the same workflow functions
-      expect(honoFunctions.length).toBe(expressFunctions.length);
-      expect(honoFunctions.length).toBe(fastifyFunctions.length);
     });
   });
 });
