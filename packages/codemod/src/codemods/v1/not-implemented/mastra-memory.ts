@@ -17,7 +17,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
   const COMMENT_MESSAGE =
-    'FIXME(mastra): `memory` property has been removed. Memory is configured at the agent level. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#memory-property-from-mastra-class';
+    'FIXME(mastra): `memory` property has been removed. Memory is configured at the agent level. See: https://mastra.ai/guides/migrations/upgrade-to-v1/mastra#memory-property-from-mastra-class';
 
   // Find new Mastra() expressions
   root
