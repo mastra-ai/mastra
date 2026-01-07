@@ -58,7 +58,6 @@ export function AgentCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
     />
   );
 }

@@ -58,7 +58,6 @@ export function ScorerCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
     />
   );
 }

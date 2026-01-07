@@ -8,7 +8,7 @@ import { useDebouncedCallback } from 'use-debounce';
 
 import { cn } from '../../lib/utils';
 
-import { Button } from './button';
+import { Button } from '@/ds/components/Button/Button';
 import { Calendar } from './calendar';
 import { Input } from './input';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
@@ -145,7 +145,6 @@ export const DatePickerOnly = ({
       <div className="px-3 pb-2">
         {clearable && (
           <Button
-            variant="outline"
             tabIndex={0}
             className="w-full !opacity-50 duration-200 hover:!opacity-100"
             onClick={() => {
@@ -174,7 +173,6 @@ const DefaultButton = React.forwardRef<HTMLButtonElement, DefaultButtonProps>(
     return (
       <Button
         ref={ref}
-        variant={'outline'}
         className={cn(
           'bg-neutral-825 border-neutral-775 w-full justify-start whitespace-nowrap rounded-md border px-2 py-0 text-left flex items-center gap-1',
           className,

@@ -648,6 +648,12 @@ https://mastra.ai/en/docs/memory/overview`,
    * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of output processors configured for this memory instance
+   *
+   * Note: We intentionally do NOT check readOnly here. The readOnly check happens at execution time
+   * in each processor's processOutputResult method. This allows proper isolation when agents share
+   * a RequestContext - each agent's readOnly setting is respected when its processors actually run,
+   * not when processors are resolved (which may happen before the agent sets its MastraMemory context).
+   * See: https://github.com/mastra-ai/mastra/issues/11651
    */
   async getOutputProcessors(
     configuredProcessors: OutputProcessorOrWorkflow[] = [],
@@ -660,10 +666,6 @@ https://mastra.ai/en/docs/memory/overview`,
     const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
-
-    if (effectiveConfig.readOnly) {
-      return [];
-    }
 
     // Add SemanticRecall output processor if configured
     if (effectiveConfig.semanticRecall) {

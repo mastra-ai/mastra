@@ -87,7 +87,6 @@ export function ToolCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoadingTools || isLoadingAgents || isErrorTools || isErrorAgents}
-      variant="ghost"
     />
   );
 }
