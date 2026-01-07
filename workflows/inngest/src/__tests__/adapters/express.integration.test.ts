@@ -1,5 +1,5 @@
-import express from 'express';
 import type { Server } from 'node:http';
+import express from 'express';
 import { serve as expressAdapter } from 'inngest/express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

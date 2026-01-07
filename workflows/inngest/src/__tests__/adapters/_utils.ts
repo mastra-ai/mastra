@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultStorage } from '@mastra/libsql';
-import { Inngest } from 'inngest';
 import { $ } from 'execa';
+import { Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../../index';

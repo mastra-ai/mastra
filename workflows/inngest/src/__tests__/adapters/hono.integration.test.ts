@@ -1,6 +1,6 @@
 import { serve as honoNodeServer } from '@hono/node-server';
-import { serve as honoAdapter } from 'inngest/hono';
 import { Hono } from 'hono';
+import { serve as honoAdapter } from 'inngest/hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServe } from '../../index';

@@ -1,8 +1,8 @@
-import Koa from 'koa';
-import Router from '@koa/router';
-import bodyParser from 'koa-bodyparser';
 import type { Server } from 'node:http';
+import Router from '@koa/router';
 import { serve as koaAdapter } from 'inngest/koa';
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createServe } from '../../index';
