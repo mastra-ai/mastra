@@ -4,13 +4,14 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
+import { join } from "path/posix";
 import prismMastraDark from "./src/theme/prism-mastra-dark.js";
 import prismMastraLight from "./src/theme/prism-mastra-light.js";
 import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Mastra Docs",
+  title: "Mastra Docs v0.x",
   tagline: "TypeScript agent framework",
   favicon: "/img/favicon.ico",
 
@@ -26,6 +27,11 @@ const config = {
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: "warn",
+    },
+    parseFrontMatter: async (params) => {
+      const result = await params.defaultParseFrontMatter(params);
+      result.frontMatter.description = `Mastra v0.x: ${result.frontMatter.description}`;
+      return result;
     },
   },
 
@@ -124,7 +130,7 @@ const config = {
       {
         id: "models",
         path: "src/content/en/models",
-        routeBasePath: "models",
+        routeBasePath: "models/v0",
         sidebarPath: "./src/content/en/models/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -134,7 +140,7 @@ const config = {
       {
         id: "guides",
         path: "src/content/en/guides",
-        routeBasePath: "guides",
+        routeBasePath: "guides/v0",
         sidebarPath: "./src/content/en/guides/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -144,7 +150,7 @@ const config = {
       {
         id: "examples",
         path: "src/content/en/examples",
-        routeBasePath: "examples",
+        routeBasePath: "examples/v0",
         sidebarPath: "./src/content/en/examples/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -154,11 +160,50 @@ const config = {
       {
         id: "reference",
         path: "src/content/en/reference",
-        routeBasePath: "reference",
+        routeBasePath: "reference/v0",
         sidebarPath: "./src/content/en/reference/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
+    function assetPlugin() {
+      return {
+        name: "asset-plugin",
+        configureWebpack(config, isServer, utils, content) {
+          if (!isServer) {
+            for (const plugin of config.plugins || []) {
+              if (
+                plugin &&
+                plugin.constructor.name === "CssExtractRspackPlugin"
+              ) {
+                // @ts-ignore
+                plugin.options.filename = join(
+                  "v0",
+                  // @ts-ignore
+                  plugin.options.filename,
+                );
+                // @ts-ignore
+                plugin.options.chunkFilename = join(
+                  "v0",
+                  // @ts-ignore
+                  plugin.options.chunkFilename,
+                );
+              }
+            }
+            const filename = config.output?.filename;
+            const chunkFilename = config.output?.chunkFilename;
+            return {
+              plugins: config.plugins,
+              output: {
+                // @ts-ignore
+                filename: join("v0", filename),
+                // @ts-ignore
+                chunkFilename: join("v0", chunkFilename),
+              },
+            };
+          }
+        },
+      };
+    },
   ],
 
   presets: [
@@ -168,7 +213,7 @@ const config = {
       ({
         docs: {
           path: "src/content/en/docs",
-          routeBasePath: "docs",
+          routeBasePath: "docs/v0",
           sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
