@@ -1200,7 +1200,7 @@ Tools can access request metadata via `context.mcp.extra` when using HTTP-based 
 Whatever you set on `req.auth` in your HTTP middleware becomes available as `context.mcp.extra.authInfo` in your tools:
 
 ```
-req.auth = { ... }  →  context.mcp.extra.authInfo = { ... }
+req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
 ```
 
 ### Setting Up Authentication Middleware
@@ -1221,7 +1221,7 @@ app.use("/mcp", (req, res, next) => {
   // @ts-ignore - req.auth is read by the MCP SDK
   req.auth = {
     token,
-    userId: user.id,
+    userId: user.userId,
     email: user.email,
   };
   next();
@@ -1240,19 +1240,19 @@ The `req.auth` object is available as `context.mcp.extra.authInfo` in your tool'
 ```typescript
 execute: async (inputData, context) => {
   // Access the auth data you set in middleware
-  const authInfo = context.mcp?.extra?.authInfo;
+  const authInfo = context?.mcp?.extra?.authInfo;
 
-  if (!authInfo?.userId) {
+  if (!authInfo?.extra?.userId) {
     return { error: "Authentication required" };
   }
 
   // Use the auth data
-  console.log("User ID:", authInfo.userId);
-  console.log("Email:", authInfo.email);
+  console.log("User ID:", authInfo.extra.userId);
+  console.log("Email:", authInfo.extra.email);
 
   const response = await fetch("/api/data", {
     headers: { Authorization: `Bearer ${authInfo.token}` },
-    signal: context.mcp.extra.signal,
+    signal: context?.mcp?.extra?.signal,
   });
 
   return response.json();
@@ -1281,29 +1281,38 @@ import { MCPServer } from "@mastra/mcp";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
+const verifyToken = (token: string) => {
+  // TODO: Implement token verification
+  return {
+    userId: "123",
+    email: "test@test.com",
+  };
+};
+
 // 1. Define your tool that uses auth context
 const getUserData = createTool({
   id: "get-user-data",
   description: "Fetches data for the authenticated user",
-  parameters: z.object({}),
+  inputSchema: z.object({}),
   execute: async (inputData, context) => {
-    const authInfo = context.mcp?.extra?.authInfo;
+    const authInfo = context?.mcp?.extra?.authInfo;
 
-    if (!authInfo?.userId) {
+    if (!authInfo?.extra?.userId) {
       return { error: "Authentication required" };
     }
 
     // Access the data you set in middleware
     return {
-      userId: authInfo.userId,
-      email: authInfo.email,
+      userId: authInfo.extra.userId,
+      email: authInfo.extra.email,
     };
   },
 });
 
 // 2. Create the MCP server with your tools
 const server = new MCPServer({
-  name: "my-server",
+  id: "my-server",
+  name: "My Server",
   version: "1.0.0",
   tools: { getUserData },
 });
@@ -1319,7 +1328,7 @@ app.use("/mcp", (req, res, next) => {
   // @ts-ignore - req.auth is read by the MCP SDK
   req.auth = {
     token,
-    userId: user.id,
+    userId: user.userId,
     email: user.email,
   };
   next();
