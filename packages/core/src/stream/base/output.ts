@@ -746,7 +746,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
                   providerMetadata: baseFinishStep.providerMetadata,
-                  text: baseFinishStep.text,
+                  text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
