@@ -3900,7 +3900,7 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(agentExecutionEnded).toBe(true);
     }, 120e3);
 
-    it.skip('should resume suspended workflow', async () => {
+    it('should resume suspended workflow', async () => {
       const suspendingStep = createStep({
         id: 'suspending-step',
         description: 'A step that suspends and waits for user input',
@@ -3979,14 +3979,17 @@ describe('Agent - network - tool approval and suspension', () => {
         },
       );
 
+      const resumeChunks: any[] = [];
       let workflowResult: any = null;
       for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
         if (chunk.type === 'workflow-execution-end') {
           workflowResult = chunk.payload?.result;
         }
       }
 
-      expect(allChunks[allChunks.length - 1].type).toBe('workflow-execution-end');
+      expect(resumeChunks[0].type).toBe('workflow-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
       expect(workflowResult).toBeDefined();
       expect(workflowResult?.result?.result).toContain('workflow resume input');
     }, 120e3);

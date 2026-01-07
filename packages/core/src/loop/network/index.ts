@@ -365,7 +365,7 @@ export async function createNetworkLoop({
                           You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
                           Original task: ${inputData.task}.
 
-                          However, if the ${inputData.primitiveType} ${inputData.primitiveId} has declined the tool call, then the task is complete as the primitive tool-call was declined by the user.
+                          However, if the ${inputData.primitiveType} ${inputData.primitiveId} has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.
 
                           When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
 
@@ -993,19 +993,21 @@ export async function createNetworkLoop({
         runSuccess = false;
       }
 
-      const suspendPayload = workflowState?.status === 'suspended' ? workflowState?.suspendPayload : undefined;
-      if (suspendPayload?.__workflow_meta) {
-        delete suspendPayload.__workflow_meta;
-      }
       let resumeSchema;
+      let suspendPayload;
       if (workflowState?.status === 'suspended') {
+        const suspendedStep = workflowState?.suspended?.[0]?.[0]!;
+        suspendPayload = workflowState?.steps?.[suspendedStep]?.suspendPayload;
+        if (suspendPayload?.__workflow_meta) {
+          delete suspendPayload.__workflow_meta;
+        }
         const firstSuspendedStepPath = [...(workflowState?.suspended?.[0] ?? [])];
         let wflowStep = wf;
         while (firstSuspendedStepPath.length > 0) {
           const key = firstSuspendedStepPath.shift();
           if (key) {
             if (!wf.steps[key]) {
-              mastra.getLogger()?.warn(`Suspended step '${key}' not found in workflow '${workflowId}'`);
+              mastra?.getLogger()?.warn(`Suspended step '${key}' not found in workflow '${workflowId}'`);
               break;
             }
             wflowStep = wf.steps[key] as any;
@@ -1130,7 +1132,7 @@ export async function createNetworkLoop({
     }),
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData();
-      const logger = mastra.getLogger();
+      const logger = mastra?.getLogger();
 
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
