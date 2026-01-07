@@ -796,19 +796,33 @@ export function createStep<
                   ? { currentSpan: processorSpan }
                   : baseContext.tracingContext;
 
-                const result = await processor.processOutputStream({
-                  ...baseContext,
-                  tracingContext: processorTracingContext,
-                  part: part as ChunkType,
-                  streamParts: (streamParts ?? []) as ChunkType[],
-                  state: mutableState,
-                  messageList: passThrough.messageList, // Optional for stream processing
-                });
+                // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
+                // because outputStream uses a per-processor span stored in mutableState
+                let result: ChunkType | null | undefined;
+                try {
+                  result = await processor.processOutputStream({
+                    ...baseContext,
+                    tracingContext: processorTracingContext,
+                    part: part as ChunkType,
+                    streamParts: (streamParts ?? []) as ChunkType[],
+                    state: mutableState,
+                    messageList: passThrough.messageList, // Optional for stream processing
+                  });
 
-                // End span on finish chunk
-                if (part && (part as ChunkType).type === 'finish') {
-                  processorSpan?.end({ output: result });
+                  // End span on finish chunk
+                  if (part && (part as ChunkType).type === 'finish') {
+                    processorSpan?.end({ output: result });
+                    delete mutableState[spanKey];
+                  }
+                } catch (error) {
+                  // End span with error and clean up state
+                  if (error instanceof TripWire) {
+                    processorSpan?.end({ output: { tripwire: error.message } });
+                  } else {
+                    processorSpan?.error({ error: error as Error, endSpan: true });
+                  }
                   delete mutableState[spanKey];
+                  throw error;
                 }
 
                 return { ...passThrough, state: mutableState, part: result };
