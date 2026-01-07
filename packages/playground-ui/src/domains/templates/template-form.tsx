@@ -18,6 +18,7 @@ type TemplateFormProps = {
   handleInstallTemplate: () => void;
   handleVariableChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isLoadingEnvVars?: boolean;
+  isInstalling?: boolean;
   defaultModelProvider?: string;
   defaultModelId?: string;
   onModelUpdate?: (params: { provider: string; modelId: string }) => Promise<{ message: string }>;
@@ -32,6 +33,7 @@ export function TemplateForm({
   handleInstallTemplate,
   handleVariableChange,
   isLoadingEnvVars,
+  isInstalling,
   defaultModelProvider,
   defaultModelId,
   onModelUpdate,
@@ -123,9 +125,19 @@ export function TemplateForm({
               '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
             )}
             onClick={handleInstallTemplate}
-            disabled={!selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0}
+            disabled={
+              !selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0 || isInstalling
+            }
           >
-            Install <ArrowRightIcon />
+            {isInstalling ? (
+              <>
+                <Spinner className="w-4 h-4" /> Installing...
+              </>
+            ) : (
+              <>
+                Install <ArrowRightIcon />
+              </>
+            )}
           </Button>
         )}
       </div>

@@ -8,6 +8,7 @@ import { useThreadInput } from '@/domains/conversation';
 import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/components/assistant-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -20,7 +21,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { paths, navigate } = useLinkComponent();
 
   // Get memory config to check if semantic recall is enabled
-  const { data } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
 
   // Check if semantic recall is enabled
   const config = data?.config;
@@ -70,6 +71,16 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   );
 
   const searchScope = searchMemoryData?.searchScope;
+
+  if (isConfigLoading) {
+    return (
+      <div className="flex flex-col h-full p-4 gap-4">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
