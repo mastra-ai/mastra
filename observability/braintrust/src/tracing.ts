@@ -494,9 +494,7 @@ export class BraintrustExporter extends BaseExporter {
 
       // For user/system messages, extract text and represent non-text content
       if (role === 'user' || role === 'system') {
-        const contentParts = content
-          .map((part: any) => this.convertContentPart(part))
-          .filter(Boolean);
+        const contentParts = content.map((part: any) => this.convertContentPart(part)).filter(Boolean);
 
         return {
           role,
@@ -553,9 +551,7 @@ export class BraintrustExporter extends BaseExporter {
 
       // For tool messages, convert to OpenAI tool message format
       if (role === 'tool') {
-        const toolResult = content.find(
-          (part): part is AISDKToolResultPart => part?.type === 'tool-result',
-        );
+        const toolResult = content.find((part): part is AISDKToolResultPart => part?.type === 'tool-result');
         if (toolResult) {
           // Support both v4 'result' and v5 'output' fields
           const resultData = toolResult.output ?? toolResult.result;
