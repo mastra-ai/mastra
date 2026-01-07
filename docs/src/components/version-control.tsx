@@ -13,18 +13,39 @@ import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
 
 import FeatureVersioning from "../../feature-versioning.json";
 
+/** Available documentation versions with their display labels */
 const versions = [
   { value: "stable", label: "Stable (v0)" },
   { value: "beta", label: "Beta (v1)" },
-];
+] as const;
 
 type Version = "beta" | "stable";
 
+/**
+ * Extracts the current documentation version from a URL pathname.
+ *
+ * Checks if the third segment of the path is "v1" to determine if viewing beta docs.
+ * Example: "/docs/v1/agents" -> "beta", "/docs/agents" -> "stable"
+ */
 const getVersionFromPath = (pathname: string): Version => {
   const pathChunks = pathname.split("/");
   return pathChunks?.[2] === "v1" ? "beta" : "stable";
 };
 
+/**
+ * Transforms a URL pathname to point to the equivalent page in a different version.
+ *
+ * For beta: inserts "v1" as the third path segment if not already present.
+ * For stable: removes "v1" from the third path segment if present.
+ *
+ * @example
+ * // Switching from stable to beta
+ * getPathForVersion("/docs/agents", "beta") // Returns "/docs/v1/agents"
+ *
+ * @example
+ * // Switching from beta to stable
+ * getPathForVersion("/docs/v1/agents", "stable") // Returns "/docs/agents"
+ */
 const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   const pathChunks = pathname.split("/");
 
@@ -45,6 +66,13 @@ const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   return pathChunks.join("/");
 };
 
+/**
+ * A dropdown component that allows users to switch between documentation versions.
+ *
+ * Displays the current version and provides a dropdown menu to switch to the other version. Uses the current URL path to determine the active version and generates the appropriate link for version switching.
+ *
+ * The component also checks `FeatureVersioning` to determine if the current page exists in the target version. If not, shows "Not available in [version]" instead of a clickable link.
+ */
 export default function VersionControl({
   className,
   size = "default",
