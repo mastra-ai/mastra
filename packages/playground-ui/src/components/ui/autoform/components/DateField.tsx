@@ -1,5 +1,3 @@
-'use client';
-
 import { AutoFormFieldProps } from '@autoform/react';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';

@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
 import { Combobox } from '@/components/ui/combobox';
