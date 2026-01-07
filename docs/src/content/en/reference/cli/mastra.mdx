@@ -11,9 +11,9 @@ You can use the Command-Line Interface (CLI) provided by Mastra to develop, buil
 
 ## `mastra dev`
 
-Starts a server which exposes [Studio](/docs/v1/getting-started/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
+Starts a server which exposes [Studio](/docs/getting-started/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
 
-You can also [configure the server](/docs/v1/getting-started/studio#configuration).
+You can also [configure the server](/docs/getting-started/studio#configuration).
 
 ### Flags
 
@@ -21,7 +21,7 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/v1/getting-started/studio#local-https).
+Enable local HTTPS support. [Learn more](/docs/getting-started/studio#local-https).
 
 #### `--inspect`
 
@@ -112,7 +112,7 @@ You need to run `mastra build` before using `mastra start`.
 
 :::
 
-Starts a local server to serve your built Mastra application in production mode. By default, [OTEL Tracing](/docs/v1/observability/tracing/overview) is enabled.
+Starts a local server to serve your built Mastra application in production mode. By default, [OTEL Tracing](/docs/observability/tracing/overview) is enabled.
 
 ### Flags
 
@@ -124,11 +124,11 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
 #### `--no-telemetry`
 
-Disable the [OTEL Tracing](/docs/v1/observability/tracing/overview).
+Disable the [OTEL Tracing](/docs/observability/tracing/overview).
 
 ## `mastra studio`
 
-Starts [Mastra Studio](/docs/v1/getting-started/studio) as a static server. After starting, you can enter your Mastra instance URL (e.g. `http://localhost:4111`) to connect Studio to your Mastra backend.
+Starts [Mastra Studio](/docs/getting-started/studio) as a static server. After starting, you can enter your Mastra instance URL (e.g. `http://localhost:4111`) to connect Studio to your Mastra backend.
 
 ### Flags
 
@@ -148,7 +148,7 @@ It accepts [common flags][common-flags].
 
 The `mastra scorers` command provides management capabilities for evaluation scorers that measure the quality, accuracy, and performance of AI-generated outputs.
 
-Read the [Scorers overview](/docs/v1/evals/overview) to learn more.
+Read the [Scorers overview](/docs/evals/overview) to learn more.
 
 ### `add`
 
