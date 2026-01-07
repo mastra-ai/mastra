@@ -17,6 +17,7 @@ import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -736,6 +737,11 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+  /**
+   * Optional reference to the Mastra instance.
+   * When provided, it will be passed to output processors.
+   */
+  mastra?: Mastra;
 };
 
 /**

@@ -1,10 +1,11 @@
 import type { Processor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage, MemoryConfig } from '../../memory';
 import type { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MastraStorage, MemoryStorage } from '../../storage';
 
 export interface WorkingMemoryTemplate {
   format: 'markdown' | 'json';
@@ -59,7 +60,12 @@ export class WorkingMemory implements Processor {
 
   constructor(
     private options: {
-      storage: MemoryStorage;
+      /**
+       * Storage instance for retrieving working memory.
+       * If not provided, the processor will attempt to get storage from the mastra instance
+       * passed in the processInput context.
+       */
+      storage?: MemoryStorage;
       template?: WorkingMemoryTemplate;
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
@@ -67,9 +73,20 @@ export class WorkingMemory implements Processor {
         getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null>;
       };
       logger?: IMastraLogger;
-    },
+    } = {},
   ) {
     this.logger = options.logger;
+  }
+
+  /**
+   * Get MemoryStorage from options or from mastra instance
+   */
+  private async getMemoryStorage(mastra?: Mastra): Promise<MemoryStorage | undefined> {
+    if (this.options.storage) {
+      return this.options.storage;
+    }
+    const mastraStorage = mastra?.getStorage();
+    return mastraStorage?.stores?.memory;
   }
 
   async processInput(args: {
@@ -77,8 +94,18 @@ export class WorkingMemory implements Processor {
     messageList: MessageList;
     abort: (reason?: string) => never;
     requestContext?: RequestContext;
+    /** Optional Mastra instance for accessing primitives when not explicitly provided */
+    mastra?: Mastra;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext } = args;
+    const { messageList, requestContext, mastra } = args;
+
+    // Get memory storage from options, or fall back to mastra instance
+    const storage = await this.getMemoryStorage(mastra);
+
+    if (!storage) {
+      this.logger?.warn('[WorkingMemory] No storage available - skipping working memory injection');
+      return messageList;
+    }
 
     // Get threadId and resourceId from runtime context
     const memoryContext = parseMemoryRequestContext(requestContext);
@@ -98,11 +125,11 @@ export class WorkingMemory implements Processor {
 
     if (scope === 'thread' && threadId) {
       // Get thread-scoped working memory
-      const thread = await this.options.storage.getThreadById({ threadId });
+      const thread = await storage.getThreadById({ threadId });
       workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
     } else if (scope === 'resource' && resourceId) {
       // Get resource-scoped working memory
-      const resource = await this.options.storage.getResourceById({ resourceId });
+      const resource = await storage.getResourceById({ resourceId });
       workingMemoryData = resource?.workingMemory || null;
     }
 

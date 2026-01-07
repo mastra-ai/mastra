@@ -5,6 +5,7 @@ import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
@@ -30,6 +31,28 @@ export interface ProcessorContext<TTripwireMetadata = unknown> {
    * Use this to implement retry limits within your processor.
    */
   retryCount: number;
+  /**
+   * Optional reference to the Mastra instance.
+   * Use this to access other Mastra primitives (agents, tools, workflows, storage, vectors, etc.)
+   * within the processor lifecycle.
+   *
+   * @example
+   * ```typescript
+   * const processor = {
+   *   id: 'my-processor',
+   *   async processInput({ mastra, messages }) {
+   *     // Access storage from mastra
+   *     const storage = mastra?.getStorage();
+   *     // Access an agent
+   *     const agent = mastra?.getAgent('my-agent');
+   *     // Access a tool
+   *     const tool = mastra?.getTool('my-tool');
+   *     return messages;
+   *   }
+   * };
+   * ```
+   */
+  mastra?: Mastra;
 }
 
 /**

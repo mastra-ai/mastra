@@ -1,16 +1,22 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
+import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MastraStorage, MemoryStorage } from '../../storage';
 
 /**
  * Options for the MessageHistory processor
  */
 export interface MessageHistoryOptions {
-  storage: MemoryStorage;
+  /**
+   * Storage instance for retrieving and persisting message history.
+   * If not provided, the processor will attempt to get storage from the mastra instance
+   * passed in the processor context.
+   */
+  storage?: MemoryStorage;
   lastMessages?: number;
 }
 
@@ -25,12 +31,23 @@ export interface MessageHistoryOptions {
 export class MessageHistory implements Processor {
   readonly id = 'message-history';
   readonly name = 'MessageHistory';
-  private storage: MemoryStorage;
+  private storage?: MemoryStorage;
   private lastMessages?: number;
 
-  constructor(options: MessageHistoryOptions) {
+  constructor(options: MessageHistoryOptions = {}) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+  }
+
+  /**
+   * Get MemoryStorage from options or from mastra instance
+   */
+  private async getMemoryStorage(mastra?: Mastra): Promise<MemoryStorage | undefined> {
+    if (this.storage) {
+      return this.storage;
+    }
+    const mastraStorage = mastra?.getStorage();
+    return mastraStorage?.stores?.memory;
   }
 
   async processInput(args: {
@@ -39,8 +56,17 @@ export class MessageHistory implements Processor {
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
+    /** Optional Mastra instance for accessing primitives when not explicitly provided */
+    mastra?: Mastra;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList } = args;
+    const { messageList, mastra } = args;
+
+    // Get memory storage from options, or fall back to mastra instance
+    const storage = await this.getMemoryStorage(mastra);
+
+    if (!storage) {
+      return messageList;
+    }
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRequestContext(args.requestContext);
@@ -51,7 +77,7 @@ export class MessageHistory implements Processor {
     }
 
     // 1. Fetch historical messages from storage (as DB format)
-    const result = await this.storage.listMessages({
+    const result = await storage.listMessages({
       threadId,
       page: 0,
       perPage: this.lastMessages,
@@ -152,8 +178,17 @@ export class MessageHistory implements Processor {
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
+    /** Optional Mastra instance for accessing primitives when not explicitly provided */
+    mastra?: Mastra;
   }): Promise<MessageList> {
-    const { messageList } = args;
+    const { messageList, mastra } = args;
+
+    // Get memory storage from options, or fall back to mastra instance
+    const storage = await this.getMemoryStorage(mastra);
+
+    if (!storage) {
+      return messageList;
+    }
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRequestContext(args.requestContext);
@@ -175,11 +210,11 @@ export class MessageHistory implements Processor {
     const filtered = this.filterMessagesForPersistence(messagesToSave);
 
     // Persist messages directly to storage
-    await this.storage.saveMessages({ messages: filtered });
+    await storage.saveMessages({ messages: filtered });
 
-    const thread = await this.storage.getThreadById({ threadId });
+    const thread = await storage.getThreadById({ threadId });
     if (thread) {
-      await this.storage.updateThread({
+      await storage.updateThread({
         id: threadId,
         title: thread.title || '',
         metadata: thread.metadata || {},

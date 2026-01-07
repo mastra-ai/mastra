@@ -326,6 +326,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       outputProcessors,
       logger: this.logger,
       agentName: this.name,
+      mastra: this.#mastra,
     });
   }
 
