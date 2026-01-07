@@ -1,6 +1,7 @@
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_OUTPUT_FORMAT,
+  OBSERVER_OUTPUT_FORMAT_BASE,
   OBSERVER_GUIDELINES,
   PATTERN_INSTRUCTIONS,
 } from './observer-agent';
@@ -20,7 +21,8 @@ export interface ReflectorResult {
 }
 
 /**
- * The Reflector's system prompt.
+ * Build the Reflector's system prompt.
+ * @param recognizePatterns - Whether to include pattern recognition instructions (default: true)
  *
  * The Reflector handles meta-observation - when observations grow too large,
  * it reorganizes them into something more manageable by:
@@ -29,7 +31,21 @@ export interface ReflectorResult {
  * - Identifying if the agent got off track and how to get back on track
  * - Preserving ALL important information (reflections become the ENTIRE memory)
  */
-export const REFLECTOR_SYSTEM_PROMPT = `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
+export function buildReflectorSystemPrompt(recognizePatterns: boolean = true): string {
+  // Use the appropriate observer output format based on pattern recognition setting
+  const observerOutputFormat = recognizePatterns ? OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
+  
+  // Build the patterns section for the Reflector's own output format
+  const patternsSection = recognizePatterns
+    ? `
+<patterns>
+Consolidate and update patterns from the input.
+${PATTERN_INSTRUCTIONS}
+</patterns>
+`
+    : '';
+
+  return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
 Use this to understand how your observational memories were created.
@@ -39,7 +55,7 @@ ${OBSERVER_EXTRACTION_INSTRUCTIONS}
 
 === OUTPUT FORMAT ===
 
-${OBSERVER_OUTPUT_FORMAT}
+${observerOutputFormat}
 
 === GUIDELINES ===
 
@@ -107,12 +123,7 @@ Your output MUST use XML tags to structure the response:
 Put all consolidated observations here using the date-grouped format with priority emojis (🔴, 🟡, 🟢).
 Group related observations with indentation.
 </observations>
-
-<patterns>
-Consolidate and update patterns from the input.
-${PATTERN_INSTRUCTIONS}
-</patterns>
-
+${patternsSection}
 <current-task>
 State the current task(s) explicitly:
 - Primary: What the agent is currently working on
@@ -127,6 +138,12 @@ Hint for the agent's immediate next message. Examples:
 </suggested-response>
 
 User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;
+}
+
+/**
+ * The Reflector's system prompt (default - for backwards compatibility)
+ */
+export const REFLECTOR_SYSTEM_PROMPT = buildReflectorSystemPrompt();
 
 /**
  * Compression retry prompt - used when reflection doesn't reduce size

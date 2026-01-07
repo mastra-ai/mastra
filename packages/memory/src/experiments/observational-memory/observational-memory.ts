@@ -19,7 +19,7 @@ import {
   formatMessagesForObserver,
 } from './observer-agent';
 import {
-  REFLECTOR_SYSTEM_PROMPT,
+  buildReflectorSystemPrompt,
   buildReflectorPrompt,
   parseReflectorOutput,
   validateCompression,
@@ -31,7 +31,6 @@ import type {
   ThresholdRange,
   ModelSettings,
   ProviderOptions,
-  ObservationFocus,
 } from './types';
 
 /**
@@ -118,7 +117,6 @@ interface ResolvedObserverConfig {
   bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
-  focus?: ObservationFocus;
 }
 
 interface ResolvedReflectorConfig {
@@ -293,7 +291,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.maxOutputTokens,
       },
       providerOptions: config.observer?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.providerOptions,
-      focus: config.observer?.focus,
     };
 
     // Resolve reflector config with defaults
@@ -395,8 +392,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      // Build system prompt with focus configuration
-      const systemPrompt = buildObserverSystemPrompt(this.observerConfig.focus);
+      // Build system prompt with pattern recognition configuration
+      const systemPrompt = buildObserverSystemPrompt(this.observerRecognizePatterns);
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -413,10 +410,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getReflectorAgent(): Agent {
     if (!this.reflectorAgent) {
+      // Build system prompt with pattern recognition configuration
+      const systemPrompt = buildReflectorSystemPrompt(this.reflectorRecognizePatterns);
+
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
         name: 'Reflector',
-        instructions: REFLECTOR_SYSTEM_PROMPT,
+        instructions: systemPrompt,
         model: this.reflectorConfig.model,
       });
     }

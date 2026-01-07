@@ -60,58 +60,6 @@ export interface ProviderOptions {
 }
 
 /**
- * Predefined observation focus areas.
- * These control what types of information the observer prioritizes.
- */
-export type ObservationFocusType =
-  /** Personal/biographical facts: education, work history, family, location, age, etc. */
-  | 'personal-facts'
-  /** User preferences and communication style */
-  | 'preferences'
-  /** Current projects, tasks, and goals */
-  | 'tasks'
-  /** Technical context and code-related information */
-  | 'technical'
-  /** Temporal information: dates, deadlines, schedules */
-  | 'temporal'
-  /** Relationships and people mentioned */
-  | 'relationships'
-  /** Health and wellness information */
-  | 'health'
-  /** Financial information */
-  | 'financial'
-  /** Location and travel information */
-  | 'location'
-  /** Custom focus area with description */
-  | { custom: string };
-
-/**
- * Configuration for observation focus areas.
- * Controls what types of information the observer prioritizes extracting.
- */
-export interface ObservationFocus {
-  /**
-   * Focus areas to prioritize.
-   * Can be predefined types or custom descriptions.
-   *
-   * @example
-   * // Use predefined focus areas
-   * focus: ['personal-facts', 'preferences', 'tasks']
-   *
-   * @example
-   * // Add custom focus area
-   * focus: ['personal-facts', { custom: 'Product preferences and purchase history' }]
-   */
-  include: ObservationFocusType[];
-
-  /**
-   * Optional: Areas to explicitly deprioritize or skip.
-   * Useful for privacy or to reduce noise.
-   */
-  exclude?: ObservationFocusType[];
-}
-
-/**
  * Configuration for the Observer agent
  */
 export interface ObserverConfig {
@@ -154,32 +102,6 @@ export interface ObserverConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 215 } } }
    */
   providerOptions?: ProviderOptions;
-
-  /**
-   * Focus areas for observation extraction.
-   * Controls what types of information the observer prioritizes.
-   *
-   * @default { include: ['preferences', 'tasks', 'technical'] }
-   *
-   * @example
-   * // For a personal assistant that needs to remember user facts
-   * focus: {
-   *   include: ['personal-facts', 'preferences', 'relationships', 'health']
-   * }
-   *
-   * @example
-   * // For a coding assistant
-   * focus: {
-   *   include: ['technical', 'tasks', 'preferences']
-   * }
-   *
-   * @example
-   * // For a benchmark like LongMemEval
-   * focus: {
-   *   include: ['personal-facts', 'preferences', 'temporal', 'relationships', 'tasks']
-   * }
-   */
-  focus?: ObservationFocus;
 
   /**
    * Whether to extract and track patterns (recurring themes).

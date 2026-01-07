@@ -1,101 +1,4 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ObservationFocus, ObservationFocusType } from './types';
-
-/**
- * Focus area descriptions for the observer prompt.
- * Maps focus types to their prompt instructions.
- */
-const FOCUS_AREA_DESCRIPTIONS: Record<string, string> = {
-  'personal-facts': `PERSONAL/BIOGRAPHICAL FACTS (HIGH PRIORITY):
-- Education: degrees, schools, majors, graduation dates
-- Work history: jobs, companies, roles, career changes
-- Personal identity: name, age, location, nationality
-- Family: spouse, children, parents, siblings mentioned
-- Life events: moves, marriages, milestones
-- Any "I am...", "I have...", "I graduated...", "I work at..." statements
-- Capture these EXACTLY as stated - they are critical for recall`,
-
-  preferences: `USER PREFERENCES:
-- Explicit preferences (e.g., "I prefer short answers", "I like examples")
-- Communication style (e.g., "User dislikes verbose explanations")
-- Tool/technology preferences
-- Format preferences (bullet points, code examples, etc.)`,
-
-  tasks: `CURRENT TASKS & PROJECTS:
-- What the user is working on
-- Goals and objectives stated
-- Progress and milestones
-- Next steps mentioned
-- Blockers or challenges`,
-
-  technical: `TECHNICAL CONTEXT:
-- Programming languages and frameworks used
-- Technical level and expertise
-- Code snippets and implementations
-- Architecture decisions
-- Technical requirements and constraints`,
-
-  temporal: `TEMPORAL INFORMATION:
-- Specific dates mentioned (deadlines, events, appointments)
-- Schedules and routines
-- Time-sensitive information
-- "Yesterday", "last week", "next month" references with context`,
-
-  relationships: `RELATIONSHIPS & PEOPLE:
-- Names of people mentioned (colleagues, friends, family)
-- Relationships between people
-- Organizations and teams
-- Contact information if shared`,
-
-  health: `HEALTH & WELLNESS:
-- Health conditions mentioned
-- Medications or treatments
-- Fitness goals and activities
-- Dietary preferences or restrictions`,
-
-  financial: `FINANCIAL INFORMATION:
-- Budget constraints mentioned
-- Financial goals
-- Purchases or expenses discussed
-- Financial preferences`,
-
-  location: `LOCATION & TRAVEL:
-- Current location/residence
-- Places mentioned
-- Travel plans or history
-- Geographic preferences`,
-};
-
-/**
- * Build the focus areas section of the prompt based on configuration.
- */
-function buildFocusSection(focus?: ObservationFocus): string {
-  // Default focus areas if none specified
-  const defaultFocus: ObservationFocusType[] = ['preferences', 'tasks', 'technical'];
-  const includedTypes = focus?.include ?? defaultFocus;
-  const excludedTypes = focus?.exclude ?? [];
-
-  const sections: string[] = [];
-
-  for (const focusType of includedTypes) {
-    // Skip if excluded
-    if (typeof focusType === 'string' && excludedTypes.includes(focusType)) {
-      continue;
-    }
-
-    if (typeof focusType === 'string') {
-      const description = FOCUS_AREA_DESCRIPTIONS[focusType];
-      if (description) {
-        sections.push(description);
-      }
-    } else if (focusType.custom) {
-      // Custom focus area
-      sections.push(`CUSTOM FOCUS:\n${focusType.custom}`);
-    }
-  }
-
-  return sections.join('\n\n');
-}
 
 /**
  * The core extraction instructions for the Observer.
@@ -176,7 +79,10 @@ IMPORTANT:
  * The output format instructions for the Observer.
  * This is exported so the Reflector can use the same format.
  */
-export const OBSERVER_OUTPUT_FORMAT = `Use priority levels:
+/**
+ * Base output format for Observer (without patterns section)
+ */
+export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
 - 🔴 High: explicit user facts, preferences, goals achieved, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
@@ -212,13 +118,22 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>
+</suggested-response>`;
 
+/**
+ * Patterns section for Observer output format
+ */
+export const OBSERVER_PATTERNS_SECTION = `
 <patterns>
 ${PATTERN_INSTRUCTIONS}
 </patterns>
 
 Only include patterns when there are 2+ related items to group.`;
+
+/**
+ * Full output format including patterns (for backwards compatibility)
+ */
+export const OBSERVER_OUTPUT_FORMAT = OBSERVER_OUTPUT_FORMAT_BASE + OBSERVER_PATTERNS_SECTION;
 
 /**
  * The guidelines for the Observer.
@@ -238,10 +153,15 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - If the user provides detailed messages or code snippets, observe all important details.`;
 
 /**
- * Build the complete observer system prompt with focus areas.
+ * Build the complete observer system prompt.
+ * @param recognizePatterns - Whether to include pattern recognition instructions (default: true)
  */
-export function buildObserverSystemPrompt(_focus?: ObservationFocus): string {
-  // const focusSection = buildFocusSection(focus);
+export function buildObserverSystemPrompt(recognizePatterns: boolean = true): string {
+  
+  // Conditionally include patterns section based on config
+  const outputFormat = recognizePatterns 
+    ? OBSERVER_OUTPUT_FORMAT 
+    : OBSERVER_OUTPUT_FORMAT_BASE;
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
@@ -253,7 +173,7 @@ ${OBSERVER_EXTRACTION_INSTRUCTIONS}
 
 Your output MUST use XML tags to structure the response. This allows the system to properly parse and manage memory over time.
 
-${OBSERVER_OUTPUT_FORMAT}
+${outputFormat}
 
 === GUIDELINES ===
 

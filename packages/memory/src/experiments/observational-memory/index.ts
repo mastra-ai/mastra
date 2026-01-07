@@ -25,8 +25,7 @@ export type {
   ReflectorConfig,
   ObserverResult,
   ReflectorResult,
-  ObservationFocus,
-  ObservationFocusType,
+
 } from './types';
 
 // Observer Agent

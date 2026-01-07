@@ -455,6 +455,74 @@ describe('Storage Operations', () => {
       const previousRecord = history?.find(r => r.id === initial.id);
       expect(previousRecord?.lastObservedAt).toEqual(observedAt);
     });
+
+    it('should save patterns from reflector to new OM record', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Set up initial record with some patterns from observer
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 User enjoys hiking and camping',
+        tokenCount: 30000,
+        lastObservedAt: new Date(),
+        patterns: { hobbies: ['hiking (Jan 2026)', 'camping (Feb 2026)'] },
+      });
+
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+      expect(currentRecord?.patterns?.hobbies).toContain('hiking (Jan 2026)');
+
+      // Create reflection with consolidated patterns from reflector
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed: User is outdoor enthusiast',
+        tokenCount: 5000,
+        patterns: {
+          hobbies: ['hiking (Jan 2026)', 'camping (Feb 2026)', 'fishing (Mar 2026)'],
+          trips: ['mountain trip (Jan 2026)'],
+        },
+      });
+
+      // New record should have the patterns from reflector
+      expect(newRecord.patterns).toBeDefined();
+      expect(newRecord.patterns?.hobbies).toContain('hiking (Jan 2026)');
+      expect(newRecord.patterns?.hobbies).toContain('fishing (Mar 2026)');
+      expect(newRecord.patterns?.trips).toContain('mountain trip (Jan 2026)');
+    });
+
+    it('should handle reflection without patterns', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Some observations',
+        tokenCount: 30000,
+        lastObservedAt: new Date(),
+        patterns: { hobbies: ['hiking'] }, // Has patterns before reflection
+      });
+
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+
+      // Create reflection WITHOUT patterns (reflector didn't output any)
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed observations',
+        tokenCount: 5000,
+        // No patterns passed
+      });
+
+      // New record should have undefined patterns
+      expect(newRecord.patterns).toBeUndefined();
+    });
   });
 
   describe('getObservationalMemoryHistory', () => {
@@ -965,6 +1033,81 @@ Help user implement XML parsing
         // currentTask is NOT returned by parseReflectorOutput (only observations and suggestedContinuation)
         // and is NOT embedded in observations
         expect(result.observations).not.toContain('Help user implement XML parsing');
+      });
+    });
+
+    describe('Pattern extraction', () => {
+      it('should extract patterns from reflector output', () => {
+        const output = `<observations>
+- 🔴 User enjoys outdoor activities
+- 🟡 User mentioned several trips
+</observations>
+
+<patterns>
+<hobbies>
+* hiking (Jan 2026)
+* camping (Feb 2026)
+</hobbies>
+<trips>
+* visited mountains (Jan 2026)
+* beach vacation (Mar 2026)
+</trips>
+</patterns>
+
+<suggested-response>
+Ask about their next adventure
+</suggested-response>`;
+
+        const result = parseReflectorOutput(output);
+        expect(result.patterns).toBeDefined();
+        expect(result.patterns?.hobbies).toContain('hiking (Jan 2026)');
+        expect(result.patterns?.hobbies).toContain('camping (Feb 2026)');
+        expect(result.patterns?.trips).toContain('visited mountains (Jan 2026)');
+        expect(result.patterns?.trips).toContain('beach vacation (Mar 2026)');
+      });
+
+      it('should return undefined patterns when no patterns section exists', () => {
+        const output = `<observations>
+- 🔴 User preference noted
+</observations>
+
+<suggested-response>
+Continue the conversation
+</suggested-response>`;
+
+        const result = parseReflectorOutput(output);
+        expect(result.patterns).toBeUndefined();
+      });
+
+      it('should handle empty patterns section', () => {
+        const output = `<observations>
+- 🔴 User preference noted
+</observations>
+
+<patterns>
+</patterns>`;
+
+        const result = parseReflectorOutput(output);
+        // Empty patterns should result in undefined (no patterns extracted)
+        expect(result.patterns).toBeUndefined();
+      });
+
+      it('should handle patterns with hyphen list items', () => {
+        const output = `<observations>
+- 🔴 User has multiple interests
+</observations>
+
+<patterns>
+<interests>
+- reading books
+- playing guitar
+</interests>
+</patterns>`;
+
+        const result = parseReflectorOutput(output);
+        expect(result.patterns).toBeDefined();
+        expect(result.patterns?.interests).toContain('reading books');
+        expect(result.patterns?.interests).toContain('playing guitar');
       });
     });
   });
@@ -3267,9 +3410,6 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         observer: {
           model: 'google/gemini-2.5-flash',
           observationThreshold: 500, // Low threshold to trigger on each session
-          focus: {
-            include: ['personal-facts', 'preferences', 'tasks', 'technical'],
-          },
         },
         reflector: {
           model: 'google/gemini-2.5-flash',
