@@ -66,7 +66,7 @@ export const mastra = new Mastra({
         serviceName: "mastra",
         exporters: [
           new DefaultExporter(), // Persists traces to configured storage for Mastra Studio (requires storage configuration, disabled without it)
-          new CloudExporter(),
+          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(),

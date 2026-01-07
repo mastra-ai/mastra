@@ -63,15 +63,15 @@ This configuration includes:
 - **Exporters**:
   - `DefaultExporter` - Persists traces to your configured storage for Mastra Studio
   - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
-- **Span Output Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
+- **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
 
 ## Exporters
 
-Exporters determine where your trace data is sent and how it's stored. Choosing the right exporters allows you to integrate with your existing observability stack, comply with data residency requirements, and optimize for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
+Exporters determine where your trace data is sent and how it's stored. They integrate with your existing observability stack, support data residency requirements, and can be optimized for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
 
 ### Internal Exporters
 
-Mastra provides two built-in exporters that work out of the box:
+Mastra provides two built-in exporters:
 
 - **[Default](/docs/v1/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
 - **[Cloud](/docs/v1/observability/tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
