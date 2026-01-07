@@ -1684,7 +1684,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     return textChunks
       .map(c => {
         if (c.type === 'agent-execution-event-text-delta') {
-          return c.payload?.payload?.textDelta || '';
+          return c.payload?.payload?.textDelta || c.payload?.payload?.text || '';
         }
         if (c.type === 'routing-agent-text-delta') {
           return c.payload?.text || '';
