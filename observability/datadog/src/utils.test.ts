@@ -2,8 +2,8 @@
  * Tests for Datadog exporter utility functions
  */
 
-import { describe, it, expect } from 'vitest';
 import { SpanType } from '@mastra/core/observability';
+import { describe, it, expect } from 'vitest';
 import { formatInput, formatOutput, kindFor, toDate, safeStringify, SPAN_TYPE_TO_KIND } from './utils';
 
 describe('kindFor', () => {

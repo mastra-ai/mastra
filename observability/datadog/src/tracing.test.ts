@@ -6,9 +6,9 @@
 
 /// <reference types="node" />
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { TracingEvent, AnyExportedSpan } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Use vi.hoisted to define mocks before they're used in vi.mock
 const {
@@ -158,13 +158,13 @@ describe('DatadogExporter', () => {
     });
 
     it('disables exporter when mlApp is missing', () => {
-      const exporter = new DatadogExporter({});
+      new DatadogExporter({});
       // Exporter should be disabled - verify by checking that trace is not called on export
       expect(mockEnable).not.toHaveBeenCalled();
     });
 
     it('disables exporter when agentless mode lacks apiKey', () => {
-      const exporter = new DatadogExporter({
+      new DatadogExporter({
         mlApp: 'test-app',
         agentless: true,
         // apiKey not provided

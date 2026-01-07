@@ -12,7 +12,6 @@
  * - Supports both agent and agentless modes
  */
 
-import tracer from 'dd-trace';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -23,8 +22,10 @@ import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
+import tracer from 'dd-trace';
 import { formatUsageMetrics } from './metrics';
-import { type DatadogSpanKind, ensureTracer, kindFor, toDate, formatInput, formatOutput } from './utils';
+import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './utils';
+import type { DatadogSpanKind } from './utils';
 
 /**
  * LLMObs span options with required name and kind properties.
@@ -615,10 +616,8 @@ export class DatadogExporter extends BaseExporter {
   private emitSingleSpan(span: AnyExportedSpan, state: TraceState, parent?: any) {
     const options = this.buildSpanOptions(span);
 
-    let capturedSpan: any;
     const runTrace = () =>
       tracer.llmobs.trace(options as any, (ddSpan: any) => {
-        capturedSpan = ddSpan;
         const annotations = this.buildAnnotations(span);
         if (Object.keys(annotations).length > 0) {
           tracer.llmobs.annotate(ddSpan, annotations);

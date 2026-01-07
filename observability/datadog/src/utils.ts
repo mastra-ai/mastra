@@ -2,8 +2,8 @@
  * Utility functions for Datadog LLM Observability Exporter
  */
 
-import tracer from 'dd-trace';
 import { SpanType } from '@mastra/core/observability';
+import tracer from 'dd-trace';
 
 /**
  * Datadog LLM Observability span kinds.
