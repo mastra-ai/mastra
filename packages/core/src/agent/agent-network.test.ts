@@ -907,11 +907,11 @@ describe('Agent - network - response reformatting', () => {
     // 1. doGenerate: routing step selects sub-agent to delegate
     // 2. doStream: generateFinalResult (called when custom scorer passes)
     // Note: With custom scorers, completion is determined by scorer, not by routing returning "none"
-    let doGenerateCount = 0;
-    let doStreamCount = 0;
+    let _doGenerateCount = 0;
+    let _doStreamCount = 0;
     const routingMockModel = new MockLanguageModelV2({
       doGenerate: async () => {
-        doGenerateCount++;
+        _doGenerateCount++;
         // Routing step: delegate to sub-agent
         const text = JSON.stringify({
           primitiveId: 'research-sub-agent',
@@ -928,7 +928,7 @@ describe('Agent - network - response reformatting', () => {
         };
       },
       doStream: async () => {
-        doStreamCount++;
+        _doStreamCount++;
         // generateFinalResult: return reformatted response
         const text = JSON.stringify({
           finalResult: 'REFORMATTED: Based on the research, dolphins are fascinating marine mammals.',
@@ -1870,10 +1870,10 @@ describe('Agent - network - finalResult saving', () => {
       finalResult: 'GENERATED_FINAL_RESULT: This is the synthesized response.',
     });
 
-    let doGenerateCount = 0;
+    let _doGenerateCount = 0;
     const mockModel = new MockLanguageModelV2({
       doGenerate: async () => {
-        doGenerateCount++;
+        _doGenerateCount++;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -2033,7 +2033,7 @@ describe('Agent - network - finalResult saving', () => {
       finalResult: 'DEFAULT_CHECK_FINAL_RESULT: Synthesized by default check',
     });
 
-    let streamCount = 0;
+    let _streamCount = 0;
     const mockModel = new MockLanguageModelV2({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -2043,7 +2043,7 @@ describe('Agent - network - finalResult saving', () => {
         warnings: [],
       }),
       doStream: async () => {
-        streamCount++;
+        _streamCount++;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
