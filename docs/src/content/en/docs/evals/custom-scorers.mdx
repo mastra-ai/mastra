@@ -187,7 +187,7 @@ const glutenCheckerScorer = createScorer({...})
 })
 ```
 
-**Prompt Objects:** See the [`createScorer`](/reference/v1/evals/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
+**Prompt Objects:** See the [`createScorer`](/reference/evals/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
@@ -244,7 +244,7 @@ Together, these components allow you to define custom evaluation logic using LLM
 
 :::info
 
-Visit [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+Visit [createScorer](/reference/evals/create-scorer) for the full API and configuration options.
 
 :::
 
@@ -482,5 +482,5 @@ console.log("Reason:", result.reason);
 
 **Examples and Resources:**
 
-- [createScorer API Reference](/reference/v1/evals/create-scorer) - Complete technical documentation
+- [createScorer API Reference](/reference/evals/create-scorer) - Complete technical documentation
 - [Built-in Scorers Source Code](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - Real implementations for reference

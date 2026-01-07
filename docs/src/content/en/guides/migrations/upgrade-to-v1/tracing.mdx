@@ -46,7 +46,7 @@ export const mastra = new Mastra({
 });
 ```
 
-This minimal configuration automatically includes the `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter` processor. See the [observability tracing documentation](/docs/v1/observability/tracing/overview) for full configuration options.
+This minimal configuration automatically includes the `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter` processor. See the [observability tracing documentation](/docs/observability/tracing/overview) for full configuration options.
 
 **After (v1 with custom configuration):**
 
@@ -89,7 +89,7 @@ Key changes:
 3. Use `default: { enabled: true }` for quick setup, or `configs:` for custom configuration
 4. Export types change from string literals (`'otlp'`) to exporter class instances (`new OtelExporter()`)
 
-See the [exporters documentation](/docs/v1/observability/tracing/overview#exporters) for all available exporters.
+See the [exporters documentation](/docs/observability/tracing/overview#exporters) for all available exporters.
 
 ### From AI Tracing
 
@@ -204,13 +204,13 @@ To migrate, update method implementations in custom exporters.
 
 The OTEL-based `telemetry` configuration from 0.x has been removed. The old system with `serviceName`, `sampling.type`, and `export.type` properties is no longer supported.
 
-To migrate, follow the "From OTEL-based Telemetry" section above. For detailed configuration options, see the [observability tracing documentation](/docs/v1/observability/tracing/overview).
+To migrate, follow the "From OTEL-based Telemetry" section above. For detailed configuration options, see the [observability tracing documentation](/docs/observability/tracing/overview).
 
 ### Custom instrumentation files
 
 The automatic detection of instrumentation files in `/mastra` (with `.ts`, `.js`, or `.mjs` extensions) has been removed. Custom instrumentation is no longer supported through separate files.
 
-To migrate, use the built-in exporter system or implement custom exporters using the `ObservabilityExporter` interface. See the [exporters documentation](/docs/v1/observability/tracing/overview#exporters) for details.
+To migrate, use the built-in exporter system or implement custom exporters using the `ObservabilityExporter` interface. See the [exporters documentation](/docs/observability/tracing/overview#exporters) for details.
 
 ### `instrumentation.mjs` files
 
@@ -258,11 +258,11 @@ If you were using OTEL-based telemetry with specific providers in 0.x, here's ho
 
 | Provider | Exporter | Guide | Reference |
 |----------|----------|-------|-----------|
-| Arize AX, Arize Phoenix | **Arize** | [Guide](/docs/v1/observability/tracing/exporters/arize) | [Reference](/reference/v1/observability/tracing/exporters/arize) |
-| Braintrust | **Braintrust** | [Guide](/docs/v1/observability/tracing/exporters/braintrust) | [Reference](/reference/v1/observability/tracing/exporters/braintrust) |
-| Langfuse | **Langfuse** | [Guide](/docs/v1/observability/tracing/exporters/langfuse) | [Reference](/reference/v1/observability/tracing/exporters/langfuse) |
-| LangSmith | **LangSmith** | [Guide](/docs/v1/observability/tracing/exporters/langsmith) | [Reference](/reference/v1/observability/tracing/exporters/langsmith) |
-| Dash0, Laminar, New Relic, SigNoz, Traceloop, Custom OTEL | **OpenTelemetry** | [Guide](/docs/v1/observability/tracing/exporters/otel) | [Reference](/reference/v1/observability/tracing/exporters/otel) |
+| Arize AX, Arize Phoenix | **Arize** | [Guide](/docs/observability/tracing/exporters/arize) | [Reference](/reference/observability/tracing/exporters/arize) |
+| Braintrust | **Braintrust** | [Guide](/docs/observability/tracing/exporters/braintrust) | [Reference](/reference/observability/tracing/exporters/braintrust) |
+| Langfuse | **Langfuse** | [Guide](/docs/observability/tracing/exporters/langfuse) | [Reference](/reference/observability/tracing/exporters/langfuse) |
+| LangSmith | **LangSmith** | [Guide](/docs/observability/tracing/exporters/langsmith) | [Reference](/reference/observability/tracing/exporters/langsmith) |
+| Dash0, Laminar, New Relic, SigNoz, Traceloop, Custom OTEL | **OpenTelemetry** | [Guide](/docs/observability/tracing/exporters/otel) | [Reference](/reference/observability/tracing/exporters/otel) |
 | LangWatch | \<coming soon\> | - | - |
 
 ### Installation
@@ -277,4 +277,4 @@ npm install @mastra/[exporter-name]-exporter
 npm install @mastra/otel-exporter@latest
 ```
 
-Plus the required protocol package for your provider (see [OTEL guide](/docs/v1/observability/tracing/exporters/otel#installation)).
+Plus the required protocol package for your provider (see [OTEL guide](/docs/observability/tracing/exporters/otel#installation)).

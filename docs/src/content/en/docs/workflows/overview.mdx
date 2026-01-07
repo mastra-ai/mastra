@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Workflows overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/v1/deployment/workflow-runners) like Inngest for managed infrastructure.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/deployment/workflow-runners) like Inngest for managed infrastructure.
 
 ![Workflows overview](/img/workflows/workflows-overview.jpg)
 
@@ -57,13 +57,13 @@ const step1 = createStep({
 
 :::info
 
-Visit [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+Visit [Step Class](/reference/workflows/step) for a full list of configuration options.
 
 :::
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/v1/agents/using-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -90,13 +90,13 @@ export const testWorkflow = createWorkflow({
 
 :::info
 
-Visit [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+Visit [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
 
 :::
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/v1/workflows/control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
 
 ## Workflow state
 
@@ -122,13 +122,13 @@ const step1 = createStep({
 
 :::info
 
-Visit [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+Visit [Workflow State](/docs/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
 
 :::
 
 ## Workflows as steps
 
-Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/v1/workflows/control-flow).
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
 
 ```typescript {26} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
@@ -325,7 +325,7 @@ When running the local mastra server, all active workflow runs will be restarted
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export type UserTier = {
@@ -347,19 +347,19 @@ const step1 = createStep({
 
 :::info
 
-Visit [Request Context](/docs/v1/server/request-context) for more information.
+Visit [Request Context](/docs/server/request-context) for more information.
 
 :::
 
 ## Testing with Studio
 
-Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Workflow State](/docs/v1/workflows/workflow-state)
-- [Control Flow](/docs/v1/workflows/control-flow)
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
-- [Error Handling](/docs/v1/workflows/error-handling)
+- [Workflow State](/docs/workflows/workflow-state)
+- [Control Flow](/docs/workflows/control-flow)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume)
+- [Error Handling](/docs/workflows/error-handling)

@@ -11,7 +11,7 @@ import StepItem from "@site/src/components/StepItem";
 # Manual Install
 
 :::info
-Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow a [getting-started guide](/docs/v1/getting-started/start), which achieves the same result using the [`mastra create`](/reference/v1/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow a [getting-started guide](/docs/getting-started/start), which achieves the same result using the [`mastra create`](/reference/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/cli/mastra#mastra-init).
 :::
 
 If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
@@ -132,7 +132,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
 
 :::note
 
-This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
+This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
 
 :::
 
@@ -171,7 +171,7 @@ export const weatherTool = createTool({
 
 :::info
 
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
+We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/using-tools).
 
 :::
 
@@ -236,7 +236,7 @@ export const mastra = new Mastra({
 
 <StepItem>
 
-You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
+You can now launch [Studio](/docs/getting-started/studio) and test your agent.
 
 <Tabs>
 <TabItem value="npm" label="npm">

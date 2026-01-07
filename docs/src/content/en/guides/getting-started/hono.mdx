@@ -8,11 +8,11 @@ import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in your Hono project
 
-In this guide, you'll build a tool-calling AI agent using Mastra and Hono. Using the [Hono server adapter](/reference/v1/server/hono-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
+In this guide, you'll build a tool-calling AI agent using Mastra and Hono. Using the [Hono server adapter](/reference/server/hono-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
 
 ## Before you begin
 
-- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 - Install Node.js `v22.13.0` or later
 
 ## Create a new Hono app (optional)
@@ -56,7 +56,7 @@ This creates a project called `mastra-hono`, but you can replace it with any nam
 
 ## Initialize Mastra
 
-Inside your Hono project directory, run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+Inside your Hono project directory, run [`mastra init`](/reference/cli/mastra#mastra-init).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
@@ -218,10 +218,10 @@ Congratulations on building your Mastra agent with Hono! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
-- Learn more about [agents](/docs/v1/agents/overview)
-- Give your agent its own [tools](/docs/v1/agents/using-tools)
-- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/agents/agent-memory) to your agent
 
 When you're ready, read more about how Mastra integrates with Hono:
 
-- [Server Adapters](/docs/v1/server/server-adapters)
+- [Server Adapters](/docs/server/server-adapters)
