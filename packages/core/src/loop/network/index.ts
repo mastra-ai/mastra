@@ -14,7 +14,7 @@ import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 import type { CompletionConfig, CompletionContext } from './validation';
-import { runValidation, formatCompletionFeedback, runDefaultCompletionCheck } from './validation';
+import { runValidation, formatCompletionFeedback, runDefaultCompletionCheck, generateFinalResult } from './validation';
 
 async function getRoutingAgent({
   requestContext,
@@ -242,6 +242,46 @@ export async function prepareMemoryStep({
   await Promise.all(promises);
 
   return { thread };
+}
+
+/**
+ * Saves the finalResult to memory if the LLM provided one.
+ * The LLM is instructed to omit finalResult when the primitive result is already sufficient,
+ * so we only need to check if finalResult is defined.
+ *
+ * @internal
+ */
+async function saveFinalResultIfProvided({
+  memory,
+  finalResult,
+  threadId,
+  resourceId,
+  generateId,
+}: {
+  memory: Awaited<ReturnType<Agent['getMemory']>>;
+  finalResult: string | undefined;
+  threadId: string;
+  resourceId: string;
+  generateId: () => string;
+}) {
+  if (memory && finalResult) {
+    await memory.saveMessages({
+      messages: [
+        {
+          id: generateId(),
+          type: 'text',
+          role: 'assistant',
+          content: {
+            parts: [{ type: 'text', text: finalResult }],
+            format: 2,
+          },
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        },
+      ] as MastraDBMessage[],
+    });
+  }
 }
 
 export async function createNetworkLoop({
@@ -1154,8 +1194,33 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
 
       // Run either configured scorers or the default LLM completion check
       let completionResult;
+      let generatedFinalResult: string | undefined;
+
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
+
+        // Generate and stream finalResult if validation passed
+        if (completionResult.complete) {
+          const routingAgentToUse = await getRoutingAgent({
+            requestContext,
+            agent: routingAgent,
+            routingConfig: routing,
+          });
+          generatedFinalResult = await generateFinalResult(routingAgentToUse, completionContext, {
+            writer,
+            stepId: generateId(),
+            runId,
+          });
+
+          // Save finalResult to memory if the LLM provided one
+          await saveFinalResultIfProvided({
+            memory: await routingAgent.getMemory({ requestContext }),
+            finalResult: generatedFinalResult,
+            threadId: inputData.threadId || runId,
+            resourceId: inputData.threadResourceId || networkName,
+            generateId,
+          });
+        }
       } else {
         const routingAgentToUse = await getRoutingAgent({
           requestContext,
@@ -1163,7 +1228,11 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
           routingConfig: routing,
         });
         // Use the default LLM completion check
-        const defaultResult = await runDefaultCompletionCheck(routingAgentToUse, completionContext);
+        const defaultResult = await runDefaultCompletionCheck(routingAgentToUse, completionContext, {
+          writer,
+          stepId: generateId(),
+          runId,
+        });
         completionResult = {
           complete: defaultResult.passed,
           completionReason: defaultResult.reason,
@@ -1171,6 +1240,20 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
           totalDuration: defaultResult.duration,
           timedOut: false,
         };
+
+        // Capture finalResult from default check
+        generatedFinalResult = defaultResult.finalResult;
+
+        // Save finalResult to memory if the LLM provided one
+        if (defaultResult.passed) {
+          await saveFinalResultIfProvided({
+            memory: await routingAgent.getMemory({ requestContext }),
+            finalResult: defaultResult.finalResult,
+            threadId: inputData.threadId || runId,
+            resourceId: inputData.threadResourceId || networkName,
+            generateId,
+          });
+        }
       }
 
       const maxIterationReached = maxIterations && inputData.iteration >= maxIterations;
@@ -1241,9 +1324,11 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       }
 
       if (isComplete) {
-        // Task is complete - the result is the primitive's output
+        // Task is complete - use generatedFinalResult if LLM provided one,
+        // otherwise keep the primitive's result
         return {
           ...inputData,
+          ...(generatedFinalResult ? { result: generatedFinalResult } : {}),
           isComplete: true,
           validationPassed: true,
           completionReason: completionResult.completionReason || 'Task complete',

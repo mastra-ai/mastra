@@ -866,6 +866,129 @@ describe('Agent - network - finalResult token efficiency', () => {
   });
 });
 
+describe('Agent - network - response reformatting', () => {
+  it('should reformat sub-agent response when last step is an agent step instead of returning as-is', async () => {
+    // Issue #10514: When an agent network's last step is an agent step,
+    // the response from that sub-agent should be reformatted/synthesized
+    // by the orchestrating agent, not returned as-is.
+    const memory = new MockMemory();
+
+    // Sub-agent's raw response - this is what the sub-agent will return
+    const subAgentRawResponse = 'RAW SUB-AGENT RESPONSE: Here are the details about dolphins.';
+
+    // Mock sub-agent model that returns a raw response
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: subAgentRawResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: subAgentRawResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'research-sub-agent',
+      name: 'Research Sub Agent',
+      description: 'A sub-agent that researches topics',
+      instructions: 'Research topics and provide detailed information.',
+      model: subAgentMockModel,
+    });
+
+    // Routing agent flow with custom scorers:
+    // 1. doGenerate: routing step selects sub-agent to delegate
+    // 2. doStream: generateFinalResult (called when custom scorer passes)
+    // Note: With custom scorers, completion is determined by scorer, not by routing returning "none"
+    let doGenerateCount = 0;
+    let doStreamCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        doGenerateCount++;
+        // Routing step: delegate to sub-agent
+        const text = JSON.stringify({
+          primitiveId: 'research-sub-agent',
+          primitiveType: 'agent',
+          prompt: 'Research dolphins',
+          selectionReason: 'Delegating to research agent for detailed information',
+        });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        doStreamCount++;
+        // generateFinalResult: return reformatted response
+        const text = JSON.stringify({
+          finalResult: 'REFORMATTED: Based on the research, dolphins are fascinating marine mammals.',
+        });
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'orchestrator-network-agent',
+      name: 'Orchestrator Network Agent',
+      instructions: 'You orchestrate research tasks and synthesize responses from sub-agents.',
+      model: routingMockModel,
+      agents: { 'research-sub-agent': subAgent },
+      memory,
+    });
+
+    // Use a custom scorer that always passes to bypass the default completion check
+    const mockScorer = {
+      id: 'always-pass-scorer',
+      name: 'Always Pass Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task is complete' }),
+    };
+
+    const anStream = await networkAgent.network('Tell me about dolphins', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'test-thread-reformat',
+        resource: 'test-resource-reformat',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Find the final result from the network finish event
+    const finishEvents = chunks.filter(c => c.type === 'network-execution-event-finish');
+    expect(finishEvents.length).toBeGreaterThan(0);
+
+    const finalResult = finishEvents[0].payload.result;
+
+    // This test verifies the fix for GitHub issue #10514:
+    // When custom scorers pass, generateFinalResult synthesizes a reformatted
+    // response which replaces the raw sub-agent response in the finish event
+    expect(finalResult).not.toContain('RAW SUB-AGENT RESPONSE');
+    expect(finalResult).toContain('REFORMATTED');
+  });
+});
+
 describe('Agent - network - text streaming', () => {
   it('should emit text events when routing agent handles request without delegation', async () => {
     const memory = new MockMemory();
@@ -877,22 +1000,39 @@ describe('Agent - network - text streaming', () => {
       selectionReason: 'I am a helpful assistant. I can help you with your questions directly.',
     });
 
+    const completionCheckResponse = JSON.stringify({
+      isComplete: true,
+      completionReason: 'The task is complete because the routing agent provided a direct answer.',
+      finalResult: 'I am a helpful assistant. I can help you with your questions directly.',
+    });
+
+    // Track calls to return routing response first, then completion response
+    let callCount = 0;
+
     const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [{ type: 'text', text: selfHandleResponse }],
-        warnings: [],
-      }),
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-delta', id: 'id-0', delta: selfHandleResponse },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
-        ]),
-      }),
+      doGenerate: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: response }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: response },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
     });
 
     const networkAgent = new Agent({
@@ -1602,7 +1742,7 @@ describe('Agent - network - completion validation', () => {
     // Find feedback message in saved messages
     const feedbackMessages = savedMessages.filter(msg => {
       const text = msg.content?.parts?.[0]?.text || '';
-      return text.includes('[NOT COMPLETE]');
+      return text.includes('NOT COMPLETE');
     });
 
     expect(feedbackMessages.length).toBeGreaterThan(0);
