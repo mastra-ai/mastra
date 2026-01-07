@@ -1,5 +1,3 @@
-'use client';
-
 import { useAssistantState } from '@assistant-ui/react';
 import { AlertCircle, CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { MarkdownText } from './markdown-text';

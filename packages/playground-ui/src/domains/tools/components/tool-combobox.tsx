@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
 import { Combobox } from '@/components/ui/combobox';
@@ -87,7 +85,6 @@ export function ToolCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoadingTools || isLoadingAgents || isErrorTools || isErrorAgents}
-      variant="ghost"
     />
   );
 }

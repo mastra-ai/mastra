@@ -1,5 +1,3 @@
-'use client';
-
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 

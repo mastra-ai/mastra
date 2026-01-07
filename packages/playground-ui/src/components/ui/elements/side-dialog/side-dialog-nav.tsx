@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,11 +27,11 @@ export function SideDialogNav({ onNext, onPrevious, className }: SideDialogNavPr
     >
       {(onNext || onPrevious) && (
         <div className={cn('flex gap-[1rem] items-baseline')}>
-          <Button onClick={handleOnPrevious} disabled={!onPrevious} variant="ghost">
+          <Button onClick={handleOnPrevious} disabled={!onPrevious}>
             Previous
             <ArrowUpIcon />
           </Button>
-          <Button onClick={handleOnNext} disabled={!onNext} variant="ghost">
+          <Button onClick={handleOnNext} disabled={!onNext}>
             Next
             <ArrowDownIcon />
           </Button>
