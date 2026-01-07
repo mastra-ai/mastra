@@ -104,9 +104,7 @@ export class PosthogExporter extends BaseExporter {
     const apiKey = config.apiKey ?? process.env.POSTHOG_API_KEY;
 
     if (!apiKey) {
-      this.setDisabled(
-        'Missing required API key. Set POSTHOG_API_KEY environment variable or pass apiKey in config.',
-      );
+      this.setDisabled('Missing required API key. Set POSTHOG_API_KEY environment variable or pass apiKey in config.');
       this.client = null as any;
       this.config = config as PosthogExporterConfig;
       return;

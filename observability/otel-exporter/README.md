@@ -8,13 +8,13 @@ Export Mastra traces to any OpenTelemetry-compatible observability platform.
 
 All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
 
-| Provider  | Environment Variables                                                                      |
-| --------- | ------------------------------------------------------------------------------------------ |
-| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)        |
-| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
-| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
-| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)        |
+| Provider  | Environment Variables                                                                       |
+| --------- | ------------------------------------------------------------------------------------------- |
+| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)         |
+| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)       |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                         |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)         |
 
 ## Supported Providers
 
@@ -66,7 +66,7 @@ new OtelExporter({
       dataset: 'production', // Optional
     },
   },
-})
+});
 ```
 
 **Note:** Get your endpoint from your Dash0 dashboard. It should be in the format `ingress.{region}.aws.dash0.com:4317`.
@@ -118,7 +118,7 @@ new OtelExporter({
       endpoint: 'https://my-signoz.example.com', // Optional: for self-hosted
     },
   },
-})
+});
 ```
 
 ### New Relic
@@ -166,7 +166,7 @@ new OtelExporter({
       endpoint: 'https://otlp.eu01.nr-data.net', // Optional: for EU region
     },
   },
-})
+});
 ```
 
 ### Traceloop
@@ -217,7 +217,7 @@ new OtelExporter({
       endpoint: 'https://custom.traceloop.com', // Optional
     },
   },
-})
+});
 ```
 
 ### Laminar
@@ -267,7 +267,7 @@ new OtelExporter({
       endpoint: 'https://api.lmnr.ai/v1/traces', // Optional
     },
   },
-})
+});
 ```
 
 **Note:** Laminar now only requires the `LMNR_PROJECT_API_KEY`. The `teamId` is optional.

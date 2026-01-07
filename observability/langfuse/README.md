@@ -68,13 +68,13 @@ const mastra = new Mastra({
 
 ### Configuration Options
 
-| Option      | Type      | Description                                                                    |
-| ----------- | --------- | ------------------------------------------------------------------------------ |
-| `publicKey` | `string`  | Langfuse public key. Defaults to `LANGFUSE_PUBLIC_KEY` env var                 |
-| `secretKey` | `string`  | Langfuse secret key. Defaults to `LANGFUSE_SECRET_KEY` env var                 |
-| `baseUrl`   | `string`  | Langfuse host URL. Defaults to `LANGFUSE_BASE_URL` env var or Langfuse cloud   |
-| `realtime`  | `boolean` | Flush after each event for immediate visibility. Defaults to `false`           |
-| `options`   | `object`  | Additional options to pass to the Langfuse client                              |
+| Option      | Type      | Description                                                                  |
+| ----------- | --------- | ---------------------------------------------------------------------------- |
+| `publicKey` | `string`  | Langfuse public key. Defaults to `LANGFUSE_PUBLIC_KEY` env var               |
+| `secretKey` | `string`  | Langfuse secret key. Defaults to `LANGFUSE_SECRET_KEY` env var               |
+| `baseUrl`   | `string`  | Langfuse host URL. Defaults to `LANGFUSE_BASE_URL` env var or Langfuse cloud |
+| `realtime`  | `boolean` | Flush after each event for immediate visibility. Defaults to `false`         |
+| `options`   | `object`  | Additional options to pass to the Langfuse client                            |
 
 ## Features
 
