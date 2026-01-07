@@ -1,5 +1,5 @@
 import { SelectField, SearchField } from '@/components/ui/elements';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 

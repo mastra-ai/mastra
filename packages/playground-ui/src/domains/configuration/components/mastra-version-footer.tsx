@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';

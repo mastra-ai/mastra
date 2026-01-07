@@ -6,7 +6,7 @@ import type { Components } from 'react-markdown';
 import { CopyButton } from '../../components/ui/copy-button';
 import { cn } from '../../lib/utils';
 
-import { highlight } from './syntax-highlighter';
+import { highlight } from '@/ds/components/CodeEditor';
 
 interface MarkdownRendererProps {
   children: string;

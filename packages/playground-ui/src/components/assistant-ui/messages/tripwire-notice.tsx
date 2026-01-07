@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, ShieldAlert, RefreshCw, Tag } from 'lucide-react';
 import { TripwireMetadata } from '@mastra/react';
