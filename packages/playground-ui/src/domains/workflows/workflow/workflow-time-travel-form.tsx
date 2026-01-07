@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { WorkflowInputData } from './workflow-input-data';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { Txt } from '@/ds/components/Txt';
