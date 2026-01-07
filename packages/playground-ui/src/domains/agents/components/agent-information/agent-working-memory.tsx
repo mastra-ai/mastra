@@ -21,10 +21,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
+
+  if (isLoading || isConfigLoading) {
+    return <Skeleton className="h-32 w-full" />;
+  }
 
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',
@@ -36,10 +40,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   React.useEffect(() => {
     setEditValue(workingMemoryData ?? '');
   }, [workingMemoryData]);
-
-  if (isLoading) {
-    return <Skeleton className="h-32 w-full" />;
-  }
 
   return (
     <div className="flex flex-col gap-4 p-4">

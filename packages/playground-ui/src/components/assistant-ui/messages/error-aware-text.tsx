@@ -1,12 +1,17 @@
 import { useAssistantState } from '@assistant-ui/react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { MarkdownText } from './markdown-text';
 import { TripwireNotice } from './tripwire-notice';
 import { MastraUIMessageMetadata } from '@mastra/react';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
+import { useState } from 'react';
+import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/ds/components/Badge';
 
 export const ErrorAwareText = () => {
   const part = useAssistantState(({ part }) => part);
+  const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   // Get text from the part - it's a TextPart so it has a text property
   const text = (part as any).text || '';
@@ -32,6 +37,27 @@ export const ErrorAwareText = () => {
         <AlertTitle as="h5">Error</AlertTitle>
         <AlertDescription as="p">{text}</AlertDescription>
       </Alert>
+    );
+  }
+
+  if (metadata?.mode === 'network' && metadata?.completionResult) {
+    return (
+      <div className="mb-2 space-y-2">
+        <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">
+          <Icon>
+            <ChevronUpIcon className={cn('transition-all', collapsedCompletionCheck ? 'rotate-90' : 'rotate-180')} />
+          </Icon>
+          <Badge variant="info" icon={<CheckCircleIcon />}>
+            {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
+          </Badge>
+        </button>
+        {!collapsedCompletionCheck && (
+          <Alert variant="info">
+            <AlertTitle as="h5">{metadata.completionResult?.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
+            <MarkdownText />
+          </Alert>
+        )}
+      </div>
     );
   }
 

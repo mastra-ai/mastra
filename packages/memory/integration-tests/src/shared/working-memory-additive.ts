@@ -483,7 +483,7 @@ Schema structure reminder:
         // Turn 1: Set up comprehensive data
         await agentGenerate(
           agent,
-          "I'm Jordan Lee, I work at DataCorp. My email contact is jordan@datacorp.com and I'm in Seattle.",
+          'My name is Jordan Lee and I live in Seattle. I work at DataCorp as a software engineer.',
           { threadId: thread.id, resourceId },
           isV5,
         );

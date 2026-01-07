@@ -267,6 +267,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
+                    createSpan: true,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);

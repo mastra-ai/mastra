@@ -6,6 +6,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
+import { Skeleton } from '@/components/ui/skeleton';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect } from 'react';
@@ -60,7 +61,16 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  if (isLoading || error) return null;
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (error) return null;
 
   if (!tool)
     return (

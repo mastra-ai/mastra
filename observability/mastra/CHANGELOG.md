@@ -1,5 +1,83 @@
 # @mastra/observability
 
+## 1.0.0-beta.10
+
+### Minor Changes
+
+- Deprecate `default: { enabled: true }` observability configuration ([#11674](https://github.com/mastra-ai/mastra/pull/11674))
+
+  The shorthand `default: { enabled: true }` configuration is now deprecated and will be removed in a future version. Users should migrate to explicit configuration with `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter`.
+
+  **Before (deprecated):**
+
+  ```typescript
+  import { Observability } from '@mastra/observability';
+
+  const mastra = new Mastra({
+    observability: new Observability({
+      default: { enabled: true },
+    }),
+  });
+  ```
+
+  **After (recommended):**
+
+  ```typescript
+  import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+
+  const mastra = new Mastra({
+    observability: new Observability({
+      configs: {
+        default: {
+          serviceName: 'mastra',
+          exporters: [new DefaultExporter(), new CloudExporter()],
+          spanOutputProcessors: [new SensitiveDataFilter()],
+        },
+      },
+    }),
+  });
+  ```
+
+  The explicit configuration makes it clear exactly what exporters and processors are being used, improving code readability and maintainability.
+
+  A deprecation warning will be logged when using the old configuration pattern.
+
+- Fix processor tracing to create individual spans per processor ([#11683](https://github.com/mastra-ai/mastra/pull/11683))
+  - Processor spans now correctly show processor IDs (e.g., `input processor: validator`) instead of combined workflow IDs
+  - Each processor in a chain gets its own trace span, improving observability into processor execution
+  - Spans are only created for phases a processor actually implements, eliminating empty spans
+  - Internal agent calls within processors now properly nest under their processor span
+  - Added `INPUT_STEP_PROCESSOR` and `OUTPUT_STEP_PROCESSOR` entity types for finer-grained tracing
+  - Changed `processorType` span attribute to `processorExecutor` with values `'workflow'` or `'legacy'`
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Fix trace-level sampling to sample entire traces instead of individual spans ([#11676](https://github.com/mastra-ai/mastra/pull/11676))
+
+  Previously, sampling decisions were made independently for each span, causing fragmented traces where some spans were sampled and others were not. This defeated the purpose of ratio or custom sampling strategies.
+
+  Now:
+  - Sampling decisions are made once at the root span level
+  - Child spans inherit the sampling decision from their parent
+  - Custom samplers are only called once per trace (for root spans)
+  - Either all spans in a trace are sampled, or none are
+
+  Fixes #11504
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+
 ## 1.0.0-beta.9
 
 ### Patch Changes
