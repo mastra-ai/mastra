@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Button } from '../buttons/button';
+import { Button } from '@/ds/components/Button/Button';
 import { XIcon } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -62,7 +62,7 @@ export function Notification({
         {children}
       </div>
       {dismissible && (
-        <Button variant="ghost" onClick={() => setLocalIsVisible(false)}>
+        <Button onClick={() => setLocalIsVisible(false)}>
           <XIcon />
           <VisuallyHidden>Dismiss</VisuallyHidden>
         </Button>

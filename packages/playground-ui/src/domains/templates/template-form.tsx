@@ -5,7 +5,7 @@ import { Fragment } from 'react';
 import { Container } from './shared';
 import Spinner from '@/components/ui/spinner';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 
 type TemplateFormProps = {
   providerOptions: { value: string; label: string }[];

@@ -58,7 +58,6 @@ export function WorkflowCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
     />
   );
 }

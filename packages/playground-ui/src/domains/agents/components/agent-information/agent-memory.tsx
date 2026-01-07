@@ -7,7 +7,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
 import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/components/assistant-ui/memory-search';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/ds/components/Button/Button';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -81,7 +81,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
               <h3 className="text-sm font-medium text-icon5">Clone Thread</h3>
               <p className="text-xs text-icon3 mt-1">Create a copy of this conversation</p>
             </div>
-            <Button variant="outline" size="sm" onClick={handleCloneThread} disabled={isCloning}>
+            <Button onClick={handleCloneThread} disabled={isCloning}>
               <Copy className="w-4 h-4 mr-2" />
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
