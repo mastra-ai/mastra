@@ -49,8 +49,9 @@ export {
   sendWorkflowRunEventBodySchema,
   workflowExecutionResultSchema,
   workflowControlResponseSchema,
-  workflowRunResponseSchema,
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
+  workflowRunResultSchema,
+  workflowRunResultQuerySchema,
 } from './workflows';
