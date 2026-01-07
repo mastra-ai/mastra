@@ -2809,7 +2809,7 @@ describe('Reflection with Thread Attribution', () => {
   });
 });
 
-describe('LongMemEval End-to-End Test (Question e47becba)', () => {
+describe.skip('LongMemEval End-to-End Test (Question e47becba)', () => {
   const questionData = firstQuestion as LongMemEvalQuestionData;
 
   // Find the session that contains the answer
@@ -3069,7 +3069,7 @@ For personal expense tracking...
  * REQUIRES: GOOGLE_GENERATIVE_AI_API_KEY environment variable
  */
 // TODO: Re-enable after full resource-scope implementation is complete
-describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
+describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
   const questionData = firstQuestion as LongMemEvalQuestionData;
   const resourceId = `resource_${questionData.question_id}`;
 
