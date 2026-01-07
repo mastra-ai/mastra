@@ -2755,12 +2755,12 @@ describe('Agent - network - finalResult edge cases', () => {
 
   it('should complete network even if finalResult memory save fails', async () => {
     const memory = new MockMemory();
-    let saveCallCount = 0;
+    let _saveCallCount = 0;
     let failedOnFinalResult = false;
 
     const originalSaveMessages = memory.saveMessages.bind(memory);
     memory.saveMessages = async (params: any) => {
-      saveCallCount++;
+      _saveCallCount++;
       // Fail when trying to save the finalResult (simple text, not network metadata)
       const hasSimpleText = params.messages.some((msg: any) => {
         const text = msg.content?.parts?.[0]?.text || '';
@@ -2945,7 +2945,7 @@ describe('Agent - network - finalResult real-world scenarios', () => {
 
     // Track calls to return different responses
     let routingCallCount = 0;
-    let streamCallCount = 0;
+    let _streamCallCount = 0;
 
     const mockModel = new MockLanguageModelV2({
       doGenerate: async () => {
@@ -2969,7 +2969,7 @@ describe('Agent - network - finalResult real-world scenarios', () => {
         };
       },
       doStream: async () => {
-        streamCallCount++;
+        _streamCallCount++;
         // generateFinalResult: synthesize from accumulated context
         const finalResultResponse = JSON.stringify({
           finalResult:
