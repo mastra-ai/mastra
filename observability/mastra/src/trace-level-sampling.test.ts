@@ -12,7 +12,7 @@
  */
 
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent, ObservabilityExporter, CustomSamplerOptions } from '@mastra/core/observability';
+import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
@@ -34,9 +34,7 @@ class TestExporter implements ObservabilityExporter {
   }
 
   getSpanIds(): string[] {
-    return this.events
-      .filter(e => e.type === TracingEventType.SPAN_ENDED)
-      .map(e => e.exportedSpan.id);
+    return this.events.filter(e => e.type === TracingEventType.SPAN_ENDED).map(e => e.exportedSpan.id);
   }
 
   getTraceIds(): string[] {
