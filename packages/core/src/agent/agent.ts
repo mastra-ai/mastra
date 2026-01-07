@@ -3073,6 +3073,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       validation: mergedOptions?.completion,
       routing: mergedOptions?.routing,
       onIterationComplete: mergedOptions?.onIterationComplete,
+      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
     });
   }
 

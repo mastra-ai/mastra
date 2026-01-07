@@ -293,6 +293,7 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
+  autoResumeSuspendedTools,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -304,6 +305,7 @@ export async function createNetworkLoop({
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
   };
+  autoResumeSuspendedTools?: boolean;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -327,6 +329,8 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      suspendedToolRunId: z.string().optional().default(''),
+      resumeData: z.any().optional(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
@@ -353,6 +357,51 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
       });
 
+      let lastAssistantMessage: MastraDBMessage | undefined;
+      let requireApprovalMetadata: Record<string, any> | undefined;
+      let suspendedTools: Record<string, any> | undefined;
+      if (autoResumeSuspendedTools) {
+        // get last assistant message from memory
+        const memory = await routingAgent.getMemory({ requestContext });
+        const recallResult = await memory?.recall({
+          threadId: initData.threadId ?? runId,
+          resourceId: initData?.threadResourceId ?? networkName,
+        });
+        if (recallResult && recallResult.messages?.length > 0) {
+          const messages = [...recallResult.messages]?.filter(message => message.role === 'assistant');
+          lastAssistantMessage = messages[0];
+        }
+        if (lastAssistantMessage) {
+          const { metadata } = lastAssistantMessage.content;
+          if (metadata?.requireApprovalMetadata) {
+            requireApprovalMetadata = metadata.requireApprovalMetadata;
+          }
+          if (metadata?.suspendedTools) {
+            suspendedTools = metadata.suspendedTools;
+          }
+        }
+      }
+
+      let suspendedToolsInstruction = '';
+
+      if (requireApprovalMetadata || suspendedTools) {
+        const suspendedToolsArr = Object.values({ ...suspendedTools, ...requireApprovalMetadata });
+        suspendedToolsInstruction =
+          suspendedToolsArr?.length > 0
+            ? `
+          Analyse the suspended primitives: ${JSON.stringify(suspendedToolsArr)}, using the messages available to you and the resumeSchema of each suspended primitive, find the tool whose resumeData you can construct properly.
+          resumeData can not be an empty object nor null/undefined. 
+          You will also find and use the previous prompt that was sent to the primitive in suspendedTool.args.
+          The primitive type is available in suspendedTool.primitiveType and the primitive id is available in suspendedTool.primitiveId.
+          When you find and call that primitive, add the resumeData to the JSON created
+          Also, add the runId of the suspended tool as suspendedToolRunId to the JSON created.
+
+          IMPORTANT: if you are unable to construct the resumeData from the messages available to you, do not send resumeData and suspendedToolRunId to the JSON created.
+          If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
+        `
+            : '';
+      }
+
       // Completion is now always handled by scorers in the validation step
       // The routing step only handles primitive selection
 
@@ -377,13 +426,17 @@ export async function createNetworkLoop({
 
                     DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
 
+                    ${suspendedToolsInstruction}
+
                     Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return "none" for the primitiveId and "none" for the primitiveType.
 
                     {
                         "primitiveId": string,
                         "primitiveType": "agent" | "workflow" | "tool",
                         "prompt": string,
-                        "selectionReason": string
+                        "selectionReason": string,
+                        "suspendedToolRunId"?: string,
+                        "resumeData"?: any
                     }
 
                     The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
@@ -398,6 +451,11 @@ export async function createNetworkLoop({
             primitiveType: PRIMITIVE_TYPES.describe('The type of the primitive to be called'),
             prompt: z.string().describe('The json string or text value to be sent to the primitive'),
             selectionReason: z.string().describe('The reason you picked the primitive'),
+            suspendedToolRunId: z.string().describe('The runId of the suspended primitive').optional().default(''),
+            resumeData: z
+              .any()
+              .describe('The resumeData object created from the resumeSchema of suspended primitive')
+              .optional(),
           }),
         },
         requestContext: requestContext,
@@ -447,6 +505,8 @@ export async function createNetworkLoop({
         selectionReason: object.selectionReason,
         iteration: iterationCount,
         runId: stepId,
+        suspendedToolRunId: object.suspendedToolRunId,
+        resumeData: object.resumeData,
       };
 
       await writer.write({
@@ -474,6 +534,8 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      suspendedToolRunId: z.string().optional().default(''),
+      resumeData: z.any().optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -522,10 +584,13 @@ export async function createNetworkLoop({
 
       const agentHasOwnMemory = agentForStep.hasOwnMemory();
 
-      const result = await (resumeData
-        ? agentForStep.resumeStream(resumeData, {
+      const resumeDataToUse = inputData.resumeData || resumeData;
+      const suspendedToolRunIdToUse = inputData.suspendedToolRunId || runId;
+
+      const result = await (resumeDataToUse
+        ? agentForStep.resumeStream(resumeDataToUse, {
             requestContext: requestContext,
-            runId,
+            runId: suspendedToolRunIdToUse,
             ...(agentHasOwnMemory
               ? {
                   memory: {
@@ -573,6 +638,8 @@ export async function createNetworkLoop({
               agentId,
               runId,
               type: 'approval',
+              primitiveType: 'agent',
+              primitiveId: agentId,
             },
           };
         }
@@ -587,6 +654,8 @@ export async function createNetworkLoop({
               agentId,
               runId,
               type: 'suspension',
+              primitiveType: 'agent',
+              primitiveId: agentId,
             },
           };
         }
@@ -728,6 +797,8 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      suspendedToolRunId: z.string().optional().default(''),
+      resumeData: z.any().optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -775,8 +846,11 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const resumeDataToUse = inputData.resumeData || resumeData;
+      const runIdToUse = inputData.suspendedToolRunId || runId;
+
       const stepId = generateId();
-      const run = await wf.createRun({ runId });
+      const run = await wf.createRun({ runId: runIdToUse });
       const toolData = {
         workflowId: wf.id,
         args: inputData,
@@ -790,9 +864,9 @@ export async function createNetworkLoop({
         runId,
       });
 
-      const stream = resumeData
+      const stream = resumeDataToUse
         ? run.resumeStream({
-            resumeData,
+            resumeData: resumeDataToUse,
             requestContext: requestContext,
           })
         : run.stream({
@@ -883,6 +957,8 @@ export async function createNetworkLoop({
                           type: 'suspensions',
                           resumeSchema,
                           workflowId,
+                          primitiveType: 'workflow',
+                          primitiveId: workflowId,
                         },
                       },
                     },
@@ -952,6 +1028,8 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      suspendedToolRunId: z.string().optional().default(''),
+      resumeData: z.any().optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -1019,6 +1097,8 @@ export async function createNetworkLoop({
 
       const toolCallId = generateId();
 
+      const resumeDataToUse = inputData.resumeData || resumeData;
+
       // Check if approval is required
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
@@ -1039,7 +1119,7 @@ export async function createNetworkLoop({
       }
 
       if (toolRequiresApproval) {
-        if (!resumeData) {
+        if (!resumeDataToUse) {
           await memory?.saveMessages({
             messages: [
               {
@@ -1077,6 +1157,8 @@ export async function createNetworkLoop({
                             ),
                         }),
                         runId,
+                        primitiveType: 'tool',
+                        primitiveId: toolId,
                       },
                     },
                   },
@@ -1113,7 +1195,7 @@ export async function createNetworkLoop({
             },
           });
         } else {
-          if (!resumeData.approved) {
+          if (!resumeDataToUse.approved) {
             const rejectionResult = 'Tool call was not approved by the user';
             await memory?.saveMessages({
               messages: [
@@ -1226,6 +1308,8 @@ export async function createNetworkLoop({
                             type: 'suspension',
                             resumeSchema: (tool as any).resumeSchema,
                             runId,
+                            primitiveType: 'tool',
+                            primitiveId: toolId,
                           },
                         },
                       },
@@ -1251,7 +1335,7 @@ export async function createNetworkLoop({
 
               toolSuspendPayload = suspendPayload;
             },
-            resumeData,
+            resumeData: resumeDataToUse,
           },
           runId,
           memory,
@@ -1334,6 +1418,8 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      suspendedToolRunId: z.string().optional().default(''),
+      resumeData: z.any().optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -1469,6 +1555,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   routing,
   onIterationComplete,
   resumeData,
+  autoResumeSuspendedTools,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1503,6 +1590,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     isComplete: boolean;
   }) => void | Promise<void>;
   resumeData?: any;
+  autoResumeSuspendedTools?: boolean;
 }) {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1529,6 +1617,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
+    autoResumeSuspendedTools,
   });
 
   // Validation step: runs external checks when LLM says task is complete

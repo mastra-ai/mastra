@@ -46,6 +46,9 @@ export interface NetworkRoutingConfig {
  * Full configuration options for agent.network() execution.
  */
 export type NetworkOptions = {
+  /** Whether to automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
