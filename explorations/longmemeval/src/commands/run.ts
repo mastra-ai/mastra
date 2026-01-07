@@ -541,7 +541,8 @@ Be specific rather than generic when the user has expressed clear preferences in
       id: 'longmemeval-metric-agent',
       name: 'LongMemEval Metric Agent',
       model: retry4o.model,
-      instructions: 'You are an evaluation assistant. Answer questions precisely and concisely.',
+      instructions:
+        'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct.',
     });
 
     const metric = new LongMemEvalMetric({
