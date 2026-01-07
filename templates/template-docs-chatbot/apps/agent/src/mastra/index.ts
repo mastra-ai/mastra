@@ -2,12 +2,17 @@ import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } fr
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
 import { docsAgent } from './agents/docs-agent';
 
 export const mastra = new Mastra({
   agents: {
     docsAgent,
   },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:../../mastra.db',
+  }),
   server: {
     port: parseInt(process.env.PORT || '4112', 10),
     timeout: 30000,
@@ -38,7 +43,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to configured storage for Mastra Studio (requires storage configuration, disabled without it)
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
