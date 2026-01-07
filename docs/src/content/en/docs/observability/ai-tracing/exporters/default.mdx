@@ -106,8 +106,8 @@ If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects
 
 | Storage Provider                                | Preferred Strategy | Supported Strategies                      | Notes                                 |
 | ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
-| **[LibSQL](/reference/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
-| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Recommended for production            |
+| **[LibSQL](/reference/v0/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
+| **[PostgreSQL](/reference/v0/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Recommended for production            |
 
 ### Strategy Benefits
 
@@ -162,6 +162,6 @@ new DefaultExporter({
 
 ## Related
 
-- [AI Tracing Overview](/docs/observability/ai-tracing/overview)
-- [CloudExporter](/docs/observability/ai-tracing/exporters/cloud)
-- [Storage Configuration](/docs/server-db/storage)
+- [AI Tracing Overview](/docs/v0/observability/ai-tracing/overview)
+- [CloudExporter](/docs/v0/observability/ai-tracing/exporters/cloud)
+- [Storage Configuration](/docs/v0/server-db/storage)

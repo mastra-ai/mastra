@@ -5,7 +5,7 @@ description: Learn how to create tools and add them to agents to extend capabili
 
 # Using Tools
 
-Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tool give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent’s capabilities.
+Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tool give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/v0/mcp/overview) to expand an agent’s capabilities.
 
 Each tool typically defines:
 
@@ -14,9 +14,9 @@ Each tool typically defines:
 - **Execution Logic:** The code that performs the tool's action.
 - **Description:** Text that helps the agent understand what the tool does and when to use it.
 
-You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
+You can also load tools from remote [MCP servers](/docs/v0/mcp/overview) to expand an agent's capabilities.
 
-Use [Studio](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
+Use [Studio](/docs/v0/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
 
 ## When to use tools
 
@@ -87,7 +87,7 @@ const result = await agent.generate("What's the weather in London?");
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RuntimeContext](/docs/v0/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers
 export type UserTier = {
@@ -114,7 +114,7 @@ export const testTool = createTool({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Runtime Context](/docs/v0/server-db/runtime-context) for more information.
 
 ## Cancelling tool execution with `AbortSignal`
 
@@ -212,6 +212,6 @@ Mastra supports both tool formats, allowing you to mix and match as needed.
 
 ## Related
 
-- [Agent Memory](/docs/agents/agent-memory)
-- [Runtime Context](/docs/server-db/runtime-context)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Agent Memory](/docs/v0/agents/agent-memory)
+- [Runtime Context](/docs/v0/server-db/runtime-context)
+- [Calling Agents](/examples/v0/agents/calling-agents)

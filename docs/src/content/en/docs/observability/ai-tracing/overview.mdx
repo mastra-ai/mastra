@@ -79,18 +79,18 @@ Exporters determine where your AI trace data is sent and how it's stored. Choosi
 
 Mastra provides two built-in exporters that work out of the box:
 
-- **[Default](/docs/observability/ai-tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
-- **[Cloud](/docs/observability/ai-tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
+- **[Default](/docs/v0/observability/ai-tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
+- **[Cloud](/docs/v0/observability/ai-tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
 
 ### External Exporters
 
 In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
 
-- **[Arize](/docs/observability/ai-tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
-- **[Braintrust](/docs/observability/ai-tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
-- **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
-- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
-- **[OpenTelemetry](/docs/observability/ai-tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
+- **[Arize](/docs/v0/observability/ai-tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
+- **[Braintrust](/docs/v0/observability/ai-tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Langfuse](/docs/v0/observability/ai-tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
+- **[LangSmith](/docs/v0/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
+- **[OpenTelemetry](/docs/v0/observability/ai-tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
   - Supports: Dash0, Datadog, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Sampling Strategies
@@ -547,7 +547,7 @@ Span processors allow you to transform, filter, or enrich trace data before it's
 
 ### Built-in Processors
 
-- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
+- [Sensitive Data Filter](/docs/v0/observability/ai-tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
 ### Creating Custom Processors
 
@@ -788,25 +788,25 @@ Traces are available in multiple locations:
 
 ### Examples
 
-- [Basic AI Tracing Example](/examples/observability/basic-ai-tracing) - Working implementation
+- [Basic AI Tracing Example](/examples/v0/observability/basic-ai-tracing) - Working implementation
 
 ### Reference Documentation
 
-- [Configuration API](/reference/observability/ai-tracing/configuration) - ObservabilityConfig details
-- [AITracing Classes](/reference/observability/ai-tracing/) - Core classes and methods
-- [Span Interfaces](/reference/observability/ai-tracing/span) - Span types and lifecycle
-- [Type Definitions](/reference/observability/ai-tracing/interfaces) - Complete interface reference
+- [Configuration API](/reference/v0/observability/ai-tracing/configuration) - ObservabilityConfig details
+- [AITracing Classes](/reference/v0/observability/ai-tracing/) - Core classes and methods
+- [Span Interfaces](/reference/v0/observability/ai-tracing/span) - Span types and lifecycle
+- [Type Definitions](/reference/v0/observability/ai-tracing/interfaces) - Complete interface reference
 
 ### Exporters
 
-- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
-- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
-- [Arize](/reference/observability/ai-tracing/exporters/arize) - Arize Phoenix and Arize AX integration
-- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
-- [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
+- [DefaultExporter](/reference/v0/observability/ai-tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/reference/v0/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
+- [ConsoleExporter](/reference/v0/observability/ai-tracing/exporters/console-exporter) - Debug output
+- [Arize](/reference/v0/observability/ai-tracing/exporters/arize) - Arize Phoenix and Arize AX integration
+- [Braintrust](/reference/v0/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/v0/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [OpenTelemetry](/reference/v0/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Processors
 
-- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - Data redaction
+- [Sensitive Data Filter](/docs/v0/observability/ai-tracing/processors/sensitive-data-filter) - Data redaction

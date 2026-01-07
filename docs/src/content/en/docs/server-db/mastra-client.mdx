@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Mastra Client SDK
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/server-db/mastra-server) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v0/server-db/mastra-server) from your client environment.
 
 ## Prerequisites
 
@@ -73,13 +73,13 @@ export const mastraClient = new MastraClient({
 
 The Mastra Client SDK exposes all resources served by the Mastra Server
 
-- **[Agents](/reference/client-js/agents)**: Generate responses and stream conversations.
-- **[Memory](/reference/client-js/memory)**: Manage conversation threads and message history.
-- **[Tools](/reference/client-js/tools)**: Executed and managed tools.
-- **[Workflows](/reference/client-js/workflows)**: Trigger workflows and track their execution.
-- **[Vectors](/reference/client-js/vectors)**: Use vector embeddings for semantic search.
-- **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
-- **[Telemetry](/reference/client-js/telemetry)**: Monitor app performance and trace activity.
+- **[Agents](/reference/v0/client-js/agents)**: Generate responses and stream conversations.
+- **[Memory](/reference/v0/client-js/memory)**: Manage conversation threads and message history.
+- **[Tools](/reference/v0/client-js/tools)**: Executed and managed tools.
+- **[Workflows](/reference/v0/client-js/workflows)**: Trigger workflows and track their execution.
+- **[Vectors](/reference/v0/client-js/vectors)**: Use vector embeddings for semantic search.
+- **[Logs](/reference/v0/client-js/logs)**: View logs and debug system behavior.
+- **[Telemetry](/reference/v0/client-js/telemetry)**: Monitor app performance and trace activity.
 
 ## Generating responses
 
@@ -108,7 +108,7 @@ const testAgent = async () => {
 };
 ```
 
-> See [.generate()](/reference/client-js/agents#generate-response) for more information.
+> See [.generate()](/reference/v0/client-js/agents#generate-response) for more information.
 
 ## Streaming responses
 
@@ -141,7 +141,7 @@ const testAgent = async () => {
 };
 ```
 
-> See [.stream()](/reference/client-js/agents#stream-response) for more information.
+> See [.stream()](/reference/v0/client-js/agents#stream-response) for more information.
 
 ## Configuration options
 
@@ -161,7 +161,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [MastraClient](/reference/client-js/mastra-client) for more configuration options.
+> See [MastraClient](/reference/v0/client-js/mastra-client) for more configuration options.
 
 ## Adding request cancelling
 
@@ -270,7 +270,7 @@ export async function action() {
 
 ## Best practices
 
-1. **Error Handling**: Implement proper [error handling](/reference/client-js/error-handling) for development scenarios.
+1. **Error Handling**: Implement proper [error handling](/reference/v0/client-js/error-handling) for development scenarios.
 2. **Environment Variables**: Use environment variables for configuration.
-3. **Debugging**: Enable detailed [logging](/reference/client-js/logs) when needed.
-4. **Performance**: Monitor application performance, [telemetry](/reference/client-js/telemetry) and traces.
+3. **Debugging**: Enable detailed [logging](/reference/v0/client-js/logs) when needed.
+4. **Performance**: Monitor application performance, [telemetry](/reference/v0/client-js/telemetry) and traces.

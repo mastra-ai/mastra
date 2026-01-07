@@ -142,7 +142,7 @@ Browse the directory of available models using the navigation on the left, or ex
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/v0/getting-started/studio) UI.
 
 :::info
 
@@ -174,7 +174,7 @@ const reasoningAgent = new Agent({
 ```
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [runtime context](/docs/v0/server-db/runtime-context), variables, or any other logic.
 
 ```typescript showLineNumbers
 const agent = new Agent({
@@ -294,4 +294,4 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 ```
-You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/scorers/overview).
+You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/v0/scorers/overview).

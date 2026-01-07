@@ -69,7 +69,7 @@ Results include both the text content and a similarity score:
 ];
 ```
 
-For an example of how to use the basic retrieval method, see the [Retrieve Results](/examples/rag/query/retrieve-results) example.
+For an example of how to use the basic retrieval method, see the [Retrieve Results](/examples/v0/rag/query/retrieve-results) example.
 
 ## Advanced Retrieval options
 
@@ -77,7 +77,7 @@ For an example of how to use the basic retrieval method, see the [Retrieve Resul
 
 Filter results based on metadata fields to narrow down the search space. This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
 
-For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/rag/metadata-filters).
+For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/v0/rag/metadata-filters).
 
 Basic filtering examples:
 
@@ -145,7 +145,7 @@ Common use cases for metadata filtering:
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
 
-For an example of how to use metadata filtering, see the [Hybrid Vector Search](/examples/rag/query/hybrid-vector-search) example.
+For an example of how to use metadata filtering, see the [Hybrid Vector Search](/examples/v0/rag/query/hybrid-vector-search) example.
 
 ### Vector Query Tool
 
@@ -260,7 +260,7 @@ await pineconeQueryTool.execute({
 });
 ```
 
-For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
+For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/v0/tools/vector-query-tool).
 
 ### Vector Store Prompts
 
@@ -531,7 +531,7 @@ const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
-For more details about re-ranking, see the [rerank()](/reference/rag/rerankWithScorer) method.
+For more details about re-ranking, see the [rerank()](/reference/v0/rag/rerankWithScorer) method.
 
 For an example of how to use the re-ranking method, see the Re-ranking Results example in the examples section.
 
@@ -556,6 +556,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-For more details about graph-based retrieval, see the [GraphRAG](/reference/rag/graph-rag) class and the [createGraphQueryTool()](/reference/tools/graph-rag-tool) function.
+For more details about graph-based retrieval, see the [GraphRAG](/reference/v0/rag/graph-rag) class and the [createGraphQueryTool()](/reference/v0/tools/graph-rag-tool) function.
 
-For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](/examples/rag/usage/graph-rag) example.
+For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](/examples/v0/rag/usage/graph-rag) example.

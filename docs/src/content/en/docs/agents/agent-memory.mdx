@@ -26,7 +26,7 @@ npm install @mastra/memory@latest @mastra/libsql@latest
 
 ## Storage providers
 
-Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/server-db/storage) documentation.
+Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v0/server-db/storage) documentation.
 
 ## Configuring memory
 
@@ -51,7 +51,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See the [Memory Class](/reference/memory/memory-class) docs for a full list of configuration options.
+See the [Memory Class](/reference/v0/memory/memory-class) docs for a full list of configuration options.
 
 :::
 
@@ -75,7 +75,7 @@ export const mastra = new Mastra({
 
 :::note
 
-See the [LibSQL Storage](/reference/storage/libsql) docs for a full list of configuration options.
+See the [LibSQL Storage](/reference/v0/storage/libsql) docs for a full list of configuration options.
 
 :::
 
@@ -135,7 +135,7 @@ To learn more about memory see the [Memory](../memory/overview) documentation.
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RuntimeContext](/docs/v0/server-db/runtime-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
@@ -162,7 +162,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See [Runtime Context](/docs/server-db/runtime-context) docs for more information.
+See [Runtime Context](/docs/v0/server-db/runtime-context) docs for more information.
 
 :::
 
@@ -171,4 +171,4 @@ See [Runtime Context](/docs/server-db/runtime-context) docs for more information
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
 - [Threads and Resources](../memory/threads-and-resources)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Runtime Context](/docs/v0/server-db/runtime-context)

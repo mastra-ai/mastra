@@ -13,7 +13,7 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 The `create mastra` CLI command is the quickest way to start a new Mastra project. It walks you through setup and creates example agents, workflows, and tools for you to learn from or adapt.
 
-For more control over setup, or to add Mastra to an existing project, see the [manual installation guide](#install-manually). You can also use [`mastra init`](/reference/cli/mastra#mastra-init) for existing projects.
+For more control over setup, or to add Mastra to an existing project, see the [manual installation guide](#install-manually). You can also use [`mastra init`](/reference/v0/cli/mastra#mastra-init) for existing projects.
 
 :::warning[Use v1 Beta]
 
@@ -25,7 +25,7 @@ It includes the latest features, improvements, and bug fixes. A stable version o
 
 ## Before you start
 
-- You'll need an API key from a [model provider](/models) to complete setup. We suggest starting with [OpenAI](https://platform.openai.com/api-keys), but if you need a provider that doesn't require a credit card, Google's [Gemini](https://aistudio.google.com/app/api-keys) is also an option.
+- You'll need an API key from a [model provider](/models/v0) to complete setup. We suggest starting with [OpenAI](https://platform.openai.com/api-keys), but if you need a provider that doesn't require a credit card, Google's [Gemini](https://aistudio.google.com/app/api-keys) is also an option.
 - [Install](https://nodejs.org/en/download) Node.js 20 or later.
 
 ## Install with `create mastra`
@@ -67,7 +67,7 @@ bun create mastra@latest
 
 :::note
 
-You can use flags with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](/docs/getting-started/templates). Read the [CLI reference](/reference/cli/create-mastra) for all options.
+You can use flags with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](/docs/v0/getting-started/templates). Read the [CLI reference](/reference/v0/cli/create-mastra) for all options.
 
 :::
 
@@ -85,13 +85,13 @@ If you encounter an error, your API key may not be configured correctly. Double-
 
 :::
 
-[Studio](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
+[Studio](/docs/v0/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
 
 ### Next steps
 
-- Read more about [Mastra's features](/docs#why-mastra).
-- Integrate Mastra with your frontend framework: [Next.js](/docs/frameworks/web-frameworks/next-js), [React](/docs/frameworks/web-frameworks/vite-react), or [Astro](/docs/frameworks/web-frameworks/astro).
-- Build an agent from scratch following one of our [guides](/guides).
+- Read more about [Mastra's features](/docs/v0#why-mastra).
+- Integrate Mastra with your frontend framework: [Next.js](/docs/v0/frameworks/web-frameworks/next-js), [React](/docs/v0/frameworks/web-frameworks/vite-react), or [Astro](/docs/v0/frameworks/web-frameworks/astro).
+- Build an agent from scratch following one of our [guides](/guides/v0).
 - Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)!
 
 ## Install manually
@@ -222,7 +222,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
 
 :::note
 
-This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
+This guide uses Google Gemini, but you can use any supported [model provider](/models/v0), including OpenAI, Anthropic, and more.
 
 :::
 
@@ -261,7 +261,7 @@ export const weatherTool = createTool({
 
 :::info
 
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/using-tools).
+We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v0/agents/using-tools).
 
 :::
 
@@ -325,7 +325,7 @@ export const mastra = new Mastra({
 
 <StepItem>
 
-You can now launch [Studio](/docs/getting-started/studio) and test your agent.
+You can now launch [Studio](/docs/v0/getting-started/studio) and test your agent.
 
 <Tabs>
 <TabItem value="npm" label="npm">

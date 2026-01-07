@@ -17,7 +17,7 @@ You can run multiple steps at the same time if they don't depend on each other. 
 myWorkflow.step(fetchUserData).step(fetchOrderData);
 ```
 
-See the [Parallel Steps](/examples/workflows_legacy/parallel-steps) example for more details.
+See the [Parallel Steps](/examples/v0/workflows_legacy/parallel-steps) example for more details.
 
 ## Sequential Execution
 
@@ -27,7 +27,7 @@ Sometimes you need to run steps in strict order to ensure outputs from one step 
 myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
-See the [Sequential Steps](/examples/workflows_legacy/sequential-steps) example for more details.
+See the [Sequential Steps](/examples/v0/workflows_legacy/sequential-steps) example for more details.
 
 ## Branching and Merging Paths
 
@@ -51,7 +51,7 @@ In this example:
 - Separately, stepA also triggers stepC, which in turn leads to stepE.
 - Separately, stepF is triggered when both stepD and stepE are completed.
 
-See the [Branching Paths](/examples/workflows_legacy/branching-paths) example for more details.
+See the [Branching Paths](/examples/v0/workflows_legacy/branching-paths) example for more details.
 
 ## Merging Multiple Branches
 
