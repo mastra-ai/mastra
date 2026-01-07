@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { ChunkType, ChunkFrom } from '@mastra/core/stream';
@@ -154,7 +155,7 @@ describe('toUIMessage', () => {
           },
           step2: {
             status: 'failed',
-            error: 'error-message',
+            error: new Error('error-message'),
             payload: {},
             startedAt: Date.now(),
             endedAt: Date.now(),
@@ -184,13 +185,13 @@ describe('toUIMessage', () => {
           },
           step2: {
             status: 'failed',
-            error: 'error-message',
+            error: expect.any(Error),
             payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
         },
-        error: 'error-message',
+        error: expect.any(Error),
       });
     });
 
@@ -1602,6 +1603,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-1',
           toolName: 'dangerous-tool',
           args: { action: 'delete', target: 'database' },
+          resumeSchema: z.any(),
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1636,6 +1638,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-2',
           toolName: 'another-tool',
           args: { param: 'value' },
+          resumeSchema: z.any(),
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1673,6 +1676,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-1',
           toolName: 'tool',
           args: {},
+          resumeSchema: z.any(),
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,

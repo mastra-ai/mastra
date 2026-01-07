@@ -7319,7 +7319,7 @@ packages:
 # Observability Overview
 [EN] Source: https://mastra.ai/en/docs/observability/overview
 
-Mastra provides comprehensive observability features designed specifically for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with specialized tools that understand AI-specific patterns.
+Mastra provides observability features for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with tools that understand AI-specific patterns.
 
 ## Key Features
 
@@ -7330,7 +7330,7 @@ Specialized tracing for AI operations that captures:
 - **Model interactions**: Token usage, latency, prompts, and completions
 - **Agent execution**: Decision paths, tool calls, and memory operations
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
-- **Automatic instrumentation**: Zero-configuration tracing with decorators
+- **Automatic instrumentation**: Tracing with decorators
 
 ## Quick Start
 
@@ -7339,8 +7339,13 @@ Configure Observability in your Mastra instance:
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
-import { LibSqlStorage } from "@mastra/libsql";
-import { Observability } from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 
 export const mastra = new Mastra({
   logger: new PinoLogger(),
@@ -7348,8 +7353,19 @@ export const mastra = new Mastra({
     id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
-  observability: new Observability({ // Enables Tracing
-    default: { enabled: true },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
+    },
   }),
 });
 ```
@@ -7951,17 +7967,33 @@ export const mastra = new Mastra({
 });
 ```
 
-### Automatic Configuration
+### Recommended Configuration
 
-When using the default observability configuration, CloudExporter is automatically included if the access token is set:
+Include CloudExporter in your observability configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes CloudExporter if token exists
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
   }),
 });
 ```
@@ -8071,21 +8103,38 @@ export const mastra = new Mastra({
 });
 ```
 
-### Automatic Configuration
+### Recommended Configuration
 
-When using the default observability configuration, DefaultExporter is automatically included:
+Include DefaultExporter in your observability configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 import { LibSQLStore } from "@mastra/libsql";
+
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes DefaultExporter
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
   }),
 });
 ```
@@ -9019,37 +9068,10 @@ Traces are created by:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    default: { enabled: true }, // Enables DefaultExporter and CloudExporter
-  }),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: "file:./mastra.db", // Storage is required for tracing
-  }),
-});
-```
-
-When enabled, the default configuration automatically includes:
-
-- **Service Name**: `"mastra"`
-- **Sampling**: `"always"`- Sample (100% of traces)
-- **Exporters**:
-  - `DefaultExporter` - Persists traces to your configured storage
-  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
-- **Span Output Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
-
-### Expanded Basic Config
-
-This default configuration is a minimal helper that equates to this more verbose configuration:
-
-```ts title="src/mastra/index.ts"
 import {
   Observability,
-  CloudExporter,
   DefaultExporter,
+  CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
 
@@ -9058,9 +9080,13 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: "mastra",
-        sampling: { type: "always" },
-        spanOutputProcessors: [new SensitiveDataFilter()],
-        exporters: [new CloudExporter(), new DefaultExporter()],
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
       },
     },
   }),
@@ -9071,13 +9097,22 @@ export const mastra = new Mastra({
 });
 ```
 
+This configuration includes:
+
+- **Service Name**: `"mastra"` - identifies your service in traces
+- **Sampling**: `"always"` by default (100% of traces)
+- **Exporters**:
+  - `DefaultExporter` - Persists traces to your configured storage for Mastra Studio
+  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+- **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
+
 ## Exporters
 
-Exporters determine where your trace data is sent and how it's stored. Choosing the right exporters allows you to integrate with your existing observability stack, comply with data residency requirements, and optimize for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
+Exporters determine where your trace data is sent and how it's stored. They integrate with your existing observability stack, support data residency requirements, and can be optimized for cost and performance. You can use multiple exporters simultaneously to send the same trace data to different destinations — for example, storing detailed traces locally for debugging while sending sampled data to a cloud provider for production monitoring.
 
 ### Internal Exporters
 
-Mastra provides two built-in exporters that work out of the box:
+Mastra provides two built-in exporters:
 
 - **[Default](/docs/v1/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
 - **[Cloud](/docs/v1/observability/tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
@@ -9283,46 +9318,34 @@ export const mastra = new Mastra({
 
 ### Common Configuration Patterns & Troubleshooting
 
-#### Default & Custom Configs
-
-Having both the default config enabled and adding custom configs is an invalid configuration of Observability. Use either the default or custom config, but not both.
-
-```ts title="src/mastra/index.ts"
-export const mastra = new Mastra({
-  observability: new Observability({
-    default: { enabled: true }, // This will always be used!
-    configs: {
-      langfuse: {
-        serviceName: "my-service",
-        exporters: [langfuseExporter], // This won't be reached
-      },
-    },
-  }),
-});
-```
-
 #### Maintaining Studio and Cloud Access
 
-When creating a custom config with external exporters, you might lose access to Studio and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
+When adding external exporters, include `DefaultExporter` and `CloudExporter` to maintain access to Studio and Mastra Cloud:
 
 ```ts title="src/mastra/index.ts"
-import { DefaultExporter, CloudExporter } from "@mastra/observability";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 import { ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: false }, // Disable default to use custom
     configs: {
       production: {
         serviceName: "my-service",
         exporters: [
           new ArizeExporter({
-            // External exporter
             endpoint: process.env.PHOENIX_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
           new DefaultExporter(), // Keep Studio access
           new CloudExporter(), // Keep Cloud access
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
         ],
       },
     },
@@ -9913,16 +9936,34 @@ packages:
 # Sensitive Data Filter
 [EN] Source: https://mastra.ai/en/docs/observability/tracing/processors/sensitive-data-filter
 
-The Sensitive Data Filter is a span processor that automatically redacts sensitive information from your traces before they're exported. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
+The Sensitive Data Filter is a span processor that redacts sensitive information from your traces during the processing pipeline before export. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
 
 ## Default Configuration
 
-By default, the Sensitive Data Filter is automatically enabled when you use the standard Mastra configuration:
+The Sensitive Data Filter is included in the recommended observability configuration:
 
 ```ts title="src/mastra/index.ts"
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes SensitiveDataFilter
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive fields before export
+        ],
+      },
+    },
   }),
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -9931,7 +9972,7 @@ export const mastra = new Mastra({
 });
 ```
 
-With the default configuration, the filter automatically redacts these common sensitive field names:
+With the default configuration, the filter redacts these common sensitive field names:
 
 - `password`
 - `token`
@@ -31498,20 +31539,36 @@ export const mastra = new Mastra({
 });
 ```
 
-**After (v1 with observability - quick start):**
+**After (v1 with observability):**
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { Observability } from '@mastra/observability';
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true },
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
+    },
   }),
 });
 ```
 
-This minimal configuration automatically includes the `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter` processor. See the [observability tracing documentation](/docs/v1/observability/tracing/overview) for full configuration options.
+This configuration includes `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter` processor. See the [observability tracing documentation](/docs/v1/observability/tracing/overview) for full configuration options.
 
 **After (v1 with custom configuration):**
 
@@ -31551,14 +31608,14 @@ export const mastra = new Mastra({
 Key changes:
 1. Install `@mastra/observability` package
 2. Replace `telemetry:` with `observability: new Observability()`
-3. Use `default: { enabled: true }` for quick setup, or `configs:` for custom configuration
+3. Use explicit `configs:` with `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter`
 4. Export types change from string literals (`'otlp'`) to exporter class instances (`new OtelExporter()`)
 
 See the [exporters documentation](/docs/v1/observability/tracing/overview#exporters) for all available exporters.
 
 ### From AI Tracing
 
-If you already upgraded to AI tracing (the intermediate system), you only need to wrap your configuration and install the new package.
+If you already upgraded to AI tracing (the intermediate system), you need to install the new package and use the explicit configuration.
 
 **Before (AI tracing):**
 
@@ -31576,19 +31633,35 @@ export const mastra = new Mastra({
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { Observability } from '@mastra/observability';
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true },
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
   }),
 });
 ```
 
 Key changes:
 1. Install `@mastra/observability` package
-2. Import `Observability` from `@mastra/observability`
-3. Wrap configuration with `new Observability()`
+2. Import `Observability`, exporters, and processors from `@mastra/observability`
+3. Use explicit `configs` with `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter`
 
 ## Changed
 
@@ -31609,18 +31682,30 @@ npm install @mastra/observability@beta
 
 ### Registry configuration
 
-The observability registry is now configured using an `Observability` class instance instead of a plain object.
+The observability registry is now configured using an `Observability` class instance with explicit configs instead of a plain object.
 
-To migrate, wrap your configuration object with `new Observability()`.
+To migrate, use `new Observability()` with explicit exporters and processors.
 
 ```diff
-+ import { Observability } from '@mastra/observability';
++ import {
++   Observability,
++   DefaultExporter,
++   CloudExporter,
++   SensitiveDataFilter,
++ } from '@mastra/observability';
 
   export const mastra = new Mastra({
 -   observability: {
-+   observability: new Observability({
-      default: { enabled: true },
+-     default: { enabled: true },
 -   },
++   observability: new Observability({
++     configs: {
++       default: {
++         serviceName: 'mastra',
++         exporters: [new DefaultExporter(), new CloudExporter()],
++         spanOutputProcessors: [new SensitiveDataFilter()],
++       },
++     },
 +   }),
   });
 ```
@@ -31701,11 +31786,22 @@ Simply remove the `instrumentation.mjs` file and configure observability in your
 
 ```typescript
 // src/mastra/index.ts
-import { Observability } from '@mastra/observability';
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true },
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
   }),
 });
 ```
@@ -33519,7 +33615,7 @@ ANTHROPIC_API_KEY=ant-...
 | `anthropic/claude-opus-4-20250514` |
 | `anthropic/claude-opus-4-5` |
 | `anthropic/claude-opus-4-5-20251101` |
-| `anthropic/claude-sonnet-4` |
+| `anthropic/claude-sonnet-4-0` |
 | `anthropic/claude-sonnet-4-20250514` |
 | `anthropic/claude-sonnet-4-5` |
 | `anthropic/claude-sonnet-4-5-20250929` |
@@ -33896,7 +33992,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 66+ AI providers and 1634+ models through Mastra's model router."
+description: "Access 66+ AI providers and 1629+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33909,7 +34005,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1634 models from 66 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1629 models from 66 providers through a single API.
 
 ## Features
 
@@ -37374,7 +37470,7 @@ const agent = new Agent({
 
 ---
 title: "Cerebras | Models | Mastra"
-description: "Use Cerebras models with Mastra. 3 models available."
+description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -37385,7 +37481,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 [EN] Source: https://mastra.ai/en/models/providers/cerebras
 
-Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
+Access 4 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
@@ -37458,6 +37554,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 40960,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "cerebras/zai-glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 40000,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -37490,7 +37598,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cerebras/zai-glm-4.6"
+      ? "cerebras/zai-glm-4.7"
       : "cerebras/gpt-oss-120b";
   }
 });
@@ -37511,7 +37619,7 @@ For detailed provider-specific documentation, see the [AI SDK Cerebras provider 
 
 ---
 title: "Chutes | Models | Mastra"
-description: "Use Chutes models with Mastra. 62 models available."
+description: "Use Chutes models with Mastra. 55 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -37521,7 +37629,7 @@ description: "Use Chutes models with Mastra. 62 models available."
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 [EN] Source: https://mastra.ai/en/models/providers/chutes
 
-Access 62 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 55 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -37536,7 +37644,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B"
+  model: "chutes/MiniMaxAI/MiniMax-M2.1-TEE"
 });
 
 // Generate a response
@@ -37559,30 +37667,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.1,
-    "outputCost": 0.39
-  },
-  {
-    "model": "chutes/ArliAI/QwQ-32B-ArliAI-RpR-v1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.03,
-    "outputCost": 0.11
-  },
   {
     "model": "chutes/chutesai/Mistral-Small-3.1-24B-Instruct-2503",
     "imageInput": true,
@@ -37615,7 +37699,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 163840,
+    "maxOutput": 65536,
     "inputCost": 0.4,
     "outputCost": 1.75
   },
@@ -37664,20 +37748,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 163840,
     "maxOutput": 65536,
-    "inputCost": 0.24,
-    "outputCost": 0.84
-  },
-  {
-    "model": "chutes/deepseek-ai/DeepSeek-V3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 163840,
-    "maxOutput": 65536,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.19,
+    "outputCost": 0.87
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3.1-TEE",
@@ -37723,21 +37795,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 16384,
-    "inputCost": 0.27,
-    "outputCost": 0.41
-  },
-  {
-    "model": "chutes/MiniMaxAI/MiniMax-M2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196608,
-    "maxOutput": 196608,
-    "inputCost": 0.26,
-    "outputCost": 1.02
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 0.38
   },
   {
     "model": "chutes/MiniMaxAI/MiniMax-M2.1-TEE",
@@ -37812,26 +37872,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "chutes/NousResearch/Hermes-4-405B-FP8",
+    "model": "chutes/NousResearch/Hermes-4-405B-FP8-TEE",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "chutes/NousResearch/Hermes-4-405B-FP8-TEE",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 40960,
-    "maxOutput": 40960,
+    "maxOutput": 65536,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -37854,8 +37902,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 40960,
-    "maxOutput": 40960,
+    "contextWindow": 524288,
+    "maxOutput": 524288,
     "inputCost": 0.1,
     "outputCost": 0.39
   },
@@ -37881,7 +37929,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 131072,
     "maxOutput": 65536,
     "inputCost": 0.04,
-    "outputCost": 0.25
+    "outputCost": 0.18
   },
   {
     "model": "chutes/openai/gpt-oss-20b",
@@ -37896,7 +37944,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.1
   },
   {
-    "model": "chutes/OpenGVLab/InternVL3-78B",
+    "model": "chutes/OpenGVLab/InternVL3-78B-TEE",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -37944,20 +37992,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.22
   },
   {
-    "model": "chutes/Qwen/Qwen2.5-VL-72B-Instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.07,
-    "outputCost": 0.26
-  },
-  {
     "model": "chutes/Qwen/Qwen2.5-VL-72B-Instruct-TEE",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
@@ -37990,18 +38026,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 40960,
     "inputCost": 0.3,
     "outputCost": 1.2
-  },
-  {
-    "model": "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.08,
-    "outputCost": 0.55
   },
   {
     "model": "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507-TEE",
@@ -38100,26 +38124,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "chutes/Qwen/Qwen3-VL-235B-A22B-Thinking",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
     "model": "chutes/Qwen/Qwen3Guard-Gen-0.6B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 40960,
-    "maxOutput": 40960,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
     "inputCost": 0.01,
     "outputCost": 0.01
   },
@@ -38156,8 +38168,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.25,
+    "outputCost": 0.85
+  },
+  {
+    "model": "chutes/tngtech/DeepSeek-TNG-R1T2-Chimera-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 0.85
   },
   {
     "model": "chutes/tngtech/TNG-R1T-Chimera-TEE",
@@ -38168,8 +38192,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.25,
+    "outputCost": 0.85
   },
   {
     "model": "chutes/unsloth/gemma-3-12b-it",
@@ -38238,8 +38262,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 40960,
-    "maxOutput": 40960,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
     "inputCost": 0.17,
     "outputCost": 0.65
   },
@@ -38276,8 +38300,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 202752,
     "maxOutput": 65536,
-    "inputCost": 0.4,
-    "outputCost": 1.75
+    "inputCost": 0.35,
+    "outputCost": 1.5
   },
   {
     "model": "chutes/zai-org/GLM-4.6V",
@@ -38316,7 +38340,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
-    id: "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
+    id: "chutes/MiniMaxAI/MiniMax-M2.1-TEE",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -38335,7 +38359,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "chutes/zai-org/GLM-4.7-TEE"
-      : "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B";
+      : "chutes/MiniMaxAI/MiniMax-M2.1-TEE";
   }
 });
 ```
@@ -44161,12 +44185,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
-      description="3 models"
+      description="4 models"
       href="/models/v1/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
       title="Chutes"
-      description="62 models"
+      description="55 models"
       href="/models/v1/providers/chutes"
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
@@ -44331,7 +44355,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/requesty.svg"
     />    <CardGridItem
       title="Scaleway"
-      description="13 models"
+      description="14 models"
       href="/models/v1/providers/scaleway"
       logo="https://models.dev/logos/scaleway.svg"
     />    <CardGridItem
@@ -52032,7 +52056,7 @@ const agent = new Agent({
 
 ---
 title: "Scaleway | Models | Mastra"
-description: "Use Scaleway models with Mastra. 13 models available."
+description: "Use Scaleway models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -52042,7 +52066,7 @@ description: "Use Scaleway models with Mastra. 13 models available."
 # <img src="https://models.dev/logos/scaleway.svg" alt="Scaleway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Scaleway
 [EN] Source: https://mastra.ai/en/models/providers/scaleway
 
-Access 13 Scaleway models through Mastra's model router. Authentication is handled automatically using the `SCALEWAY_API_KEY` environment variable.
+Access 14 Scaleway models through Mastra's model router. Authentication is handled automatically using the `SCALEWAY_API_KEY` environment variable.
 
 Learn more in the [Scaleway documentation](https://www.scaleway.com/en/docs/generative-apis/).
 
@@ -52103,6 +52127,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 0.9,
     "outputCost": 0.9
+  },
+  {
+    "model": "scaleway/devstral-2-123b-instruct-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 8192,
+    "inputCost": 0.4,
+    "outputCost": 2
   },
   {
     "model": "scaleway/gemma-3-27b-it",
@@ -55439,11 +55475,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.85,
-    "outputCost": 2.75
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 0.55,
+    "outputCost": 2.65
   }
 ]}
 />
@@ -63178,17 +63214,21 @@ const details = await agent.details();
 Generate a response from the agent:
 
 ```typescript
-const response = await agent.generate({
-  messages: [
+const response = await agent.generate(
+  [
     {
       role: "user",
       content: "Hello, how are you?",
     },
   ],
-  threadId: "thread-1", // Optional: Thread ID for conversation context
-  resourceId: "resource-1", // Optional: Resource ID
-  output: {}, // Optional: Output configuration
-});
+  {
+    memory: {
+      thread: "thread-abc", // Optional: Thread ID for conversation context
+      resource: "user-123", // Optional: Resource ID
+    },
+    structuredOutput: {}    // Optional: Structured Output configuration
+  }
+);
 ```
 
 You can also use the simplified string format:
@@ -63205,14 +63245,7 @@ const response = await agent.generate("Hello, how are you?", {
 Stream responses from the agent for real-time interactions:
 
 ```typescript
-const response = await agent.stream({
-  messages: [
-    {
-      role: "user",
-      content: "Tell me a story",
-    },
-  ],
-});
+const response = await agent.stream("Tell me a story");
 
 // Process data stream with the processDataStream util
 response.processDataStream({
@@ -63381,14 +63414,16 @@ const colorChangeTool = createTool({
 });
 
 // Use with generate
-const response = await agent.generate({
-  messages: "Change the background to blue",
+const response = await agent.generate("Change the background to blue", {
   clientTools: { colorChangeTool },
 });
 
 // Use with stream
-const response = await agent.stream({
-  messages: "Change the background to green",
+const response = await agent.stream("Tell me a story", {
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
   clientTools: { colorChangeTool },
 });
 
@@ -63398,7 +63433,11 @@ response.processDataStream({
       console.log(chunk.payload.text);
     } else if (chunk.type === "tool-call") {
       console.log(
-        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`,
+        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(
+          chunk.payload.args,
+          null,
+          2
+        )}`
       );
     }
   },
