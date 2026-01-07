@@ -1839,3 +1839,531 @@ describe('Agent - network - completion validation', () => {
     expect(iterationCallbacks[2].iteration).toBe(2);
   });
 });
+
+describe('Agent - network - finalResult saving', () => {
+  it('should save finalResult to memory when generateFinalResult provides one (custom scorers)', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that always passes
+    const mockScorer = {
+      id: 'pass-scorer',
+      name: 'Pass Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task complete' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Task handled directly',
+    });
+
+    const finalResultResponse = JSON.stringify({
+      finalResult: 'GENERATED_FINAL_RESULT: This is the synthesized response.',
+    });
+
+    let doGenerateCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        doGenerateCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        // generateFinalResult uses streaming
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: finalResultResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'finalresult-save-test-network',
+      name: 'FinalResult Save Test Network',
+      instructions: 'Test network for finalResult saving',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'finalresult-save-thread',
+        resource: 'finalresult-save-resource',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Find the finalResult message (not feedback, not network metadata)
+    const finalResultMessages = savedMessages.filter(msg => {
+      const text = msg.content?.parts?.[0]?.text || '';
+      return text.includes('GENERATED_FINAL_RESULT');
+    });
+
+    expect(finalResultMessages.length).toBe(1);
+    expect(finalResultMessages[0].content.parts[0].text).toContain('synthesized response');
+  });
+
+  it('should NOT save finalResult to memory when generateFinalResult returns undefined (custom scorers)', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    const mockScorer = {
+      id: 'pass-scorer',
+      name: 'Pass Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task complete' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'PRIMITIVE_RESULT: Direct response',
+    });
+
+    // generateFinalResult returns empty object - no finalResult
+    const noFinalResultResponse = JSON.stringify({});
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: noFinalResultResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'no-finalresult-test-network',
+      name: 'No FinalResult Test Network',
+      instructions: 'Test network when finalResult is omitted',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'no-finalresult-thread',
+        resource: 'no-finalresult-resource',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Should NOT have any separate finalResult message saved
+    // Only expect: user message, feedback message, possibly network metadata
+    const finalResultMessages = savedMessages.filter(msg => {
+      const text = msg.content?.parts?.[0]?.text || '';
+      // Exclude feedback, user input, and network metadata
+      return (
+        !text.includes('Completion Check Results') &&
+        msg.role === 'assistant' &&
+        !text.includes('isNetwork') &&
+        text.length > 0
+      );
+    });
+
+    // No separate finalResult message should be saved when LLM omits it
+    expect(finalResultMessages.length).toBe(0);
+  });
+
+  it('should save finalResult to memory when default completion check provides one', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Handling directly',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      completionReason: 'Task is done',
+      finalResult: 'DEFAULT_CHECK_FINAL_RESULT: Synthesized by default check',
+    });
+
+    let streamCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        streamCount++;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: completionResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'default-check-save-test',
+      name: 'Default Check Save Test',
+      instructions: 'Test default completion check finalResult saving',
+      model: mockModel,
+      memory,
+    });
+
+    // No custom scorers - uses default completion check
+    const anStream = await networkAgent.network('Do something', {
+      memory: {
+        thread: 'default-check-save-thread',
+        resource: 'default-check-save-resource',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    const finalResultMessages = savedMessages.filter(msg => {
+      const text = msg.content?.parts?.[0]?.text || '';
+      return text.includes('DEFAULT_CHECK_FINAL_RESULT');
+    });
+
+    expect(finalResultMessages.length).toBe(1);
+    expect(finalResultMessages[0].content.parts[0].text).toContain('Synthesized by default check');
+  });
+
+  it('should NOT save finalResult to memory when default completion check omits it', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'PRIMITIVE_RESULT_KEPT',
+    });
+
+    // Default check returns isComplete but no finalResult
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      completionReason: 'Primitive result is sufficient',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: completionResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'default-no-save-test',
+      name: 'Default No Save Test',
+      instructions: 'Test when default check omits finalResult',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      memory: {
+        thread: 'default-no-save-thread',
+        resource: 'default-no-save-resource',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Should NOT have any standalone finalResult message
+    const standaloneMessages = savedMessages.filter(msg => {
+      const text = msg.content?.parts?.[0]?.text || '';
+      return (
+        msg.role === 'assistant' &&
+        !text.includes('Completion Check Results') &&
+        !text.includes('isNetwork') &&
+        text.length > 0
+      );
+    });
+
+    expect(standaloneMessages.length).toBe(0);
+  });
+});
+
+describe('Agent - network - finalResult in finish event', () => {
+  it('should include generatedFinalResult in finish event when provided', async () => {
+    const memory = new MockMemory();
+
+    const mockScorer = {
+      id: 'pass-scorer',
+      name: 'Pass Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Complete' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'OLD_PRIMITIVE_RESULT',
+    });
+
+    const finalResultResponse = JSON.stringify({
+      finalResult: 'NEW_GENERATED_FINAL_RESULT',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: finalResultResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'finish-event-test',
+      name: 'Finish Event Test',
+      instructions: 'Test finish event payload',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'finish-event-thread',
+        resource: 'finish-event-resource',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const finishEvent = chunks.find(c => c.type === 'network-execution-event-finish');
+    expect(finishEvent).toBeDefined();
+    expect(finishEvent.payload.result).toBe('NEW_GENERATED_FINAL_RESULT');
+    expect(finishEvent.payload.result).not.toContain('OLD_PRIMITIVE_RESULT');
+  });
+
+  it('should keep primitive result in finish event when finalResult is omitted', async () => {
+    const memory = new MockMemory();
+
+    const mockScorer = {
+      id: 'pass-scorer',
+      name: 'Pass Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Complete' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'PRESERVED_PRIMITIVE_RESULT',
+    });
+
+    // generateFinalResult returns empty - no finalResult
+    const noFinalResultResponse = JSON.stringify({});
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: noFinalResultResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'preserve-result-test',
+      name: 'Preserve Result Test',
+      instructions: 'Test primitive result preservation',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'preserve-result-thread',
+        resource: 'preserve-result-resource',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const finishEvent = chunks.find(c => c.type === 'network-execution-event-finish');
+    expect(finishEvent).toBeDefined();
+    // When finalResult is omitted, primitive result should be preserved
+    expect(finishEvent.payload.result).toContain('PRESERVED_PRIMITIVE_RESULT');
+  });
+});
+
+describe('Agent - network - finalResult streaming', () => {
+  it('should stream finalResult via text-delta events when custom scorers pass', async () => {
+    const memory = new MockMemory();
+
+    const mockScorer = {
+      id: 'pass-scorer',
+      name: 'Pass Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Complete' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Handled',
+    });
+
+    const finalResultResponse = JSON.stringify({
+      finalResult: 'STREAMED_FINAL_RESULT_CONTENT',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: finalResultResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'stream-test',
+      name: 'Stream Test',
+      instructions: 'Test streaming',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'stream-test-thread',
+        resource: 'stream-test-resource',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Should have text-start and text-delta events from generateFinalResult
+    const textStartEvents = chunks.filter(c => c.type === 'routing-agent-text-start');
+    const textDeltaEvents = chunks.filter(c => c.type === 'routing-agent-text-delta');
+
+    expect(textStartEvents.length).toBeGreaterThan(0);
+    expect(textDeltaEvents.length).toBeGreaterThan(0);
+
+    const streamedText = textDeltaEvents.map(e => e.payload?.text || '').join('');
+    expect(streamedText).toContain('STREAMED_FINAL_RESULT_CONTENT');
+  });
+});
