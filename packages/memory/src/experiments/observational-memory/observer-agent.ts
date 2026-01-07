@@ -150,6 +150,29 @@ ACTIONABLE INSIGHTS:
 - User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
 
 /**
+ * Shared pattern instructions for Observer and Reflector agents.
+ * This is exported so both agents use consistent pattern formatting.
+ */
+export const PATTERN_INSTRUCTIONS = `When you notice recurring themes, group them by pattern name.
+Each pattern is a named section containing items with dates.
+Common patterns are events, plans, locations, and any other patterns you recognize.
+
+IMPORTANT: 
+- Use the ORIGINAL date when each item was mentioned or occurred, NOT the current processing date.
+- Be TERSE. Pattern items are for quick counting/reference, not full descriptions.
+- Caveman-style: "visited downtown art gallery" not "User visited the art gallery downtown"
+- Drop articles (the, a, an) and unnecessary words
+- Don't start each line with "User " - patterns are implicitly about the user
+- Patterns are ALWAYS about the user, never about assistant limitations or behaviors
+- BAD: <assistant_limitations> - never create patterns about the assistant
+- GOOD: <trips>, <purchases>, <hobbies>, <events> - patterns about user's life
+
+<pattern_name>
+* terse item description (original date)
+* another item (original date)
+</pattern_name>`;
+
+/**
  * The output format instructions for the Observer.
  * This is exported so the Reflector can use the same format.
  */
@@ -189,7 +212,13 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>`;
+</suggested-response>
+
+<patterns>
+${PATTERN_INSTRUCTIONS}
+</patterns>
+
+Only include patterns when there are 2+ related items to group.`;
 
 /**
  * The guidelines for the Observer.
@@ -262,6 +291,9 @@ export interface ObserverResult {
 
   /** Suggested continuation message for the Actor */
   suggestedContinuation?: string;
+
+  /** Extracted patterns - recurring themes grouped for easier counting/recall */
+  patterns?: ObserverPatterns;
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
@@ -357,12 +389,23 @@ export function parseObserverOutput(output: string): ObserverResult {
     console.warn('[OM Observer] Warning: Observations missing <current-task> section.');
   }
 
+  // Only include patterns if there are any
+  const hasPatterns = Object.keys(parsed.patterns).length > 0;
+
   return {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
+    patterns: hasPatterns ? parsed.patterns : undefined,
     rawOutput: output,
   };
+}
+
+/**
+ * A pattern is a named group of related items (e.g., "trips": ["Hawaii (May 10)", "Tokyo (June 5)"])
+ */
+export interface ObserverPatterns {
+  [patternName: string]: string[];
 }
 
 /**
@@ -372,6 +415,7 @@ interface ParsedMemorySection {
   observations: string;
   currentTask: string;
   suggestedResponse: string;
+  patterns: ObserverPatterns;
 }
 
 /**
@@ -383,6 +427,7 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
     observations: '',
     currentTask: '',
     suggestedResponse: '',
+    patterns: {},
   };
 
   // Extract <observations> content (supports multiple blocks)
@@ -413,6 +458,32 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   const suggestedResponseMatch = content.match(/^[ \t]*<suggested-response>([\s\S]*?)^[ \t]*<\/suggested-response>/im);
   if (suggestedResponseMatch?.[1]) {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
+  }
+
+  // Extract <patterns> content and parse individual pattern groups
+  // Format: <patterns><pattern_name>- item A\n- item B</pattern_name></patterns>
+  const patternsMatch = content.match(/^[ \t]*<patterns>([\s\S]*?)^[ \t]*<\/patterns>/im);
+  if (patternsMatch?.[1]) {
+    const patternsContent = patternsMatch[1];
+    // Find all named pattern tags (any XML tag that's not 'patterns')
+    // E.g., <trips>, <purchases>, <health-events>
+    const patternTagRegex = /<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/gi;
+    let patternMatch;
+    while ((patternMatch = patternTagRegex.exec(patternsContent)) !== null) {
+      const patternName = patternMatch[1];
+      const patternItemsRaw = patternMatch[2];
+      if (!patternName || !patternItemsRaw) continue;
+      // Extract list items (lines starting with - or *)
+      const items = patternItemsRaw
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.startsWith('-') || line.startsWith('*'))
+        .map(line => line.replace(/^[-*]\s*/, '').trim())
+        .filter(Boolean);
+      if (items.length > 0) {
+        result.patterns[patternName] = items;
+      }
+    }
   }
 
   return result;

@@ -2,6 +2,7 @@ import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_OUTPUT_FORMAT,
   OBSERVER_GUIDELINES,
+  PATTERN_INSTRUCTIONS,
 } from './observer-agent';
 
 /**
@@ -104,6 +105,11 @@ Your output MUST use XML tags to structure the response:
 Put all consolidated observations here using the date-grouped format with priority emojis (🔴, 🟡, 🟢).
 Group related observations with indentation.
 </observations>
+
+<patterns>
+Consolidate and update patterns from the input.
+${PATTERN_INSTRUCTIONS}
+</patterns>
 
 <current-task>
 State the current task(s) explicitly:

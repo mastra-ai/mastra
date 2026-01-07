@@ -674,7 +674,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    const { id, observations, tokenCount, lastObservedAt } = input;
+    const { id, observations, tokenCount, lastObservedAt, patterns } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -685,6 +685,18 @@ export class InMemoryMemory extends MemoryStorage {
     record.totalTokensObserved += tokenCount;
     // Reset pending tokens since we've now observed them
     record.pendingMessageTokens = 0;
+
+    // Merge patterns if provided
+    if (patterns && Object.keys(patterns).length > 0) {
+      const existingPatterns = record.patterns ?? {};
+      for (const [patternName, items] of Object.entries(patterns)) {
+        const existingItems = existingPatterns[patternName] ?? [];
+        // Deduplicate by exact match
+        const newItems = items.filter(item => !existingItems.includes(item));
+        existingPatterns[patternName] = [...existingItems, ...newItems];
+      }
+      record.patterns = existingPatterns;
+    }
 
     // Update timestamps (top-level, not in metadata)
     // Note: Message ID tracking removed in favor of cursor-based lastObservedAt

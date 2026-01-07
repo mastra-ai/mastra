@@ -2154,12 +2154,12 @@ describe('Thread Attribution Helpers', () => {
   });
 
   describe('wrapWithThreadTag', () => {
-    it('should wrap observations with thread XML tag', () => {
+    it('should wrap observations with thread XML tag', async () => {
       const observations = '- 🔴 User likes coffee\n- 🟡 User prefers dark roast';
       const threadId = 'thread-123';
 
-      // Access private method via any cast for testing
-      const result = (om as any).wrapWithThreadTag(threadId, observations);
+      // Access private method via any cast for testing (now async)
+      const result = await (om as any).wrapWithThreadTag(threadId, observations);
 
       expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
     });

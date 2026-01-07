@@ -647,9 +647,31 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private async callObserver(
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
-  ): Promise<{ observations: string; currentTask?: string; suggestedContinuation?: string }> {
+    existingPatterns?: Record<string, string[]>,
+  ): Promise<{
+    observations: string;
+    currentTask?: string;
+    suggestedContinuation?: string;
+    patterns?: Record<string, string[]>;
+  }> {
     const agent = this.getObserverAgent();
-    const prompt = buildObserverPrompt(existingObservations, messagesToObserve);
+    
+    // Format existing patterns into the observations if present
+    let observationsWithPatterns = existingObservations;
+    if (existingPatterns && Object.keys(existingPatterns).length > 0) {
+      let patternsContent = '\n\n<patterns>';
+      for (const [patternName, items] of Object.entries(existingPatterns)) {
+        patternsContent += `\n<${patternName}>`;
+        for (const item of items) {
+          patternsContent += `\n* ${item}`;
+        }
+        patternsContent += `\n</${patternName}>`;
+      }
+      patternsContent += '\n</patterns>';
+      observationsWithPatterns = (observationsWithPatterns || '') + patternsContent;
+    }
+    
+    const prompt = buildObserverPrompt(observationsWithPatterns, messagesToObserve);
 
     const result = await agent.generate(prompt, {
       modelSettings: {
@@ -665,6 +687,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
+      patterns: parsed.patterns,
     };
   }
 
@@ -675,12 +698,29 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private async callReflector(
     observations: string,
     manualPrompt?: string,
+    patterns?: Record<string, string[]>,
   ): Promise<{ observations: string; suggestedContinuation?: string }> {
     const agent = this.getReflectorAgent();
-    const originalTokens = this.tokenCounter.countObservations(observations);
+    
+    // Format patterns into the observations if present
+    let observationsWithPatterns = observations;
+    if (patterns && Object.keys(patterns).length > 0) {
+      let patternsContent = '\n\n<patterns>';
+      for (const [patternName, items] of Object.entries(patterns)) {
+        patternsContent += `\n<${patternName}>`;
+        for (const item of items) {
+          patternsContent += `\n* ${item}`;
+        }
+        patternsContent += `\n</${patternName}>`;
+      }
+      patternsContent += '\n</patterns>';
+      observationsWithPatterns += patternsContent;
+    }
+    
+    const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
 
     // First attempt
-    let prompt = buildReflectorPrompt(observations, manualPrompt, false);
+    let prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, false);
     let result = await agent.generate(prompt, {
       modelSettings: {
         temperature: this.reflectorConfig.modelSettings.temperature,
@@ -699,7 +739,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       );
 
       // Retry with compression prompt
-      prompt = buildReflectorPrompt(observations, manualPrompt, true);
+      prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, true);
       result = await agent.generate(prompt, {
         modelSettings: {
           temperature: this.reflectorConfig.modelSettings.temperature,
@@ -748,6 +788,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     currentTask?: string,
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
+    patterns?: Record<string, string[]>,
   ): string {
     // Optimize observations to save tokens
     const optimized = optimizeObservationsForContext(observations);
@@ -758,6 +799,20 @@ The following observations block contains your memory of past conversations with
 <observations>
 ${optimized}
 </observations>`;
+
+    // Dynamically inject patterns from thread metadata
+    if (patterns && Object.keys(patterns).length > 0) {
+      let patternsContent = '\n\n<patterns>';
+      for (const [patternName, items] of Object.entries(patterns)) {
+        patternsContent += `\n<${patternName}>`;
+        for (const item of items) {
+          patternsContent += `\n* ${item}`;
+        }
+        patternsContent += `\n</${patternName}>`;
+      }
+      patternsContent += '\n</patterns>';
+      content += patternsContent;
+    }
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -901,6 +956,8 @@ ${suggestedResponse}
     const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
     const currentTask = threadOMMetadata?.currentTask;
     const suggestedResponse = threadOMMetadata?.suggestedResponse;
+    // Patterns are stored on the OM record (resource-level), not thread metadata
+    const patterns = record.patterns;
 
     // Inject observations as a system message (every step)
     // This happens after historical message loading so we have unobservedContextBlocks
@@ -910,6 +967,7 @@ ${suggestedResponse}
         currentTask,
         suggestedResponse,
         unobservedContextBlocks,
+        patterns,
       );
       console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.scope === 'resource') {
@@ -1044,6 +1102,53 @@ ${formattedMessages}
     }
     // If no valid timestamps found, fall back to current time
     return maxTime > 0 ? new Date(maxTime) : new Date();
+  }
+
+  /**
+   * Merge new patterns with existing patterns.
+   * Deduplicates items within each pattern by content.
+   */
+  private mergePatterns(
+    existing: Record<string, string[]>,
+    newPatterns: Record<string, string[]>,
+  ): Record<string, string[]> {
+    const merged: Record<string, string[]> = { ...existing };
+
+    for (const [patternName, items] of Object.entries(newPatterns)) {
+      if (!merged[patternName]) {
+        merged[patternName] = [];
+      }
+      // Add new items that don't already exist (deduplicate by exact match)
+      for (const item of items) {
+        if (!merged[patternName].includes(item)) {
+          merged[patternName].push(item);
+        }
+      }
+    }
+
+    return merged;
+  }
+
+  /**
+   * Format patterns into a string for token counting.
+   * This mirrors the format used in formatObservationsForContext and callReflector.
+   */
+  private formatPatternsForTokenCount(patterns: Record<string, string[]>): string {
+    if (!patterns || Object.keys(patterns).length === 0) {
+      return '';
+    }
+
+    let patternsContent = '<patterns>';
+    for (const [patternName, items] of Object.entries(patterns)) {
+      patternsContent += `\n<${patternName}>`;
+      for (const item of items) {
+        patternsContent += `\n* ${item}`;
+      }
+      patternsContent += `\n</${patternName}>`;
+    }
+    patternsContent += '\n</patterns>';
+
+    return patternsContent;
   }
 
   /**
@@ -1231,6 +1336,7 @@ ${formattedMessages}
       const result = await this.callObserver(
         freshRecord?.activeObservations ?? record.activeObservations,
         unobservedMessages,
+        freshRecord?.patterns ?? record.patterns,
       );
 
       console.info(`[OM] Observer returned observations (${result.observations.length} chars)`);
@@ -1249,22 +1355,35 @@ ${formattedMessages}
           : result.observations;
       }
 
-      const totalTokenCount = this.tokenCounter.countObservations(newObservations);
+      // Calculate total tokens including patterns
+      // Merge existing patterns with new patterns to get the full picture
+      const existingPatterns = freshRecord?.patterns ?? record.patterns ?? {};
+      const mergedPatterns = result.patterns 
+        ? this.mergePatterns(existingPatterns, result.patterns)
+        : existingPatterns;
+      
+      let totalTokenCount = this.tokenCounter.countObservations(newObservations);
+      if (Object.keys(mergedPatterns).length > 0) {
+        const patternsString = this.formatPatternsForTokenCount(mergedPatterns);
+        totalTokenCount += this.tokenCounter.countObservations(patternsString);
+      }
 
-      console.info(`[OM] Storing observations: ${totalTokenCount} tokens`);
+      console.info(`[OM] Storing observations: ${totalTokenCount} tokens (including patterns)`);
 
       // Use the max message timestamp as cursor instead of current time
       // This ensures historical data (like LongMemEval fixtures) works correctly
       const lastObservedAt = this.getMaxMessageTimestamp(unobservedMessages);
 
+      // Pass patterns to storage - they'll be merged with existing patterns on the OM record
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: newObservations,
         tokenCount: totalTokenCount,
         lastObservedAt,
+        patterns: result.patterns,
       });
 
-      // Save thread-specific metadata (currentTask, suggestedResponse)
+      // Save thread-specific metadata (currentTask, suggestedResponse only - patterns are on OM record)
       if (result.suggestedContinuation || result.currentTask) {
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
@@ -1298,8 +1417,8 @@ ${formattedMessages}
         })),
       });
 
-      // Check for reflection
-      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount);
+      // Check for reflection (pass threadId so patterns can be cleared)
+      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId);
     } finally {
       await this.storage.setObservingFlag(record.id, false);
     }
@@ -1378,6 +1497,7 @@ ${formattedMessages}
       }
 
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const existingPatterns = freshRecord?.patterns ?? record.patterns;
 
       // ════════════════════════════════════════════════════════════
       // PARALLEL OBSERVATION: Call Observer for all threads concurrently
@@ -1405,9 +1525,9 @@ ${formattedMessages}
         });
 
         // Call observer for this thread's messages
-        // Note: Each thread gets the same existingObservations context (before any new observations)
+        // Note: Each thread gets the same existingObservations and existingPatterns context (before any new observations)
         // This is intentional - we don't want cross-contamination between parallel calls
-        const result = await this.callObserver(existingObservations, threadMessages);
+        const result = await this.callObserver(existingObservations, threadMessages, existingPatterns);
 
         console.info(
           `[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars):`,
@@ -1427,7 +1547,10 @@ ${formattedMessages}
       console.info(`[OM] All parallel observations complete`);
 
       // Combine results: wrap each thread's observations and append to existing
+      // Also collect all patterns from all threads to store on the OM record
+      // Start with existing patterns from the record
       let currentObservations = existingObservations;
+      let allPatterns: Record<string, string[]> = { ...(existingPatterns ?? {}) };
 
       for (const obsResult of observationResults) {
         if (!obsResult) continue;
@@ -1438,7 +1561,12 @@ ${formattedMessages}
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
         currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
-        // Update thread-specific metadata (currentTask, suggestedResponse)
+        // Collect patterns from this thread's observation (will be merged into OM record)
+        if (result.patterns) {
+          allPatterns = this.mergePatterns(allPatterns, result.patterns);
+        }
+
+        // Update thread-specific metadata (currentTask, suggestedResponse only - patterns go on OM record)
         if (result.suggestedContinuation || result.currentTask) {
           const thread = await this.storage.getThreadById({ threadId });
           if (thread) {
@@ -1471,26 +1599,32 @@ ${formattedMessages}
         });
       }
 
-      // After ALL threads observed, update the record with final observations
-      const totalTokenCount = this.tokenCounter.countObservations(currentObservations);
+      // After ALL threads observed, update the record with final observations and merged patterns
+      // Calculate total tokens including patterns
+      let totalTokenCount = this.tokenCounter.countObservations(currentObservations);
+      if (Object.keys(allPatterns).length > 0) {
+        const patternsString = this.formatPatternsForTokenCount(allPatterns);
+        totalTokenCount += this.tokenCounter.countObservations(patternsString);
+      }
 
       // Use the max message timestamp as cursor instead of current time
       // This ensures historical data (like LongMemEval fixtures) works correctly
       const lastObservedAt = this.getMaxMessageTimestamp(allUnobservedMessages);
 
-      console.info(`[OM] All threads observed. Storing ${totalTokenCount} tokens`);
+      console.info(`[OM] All threads observed. Storing ${totalTokenCount} tokens (including patterns)`);
 
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: currentObservations,
         tokenCount: totalTokenCount,
         lastObservedAt,
+        patterns: Object.keys(allPatterns).length > 0 ? allPatterns : undefined,
       });
 
       console.info(`[OM] Resource-scoped observation complete`);
 
-      // Check for reflection AFTER all threads are observed
-      await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount);
+      // Check for reflection AFTER all threads are observed (pass currentThreadId so patterns can be cleared)
+      await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount, currentThreadId);
     } finally {
       await this.storage.setObservingFlag(record.id, false);
     }
@@ -1500,7 +1634,11 @@ ${formattedMessages}
    * Check if reflection needed and trigger if so.
    * SIMPLIFIED: Always uses synchronous reflection (async buffering disabled).
    */
-  private async maybeReflect(record: ObservationalMemoryRecord, observationTokens: number): Promise<void> {
+  private async maybeReflect(
+    record: ObservationalMemoryRecord,
+    observationTokens: number,
+    threadId?: string,
+  ): Promise<void> {
     if (!this.shouldReflect(observationTokens)) {
       return;
     }
@@ -1524,7 +1662,7 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
 
     try {
-      const reflectResult = await this.callReflector(record.activeObservations);
+      const reflectResult = await this.callReflector(record.activeObservations, undefined, record.patterns);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
@@ -1533,8 +1671,9 @@ ${formattedMessages}
         tokenCount: reflectionTokenCount,
       });
 
-      // Note: Thread metadata updates for suggestedResponse happen in the calling context
-      // (processOutputResult or reflect()) where threadId is available
+      // Note: Patterns are stored on the OM record, not thread metadata.
+      // After reflection, a new OM record is created with empty patterns,
+      // so patterns naturally reset - no explicit clearing needed.
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }

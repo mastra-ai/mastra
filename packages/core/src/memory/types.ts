@@ -53,6 +53,7 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
 };
 
 /**

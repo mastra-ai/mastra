@@ -183,12 +183,26 @@ export class MessageHistory implements Processor {
     // Persist messages directly to storage
     await this.storage.saveMessages({ messages: filtered });
 
+    // Ensure thread exists (create if needed) and update its timestamp
     const thread = await this.storage.getThreadById({ threadId });
     if (thread) {
       await this.storage.updateThread({
         id: threadId,
         title: thread.title || '',
         metadata: thread.metadata || {},
+      });
+    } else {
+      // Auto-create thread if it doesn't exist
+      const resourceId = context.resourceId;
+      await this.storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: resourceId || threadId,
+          title: '',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       });
     }
 

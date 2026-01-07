@@ -39,6 +39,7 @@ export {
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
+  PATTERN_INSTRUCTIONS,
   type ObserverResult as ObserverAgentResult,
 } from './observer-agent';
 
