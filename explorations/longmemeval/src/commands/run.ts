@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { join } from 'path';
 import { readdir, readFile, mkdir, writeFile } from 'fs/promises';
-import { existsSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, writeFileSync } from 'fs';
 
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
@@ -454,6 +454,7 @@ When answering questions, carefully review the conversation history to identify 
 For example, if the user previously mentioned they prefer a specific software, tool, or approach, tailor your recommendations to match their stated preferences.
 Be specific rather than generic when the user has expressed clear preferences in past conversations. If there is a clear preference, focus in on that, and do not add additional irrelevant information.`;
 
+    const omDebugPath = join(process.cwd(), 'omm.md');
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
@@ -475,12 +476,26 @@ Be specific rather than generic when the user has expressed clear preferences in
                 const omm = args.messageList.getSystemMessages(`observational-memory`);
                 if (omm.length && omm[0]?.content) {
                   writeFileSync(
-                    join(process.cwd(), 'omm.md'),
+                    omDebugPath,
                     (omm[0].content as string) +
                       `\n\n${JSON.stringify(args.messageList.get.all.core(), null, 2)}\n\n${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
                   );
                 }
                 omm;
+                return args.messageList;
+              },
+            },
+          ]
+        : undefined,
+      outputProcessors: usesObservationalMemory
+        ? [
+            {
+              id: 'debug-output',
+              processOutputResult: args => {
+                const responses = args.messageList.get.response.v1();
+                if (existsSync(omDebugPath)) {
+                  appendFileSync(omDebugPath, `\n${JSON.stringify(responses, null, 2)}`);
+                }
                 return args.messageList;
               },
             },
