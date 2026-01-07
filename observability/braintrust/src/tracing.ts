@@ -173,8 +173,7 @@ export class BraintrustExporter extends BaseExporter {
       // Validate apiKey for creating loggers per trace
       if (!apiKey) {
         this.setDisabled(
-          `Missing required credentials (apiKey: ${!!apiKey}). ` +
-            `Set BRAINTRUST_API_KEY environment variable or pass it in config.`,
+          `Missing required API key. Set BRAINTRUST_API_KEY environment variable or pass apiKey in config.`,
         );
         this.config = null as any;
         this.useProvidedLogger = false;

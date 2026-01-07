@@ -55,20 +55,26 @@ export class ArizeExporter extends OtelExporter {
       ...config.headers,
     };
     if (spaceId) {
+      // Arize AX mode requires an API key
+      if (!apiKey) {
+        throw new Error(
+          `${LOG_PREFIX} API key is required for Arize AX. ` +
+            `Set ARIZE_API_KEY environment variable or pass apiKey in config.`,
+        );
+      }
       // arize ax header configuration
       headers['space_id'] = spaceId;
-      headers['api_key'] = apiKey ?? '';
+      headers['api_key'] = apiKey;
       endpoint = endpoint || ARIZE_AX_ENDPOINT;
     } else if (apiKey) {
       // standard otel header configuration
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
     if (!endpoint) {
-      logger.error(
+      throw new Error(
         `${LOG_PREFIX} Endpoint is required in configuration. ` +
           `Set PHOENIX_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`,
       );
-      return;
     }
     super({
       exporter: new OpenInferenceOTLPTraceExporter({
