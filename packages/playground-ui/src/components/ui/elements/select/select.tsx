@@ -1,5 +1,3 @@
-'use client';
-
 import { Select as BaseSelect, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 
 type SelectOption = {

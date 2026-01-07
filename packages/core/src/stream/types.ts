@@ -17,6 +17,7 @@ import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { ScorerResult } from '../loop';
 import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -481,6 +482,23 @@ interface NetworkFinishPayload {
   usage: LanguageModelUsage;
 }
 
+interface NetworkValidationStartPayload {
+  runId: string;
+  iteration: number;
+  checksCount: number;
+}
+
+interface NetworkValidationEndPayload {
+  runId: string;
+  iteration: number;
+  passed: boolean;
+  results: ScorerResult[];
+  duration: number;
+  timedOut: boolean;
+  reason?: string;
+  maxIterationReached: boolean;
+}
+
 interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
@@ -515,6 +533,8 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
+  | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })
+  | (BaseChunkType & { type: 'network-validation-end'; payload: NetworkValidationEndPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
   | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent });
 

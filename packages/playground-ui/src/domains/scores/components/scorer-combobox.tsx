@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
 import { Combobox } from '@/components/ui/combobox';
@@ -58,7 +56,6 @@ export function ScorerCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
     />
   );
 }

@@ -1,6 +1,6 @@
 import { DynamicForm } from '@/components/dynamic-form';
 import { Button } from '@/ds/components/Button/Button';
-import { useCodemirrorTheme } from '@/components/ui/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -134,7 +134,7 @@ const JSONInput = ({
         </div>
       )}
 
-      <SyntaxHighlighter data={inputData} onChange={setInputData} />
+      <JsonEditor data={inputData} onChange={setInputData} />
 
       {children}
 
@@ -147,11 +147,11 @@ const JSONInput = ({
   );
 };
 
-const SyntaxHighlighter = ({ data, onChange }: { data: string; onChange?: (data: string) => void }) => {
+const JsonEditor = ({ data, onChange }: { data: string; onChange?: (data: string) => void }) => {
   const theme = useCodemirrorTheme();
 
   return (
-    <div className="rounded-md bg-[#1a1a1a] p-1 font-mono">
+    <div className="rounded-md bg-surface4 p-1 font-mono relative">
       <CopyButton content={data} className="absolute top-2 right-2 z-10" />
       <CodeMirror value={data} theme={theme} extensions={[jsonLanguage]} onChange={onChange} />
     </div>
