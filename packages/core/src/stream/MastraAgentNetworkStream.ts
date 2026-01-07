@@ -16,6 +16,7 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
     reject: (reason?: any) => void;
   };
   #run: Run;
+  runId: string;
 
   constructor({
     createStream,
@@ -127,6 +128,8 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
 
     this.#run = run;
     this.#streamPromise = deferredPromise;
+
+    this.runId = run.runId;
   }
 
   get status() {

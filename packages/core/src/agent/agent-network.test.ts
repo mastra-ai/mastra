@@ -3,8 +3,10 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '../error';
+import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
@@ -3416,3 +3418,577 @@ describe('Agent - network - finalResult real-world scenarios', () => {
     expect(finishEvent.payload.result).toContain('2 iterations');
   });
 });
+// Skip tests if OPENAI_API_KEY is not set (these are integration tests requiring real API)
+// const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+
+describe('Agent - network - tool approval and suspension', () => {
+  const memory = new MockMemory();
+  const storage = new InMemoryStore();
+
+  // Tool with requireApproval for direct network tool tests
+  const mockToolExecute = vi.fn().mockImplementation(async (input: { query: string }) => {
+    return { result: `Processed: ${input.query}` };
+  });
+
+  const approvalTool = createTool({
+    id: 'approval-tool',
+    description: 'A tool that processes queries. Use this tool when the user asks to process something.',
+    inputSchema: z.object({ query: z.string().describe('The query to process') }),
+    requireApproval: true,
+    execute: mockToolExecute,
+  });
+
+  // Tool with suspend/resume for suspension tests
+  const suspendingTool = createTool({
+    id: 'suspending-tool',
+    description: 'A tool that collects user information. Use this when the user wants to provide information.',
+    inputSchema: z.object({ initialQuery: z.string().describe('The initial query from user') }),
+    suspendSchema: z.object({ message: z.string() }),
+    resumeSchema: z.object({ userResponse: z.string() }),
+    execute: async (input, context) => {
+      if (!context?.agent?.resumeData) {
+        return await context?.agent?.suspend({ message: 'Please provide additional information' });
+      }
+      return { result: `Received: ${input.initialQuery} and ${context.agent.resumeData.userResponse}` };
+    },
+  });
+
+  describe('approveNetworkToolCall', () => {
+    it('should approve a direct network tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const networkAgent = new Agent({
+        id: 'approval-network-agent',
+        name: 'Approval Network Agent',
+        instructions: 'You help users process queries. Use the approval-tool when asked to process something.',
+        model: openai('gpt-4o-mini'),
+        tools: { approvalTool },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "hello world"', {
+        memory: {
+          thread: 'test-thread-approve-direct',
+          resource: 'test-resource-approve-direct',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'tool-execution-approval') {
+          approvalReceived = true;
+        }
+      }
+      expect(approvalReceived).toBe(true);
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
+
+      // Approve the tool call
+      const resumeStream = await registeredAgent.approveNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-approve-direct',
+          resource: 'test-resource-approve-direct',
+        },
+      });
+
+      let toolExecutionEnded = false;
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'tool-execution-end') {
+          toolExecutionEnded = true;
+          expect((chunk.payload?.result as any)?.result).toBe('Processed: hello world');
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('tool-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(toolExecutionEnded).toBe(true);
+      expect(mockToolExecute).toHaveBeenCalled();
+    }, 120e3);
+
+    it('should approve a nested agent tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const subAgent = new Agent({
+        id: 'sub-agent-with-approval-tool',
+        name: 'Sub Agent',
+        description: 'An agent that processes queries using the approval tool',
+        instructions: 'You process queries. Always use the approval-tool when asked to process something.',
+        model: openai('gpt-4o-mini'),
+        tools: { approvalTool },
+      });
+
+      const networkAgent = new Agent({
+        id: 'network-agent-with-sub-agent',
+        name: 'Network Agent',
+        instructions: 'You delegate query processing to the sub-agent-with-approval-tool agent.',
+        model: openai('gpt-4o-mini'),
+        agents: { subAgent },
+        memory,
+      });
+
+      // Register agents with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent, subAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "nested test"', {
+        memory: {
+          thread: 'test-thread-approve-nested',
+          resource: 'test-resource-approve-nested',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'agent-execution-approval' || chunk.type === 'agent-execution-event-tool-call-approval') {
+          approvalReceived = true;
+        }
+      }
+
+      expect(approvalReceived).toBe(true);
+      expect(allChunks[allChunks.length - 1].type).toBe('agent-execution-approval');
+      // Approve the tool call
+      const resumeStream = await registeredAgent.approveNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-approve-nested',
+          resource: 'test-resource-approve-nested',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'agent-execution-event-tool-result') {
+          if (chunk.payload.type === 'tool-result') {
+            expect((chunk.payload.payload?.result as any)?.result).toBe('Processed: nested test');
+          } else {
+            throw new Error(`Unexpected chunk type: ${chunk.type}`);
+          }
+        }
+      }
+      expect(resumeChunks[0].type).toBe('agent-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(mockToolExecute).toHaveBeenCalled();
+    }, 120e3);
+  });
+
+  describe('declineNetworkToolCall', () => {
+    it('should decline a direct network tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const networkAgent = new Agent({
+        id: 'decline-network-agent',
+        name: 'Decline Network Agent',
+        instructions: 'You help users process queries. Use the approval-tool when asked to process something.',
+        model: openai('gpt-4o-mini'),
+        tools: { approvalTool },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "decline test"', {
+        memory: {
+          thread: 'test-thread-decline-direct',
+          resource: 'test-resource-decline-direct',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'tool-execution-approval') {
+          approvalReceived = true;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
+
+      expect(approvalReceived).toBe(true);
+
+      // Decline the tool call
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-decline-direct',
+          resource: 'test-resource-decline-direct',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      let rejectionFound = false;
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'tool-execution-end') {
+          const result = chunk.payload?.result;
+          if (result === 'Tool call was not approved by the user') {
+            rejectionFound = true;
+          }
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('tool-execution-end');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(rejectionFound).toBe(true);
+      expect(mockToolExecute).not.toHaveBeenCalled();
+    }, 120e3);
+
+    it('should decline a nested agent tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const subAgent = new Agent({
+        id: 'sub-agent-decline',
+        name: 'Sub Agent Decline',
+        description: 'An agent that processes queries using the approval tool',
+        instructions: 'You process queries. Always use the approval-tool when asked to process something.',
+        model: openai('gpt-4o-mini'),
+        tools: { approvalTool },
+      });
+
+      const networkAgent = new Agent({
+        id: 'network-agent-decline-nested',
+        name: 'Network Agent Decline',
+        instructions: 'You delegate query processing to the sub-agent-decline agent.',
+        model: openai('gpt-4o-mini'),
+        agents: { subAgent },
+        memory,
+      });
+
+      // Register agents with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent, subAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "nested decline"', {
+        memory: {
+          thread: 'test-thread-decline-nested',
+          resource: 'test-resource-decline-nested',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'agent-execution-approval' || chunk.type === 'agent-execution-event-tool-call-approval') {
+          approvalReceived = true;
+        }
+      }
+
+      expect(approvalReceived).toBe(true);
+      expect(allChunks[allChunks.length - 1].type).toBe('agent-execution-approval');
+
+      // Decline the tool call
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-decline-nested',
+          resource: 'test-resource-decline-nested',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'agent-execution-event-tool-result') {
+          if (chunk.payload.type === 'tool-result') {
+            expect(chunk.payload.payload?.result).toBe('Tool call was not approved by the user');
+          } else {
+            throw new Error(`Unexpected chunk type: ${chunk.type}`);
+          }
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('agent-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(mockToolExecute).not.toHaveBeenCalled();
+    }, 120e3);
+  });
+
+  describe('resumeNetwork', () => {
+    it('should resume suspended direct network tool', async () => {
+      const networkAgent = new Agent({
+        id: 'suspend-network-agent',
+        name: 'Suspend Network Agent',
+        instructions: 'You help users provide information. Use the suspending-tool when asked to collect info.',
+        model: openai('gpt-4o-mini'),
+        tools: { suspendingTool },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "starting data"', {
+        memory: {
+          thread: 'test-thread-suspend-direct',
+          resource: 'test-resource-suspend-direct',
+        },
+      });
+
+      let suspensionReceived = false;
+      let suspendPayload: any = null;
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'tool-execution-suspended') {
+          suspensionReceived = true;
+          suspendPayload = chunk.payload?.suspendPayload;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-suspended');
+      expect(suspensionReceived).toBe(true);
+      expect(suspendPayload).toBeDefined();
+      expect(suspendPayload?.message).toBe('Please provide additional information');
+
+      // Resume with user data
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'my additional info' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-suspend-direct',
+            resource: 'test-resource-suspend-direct',
+          },
+        },
+      );
+
+      let toolResult: any = null;
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'tool-execution-end') {
+          toolResult = chunk.payload?.result;
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('tool-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+      expect(toolResult).toBeDefined();
+      expect(toolResult?.result).toContain('my additional info');
+    }, 120e3);
+
+    it('should resume suspended nested agent tool', async () => {
+      const subAgent = new Agent({
+        id: 'sub-agent-suspend',
+        name: 'Sub Agent Suspend',
+        description: 'An agent that collects information using the suspending tool',
+        instructions: 'You collect information. Always use the suspending-tool when asked to collect info.',
+        model: openai('gpt-4o-mini'),
+        tools: { suspendingTool },
+      });
+
+      const networkAgent = new Agent({
+        id: 'network-agent-suspend-nested',
+        name: 'Network Agent Suspend',
+        instructions: 'You delegate information collection to the sub-agent-suspend agent.',
+        model: openai('gpt-4o-mini'),
+        agents: { subAgent },
+        memory,
+      });
+
+      // Register agents with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent, subAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with query "nested suspend test"', {
+        memory: {
+          thread: 'test-thread-suspend-nested',
+          resource: 'test-resource-suspend-nested',
+        },
+      });
+
+      let suspensionReceived = false;
+      let suspendPayload: any = null;
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'agent-execution-suspended') {
+          suspensionReceived = true;
+          suspendPayload = chunk.payload?.suspendPayload;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('agent-execution-suspended');
+      expect(suspensionReceived).toBe(true);
+      expect(suspendPayload).toBeDefined();
+      expect(suspendPayload?.message).toBe('Please provide additional information');
+
+      // Resume with user data
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'nested resume data' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-suspend-nested',
+            resource: 'test-resource-suspend-nested',
+          },
+        },
+      );
+
+      const resumeChunks: any[] = [];
+      let agentExecutionEnded = false;
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'agent-execution-event-tool-result') {
+          if (chunk.payload.type === 'tool-result') {
+            expect((chunk.payload.payload?.result as any)?.result).toContain('nested resume data');
+          } else {
+            throw new Error(`Unexpected chunk type: ${chunk.type}`);
+          }
+        }
+        if (chunk.type === 'agent-execution-end') {
+          agentExecutionEnded = true;
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('agent-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+      expect(agentExecutionEnded).toBe(true);
+    }, 120e3);
+
+    it.skip('should resume suspended workflow', async () => {
+      const suspendingStep = createStep({
+        id: 'suspending-step',
+        description: 'A step that suspends and waits for user input',
+        inputSchema: z.object({ query: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            return await suspend({ message: 'Please provide user input for workflow' });
+          }
+          return { result: `Workflow received: ${inputData.query} and ${resumeData.userInput}` };
+        },
+      });
+
+      const suspendingWorkflow = createWorkflow({
+        id: 'suspending-workflow',
+        description: 'A workflow that collects user input. Use when asked to run a workflow that needs user input.',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(suspendingStep)
+        .commit();
+
+      const networkAgent = new Agent({
+        id: 'network-agent-workflow-suspend',
+        name: 'Network Agent Workflow',
+        instructions: 'You help run workflows. Use the suspending-workflow when asked to run a workflow.',
+        model: openai('gpt-4o-mini'),
+        workflows: { suspendingWorkflow },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Run the workflow with query "workflow test"', {
+        memory: {
+          thread: 'test-thread-workflow-suspend',
+          resource: 'test-resource-workflow-suspend',
+        },
+      });
+
+      let suspensionReceived = false;
+      let suspendPayload: any = null;
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'workflow-execution-suspended') {
+          suspensionReceived = true;
+          suspendPayload = chunk.payload?.suspendPayload;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('workflow-execution-suspended');
+      expect(suspensionReceived).toBe(true);
+      expect(suspendPayload).toBeDefined();
+      expect(suspendPayload?.message).toBe('Please provide user input for workflow');
+
+      // Resume with user data
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userInput: 'workflow resume input' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-workflow-suspend',
+            resource: 'test-resource-workflow-suspend',
+          },
+        },
+      );
+
+      let workflowResult: any = null;
+      for await (const chunk of resumeStream) {
+        if (chunk.type === 'workflow-execution-end') {
+          workflowResult = chunk.payload?.result;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('workflow-execution-end');
+      expect(workflowResult).toBeDefined();
+      expect(workflowResult?.result?.result).toContain('workflow resume input');
+    }, 120e3);
+  });
+}, 120e3);
