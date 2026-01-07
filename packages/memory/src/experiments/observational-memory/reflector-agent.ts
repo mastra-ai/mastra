@@ -15,6 +15,8 @@ export interface ReflectorResult {
   suggestedContinuation?: string;
   /** Token count of output (for compression validation) */
   tokenCount?: number;
+  /** Consolidated patterns extracted from reflector output */
+  patterns?: Record<string, string[]>;
 }
 
 /**
@@ -184,10 +186,14 @@ export function parseReflectorOutput(output: string): ReflectorResult {
   // Those are stored separately in thread metadata and injected dynamically
   const observations = parsed.observations || '';
 
+  // Only include patterns if any were extracted
+  const hasPatterns = Object.keys(parsed.patterns).length > 0;
+
   return {
     observations,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     // Note: Reflector's currentTask is not used - thread metadata preserves per-thread tasks
+    patterns: hasPatterns ? parsed.patterns : undefined,
   };
 }
 
@@ -198,6 +204,7 @@ interface ParsedReflectorSection {
   observations: string;
   currentTask: string;
   suggestedResponse: string;
+  patterns: Record<string, string[]>;
 }
 
 /**
@@ -209,6 +216,7 @@ function parseReflectorSectionXml(content: string): ParsedReflectorSection {
     observations: '',
     currentTask: '',
     suggestedResponse: '',
+    patterns: {},
   };
 
   // Extract <observations> content (supports multiple blocks)
@@ -236,6 +244,32 @@ function parseReflectorSectionXml(content: string): ParsedReflectorSection {
   const suggestedResponseMatch = content.match(/<suggested-response>([\s\S]*?)<\/suggested-response>/i);
   if (suggestedResponseMatch?.[1]) {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
+  }
+
+  // Extract <patterns> content and parse individual pattern groups
+  // Format: <patterns><pattern_name>- item A\n- item B</pattern_name></patterns>
+  const patternsMatch = content.match(/^[ \t]*<patterns>([\s\S]*?)^[ \t]*<\/patterns>/im);
+  if (patternsMatch?.[1]) {
+    const patternsContent = patternsMatch[1];
+    // Find all named pattern tags (any XML tag that's not 'patterns')
+    // E.g., <trips>, <purchases>, <health-events>
+    const patternTagRegex = /<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/gi;
+    let patternMatch;
+    while ((patternMatch = patternTagRegex.exec(patternsContent)) !== null) {
+      const patternName = patternMatch[1];
+      const patternItemsRaw = patternMatch[2];
+      if (!patternName || !patternItemsRaw) continue;
+      // Extract list items (lines starting with - or *)
+      const items = patternItemsRaw
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.startsWith('-') || line.startsWith('*'))
+        .map(line => line.replace(/^[-*]\s*/, '').trim())
+        .filter(Boolean);
+      if (items.length > 0) {
+        result.patterns[patternName] = items;
+      }
+    }
   }
 
   return result;

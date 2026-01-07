@@ -427,6 +427,7 @@ Active evaluations:`;
       }
 
       observationalMemory = new ObservationalMemory({
+        observeFutureOnly: false,
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         storage: omStorage,
         observer: {

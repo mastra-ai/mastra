@@ -180,6 +180,14 @@ export interface ObserverConfig {
    * }
    */
   focus?: ObservationFocus;
+
+  /**
+   * Whether to extract and track patterns (recurring themes).
+   * Patterns help with counting and recalling related items.
+   *
+   * @default true
+   */
+  recognizePatterns?: boolean;
 }
 
 /**
@@ -222,6 +230,14 @@ export interface ReflectorConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Whether to extract and consolidate patterns during reflection.
+   * Patterns help with counting and recalling related items.
+   *
+   * @default true
+   */
+  recognizePatterns?: boolean;
 }
 
 /**

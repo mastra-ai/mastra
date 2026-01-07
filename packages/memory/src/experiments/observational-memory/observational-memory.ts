@@ -98,6 +98,15 @@ export interface ObservationalMemoryConfig {
   onDebugEvent?: (event: ObservationDebugEvent) => void;
 
   obscureThreadIds?: boolean;
+
+  /**
+   * Only observe messages created after OM is enabled.
+   * When true (default), historical messages are skipped on first observation.
+   * This prevents churning through millions of existing messages.
+   *
+   * @default true
+   */
+  observeFutureOnly?: boolean;
 }
 
 /**
@@ -252,10 +261,22 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private hasher = xxhash();
   private threadIdCache = new Map<string, string>();
 
+  /** Whether to extract patterns in Observer */
+  private observerRecognizePatterns: boolean;
+
+  /** Whether to consolidate patterns in Reflector */
+  private reflectorRecognizePatterns: boolean;
+
+  /** Only observe messages created after OM is enabled */
+  private observeFutureOnly: boolean;
+
   constructor(config: ObservationalMemoryConfig) {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    this.observerRecognizePatterns = config.observer?.recognizePatterns ?? true;
+    this.reflectorRecognizePatterns = config.reflector?.recognizePatterns ?? true;
+    this.observeFutureOnly = config.observeFutureOnly ?? true;
 
     // Resolve observer config with defaults
     this.observerConfig = {
@@ -426,6 +447,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
 
     if (!record) {
+      // When observeFutureOnly is true, set lastObservedAt to now so we skip historical messages
+      const initialLastObservedAt = this.observeFutureOnly ? new Date() : undefined;
+
       record = await this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
@@ -436,6 +460,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           scope: this.scope,
         },
       });
+
+      // If observeFutureOnly, immediately update the record with the current timestamp
+      if (initialLastObservedAt && record.id) {
+        await this.storage.updateActiveObservations({
+          id: record.id,
+          observations: record.activeObservations || '',
+          tokenCount: 0,
+          lastObservedAt: initialLastObservedAt,
+        });
+        record.lastObservedAt = initialLastObservedAt;
+      }
     }
 
     return record;
@@ -687,7 +722,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
-      patterns: parsed.patterns,
+      // Only include patterns if observer patterns are enabled
+      patterns: this.observerRecognizePatterns ? parsed.patterns : undefined,
     };
   }
 
@@ -699,7 +735,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observations: string,
     manualPrompt?: string,
     patterns?: Record<string, string[]>,
-  ): Promise<{ observations: string; suggestedContinuation?: string }> {
+  ): Promise<{ observations: string; suggestedContinuation?: string; patterns?: Record<string, string[]> }> {
     const agent = this.getReflectorAgent();
     
     // Format patterns into the observations if present
@@ -767,6 +803,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return {
       observations: parsed.observations,
       suggestedContinuation: parsed.suggestedContinuation,
+      patterns: parsed.patterns,
     };
   }
 
@@ -1662,18 +1699,20 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
 
     try {
-      const reflectResult = await this.callReflector(record.activeObservations, undefined, record.patterns);
+      // Only pass patterns to Reflector if reflector patterns are enabled
+      const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
+      const reflectResult = await this.callReflector(record.activeObservations, undefined, patternsToReflect);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
+        patterns: reflectResult.patterns,
       });
 
-      // Note: Patterns are stored on the OM record, not thread metadata.
-      // After reflection, a new OM record is created with empty patterns,
-      // so patterns naturally reset - no explicit clearing needed.
+      // Note: Patterns from the Reflector are preserved in the new OM record.
+      // The Reflector consolidates patterns from observations into its output.
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }
@@ -1712,13 +1751,16 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
 
     try {
-      const reflectResult = await this.callReflector(record.activeObservations, prompt);
+      // Manual reflect also passes patterns if enabled
+      const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
+      const reflectResult = await this.callReflector(record.activeObservations, prompt, patternsToReflect);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
+        patterns: reflectResult.patterns,
       });
 
       // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread

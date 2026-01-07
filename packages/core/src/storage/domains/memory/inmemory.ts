@@ -763,7 +763,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord, reflection, tokenCount } = input;
+    const { currentRecord, reflection, tokenCount, patterns } = input;
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
     const now = new Date();
 
@@ -781,6 +781,8 @@ export class InMemoryMemory extends MemoryStorage {
       // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
       // The previous DB record retains its observedMessageIds as historical record.
       // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
+      // Patterns from reflection - new OM record gets the patterns the Reflector extracted
+      patterns: patterns,
       config: currentRecord.config,
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,

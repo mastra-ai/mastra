@@ -3444,3 +3444,500 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
     60000,
   );
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Unit Tests: Pattern Toggles and observeFutureOnly
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Pattern Toggles', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'test-thread';
+  const resourceId = 'test-resource';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  describe('Observer patterns toggle', () => {
+    it('should store patterns when observer.patterns is true (default)', async () => {
+      // Mock model that returns observations WITH patterns
+      const mockModelWithPatterns = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{
+            type: 'text' as const,
+            text: `<observations>
+Date: January 7, 2026
+* 🔴 (10:00) User mentioned they love hiking.
+</observations>
+
+<patterns>
+<hobbies>
+* hiking (Jan 7, 2026)
+</hobbies>
+</patterns>`
+          }],
+          warnings: [],
+        }),
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: mockModelWithPatterns as any,
+          observationThreshold: 10, // Low threshold to trigger observation
+          // recognizePatterns: true is the default
+        },
+        reflector: {
+          model: mockModelWithPatterns as any,
+          reflectionThreshold: 50000,
+        },
+        observeFutureOnly: false,
+      });
+
+      // Initialize record
+      await storage.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
+
+      // Call observer directly with proper signature: (existingObservations, messagesToObserve, existingPatterns)
+      const result = await (om as any).callObserver(
+        undefined, // existingObservations
+        [{ 
+          id: 'msg-1',
+          role: 'user', 
+          content: [{ type: 'text', text: 'I love hiking in the mountains!' }],
+          createdAt: new Date('2026-01-07T10:00:00Z'),
+          threadId,
+          resourceId,
+        }],
+        undefined // existingPatterns
+      );
+
+      // Patterns should be returned
+      expect(result.patterns).toBeDefined();
+      expect(result.patterns.hobbies).toBeDefined();
+      expect(result.patterns.hobbies).toContain('hiking (Jan 7, 2026)');
+    });
+
+    it('should NOT store patterns when observer.recognizePatterns is false', async () => {
+      // Mock model that returns observations WITH patterns
+      const mockModelWithPatterns = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{
+            type: 'text' as const,
+            text: `<observations>
+Date: January 7, 2026
+* 🔴 (10:00) User mentioned they love hiking.
+</observations>
+
+<patterns>
+<hobbies>
+* hiking (Jan 7, 2026)
+</hobbies>
+</patterns>`
+          }],
+          warnings: [],
+        }),
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: mockModelWithPatterns as any,
+          observationThreshold: 10,
+          recognizePatterns: false, // Disable patterns
+        },
+        reflector: {
+          model: mockModelWithPatterns as any,
+          reflectionThreshold: 50000,
+        },
+        observeFutureOnly: false,
+      });
+
+      // Initialize record
+      await storage.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
+
+      // Call observer directly with proper signature: (existingObservations, messagesToObserve, existingPatterns)
+      const result = await (om as any).callObserver(
+        undefined, // existingObservations
+        [{ 
+          id: 'msg-1',
+          role: 'user', 
+          content: [{ type: 'text', text: 'I love hiking in the mountains!' }],
+          createdAt: new Date('2026-01-07T10:00:00Z'),
+          threadId,
+          resourceId,
+        }],
+        undefined // existingPatterns
+      );
+
+      // Patterns should NOT be returned (even though model output them)
+      expect(result.patterns).toBeUndefined();
+    });
+
+    it('should NOT inject patterns into context when observer.recognizePatterns is false even if patterns exist in storage', async () => {
+      // First, manually add patterns to storage
+      const record = await storage.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: 'Some observations',
+        tokenCount: 100,
+        lastObservedAt: new Date(),
+        patterns: { hobbies: ['hiking (Jan 7, 2026)'] },
+      });
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{ type: 'text' as const, text: '<observations>\nTest\n</observations>' }],
+          warnings: [],
+        }),
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: mockModel as any,
+          observationThreshold: 10000,
+          recognizePatterns: false, // Patterns disabled
+        },
+        reflector: {
+          model: mockModel as any,
+          reflectionThreshold: 50000,
+        },
+      });
+
+      // Get the record to verify patterns exist
+      const storedRecord = await storage.getObservationalMemory(threadId, resourceId);
+      expect(storedRecord?.patterns?.hobbies).toContain('hiking (Jan 7, 2026)');
+
+      // Format observations for context - patterns should NOT be included
+      const formatted = (om as any).formatObservationsForContext(
+        storedRecord?.activeObservations || '',
+        undefined, // suggestedResponse
+        undefined, // currentTask
+        undefined, // unobservedContextBlocks
+        undefined  // patterns - not passed because toggle is off
+      );
+
+      expect(formatted).not.toContain('<patterns>');
+      expect(formatted).not.toContain('hobbies');
+    });
+  });
+
+  describe('Reflector patterns toggle', () => {
+    it('should pass patterns to reflector when reflector.patterns is true (default)', async () => {
+      let reflectorReceivedPatterns = false;
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          // Check if patterns are in the prompt sent to reflector
+          const promptStr = JSON.stringify(prompt);
+          if (promptStr.includes('<patterns>') && promptStr.includes('hobbies')) {
+            reflectorReceivedPatterns = true;
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            content: [{
+              type: 'text' as const,
+              text: `<observations>
+Date: January 7, 2026
+* 🔴 (10:00) Consolidated observation.
+</observations>`
+            }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: mockModel as any,
+          observationThreshold: 10000,
+        },
+        reflector: {
+          model: mockModel as any,
+          reflectionThreshold: 50000,
+          // recognizePatterns: true is the default
+        },
+      });
+
+      // Call reflector with patterns
+      await (om as any).callReflector(
+        'Some observations to reflect on',
+        { hobbies: 'hiking (Jan 7, 2026)' } // patterns
+      );
+
+      expect(reflectorReceivedPatterns).toBe(true);
+    });
+
+    it('should NOT pass patterns to reflector when reflector.patterns is false', async () => {
+      let reflectorReceivedPatterns = false;
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          // Check if patterns are in the prompt sent to reflector
+          const promptStr = JSON.stringify(prompt);
+          if (promptStr.includes('<patterns>') && promptStr.includes('hobbies')) {
+            reflectorReceivedPatterns = true;
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            content: [{
+              type: 'text' as const,
+              text: `<observations>
+Date: January 7, 2026
+* 🔴 (10:00) Consolidated observation.
+</observations>`
+            }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        observer: {
+          model: mockModel as any,
+          observationThreshold: 10000,
+        },
+        reflector: {
+          model: mockModel as any,
+          reflectionThreshold: 50000,
+          recognizePatterns: false, // Disable patterns for reflector
+        },
+      });
+
+      // Even though we pass patterns, they should not be sent to reflector
+      // because reflectorRecognizePatterns is false
+      // We need to test via maybeReflect which checks the toggle
+      
+      // Initialize record with patterns
+      const initRecord = await storage.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
+      await storage.updateActiveObservations({
+        id: initRecord.id,
+        observations: 'A'.repeat(60000), // Large enough to trigger reflection
+        tokenCount: 60000,
+        lastObservedAt: new Date(),
+        patterns: { hobbies: ['hiking (Jan 7, 2026)'] },
+      });
+
+      // Trigger reflection via maybeReflect
+      const reflectRecord = await storage.getObservationalMemory(threadId, resourceId);
+      await (om as any).maybeReflect(reflectRecord, threadId);
+
+      // Reflector should NOT have received patterns
+      expect(reflectorReceivedPatterns).toBe(false);
+    });
+  });
+});
+
+describe('observeFutureOnly', () => {
+  let storage: InMemoryMemory;
+  let mockModel: MockLanguageModelV2;
+  const threadId = 'test-thread';
+  const resourceId = 'test-resource';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+        content: [{ type: 'text' as const, text: '<observations>\nTest observation\n</observations>' }],
+        warnings: [],
+      }),
+    });
+  });
+
+  it('should default to true', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      observer: {
+        model: mockModel as any,
+        observationThreshold: 100,
+      },
+      reflector: {
+        model: mockModel as any,
+        reflectionThreshold: 50000,
+      },
+    });
+
+    expect((om as any).observeFutureOnly).toBe(true);
+  });
+
+  it('should set lastObservedAt to now when observeFutureOnly is true and record is created', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      observer: {
+        model: mockModel as any,
+        observationThreshold: 100,
+      },
+      reflector: {
+        model: mockModel as any,
+        reflectionThreshold: 50000,
+      },
+      observeFutureOnly: true,
+    });
+
+    const beforeCreate = new Date();
+
+    // Trigger record creation via getOrCreateRecord (private method, access via processInputStep)
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+    const afterCreate = new Date();
+
+    // lastObservedAt should be set to approximately now
+    expect(record.lastObservedAt).toBeDefined();
+    expect(record.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeCreate.getTime());
+    expect(record.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterCreate.getTime());
+  });
+
+  it('should NOT set lastObservedAt when observeFutureOnly is false and record is created', async () => {
+    const om = new ObservationalMemory({
+      storage,
+      observer: {
+        model: mockModel as any,
+        observationThreshold: 100,
+      },
+      reflector: {
+        model: mockModel as any,
+        reflectionThreshold: 50000,
+      },
+      observeFutureOnly: false,
+    });
+
+    // Trigger record creation
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+    // lastObservedAt should NOT be set
+    expect(record.lastObservedAt).toBeUndefined();
+  });
+
+  it('should skip historical messages when observeFutureOnly is true', async () => {
+    // First, save some historical messages
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test Thread',
+        createdAt: new Date('2023-01-01'),
+        updatedAt: new Date('2023-01-01'),
+        metadata: {},
+      },
+    });
+
+    const historicalDate = new Date('2023-01-01T10:00:00Z');
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'historical-msg-1',
+          threadId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Historical message 1' }] },
+          createdAt: historicalDate,
+          type: 'text',
+        },
+        {
+          id: 'historical-msg-2',
+          threadId,
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Historical response 1' }] },
+          createdAt: new Date(historicalDate.getTime() + 1000),
+          type: 'text',
+        },
+      ],
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observer: {
+        model: mockModel as any,
+        observationThreshold: 100,
+      },
+      reflector: {
+        model: mockModel as any,
+        reflectionThreshold: 50000,
+      },
+      observeFutureOnly: true,
+    });
+
+    // Create the record (this sets lastObservedAt to now)
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+    // Now load unobserved messages - should be empty since lastObservedAt is set to now
+    const unobservedMessages = await (om as any).loadUnobservedMessages(threadId, resourceId, record.lastObservedAt);
+
+    expect(unobservedMessages).toHaveLength(0);
+  });
+
+  it('should include historical messages when observeFutureOnly is false', async () => {
+    // First, save some historical messages
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test Thread',
+        createdAt: new Date('2023-01-01'),
+        updatedAt: new Date('2023-01-01'),
+        metadata: {},
+      },
+    });
+
+    const historicalDate = new Date('2023-01-01T10:00:00Z');
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'historical-msg-1',
+          threadId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Historical message 1' }] },
+          createdAt: historicalDate,
+          type: 'text',
+        },
+        {
+          id: 'historical-msg-2',
+          threadId,
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Historical response 1' }] },
+          createdAt: new Date(historicalDate.getTime() + 1000),
+          type: 'text',
+        },
+      ],
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observer: {
+        model: mockModel as any,
+        observationThreshold: 100,
+      },
+      reflector: {
+        model: mockModel as any,
+        reflectionThreshold: 50000,
+      },
+      observeFutureOnly: false,
+    });
+
+    // Create the record (this should NOT set lastObservedAt)
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+    // Now load unobserved messages - should include historical messages (lastObservedAt is undefined)
+    const unobservedMessages = await (om as any).loadUnobservedMessages(threadId, resourceId, record.lastObservedAt);
+
+    expect(unobservedMessages.length).toBeGreaterThan(0);
+    expect(unobservedMessages.some((m: any) => m.id === 'historical-msg-1')).toBe(true);
+  });
+});

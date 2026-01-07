@@ -393,4 +393,5 @@ export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+  patterns?: Record<string, string[]>;
 }
