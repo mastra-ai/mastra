@@ -1,5 +1,27 @@
 # create-mastra
 
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Fix peer dependency conflicts in browsing-agent template. Updated template dependencies to align with @browserbasehq/stagehand@2.5.6 requirements: ([#11346](https://github.com/mastra-ai/mastra/pull/11346))
+  - Updated `dotenv` from `^17.2.1` to `^16.4.5`
+  - Updated `zod` from `^3.25.76` to `^3.25.67`
+
+  This ensures `npx create-mastra@latest --template browsing-agent` can be installed and run without peer dependency errors.
+
+- Add initial state input to workflow form in studio ([#11560](https://github.com/mastra-ai/mastra/pull/11560))
+
+- Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers ([#11562](https://github.com/mastra-ai/mastra/pull/11562))
+
 ## 1.0.0-beta.12
 
 ### Minor Changes
