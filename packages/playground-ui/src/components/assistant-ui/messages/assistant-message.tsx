@@ -8,6 +8,17 @@ import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
+/**
+ * Content item type for assistant message content parts.
+ */
+interface ContentItem {
+  type: string;
+  metadata?: {
+    mode?: string;
+    completionResult?: unknown;
+  };
+}
+
 export interface AssistantMessageProps {
   hasModelList?: boolean;
 }
@@ -16,8 +27,8 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 
-  const isNotAssistantTextResponse = data.content.every(
-    ({ type, metadata }: any) =>
+  const isNotAssistantTextResponse = (data.content as ContentItem[]).every(
+    ({ type, metadata }) =>
       type === 'tool-call' ||
       type === 'reasoning' ||
       (type === 'text' && metadata?.mode === 'network' && metadata?.completionResult),
