@@ -88,7 +88,7 @@ type TraceMetadata = {
 
 export class PosthogExporter extends BaseExporter {
   name = 'posthog';
-  private client: PostHog;
+  private client: PostHog | null;
   private config: PosthogExporterConfig;
   private traceMap = new Map<string, TraceMetadata>();
 
@@ -105,8 +105,8 @@ export class PosthogExporter extends BaseExporter {
 
     if (!apiKey) {
       this.setDisabled('Missing required API key. Set POSTHOG_API_KEY environment variable or pass apiKey in config.');
-      this.client = null as any;
-      this.config = config as PosthogExporterConfig;
+      this.client = null;
+      this.config = config;
       return;
     }
 
