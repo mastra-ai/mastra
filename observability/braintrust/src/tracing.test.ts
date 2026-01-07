@@ -1103,6 +1103,34 @@ describe('BraintrustExporter', () => {
         }),
       );
     });
+
+    it('should handle undefined tool results (missing output/result fields)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'undefined-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_456' }], // no output or result field
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'tool', content: '', tool_call_id: 'call_456' }],
+        }),
+      );
+    });
   });
 
   describe('Span Updates', () => {

@@ -640,7 +640,11 @@ export class BraintrustExporter extends BaseExporter {
     if (resultData === undefined || resultData === null) {
       return '';
     }
-    return JSON.stringify(resultData);
+    try {
+      return JSON.stringify(resultData);
+    } catch {
+      return '[unserializable result]';
+    }
   }
 
   /**
