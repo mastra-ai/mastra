@@ -39,23 +39,35 @@ export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
 export class ArizeExporter extends OtelExporter {
   name = 'arize';
 
-  constructor(config: ArizeExporterConfig) {
+  constructor(config: ArizeExporterConfig = {}) {
     const logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
-    let endpoint: string | undefined = config.endpoint;
+
+    // Read configuration from config or environment variables
+    // Priority: config > ARIZE_* env vars > PHOENIX_* env vars
+    const spaceId = config.spaceId ?? process.env.ARIZE_SPACE_ID;
+    const apiKey = config.apiKey ?? process.env.ARIZE_API_KEY ?? process.env.PHOENIX_API_KEY;
+    const projectName = config.projectName ?? process.env.ARIZE_PROJECT_NAME ?? process.env.PHOENIX_PROJECT_NAME;
+
+    // Determine endpoint: config > PHOENIX_ENDPOINT > ARIZE_AX_ENDPOINT (if spaceId is set)
+    let endpoint: string | undefined = config.endpoint ?? process.env.PHOENIX_ENDPOINT;
+
     const headers: Record<string, string> = {
       ...config.headers,
     };
-    if (config.spaceId) {
+    if (spaceId) {
       // arize ax header configuration
-      headers['space_id'] = config.spaceId;
-      headers['api_key'] = config.apiKey ?? '';
-      endpoint = config.endpoint || ARIZE_AX_ENDPOINT;
-    } else if (config.apiKey) {
+      headers['space_id'] = spaceId;
+      headers['api_key'] = apiKey ?? '';
+      endpoint = endpoint || ARIZE_AX_ENDPOINT;
+    } else if (apiKey) {
       // standard otel header configuration
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      headers['Authorization'] = `Bearer ${apiKey}`;
     }
     if (!endpoint) {
-      logger.error(`${LOG_PREFIX} Endpoint is required in configuration. Disabling exporter.`);
+      logger.error(
+        `${LOG_PREFIX} Endpoint is required in configuration. ` +
+          `Set PHOENIX_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`,
+      );
       return;
     }
     super({
@@ -65,7 +77,7 @@ export class ArizeExporter extends OtelExporter {
       }),
       ...config,
       resourceAttributes: {
-        [SEMRESATTRS_PROJECT_NAME]: config.projectName,
+        [SEMRESATTRS_PROJECT_NAME]: projectName,
         ...config.resourceAttributes,
       },
       provider: {

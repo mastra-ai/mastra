@@ -157,7 +157,7 @@ export class BraintrustExporter extends BaseExporter {
   private useProvidedLogger: boolean;
   private providedLogger?: Logger<true>;
 
-  constructor(config: BraintrustExporterConfig) {
+  constructor(config: BraintrustExporterConfig = {}) {
     super(config);
 
     if (config.braintrustLogger) {
@@ -166,15 +166,26 @@ export class BraintrustExporter extends BaseExporter {
       this.providedLogger = config.braintrustLogger;
       this.config = config;
     } else {
+      // Read credentials from config or environment variables
+      const apiKey = config.apiKey ?? process.env.BRAINTRUST_API_KEY;
+      const endpoint = config.endpoint ?? process.env.BRAINTRUST_ENDPOINT;
+
       // Validate apiKey for creating loggers per trace
-      if (!config.apiKey) {
-        this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
+      if (!apiKey) {
+        this.setDisabled(
+          `Missing required credentials (apiKey: ${!!apiKey}). ` +
+            `Set BRAINTRUST_API_KEY environment variable or pass it in config.`,
+        );
         this.config = null as any;
         this.useProvidedLogger = false;
         return;
       }
       this.useProvidedLogger = false;
-      this.config = config;
+      this.config = {
+        ...config,
+        apiKey,
+        endpoint,
+      };
     }
   }
 
