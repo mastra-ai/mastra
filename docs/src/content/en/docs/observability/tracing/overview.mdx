@@ -277,46 +277,34 @@ export const mastra = new Mastra({
 
 ### Common Configuration Patterns & Troubleshooting
 
-#### Default & Custom Configs
-
-Having both the default config enabled and adding custom configs is an invalid configuration of Observability. Use either the default or custom config, but not both.
-
-```ts title="src/mastra/index.ts"
-export const mastra = new Mastra({
-  observability: new Observability({
-    default: { enabled: true }, // This will always be used!
-    configs: {
-      langfuse: {
-        serviceName: "my-service",
-        exporters: [langfuseExporter], // This won't be reached
-      },
-    },
-  }),
-});
-```
-
 #### Maintaining Studio and Cloud Access
 
-When creating a custom config with external exporters, you might lose access to Studio and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
+When adding external exporters, include `DefaultExporter` and `CloudExporter` to maintain access to Studio and Mastra Cloud:
 
 ```ts title="src/mastra/index.ts"
-import { DefaultExporter, CloudExporter } from "@mastra/observability";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 import { ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: false }, // Disable default to use custom
     configs: {
       production: {
         serviceName: "my-service",
         exporters: [
           new ArizeExporter({
-            // External exporter
             endpoint: process.env.PHOENIX_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
           new DefaultExporter(), // Keep Studio access
           new CloudExporter(), // Keep Cloud access
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
         ],
       },
     },

@@ -11,12 +11,30 @@ The Sensitive Data Filter is a span processor that automatically redacts sensiti
 
 ## Default Configuration
 
-By default, the Sensitive Data Filter is automatically enabled when you use the standard Mastra configuration:
+The Sensitive Data Filter is included in the recommended observability configuration:
 
 ```ts title="src/mastra/index.ts"
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes SensitiveDataFilter
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Automatically redacts sensitive fields
+        ],
+      },
+    },
   }),
   storage: new LibSQLStore({
     id: 'mastra-storage',
