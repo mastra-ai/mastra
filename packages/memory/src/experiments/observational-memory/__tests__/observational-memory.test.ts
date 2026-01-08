@@ -3599,7 +3599,7 @@ describe('Pattern Toggles', () => {
   });
 
   describe('Observer patterns toggle', () => {
-    it('should store patterns when observer.patterns is true (default)', async () => {
+    it('should store patterns when observer.recognizePatterns is true', async () => {
       // Mock model that returns observations WITH patterns
       const mockModelWithPatterns = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -3628,7 +3628,7 @@ Date: January 7, 2026
         observer: {
           model: mockModelWithPatterns as any,
           observationThreshold: 10, // Low threshold to trigger observation
-          // recognizePatterns: true is the default
+          recognizePatterns: true, // Explicitly enable patterns
         },
         reflector: {
           model: mockModelWithPatterns as any,
@@ -3772,7 +3772,7 @@ Date: January 7, 2026
   });
 
   describe('Reflector patterns toggle', () => {
-    it('should pass patterns to reflector when reflector.patterns is true (default)', async () => {
+    it('should pass patterns to reflector when reflector.recognizePatterns is true', async () => {
       let reflectorReceivedPatterns = false;
 
       const mockModel = new MockLanguageModelV2({
@@ -3807,7 +3807,7 @@ Date: January 7, 2026
         reflector: {
           model: mockModel as any,
           reflectionThreshold: 50000,
-          // recognizePatterns: true is the default
+          recognizePatterns: true, // Explicitly enable patterns
         },
       });
 

@@ -28,6 +28,19 @@ import {
 } from './reflector-agent';
 import { TokenCounter } from './token-counter';
 import type { ObserverConfig, ReflectorConfig, ThresholdRange, ModelSettings, ProviderOptions } from './types';
+/**
+ * Simple slugify utility - converts a string to a URL-friendly slug.
+ * Avoids external dependency for this simple use case.
+ */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove non-word chars (except spaces and hyphens)
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single
+    .replace(/^-+|-+$/g, ''); // Trim hyphens from start/end
+}
 
 /**
  * Debug event emitted when observation-related events occur.
@@ -268,8 +281,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.observerRecognizePatterns = config.observer?.recognizePatterns ?? true;
-    this.reflectorRecognizePatterns = config.reflector?.recognizePatterns ?? true;
+    this.observerRecognizePatterns = config.observer?.recognizePatterns ?? false;
+    this.reflectorRecognizePatterns = config.reflector?.recognizePatterns ?? false;
     this.observeFutureOnly = config.observeFutureOnly ?? true;
 
     // Resolve observer config with defaults
@@ -1668,13 +1681,13 @@ ${formattedMessages}
   private async maybeReflect(
     record: ObservationalMemoryRecord,
     observationTokens: number,
-    threadId?: string,
+    _threadId?: string,
   ): Promise<void> {
     if (!this.shouldReflect(observationTokens)) {
       return;
     }
 
-    // ════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════��══════════════����═
     // LOCKING: Check if reflection is already in progress
     // ════════════════════════════════════════════════════════════
     if (record.isReflecting) {
@@ -1864,20 +1877,16 @@ ${formattedMessages}
       id: 'recall',
       description:
         config?.description ??
-        "Ask a question about the user's history or recall specific information from memory. " +
+        'Recall specific information from memory. ' +
           'Use this when you need to count items, list things, or answer questions that require ' +
           'searching through past conversations.',
       inputSchema: z.object({
-        question: z
+        pattern: z
           .string()
-          .describe(
-            "The question to ask about the user's history. Be specific. " +
-              'Examples: "How many trips did the user take?", "List all the user\'s pets", ' +
-              '"What restaurants has the user mentioned?"',
-          ),
+          .describe('The pattern to extract from memory. ' + 'Examples: "events", "past_jobs", "interests"'),
       }),
       execute: async (inputData, context) => {
-        const { question } = inputData;
+        const { pattern } = inputData;
 
         // Get thread/resource context from the tool execution context
         const threadId = context?.agent?.threadId;
@@ -1951,9 +1960,6 @@ ${formattedMessages}
 
           // Build the recall prompt
           const systemPrompt = `
-Your task is to answer the following question based on the available context:
-"${question}"
-
 === CONTEXT ===
 
 ${formattedContext}
@@ -1964,11 +1970,12 @@ ${formattedMessages}
 
 === INSTRUCTIONS ===
 
-- Answer the question directly and concisely
 - If counting items, provide the count and list the items
+- If there are multiple variants of the same item, count each separately (eg three different days for the same kind of event)
 - If the information is not available, say so clearly
 - Use the observations and patterns to inform your answer
-- Be specific and cite relevant details from the context`;
+- Be specific and cite relevant details from the context
+`;
 
           // Create the recall agent if not already created
           if (!recallAgent) {
@@ -1980,8 +1987,17 @@ ${formattedMessages}
             });
           }
 
+          const patternSlug = slugify(pattern);
           // Call the recall agent
-          const result = await recallAgent.generate(question, { instructions: systemPrompt });
+          const result = await recallAgent.generate(
+            `Another agent has called on you to extract a pattern from the memory system the two of you share. Extract the following pattern using the information you're aware of. Your complete response will be shown directly to the agent that called on you.
+<${patternSlug}>
+- A (original date)
+- B (original date)
+- etc ...
+</${patternSlug}>`,
+            { instructions: systemPrompt },
+          );
 
           return {
             success: true,

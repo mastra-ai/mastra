@@ -107,7 +107,7 @@ export interface ObserverConfig {
    * Whether to extract and track patterns (recurring themes).
    * Patterns help with counting and recalling related items.
    *
-   * @default true
+   * @default false
    */
   recognizePatterns?: boolean;
 }
@@ -157,7 +157,7 @@ export interface ReflectorConfig {
    * Whether to extract and consolidate patterns during reflection.
    * Patterns help with counting and recalling related items.
    *
-   * @default true
+   * @default false
    */
   recognizePatterns?: boolean;
 }
