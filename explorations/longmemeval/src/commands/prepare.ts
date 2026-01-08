@@ -19,6 +19,7 @@ import type { CoreMessage } from 'ai';
 import { getMemoryOptions, observationalMemoryConfig } from '../config';
 import { makeRetryModel } from '../retry-model';
 import { google } from '@ai-sdk/google';
+import { makeDeterministicIds } from './deterministic-ids';
 
 const retry4o = makeRetryModel(google('gemini-2.5-flash'));
 
@@ -884,7 +885,10 @@ export class PrepareCommand {
 
     // Persist storage
     if (usesObservationalMemory && omStorage) {
-      await omStorage.persist(join(questionDir, 'om.json'));
+      const omJsonPath = join(questionDir, 'om.json');
+      await omStorage.persist(omJsonPath);
+      // Make message IDs deterministic for clean git diffs
+      await makeDeterministicIds(omJsonPath);
     } else {
       await benchmarkStore.persist(join(questionDir, 'db.json'));
     }

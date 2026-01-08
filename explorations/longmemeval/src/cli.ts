@@ -16,6 +16,7 @@ import { SyncCommand } from './commands/sync';
 import { CleanCommand } from './commands/clean';
 import { ObscureThreadIdsCommand } from './commands/obscure-thread-ids';
 import { SessionsCommand } from './commands/sessions';
+import { DeterministicIdsCommand } from './commands/deterministic-ids';
 
 const program = new Command();
 
@@ -812,6 +813,25 @@ program
         questionId: options.questionId,
         showAll: options.all,
       });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// Deterministic IDs command - update message IDs to be deterministic
+program
+  .command('deterministic-ids')
+  .description('Update message IDs in prepared data to be deterministic (thread_id_msg_index)')
+  .option('--prepared-data-dir <dir>', 'Directory containing prepared data')
+  .option('-q, --question-id <id>', 'Only update a specific question')
+  .action(async options => {
+    try {
+      const command = new DeterministicIdsCommand({
+        preparedDataDir: options.preparedDataDir,
+        questionId: options.questionId,
+      });
+      await command.run();
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
       process.exit(1);
