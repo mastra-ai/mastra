@@ -21030,5 +21030,544 @@ describe('Workflow', () => {
         }),
       );
     });
+
+    it('should provide getInitData function in onFinish callback', async () => {
+      let receivedInitData: any = null;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-getInitData-onFinish-workflow',
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedInitData = result.getInitData();
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: { userId: 'user-123' } });
+
+      expect(receivedInitData).toEqual({ userId: 'user-123' });
+    });
+
+    it('should provide getInitData function in onError callback', async () => {
+      let receivedInitData: any = null;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-getInitData-onError-workflow',
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedInitData = errorInfo.getInitData();
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: { userId: 'user-456' } });
+
+      expect(receivedInitData).toEqual({ userId: 'user-456' });
+    });
+
+    it('should provide mastra instance in onFinish callback', async () => {
+      let receivedMastra: Mastra | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-mastra-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedMastra = result.mastra;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-mastra-onFinish-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-mastra-onFinish-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedMastra).toBe(mastra);
+    });
+
+    it('should provide mastra instance in onError callback', async () => {
+      let receivedMastra: Mastra | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-mastra-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedMastra = errorInfo.mastra;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-mastra-onError-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-mastra-onError-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedMastra).toBe(mastra);
+    });
+
+    it('should provide requestContext in onFinish callback', async () => {
+      let receivedRequestContext: RequestContext | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-requestContext-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedRequestContext = result.requestContext;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-requestContext-onFinish-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const requestContext = new RequestContext([['customKey', 'customValue']]);
+
+      const run = await mastra.getWorkflow('test-requestContext-onFinish-workflow').createRun();
+      await run.start({ inputData: {}, requestContext });
+
+      expect(receivedRequestContext).toBeDefined();
+      expect(receivedRequestContext?.get('customKey')).toBe('customValue');
+    });
+
+    it('should provide requestContext in onError callback', async () => {
+      let receivedRequestContext: RequestContext | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-requestContext-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedRequestContext = errorInfo.requestContext;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-requestContext-onError-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const requestContext = new RequestContext([['errorKey', 'errorValue']]);
+
+      const run = await mastra.getWorkflow('test-requestContext-onError-workflow').createRun();
+      await run.start({ inputData: {}, requestContext });
+
+      expect(receivedRequestContext).toBeDefined();
+      expect(receivedRequestContext?.get('errorKey')).toBe('errorValue');
+    });
+
+    it('should provide runId in onFinish callback', async () => {
+      let receivedRunId: string | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-runId-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedRunId = result.runId;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedRunId).toBeDefined();
+      expect(typeof receivedRunId).toBe('string');
+      expect(receivedRunId).toBe(run.runId);
+    });
+
+    it('should provide workflowId in onFinish callback', async () => {
+      let receivedWorkflowId: string | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflowId-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedWorkflowId = result.workflowId;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedWorkflowId).toBe('test-workflowId-onFinish-workflow');
+    });
+
+    it('should provide resourceId in onFinish callback when provided', async () => {
+      let receivedResourceId: string | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-resourceId-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedResourceId = result.resourceId;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-resourceId-onFinish-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-resourceId-onFinish-workflow').createRun({
+        resourceId: 'user-resource-123',
+      });
+      await run.start({ inputData: {} });
+
+      expect(receivedResourceId).toBe('user-resource-123');
+    });
+
+    it('should provide logger in onFinish callback', async () => {
+      let receivedLogger: any = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedLogger = result.logger;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedLogger).toBeDefined();
+      expect(typeof receivedLogger.info).toBe('function');
+      expect(typeof receivedLogger.error).toBe('function');
+    });
+
+    it('should provide state in onFinish callback', async () => {
+      let receivedState: Record<string, any> | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ setState }) => {
+          await setState({ counter: 42 });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ counter: z.number().optional() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-state-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ counter: z.number().optional() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedState = result.state;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedState).toBeDefined();
+      expect(receivedState?.counter).toBe(42);
+    });
+
+    it('should provide runId in onError callback', async () => {
+      let receivedRunId: string | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-runId-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedRunId = errorInfo.runId;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedRunId).toBeDefined();
+      expect(typeof receivedRunId).toBe('string');
+      expect(receivedRunId).toBe(run.runId);
+    });
+
+    it('should provide workflowId in onError callback', async () => {
+      let receivedWorkflowId: string | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflowId-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedWorkflowId = errorInfo.workflowId;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedWorkflowId).toBe('test-workflowId-onError-workflow');
+    });
+
+    it('should provide logger in onError callback', async () => {
+      let receivedLogger: any = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedLogger = errorInfo.logger;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedLogger).toBeDefined();
+      expect(typeof receivedLogger.info).toBe('function');
+      expect(typeof receivedLogger.error).toBe('function');
+    });
+
+    it('should provide resourceId in onError callback when provided', async () => {
+      let receivedResourceId: string | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-resourceId-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedResourceId = errorInfo.resourceId;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-resourceId-onError-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-resourceId-onError-workflow').createRun({
+        resourceId: 'error-resource-456',
+      });
+      await run.start({ inputData: {} });
+
+      expect(receivedResourceId).toBe('error-resource-456');
+    });
+
+    it('should provide state in onError callback', async () => {
+      let receivedState: Record<string, any> | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ setState }) => {
+          await setState({ counter: 10 });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ counter: z.number().optional() }),
+      });
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(new Error('Step execution failed')),
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({}),
+        stateSchema: z.object({ counter: z.number().optional() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-state-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({ counter: z.number().optional() }),
+        steps: [step1, failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedState = errorInfo.state;
+          },
+        },
+      });
+      workflow.then(step1).then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedState).toBeDefined();
+      expect(receivedState?.counter).toBe(10);
+    });
   });
 });
