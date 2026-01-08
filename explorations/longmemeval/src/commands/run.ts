@@ -456,7 +456,7 @@ When answering questions, carefully review the conversation history to identify 
 For example, if the user previously mentioned they prefer a specific software, tool, or approach, tailor your recommendations to match their stated preferences.
 Be specific rather than generic when the user has expressed clear preferences in past conversations. If there is a clear preference, focus in on that, and do not add additional irrelevant information.`;
 
-    const omDebugPath = join(process.cwd(), 'omm.md');
+    const omDebugPath = join(questionDir, 'om.md');
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
