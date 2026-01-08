@@ -33,7 +33,8 @@
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/memory": "link:../../packages/memory",
-      "mastra": "link:../../packages/cli"
+      "mastra": "link:../../packages/cli",
+      "jws": "^4.0.1"
     }
   },
   "devDependencies": {

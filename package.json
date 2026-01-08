@@ -101,7 +101,8 @@
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3",
-    "ssri": ">=6.0.2"
+    "ssri": ">=6.0.2",
+    "jws": "^4.0.1"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.2",
