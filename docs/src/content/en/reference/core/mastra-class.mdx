@@ -13,8 +13,8 @@ The `Mastra` class is the central orchestrator in any Mastra application, managi
 
 Think of `Mastra` as a top-level registry:
 
-- Registering **integrations** makes them accessible to **agents**, **workflows**, and **tools** alike.
-- **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
+- Registering integrations makes them accessible to agents, workflows, and tools alike.
+- Tools aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
 
 ## Usage example
 
@@ -40,6 +40,8 @@ export const mastra = new Mastra({
 ```
 
 ## Constructor parameters
+
+Visit the [Configuration reference](/reference/v1/configuration) for detailed documentation on all available configuration options.
 
 <PropertiesTable
   content={[

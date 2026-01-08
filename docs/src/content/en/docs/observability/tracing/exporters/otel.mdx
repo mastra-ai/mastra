@@ -166,7 +166,7 @@ new OtelExporter({
 
 [Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
 
-Datadog uses gRPC for OTLP ingestion, which requires explicit imports and bundler configuration to work correctly:
+Datadog uses gRPC for OTLP ingestion, which requires explicit imports and [bundler configuration](/reference/v1/configuration#bundlerexternals) to work correctly:
 
 ```typescript title="src/mastra/index.ts"
 // Explicitly import gRPC dependencies for the bundler
@@ -181,7 +181,6 @@ export const mastra = new Mastra({
   bundler: {
     externals: ["@grpc/grpc-js"],
   },
-
   observability: new Observability({
     configs: {
       default: {

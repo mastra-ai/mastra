@@ -1,0 +1,110 @@
+---
+title: "Reference: Configuration"
+description: "Reference documentation on Mastra's configuration options"
+packages:
+  - "@mastra/core"
+---
+
+# Configuration
+
+The following reference covers all supported options in Mastra. You initialize and configure Mastra by instantiating the [`Mastra` class](/reference/v1/core/mastra-class).
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // Your options...
+});
+```
+
+## Top-level options
+
+### agents
+
+### deployer
+
+### events
+
+### gateways
+
+### idGenerator
+
+### logger
+
+### mcpServers
+
+### memory
+
+### observability
+
+### processors
+
+### pubsub
+
+### scorers
+
+### storage
+
+### tools
+
+### tts
+
+### vectors
+
+### workflows
+
+## Bundler options
+
+### bundler.externals
+
+### bundler.sourcemap
+
+### bundler.transpilePackages
+
+## Server options
+
+### server.apiRoutes
+
+By default, Mastra automatically exposes registered agents and workflows via its server. For additional behavior you can define your own HTTP routes.
+
+Visit the [Custom API routes](/docs/v1/server/custom-api-routes) documentation to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
+        handler: async (c) => {
+          return c.json({ message: "Custom route" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### server.auth
+
+### server.bodySizeLimit
+
+### server.build
+
+### server.cors
+
+### server.host
+
+### server.https
+
+### server.middleware
+
+### server.onError
+
+### server.port
+
+### server.studioBase
+
+### server.timeout
