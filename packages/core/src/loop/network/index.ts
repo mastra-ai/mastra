@@ -1580,7 +1580,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         const messages = [...recallResult.messages]?.reverse()?.filter(message => message.role === 'assistant');
         lastAssistantMessage = messages[0];
       }
-      console.dir({ lastAssistantMessage, messages: recallResult?.messages }, { depth: null });
       if (lastAssistantMessage) {
         const { metadata } = lastAssistantMessage.content;
         if (metadata?.requireApprovalMetadata) {

@@ -374,7 +374,10 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       );
 
     setIsRunning(true);
-    setNetworkToolCallApprovals(prev => ({ ...prev, [toolName]: { status: 'declined' } }));
+    setNetworkToolCallApprovals(prev => ({
+      ...prev,
+      [runId ? `${runId}-${toolName}` : toolName]: { status: 'declined' },
+    }));
 
     const agent = baseClient.getAgent(agentId);
     const response = await agent.declineNetworkToolCall({ runId: networkRunId });
