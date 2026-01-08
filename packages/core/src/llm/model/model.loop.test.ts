@@ -52,7 +52,7 @@ describe.concurrent('MastraLLMVNext', () => {
       methodType: 'stream',
     });
 
-    const res = await result.aisdk.v5.getFullOutput();
+    const res = await result.getFullOutput();
     expect(res).toBeDefined();
     expect(res.text).toBeDefined();
     expect(res.text).toBeTypeOf('string');
@@ -97,7 +97,7 @@ describe.concurrent('MastraLLMVNext', () => {
       methodType: 'stream',
     });
 
-    const chunks = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+    const chunks = await convertAsyncIterableToArray(result.fullStream);
     expect(chunks).toBeDefined();
     expect(chunks.length).toBeGreaterThan(0);
   }, 20000);
@@ -146,7 +146,7 @@ describe.concurrent('MastraLLMVNext', () => {
     expect(object.age).toBeDefined();
     expect(object.age).toBeTypeOf('number');
 
-    const aisdkObjectStreamChunks = await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+    const aisdkObjectStreamChunks = await convertAsyncIterableToArray(result.objectStream);
     expect(aisdkObjectStreamChunks).toBeDefined();
     expect(aisdkObjectStreamChunks.length).toBeGreaterThan(0);
     aisdkObjectStreamChunks.forEach(chunk => {
@@ -160,7 +160,7 @@ describe.concurrent('MastraLLMVNext', () => {
     expect(aisdkLastChunk.age).toBeDefined();
     expect(aisdkLastChunk.age).toBeTypeOf('number');
 
-    const aisdkObject = await result.aisdk.v5.object;
+    const aisdkObject = await result.object;
     expect(aisdkObject).toBeDefined();
     expect(aisdkObject.name).toBeDefined();
     expect(aisdkObject.name).toBeTypeOf('string');
@@ -223,7 +223,7 @@ describe.concurrent('MastraLLMVNext', () => {
       methodType: 'stream',
     });
 
-    const res = await result.aisdk.v5.getFullOutput();
+    const res = await result.getFullOutput();
 
     expect(res.object).toBeDefined();
     expect(res.object?.name).toBeDefined();
@@ -292,13 +292,13 @@ describe.concurrent('MastraLLMVNext', () => {
       methodType: 'stream',
     });
 
-    for await (const chunk of result.aisdk.v5.fullStream) {
+    for await (const chunk of result.fullStream) {
       if (chunk.type === 'object') {
         expect(chunk.object).toBeDefined();
       }
     }
 
-    const object = await result.aisdk.v5.object;
+    const object = await result.object;
     expect(object).toBeDefined();
     expect(object.name).toBeDefined();
     expect(object.name).toBeTypeOf('string');
