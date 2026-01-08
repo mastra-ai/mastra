@@ -416,7 +416,7 @@ The OtelExporter uses OpenTelemetry's `BatchSpanProcessor` for efficient span ex
 - **Default batch size**: 512 spans (configurable via `batchSize`)
 - **Export interval**: Every 5 seconds or when batch is full
 - **Queue size**: Up to 2048 spans queued in memory
-- **Production-ready**: Optimized for high-throughput applications
+- **High-throughput support**: Handles large volumes of spans efficiently
 
 This approach ensures:
 

@@ -233,7 +233,7 @@ export class PosthogExporter extends BaseExporter {
       const parentIsRootSpan = this.isParentRootSpan(span, traceData);
       const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
 
-      this.client.capture({
+      this.client?.capture({
         distinctId,
         event: eventName,
         properties,
@@ -292,7 +292,7 @@ export class PosthogExporter extends BaseExporter {
     const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
     Object.assign(traceProperties, customMetadata);
 
-    this.client.capture({
+    this.client?.capture({
       distinctId,
       event: '$ai_trace',
       properties: traceProperties,
@@ -307,7 +307,7 @@ export class PosthogExporter extends BaseExporter {
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0);
 
-    this.client.capture({
+    this.client?.capture({
       distinctId,
       event: eventName,
       properties,

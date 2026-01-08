@@ -370,6 +370,11 @@ export class BraintrustExporter extends BaseExporter {
       return;
     }
 
+    // Guard against null config (when exporter is disabled)
+    if (!this.config) {
+      return;
+    }
+
     try {
       const loggerInstance = await initLogger({
         projectName: this.config.projectName ?? 'mastra-tracing',

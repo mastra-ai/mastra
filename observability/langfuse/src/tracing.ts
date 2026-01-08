@@ -127,7 +127,7 @@ export class LangfuseExporter extends BaseExporter {
         `Missing required credentials (publicKey: ${publicKeySource}, secretKey: ${secretKeySource}). ` +
           `Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables or pass them in config.`,
       );
-      // Create a no-op client to prevent runtime errors
+      // Set client to null - safety is ensured by the isDisabled flag set above
       this.client = null as any;
       return;
     }
