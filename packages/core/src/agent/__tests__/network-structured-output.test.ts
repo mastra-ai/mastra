@@ -79,42 +79,24 @@ describe('Agent Network - Structured Output', () => {
         // First call is routing, subsequent calls return structured result
         const text = callCount === 1 ? routingResponse : structuredResultJson;
 
-        // For structured output, stream the JSON in chunks like structured-output.test.ts does
-        const chunks =
-          callCount === 1
-            ? [
-                { type: 'stream-start' as const, warnings: [] },
-                { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start' as const, id: 'text-1' },
-                { type: 'text-delta' as const, id: 'text-1', delta: text },
-                { type: 'text-end' as const, id: 'text-1' },
-                {
-                  type: 'finish' as const,
-                  finishReason: 'stop' as const,
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                },
-              ]
-            : [
-                { type: 'stream-start' as const, warnings: [] },
-                { type: 'response-metadata' as const, id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start' as const, id: 'text-2' },
-                // Stream JSON incrementally like the structured output tests do
-                { type: 'text-delta' as const, id: 'text-2', delta: '{ ' },
-                { type: 'text-delta' as const, id: 'text-2', delta: '"summary": "Task completed successfully", ' },
-                {
-                  type: 'text-delta' as const,
-                  id: 'text-2',
-                  delta: '"recommendations": ["Recommendation 1", "Recommendation 2"], ',
-                },
-                { type: 'text-delta' as const, id: 'text-2', delta: '"confidence": 0.95 ' },
-                { type: 'text-delta' as const, id: 'text-2', delta: '}' },
-                { type: 'text-end' as const, id: 'text-2' },
-                {
-                  type: 'finish' as const,
-                  finishReason: 'stop' as const,
-                  usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
-                },
-              ];
+        // Stream JSON - for non-routing calls, stream in chunks
+        const chunks = [
+          { type: 'stream-start' as const, warnings: [] },
+          {
+            type: 'response-metadata' as const,
+            id: `id-${callCount}`,
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start' as const, id: `text-${callCount}` },
+          { type: 'text-delta' as const, id: `text-${callCount}`, delta: text },
+          { type: 'text-end' as const, id: `text-${callCount}` },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ];
 
         return {
           stream: convertArrayToReadableStream(chunks),
@@ -481,6 +463,185 @@ describe('Agent Network - Structured Output', () => {
 
       expect(result).toBeDefined();
       expect(result).toEqual(structuredResult);
+    });
+  });
+
+  describe('Edge cases', () => {
+    it('should resolve object promise even if awaited before stream consumption', async () => {
+      const mockModel = createNetworkMockModel({ structuredResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Test', {
+        requestContext,
+        completion: { scorers: [alwaysPassScorer as any] },
+        structuredOutput: { schema: resultSchema },
+      });
+
+      // Start awaiting object before consuming stream
+      const objectPromise = stream.object;
+
+      // Now consume stream
+      for await (const _chunk of stream) {
+        // Process
+      }
+
+      // Object should resolve correctly
+      const result = await objectPromise;
+      expect(result).toBeDefined();
+      expect(result!.summary).toBe(structuredResult.summary);
+    });
+
+    it('should handle complex nested schemas', async () => {
+      const nestedSchema = z.object({
+        metadata: z.object({
+          version: z.string(),
+          timestamp: z.number(),
+        }),
+        results: z.array(
+          z.object({
+            id: z.string(),
+            data: z.object({
+              value: z.number(),
+              tags: z.array(z.string()),
+            }),
+          }),
+        ),
+        status: z.enum(['success', 'partial', 'failed']),
+      });
+
+      const nestedResult = {
+        metadata: { version: '1.0', timestamp: 1234567890 },
+        results: [
+          { id: 'r1', data: { value: 42, tags: ['important', 'urgent'] } },
+          { id: 'r2', data: { value: 17, tags: ['low'] } },
+        ],
+        status: 'success' as const,
+      };
+
+      const mockModel = createNetworkMockModel({ structuredResult: nestedResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test nested',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Test nested schema', {
+        requestContext,
+        completion: { scorers: [alwaysPassScorer as any] },
+        structuredOutput: { schema: nestedSchema },
+      });
+
+      for await (const _chunk of stream) {
+        // Consume
+      }
+
+      const result = await stream.object;
+      expect(result).toBeDefined();
+      expect(result!.metadata.version).toBe('1.0');
+      expect(result!.results).toHaveLength(2);
+      expect(result!.results[0].data.tags).toContain('important');
+      expect(result!.status).toBe('success');
+    });
+
+    it('should handle schema with optional fields', async () => {
+      const optionalSchema = z.object({
+        required: z.string(),
+        optional: z.string().optional(),
+        withDefault: z.number().default(0),
+      });
+
+      const resultWithOptional = {
+        required: 'value',
+        // optional is omitted
+        withDefault: 5,
+      };
+
+      const mockModel = createNetworkMockModel({ structuredResult: resultWithOptional });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test optional',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Test optional fields', {
+        requestContext,
+        completion: { scorers: [alwaysPassScorer as any] },
+        structuredOutput: { schema: optionalSchema },
+      });
+
+      for await (const _chunk of stream) {
+        // Consume
+      }
+
+      const result = await stream.object;
+      expect(result).toBeDefined();
+      expect(result!.required).toBe('value');
+      expect(result!.optional).toBeUndefined();
+      expect(result!.withDefault).toBe(5);
+    });
+
+    it('should resolve object as undefined when network completes without structuredOutput', async () => {
+      const mockModel = createNetworkMockModel({});
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Test', {
+        requestContext,
+        completion: { scorers: [alwaysPassScorer as any] },
+        // No structuredOutput
+      });
+
+      for await (const _chunk of stream) {
+        // Consume
+      }
+
+      const result = await stream.object;
+      expect(result).toBeUndefined();
+    });
+
+    it('should accumulate usage across structured output generation', async () => {
+      const mockModel = createNetworkMockModel({ structuredResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Test usage', {
+        requestContext,
+        completion: { scorers: [alwaysPassScorer as any] },
+        structuredOutput: { schema: resultSchema },
+      });
+
+      for await (const _chunk of stream) {
+        // Consume
+      }
+
+      const usage = await stream.usage;
+      // Usage should include tokens from both routing and structured output calls
+      expect(usage.totalTokens).toBeGreaterThan(0);
     });
   });
 
