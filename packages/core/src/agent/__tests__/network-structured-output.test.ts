@@ -44,10 +44,7 @@ describe('Agent Network - Structured Output', () => {
    * 1. First call: Routing decision
    * 2. Second call: Structured output generation (when schema is provided)
    */
-  function createNetworkMockModel(options: {
-    routingResponse?: object;
-    structuredResult?: object;
-  }) {
+  function createNetworkMockModel(options: { routingResponse?: object; structuredResult?: object }) {
     const routingResponse = JSON.stringify(
       options.routingResponse ?? {
         primitiveId: 'none',
