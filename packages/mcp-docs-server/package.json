@@ -36,6 +36,7 @@
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "jsdom": "^26.1.0",
+    "local-pkg": "^1.1.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

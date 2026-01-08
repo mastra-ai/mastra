@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { getPackageInfo } from 'local-pkg';
 import { z } from 'zod';
 import { logger } from '../logger';
 
@@ -26,93 +27,87 @@ interface SourceMap {
 // Cache for performance
 const packageCache = new Map<string, string[]>();
 const sourceMapCache = new Map<string, SourceMap | null>();
-const nodeModulesCache = new Map<string, string | null>();
+const packageInfoCache = new Map<string, { rootPath: string; version: string } | null>();
 
-// Helper to find node_modules directory
-async function findNodeModules(startDir: string): Promise<string | null> {
-  // Use absolute path as cache key
-  const absoluteStartDir = path.resolve(startDir);
+// List of known @mastra packages to check for
+const KNOWN_MASTRA_PACKAGES = [
+  '@mastra/core',
+  '@mastra/cli',
+  '@mastra/memory',
+  '@mastra/rag',
+  '@mastra/evals',
+  '@mastra/mcp',
+  '@mastra/server',
+  '@mastra/deployer',
+  '@mastra/agent-builder',
+  '@mastra/auth',
+  '@mastra/fastembed',
+  '@mastra/loggers',
+  '@mastra/schema-compat',
+  '@mastra/codemod',
+] as const;
 
-  if (nodeModulesCache.has(absoluteStartDir)) {
-    const cached = nodeModulesCache.get(absoluteStartDir)!;
-    void logger.debug('Using cached node_modules path', { startDir: absoluteStartDir, path: cached });
-    return cached;
+// Helper to get package info using local-pkg (works across all package managers)
+async function getPackageRootPath(packageName: string): Promise<{ rootPath: string; version: string } | null> {
+  if (packageInfoCache.has(packageName)) {
+    return packageInfoCache.get(packageName)!;
   }
-
-  void logger.debug('Searching for node_modules', {
-    startDir: absoluteStartDir,
-    cwd: process.cwd(),
-  });
-
-  let currentDir = absoluteStartDir;
-  const root = path.parse(currentDir).root;
-  const searchedPaths: string[] = [];
-
-  while (currentDir !== root) {
-    const nodeModulesPath = path.join(currentDir, 'node_modules');
-    searchedPaths.push(nodeModulesPath);
-
-    try {
-      const stats = await fs.stat(nodeModulesPath);
-      if (stats.isDirectory()) {
-        void logger.info('Found node_modules directory', { path: nodeModulesPath });
-        nodeModulesCache.set(absoluteStartDir, nodeModulesPath);
-        return nodeModulesPath;
-      }
-    } catch {
-      // Continue searching up the directory tree
-    }
-    currentDir = path.dirname(currentDir);
-  }
-
-  void logger.warning('No node_modules directory found', {
-    searchedPaths,
-    startedFrom: absoluteStartDir,
-  });
-
-  nodeModulesCache.set(absoluteStartDir, null);
-  return null;
-}
-
-// Helper to get installed @mastra packages with embedded docs
-async function getInstalledMastraPackages(nodeModulesPath: string): Promise<string[]> {
-  if (packageCache.has(nodeModulesPath)) {
-    void logger.debug('Using cached package list', { count: packageCache.get(nodeModulesPath)!.length });
-    return packageCache.get(nodeModulesPath)!;
-  }
-
-  void logger.debug('Scanning for @mastra packages', { nodeModulesPath });
-
-  const packages: string[] = [];
-  const packagesWithoutDocs: string[] = [];
 
   try {
-    const mastraDir = path.join(nodeModulesPath, '@mastra');
-    const entries = await fs.readdir(mastraDir, { withFileTypes: true });
-
-    void logger.debug('Found @mastra directory entries', { count: entries.length });
-
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const docsPath = path.join(mastraDir, entry.name, 'dist', 'docs');
-        try {
-          await fs.stat(docsPath);
-          packages.push(`@mastra/${entry.name}`);
-          void logger.debug('Found package with embedded docs', { package: `@mastra/${entry.name}` });
-        } catch {
-          packagesWithoutDocs.push(`@mastra/${entry.name}`);
-        }
-      }
+    const info = await getPackageInfo(packageName);
+    if (info?.rootPath) {
+      const result = { rootPath: info.rootPath, version: info.version || 'unknown' };
+      packageInfoCache.set(packageName, result);
+      void logger.debug('Resolved package with local-pkg', { packageName, ...result });
+      return result;
     }
   } catch (err) {
-    void logger.warning('@mastra directory not found or not accessible', {
-      mastraDir: path.join(nodeModulesPath, '@mastra'),
+    void logger.debug('Package not found or error resolving', {
+      packageName,
       error: err instanceof Error ? err.message : String(err),
     });
   }
 
+  packageInfoCache.set(packageName, null);
+  return null;
+}
+
+// Helper to get installed @mastra packages with embedded docs
+async function getInstalledMastraPackages(projectPath: string): Promise<string[]> {
+  const cacheKey = projectPath;
+
+  if (packageCache.has(cacheKey)) {
+    void logger.debug('Using cached package list', { count: packageCache.get(cacheKey)!.length });
+    return packageCache.get(cacheKey)!;
+  }
+
+  void logger.debug('Scanning for @mastra packages using local-pkg', { projectPath });
+
+  const packages: string[] = [];
+  const packagesWithoutDocs: string[] = [];
+
+  // Check known packages using local-pkg (works with npm, yarn, pnpm, etc.)
+  for (const packageName of KNOWN_MASTRA_PACKAGES) {
+    const packageInfo = await getPackageRootPath(packageName);
+
+    if (packageInfo) {
+      const docsPath = path.join(packageInfo.rootPath, 'dist', 'docs');
+      try {
+        const stats = await fs.stat(docsPath);
+        if (stats.isDirectory()) {
+          packages.push(packageName);
+          void logger.debug('Found package with embedded docs', { package: packageName });
+        } else {
+          packagesWithoutDocs.push(packageName);
+        }
+      } catch {
+        packagesWithoutDocs.push(packageName);
+      }
+    }
+  }
+
   const result = packages.sort();
-  packageCache.set(nodeModulesPath, result);
+  packageCache.set(cacheKey, result);
 
   void logger.info('Package scan complete', {
     packagesWithDocs: result.length,
@@ -123,19 +118,24 @@ async function getInstalledMastraPackages(nodeModulesPath: string): Promise<stri
   return result;
 }
 
-// Helper to read SOURCE_MAP.json
-async function readSourceMap(nodeModulesPath: string, packageName: string): Promise<SourceMap | null> {
-  const cacheKey = `${nodeModulesPath}:${packageName}`;
-  if (sourceMapCache.has(cacheKey)) return sourceMapCache.get(cacheKey)!;
+// Helper to read SOURCE_MAP.json using package root from local-pkg
+async function readSourceMap(packageName: string): Promise<SourceMap | null> {
+  if (sourceMapCache.has(packageName)) return sourceMapCache.get(packageName)!;
 
   try {
-    const sourceMapPath = path.join(nodeModulesPath, packageName, 'dist', 'docs', 'SOURCE_MAP.json');
+    const packageInfo = await getPackageRootPath(packageName);
+    if (!packageInfo) {
+      sourceMapCache.set(packageName, null);
+      return null;
+    }
+
+    const sourceMapPath = path.join(packageInfo.rootPath, 'dist', 'docs', 'SOURCE_MAP.json');
     const content = await fs.readFile(sourceMapPath, 'utf-8');
     const sourceMap = JSON.parse(content) as SourceMap;
-    sourceMapCache.set(cacheKey, sourceMap);
+    sourceMapCache.set(packageName, sourceMap);
     return sourceMap;
   } catch {
-    sourceMapCache.set(cacheKey, null);
+    sourceMapCache.set(packageName, null);
     return null;
   }
 }
@@ -164,14 +164,7 @@ export const getMastraHelpTool = {
   execute: async (args: { projectPath: string }) => {
     void logger.debug('Executing getMastraHelp tool', { projectPath: args.projectPath });
 
-    const nodeModulesPath = await findNodeModules(args.projectPath);
-    if (!nodeModulesPath) {
-      return `No node_modules directory found starting from: ${args.projectPath}
-
-Make sure you're running this from within a Node.js project that has Mastra packages installed.`;
-    }
-
-    const packages = await getInstalledMastraPackages(nodeModulesPath);
+    const packages = await getInstalledMastraPackages(args.projectPath);
     if (packages.length === 0) {
       return `No Mastra packages with embedded documentation found in your project.
 
@@ -260,17 +253,7 @@ export const listInstalledPackagesTool = {
       },
     });
 
-    const nodeModulesPath = await findNodeModules(args.projectPath);
-    if (!nodeModulesPath) {
-      return `No node_modules directory found in the specified project path.
-
-Project path: ${args.projectPath}
-Searched up to root looking for node_modules but didn't find any.
-
-Make sure the projectPath points to a directory that contains (or is within) a Node.js project with @mastra/* packages installed.`;
-    }
-
-    const packages = await getInstalledMastraPackages(nodeModulesPath);
+    const packages = await getInstalledMastraPackages(args.projectPath);
     if (packages.length === 0) {
       return `No @mastra/* packages with embedded docs found in your project.
 
@@ -323,10 +306,7 @@ export const readSourceMapTool = {
   execute: async (args: { package: string; projectPath: string; filter?: string }) => {
     void logger.debug('Executing readMastraSourceMap tool', { args });
 
-    const nodeModulesPath = await findNodeModules(args.projectPath);
-    if (!nodeModulesPath) return 'No node_modules directory found.';
-
-    const sourceMap = await readSourceMap(nodeModulesPath, args.package);
+    const sourceMap = await readSourceMap(args.package);
     if (!sourceMap) return `No SOURCE_MAP.json found for ${args.package}.`;
 
     let exports = Object.entries(sourceMap.exports);
@@ -409,10 +389,7 @@ export const findExportTool = {
   }) => {
     void logger.debug('Executing findMastraExport tool', { args });
 
-    const nodeModulesPath = await findNodeModules(args.projectPath);
-    if (!nodeModulesPath) return 'No node_modules directory found.';
-
-    const sourceMap = await readSourceMap(nodeModulesPath, args.package);
+    const sourceMap = await readSourceMap(args.package);
     if (!sourceMap) return `No SOURCE_MAP.json found for ${args.package}.`;
 
     const exportInfo = sourceMap.exports[args.exportName];
@@ -430,12 +407,16 @@ Run getMastraExports with package="${args.package}" to see all available exports
 Run getMastraExports with package="${args.package}" to see all available exports.`;
     }
 
-    const packagePath = path.join(nodeModulesPath, args.package);
+    const packageInfo = await getPackageRootPath(args.package);
+    if (!packageInfo) {
+      return `Package ${args.package} not found. Make sure it's installed.`;
+    }
+
     const output: string[] = [`# ${args.exportName} (${args.package})`, ''];
 
     if (args.includeTypes !== false) {
       try {
-        const typesPath = path.join(packagePath, exportInfo.types);
+        const typesPath = path.join(packageInfo.rootPath, exportInfo.types);
         const typesContent = await fs.readFile(typesPath, 'utf-8');
         output.push('## Type Definition', '', `\`${exportInfo.types}\``, '', '```typescript');
 
@@ -458,7 +439,7 @@ Run getMastraExports with package="${args.package}" to see all available exports
 
     if (args.includeImplementation) {
       try {
-        const implPath = path.join(packagePath, exportInfo.implementation);
+        const implPath = path.join(packageInfo.rootPath, exportInfo.implementation);
         const implContent = await fs.readFile(implPath, 'utf-8');
         const lines = implContent.split('\n');
         const numLines = args.implementationLines || 50;
@@ -524,10 +505,12 @@ export const readEmbeddedDocsTool = {
   execute: async (args: { package: string; projectPath: string; topic?: string; file?: string }) => {
     void logger.debug('Executing readMastraEmbeddedDocs tool', { args });
 
-    const nodeModulesPath = await findNodeModules(args.projectPath);
-    if (!nodeModulesPath) return 'No node_modules directory found.';
+    const packageInfo = await getPackageRootPath(args.package);
+    if (!packageInfo) {
+      return `Package ${args.package} not found. Make sure it's installed.`;
+    }
 
-    const docsPath = path.join(nodeModulesPath, args.package, 'dist', 'docs');
+    const docsPath = path.join(packageInfo.rootPath, 'dist', 'docs');
 
     try {
       await fs.stat(docsPath);
@@ -652,17 +635,17 @@ export const searchEmbeddedDocsTool = {
   execute: async (args: { query: string; projectPath: string; package?: string; maxResults?: number }) => {
     void logger.debug('Executing searchMastraEmbeddedDocs tool', { args });
 
-    const nodeModulesPath = await findNodeModules(args.projectPath);
-    if (!nodeModulesPath) return 'No node_modules directory found.';
-
-    const packages = args.package ? [args.package] : await getInstalledMastraPackages(nodeModulesPath);
+    const packages = args.package ? [args.package] : await getInstalledMastraPackages(args.projectPath);
     if (packages.length === 0) return 'No Mastra packages found.';
 
     const queryLower = args.query.toLowerCase();
     const results: Array<{ pkg: string; file: string; excerpt: string; score: number }> = [];
 
     for (const pkg of packages) {
-      const docsPath = path.join(nodeModulesPath, pkg, 'dist', 'docs');
+      const packageInfo = await getPackageRootPath(pkg);
+      if (!packageInfo) continue;
+
+      const docsPath = path.join(packageInfo.rootPath, 'dist', 'docs');
 
       try {
         const findFiles = async (dir: string): Promise<string[]> => {
