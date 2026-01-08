@@ -379,6 +379,54 @@ describe('wrapSchemaForQueryParams', () => {
         expect(withNull.data.tags).toBeNull();
       }
     });
+
+    it('should wrap double-optional object fields (after .partial() on already-optional field)', () => {
+      // This reproduces the issue with tracesFilterSchema where startedAt is already optional
+      // and then .partial() is called, creating ZodOptional<ZodOptional<ZodObject>>
+      const dateRangeSchema = z.object({
+        start: z.coerce.date().optional(),
+        end: z.coerce.date().optional(),
+      });
+
+      const filterSchema = z.object({
+        startedAt: dateRangeSchema.optional(), // Already optional
+      });
+
+      // Calling .partial() creates double-optional wrapper
+      const partialSchema = filterSchema.partial();
+      const querySchema = wrapSchemaForQueryParams(partialSchema);
+
+      // Test with JSON string - this should work after the fix
+      const withValue = querySchema.safeParse({ startedAt: '{"start": "2024-01-01"}' });
+      expect(withValue.success).toBe(true);
+      if (withValue.success) {
+        expect(withValue.data.startedAt?.start).toBeInstanceOf(Date);
+      }
+
+      // Test without value
+      const withoutValue = querySchema.safeParse({});
+      expect(withoutValue.success).toBe(true);
+      if (withoutValue.success) {
+        expect(withoutValue.data.startedAt).toBeUndefined();
+      }
+    });
+
+    it('should wrap deeply nested optional/nullable fields', () => {
+      const innerSchema = z.object({ value: z.string() });
+
+      // Create a deeply nested optional/nullable chain
+      const schema = z.object({
+        field: innerSchema.optional().nullable().optional(),
+      });
+
+      const querySchema = wrapSchemaForQueryParams(schema);
+
+      const result = querySchema.safeParse({ field: '{"value": "test"}' });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.field).toEqual({ value: 'test' });
+      }
+    });
   });
 
   describe('mixed schema', () => {

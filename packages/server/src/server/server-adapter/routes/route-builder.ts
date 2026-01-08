@@ -83,10 +83,13 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
  * Simple types: strings, numbers, booleans, enums (can use z.coerce for conversion)
  */
 function isComplexType(schema: ZodTypeAny): boolean {
-  // Unwrap optional/nullable to check the inner type
+  // Unwrap all layers of optional/nullable to check the inner type
+  // This handles cases like .partial() on schemas with already-optional fields
+  // which creates ZodOptional<ZodOptional<...>> nesting
   let inner: ZodTypeAny = schema;
-  if (inner instanceof ZodOptional) inner = inner.unwrap();
-  if (inner instanceof ZodNullable) inner = inner.unwrap();
+  while (inner instanceof ZodOptional || inner instanceof ZodNullable) {
+    inner = inner instanceof ZodOptional ? inner.unwrap() : inner.unwrap();
+  }
 
   // Complex types that need JSON parsing
   return inner instanceof ZodArray || inner instanceof ZodRecord || inner instanceof ZodObject;
