@@ -1,6 +1,5 @@
 ---
 '@mastra/deployer': patch
-'@internal/playground': patch
 ---
 
 Add MASTRA_AUTO_DETECT_URL env var to auto-detect server URL from browser origin
