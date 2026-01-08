@@ -1035,7 +1035,12 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": "{ "content": "Hello, world!" }",
+                        "content": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
                         "role": "assistant",
                       },
                     ],
@@ -1245,7 +1250,12 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": "{ "invalid": "Hello, world!" }",
+                        "content": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
                         "role": "assistant",
                       },
                     ],
@@ -1452,7 +1462,12 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": "{ "invalid": "Hello, world!" }",
+                        "content": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
                         "role": "assistant",
                       },
                     ],
