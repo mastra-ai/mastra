@@ -301,4 +301,317 @@ describe('MastraMemory Processor Caching (Issue #11455)', () => {
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('cache invalidation when dependencies change', () => {
+    it('should invalidate SemanticRecall when setVector is called', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Set up semantic recall
+      (memory as any).vector = mockVector;
+      (memory as any).embedder = mockEmbedder;
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        semanticRecall: true,
+        lastMessages: false,
+      };
+
+      // Get initial processor instances
+      const inputProcessors1 = await memory.getInputProcessors();
+      const outputProcessors1 = await memory.getOutputProcessors();
+
+      const inputSemanticRecall1 = inputProcessors1.find(p => p.id === 'semantic-recall');
+      const outputSemanticRecall1 = outputProcessors1.find(p => p.id === 'semantic-recall');
+
+      expect(inputSemanticRecall1).toBeDefined();
+      expect(outputSemanticRecall1).toBeDefined();
+
+      // Create a new mock vector store
+      const newMockVector = {
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue([]),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue([]),
+      } as unknown as MastraVector;
+
+      // Call setVector to change the vector store
+      memory.setVector(newMockVector);
+
+      // Get processors again
+      const inputProcessors2 = await memory.getInputProcessors();
+      const outputProcessors2 = await memory.getOutputProcessors();
+
+      const inputSemanticRecall2 = inputProcessors2.find(p => p.id === 'semantic-recall');
+      const outputSemanticRecall2 = outputProcessors2.find(p => p.id === 'semantic-recall');
+
+      expect(inputSemanticRecall2).toBeDefined();
+      expect(outputSemanticRecall2).toBeDefined();
+
+      // SemanticRecall instances should be NEW (cache invalidated)
+      expect(inputSemanticRecall1).not.toBe(inputSemanticRecall2);
+      expect(outputSemanticRecall1).not.toBe(outputSemanticRecall2);
+    });
+
+    it('should invalidate SemanticRecall when setEmbedder is called', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Set up semantic recall
+      (memory as any).vector = mockVector;
+      (memory as any).embedder = mockEmbedder;
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        semanticRecall: true,
+        lastMessages: false,
+      };
+
+      // Get initial processor instances
+      const inputProcessors1 = await memory.getInputProcessors();
+      const outputProcessors1 = await memory.getOutputProcessors();
+
+      const inputSemanticRecall1 = inputProcessors1.find(p => p.id === 'semantic-recall');
+      const outputSemanticRecall1 = outputProcessors1.find(p => p.id === 'semantic-recall');
+
+      expect(inputSemanticRecall1).toBeDefined();
+      expect(outputSemanticRecall1).toBeDefined();
+
+      // Create a new mock embedder
+      const newMockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.4, 0.5, 0.6]],
+        }),
+        modelId: 'new-test-embedder',
+      } as unknown as MastraEmbeddingModel<string>;
+
+      // Call setEmbedder to change the embedder
+      memory.setEmbedder(newMockEmbedder);
+
+      // Get processors again
+      const inputProcessors2 = await memory.getInputProcessors();
+      const outputProcessors2 = await memory.getOutputProcessors();
+
+      const inputSemanticRecall2 = inputProcessors2.find(p => p.id === 'semantic-recall');
+      const outputSemanticRecall2 = outputProcessors2.find(p => p.id === 'semantic-recall');
+
+      expect(inputSemanticRecall2).toBeDefined();
+      expect(outputSemanticRecall2).toBeDefined();
+
+      // SemanticRecall instances should be NEW (cache invalidated)
+      expect(inputSemanticRecall1).not.toBe(inputSemanticRecall2);
+      expect(outputSemanticRecall1).not.toBe(outputSemanticRecall2);
+    });
+
+    it('should invalidate all processors when setStorage is called', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Set up all processor types
+      (memory as any).vector = mockVector;
+      (memory as any).embedder = mockEmbedder;
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        semanticRecall: true,
+        lastMessages: 10,
+        workingMemory: { enabled: true, template: '# Test' },
+      };
+
+      // Get initial processor instances from both input and output
+      const inputProcessors1 = await memory.getInputProcessors();
+      const outputProcessors1 = await memory.getOutputProcessors();
+
+      const inputSemanticRecall1 = inputProcessors1.find(p => p.id === 'semantic-recall');
+      const inputWorkingMemory1 = inputProcessors1.find(p => p.id === 'working-memory');
+      const inputMessageHistory1 = inputProcessors1.find(p => p.id === 'message-history');
+      const outputSemanticRecall1 = outputProcessors1.find(p => p.id === 'semantic-recall');
+      const outputMessageHistory1 = outputProcessors1.find(p => p.id === 'message-history');
+
+      expect(inputSemanticRecall1).toBeDefined();
+      expect(inputWorkingMemory1).toBeDefined();
+      expect(inputMessageHistory1).toBeDefined();
+      expect(outputSemanticRecall1).toBeDefined();
+      expect(outputMessageHistory1).toBeDefined();
+
+      // Create a new mock storage
+      const newMockMemoryStore = {
+        getThreadById: vi.fn().mockResolvedValue(null),
+        getThreadsByResourceId: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
+        listThreadsByResourceId: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
+        saveThread: vi.fn().mockImplementation(({ thread }) => Promise.resolve(thread)),
+        deleteThread: vi.fn().mockResolvedValue(undefined),
+        listMessages: vi.fn().mockResolvedValue({ messages: [] }),
+        getMessages: vi.fn().mockResolvedValue([]),
+        saveMessages: vi.fn().mockResolvedValue({ messages: [] }),
+        deleteMessages: vi.fn().mockResolvedValue(undefined),
+        getResourceById: vi.fn().mockResolvedValue(null),
+        updateResource: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const newMockStorage = {
+        getStore: vi.fn().mockResolvedValue(newMockMemoryStore),
+        init: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MastraStorage;
+
+      // Call setStorage to change the storage
+      memory.setStorage(newMockStorage);
+
+      // Get processors again
+      const inputProcessors2 = await memory.getInputProcessors();
+      const outputProcessors2 = await memory.getOutputProcessors();
+
+      const inputSemanticRecall2 = inputProcessors2.find(p => p.id === 'semantic-recall');
+      const inputWorkingMemory2 = inputProcessors2.find(p => p.id === 'working-memory');
+      const inputMessageHistory2 = inputProcessors2.find(p => p.id === 'message-history');
+      const outputSemanticRecall2 = outputProcessors2.find(p => p.id === 'semantic-recall');
+      const outputMessageHistory2 = outputProcessors2.find(p => p.id === 'message-history');
+
+      expect(inputSemanticRecall2).toBeDefined();
+      expect(inputWorkingMemory2).toBeDefined();
+      expect(inputMessageHistory2).toBeDefined();
+      expect(outputSemanticRecall2).toBeDefined();
+      expect(outputMessageHistory2).toBeDefined();
+
+      // ALL processor instances should be NEW (cache invalidated)
+      expect(inputSemanticRecall1).not.toBe(inputSemanticRecall2);
+      expect(inputWorkingMemory1).not.toBe(inputWorkingMemory2);
+      expect(inputMessageHistory1).not.toBe(inputMessageHistory2);
+      expect(outputSemanticRecall1).not.toBe(outputSemanticRecall2);
+      expect(outputMessageHistory1).not.toBe(outputMessageHistory2);
+    });
+  });
+
+  describe('WorkingMemory and MessageHistory caching', () => {
+    it('should return the SAME WorkingMemory instance across multiple getInputProcessors calls', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Enable working memory
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        workingMemory: { enabled: true, template: '# Test Working Memory' },
+        lastMessages: false,
+        semanticRecall: false,
+      };
+
+      // Call getInputProcessors multiple times
+      const processors1 = await memory.getInputProcessors();
+      const processors2 = await memory.getInputProcessors();
+      const processors3 = await memory.getInputProcessors();
+
+      // Find WorkingMemory processors
+      const workingMemory1 = processors1.find(p => p.id === 'working-memory');
+      const workingMemory2 = processors2.find(p => p.id === 'working-memory');
+      const workingMemory3 = processors3.find(p => p.id === 'working-memory');
+
+      expect(workingMemory1).toBeDefined();
+      expect(workingMemory2).toBeDefined();
+      expect(workingMemory3).toBeDefined();
+
+      // Same instance should be returned across all calls
+      expect(workingMemory1).toBe(workingMemory2);
+      expect(workingMemory2).toBe(workingMemory3);
+    });
+
+    it('should return the SAME MessageHistory instance across multiple getInputProcessors calls', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Enable message history
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        lastMessages: 10,
+        workingMemory: { enabled: false },
+        semanticRecall: false,
+      };
+
+      // Call getInputProcessors multiple times
+      const processors1 = await memory.getInputProcessors();
+      const processors2 = await memory.getInputProcessors();
+      const processors3 = await memory.getInputProcessors();
+
+      // Find MessageHistory processors
+      const messageHistory1 = processors1.find(p => p.id === 'message-history');
+      const messageHistory2 = processors2.find(p => p.id === 'message-history');
+      const messageHistory3 = processors3.find(p => p.id === 'message-history');
+
+      expect(messageHistory1).toBeDefined();
+      expect(messageHistory2).toBeDefined();
+      expect(messageHistory3).toBeDefined();
+
+      // Same instance should be returned across all calls
+      expect(messageHistory1).toBe(messageHistory2);
+      expect(messageHistory2).toBe(messageHistory3);
+    });
+
+    it('should return the SAME MessageHistory instance across multiple getOutputProcessors calls', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Enable message history
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        lastMessages: 10,
+        workingMemory: { enabled: false },
+        semanticRecall: false,
+      };
+
+      // Call getOutputProcessors multiple times
+      const processors1 = await memory.getOutputProcessors();
+      const processors2 = await memory.getOutputProcessors();
+      const processors3 = await memory.getOutputProcessors();
+
+      // Find MessageHistory processors
+      const messageHistory1 = processors1.find(p => p.id === 'message-history');
+      const messageHistory2 = processors2.find(p => p.id === 'message-history');
+      const messageHistory3 = processors3.find(p => p.id === 'message-history');
+
+      expect(messageHistory1).toBeDefined();
+      expect(messageHistory2).toBeDefined();
+      expect(messageHistory3).toBeDefined();
+
+      // Same instance should be returned across all calls
+      expect(messageHistory1).toBe(messageHistory2);
+      expect(messageHistory2).toBe(messageHistory3);
+    });
+
+    it('should share the same MessageHistory instance between getInputProcessors and getOutputProcessors', async () => {
+      const memory = new MockMemory({
+        storage: mockStorage as any,
+        enableMessageHistory: false,
+      });
+
+      // Enable message history
+      (memory as any).threadConfig = {
+        ...(memory as any).threadConfig,
+        lastMessages: 10,
+        workingMemory: { enabled: false },
+        semanticRecall: false,
+      };
+
+      // Call both input and output processor getters
+      const inputProcessors = await memory.getInputProcessors();
+      const outputProcessors = await memory.getOutputProcessors();
+
+      // Find MessageHistory processors
+      const inputMessageHistory = inputProcessors.find(p => p.id === 'message-history');
+      const outputMessageHistory = outputProcessors.find(p => p.id === 'message-history');
+
+      expect(inputMessageHistory).toBeDefined();
+      expect(outputMessageHistory).toBeDefined();
+
+      // Same instance should be shared between input and output
+      expect(inputMessageHistory).toBe(outputMessageHistory);
+    });
+  });
 });
