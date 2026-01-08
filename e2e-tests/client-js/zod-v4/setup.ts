@@ -8,6 +8,7 @@ import { Observability, DefaultExporter } from '@mastra/observability';
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import getPort from 'get-port';
+import { waitForServer } from '@internal/client-js-test-utils';
 
 let server: ReturnType<typeof serve> | undefined;
 
@@ -89,21 +90,6 @@ export default async function setup(project: TestProject) {
       server.close();
     }
   };
-}
-
-async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<void> {
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const res = await fetch(`${baseUrl}/api/agents`);
-      if (res.ok) {
-        return;
-      }
-    } catch {
-      // Server not ready yet
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  throw new Error(`Server did not start within ${maxAttempts * 500}ms`);
 }
 
 declare module 'vitest' {
