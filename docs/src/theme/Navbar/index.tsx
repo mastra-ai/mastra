@@ -20,14 +20,14 @@ function AnnouncementBanner() {
         <span className="font-semibold">Mastra v1 was released!</span> Start{" "}
         <a
           className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
-          href="https://mastra.ai/docs/v1/getting-started/start"
+          href="https://mastra.ai/docs/getting-started/start"
         >
           new projects
         </a>{" "}
         with v1 or{" "}
         <a
           className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
-          href="https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview"
+          href="https://mastra.ai/guides/migrations/upgrade-to-v1/overview"
         >
           upgrade
         </a>{" "}
