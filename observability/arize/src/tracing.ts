@@ -51,41 +51,62 @@ export class ArizeExporter extends OtelExporter {
     const headers: Record<string, string> = {
       ...config.headers,
     };
+
+    // Validate credentials based on mode
+    let disabledReason: string | undefined;
+
     if (spaceId) {
       // Arize AX mode requires an API key
       if (!apiKey) {
-        throw new Error(
+        disabledReason =
           `${LOG_PREFIX} API key is required for Arize AX. ` +
-            `Set ARIZE_API_KEY environment variable or pass apiKey in config.`,
-        );
+          `Set ARIZE_API_KEY environment variable or pass apiKey in config.`;
+      } else {
+        // arize ax header configuration
+        headers['space_id'] = spaceId;
+        headers['api_key'] = apiKey;
+        endpoint = endpoint || ARIZE_AX_ENDPOINT;
       }
-      // arize ax header configuration
-      headers['space_id'] = spaceId;
-      headers['api_key'] = apiKey;
-      endpoint = endpoint || ARIZE_AX_ENDPOINT;
     } else if (apiKey) {
       // standard otel header configuration
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
-    if (!endpoint) {
-      throw new Error(
+
+    if (!disabledReason && !endpoint) {
+      disabledReason =
         `${LOG_PREFIX} Endpoint is required in configuration. ` +
-          `Set PHOENIX_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`,
-      );
+        `Set PHOENIX_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`;
     }
+
+    // If disabled, create with minimal config and disable
+    if (disabledReason) {
+      super({
+        ...config,
+        provider: {
+          custom: {
+            endpoint: 'http://disabled',
+            headers: {},
+            protocol: 'http/protobuf',
+          },
+        },
+      });
+      this.setDisabled(disabledReason);
+      return;
+    }
+
     super({
       exporter: new OpenInferenceOTLPTraceExporter({
-        url: endpoint,
+        url: endpoint!,
         headers,
       }),
       ...config,
       resourceAttributes: {
-        [SEMRESATTRS_PROJECT_NAME]: projectName,
+        ...(projectName ? { [SEMRESATTRS_PROJECT_NAME]: projectName } : {}),
         ...config.resourceAttributes,
       },
       provider: {
         custom: {
-          endpoint,
+          endpoint: endpoint!,
           headers,
           protocol: 'http/protobuf',
         },
