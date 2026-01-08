@@ -215,7 +215,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         if (typeof snapshot === 'string') {
           try {
             snapshot = JSON.parse(snapshot) as WorkflowRunState;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (error) {
             return false;
           }

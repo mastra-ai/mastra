@@ -32,7 +32,7 @@ interface StreamStepOptions {
   autoResumeSuspendedTools?: boolean;
 }
 
-export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createStreamStep<OUTPUT = undefined>({
   capabilities,
   runId,
   returnScorerData,

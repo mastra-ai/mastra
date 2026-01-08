@@ -8,7 +8,6 @@ import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types
 import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { OutputSchema } from '../stream/base/schema';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
@@ -45,7 +44,7 @@ export interface NetworkRoutingConfig {
 /**
  * Full configuration options for agent.network() execution.
  */
-export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
+export type NetworkOptions<OUTPUT = undefined> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
@@ -133,15 +132,15 @@ export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
    * const result = await stream.object;
    * ```
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT extends undefined ? never : OUTPUT>;
 };
 
 /**
  * @deprecated Use NetworkOptions instead
  */
-export type MultiPrimitiveExecutionOptions<OUTPUT extends OutputSchema = undefined> = NetworkOptions<OUTPUT>;
+export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
-export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
+export type AgentExecutionOptions<OUTPUT = undefined> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -238,13 +237,13 @@ export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallConcurrency?: number;
 
   /** Structured output generation with enhanced developer experience  */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
 };
 
-export type InnerAgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
+export type InnerAgentExecutionOptions<OUTPUT = undefined> = AgentExecutionOptions<OUTPUT> & {
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;

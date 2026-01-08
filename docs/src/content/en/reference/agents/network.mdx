@@ -349,13 +349,13 @@ await agent.network(`
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT> | undefined>",
+      type: "Promise<OUTPUT | undefined>",
       description:
         "A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
     },

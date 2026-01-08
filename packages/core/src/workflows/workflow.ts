@@ -76,8 +76,8 @@ import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
-export type AgentStepOptions<TOUTPUT> = Omit<
-  AgentExecutionOptions<OutputSchema<TOUTPUT>> & AgentStreamOptions,
+export type AgentStepOptions<TOutput> = Omit<
+  AgentExecutionOptions<TOutput> & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
   | 'requestContext'
