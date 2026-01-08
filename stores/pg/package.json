@@ -16,12 +16,25 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./drizzle": {
+      "import": {
+        "types": "./dist/drizzle/index.d.ts",
+        "default": "./dist/drizzle/index.js"
+      },
+      "require": {
+        "types": "./dist/drizzle/index.d.ts",
+        "default": "./dist/drizzle/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/pg",
     "build:watch": "pnpm build:lib --watch",
+    "generate:drizzle": "node scripts/generate-drizzle-schema.mjs",
+    "generate:drizzle:check": "node scripts/generate-drizzle-schema.mjs --check",
+    "verify:drizzle": "node scripts/verify-drizzle-schema.mjs",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",
     "pretest:perf": "docker compose -f docker-compose.perf.yaml up -d && (for i in $(seq 1 30); do docker compose -f docker-compose.perf.yaml exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
@@ -48,13 +61,21 @@
     "@types/pg": "^8.16.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "drizzle-kit": "^0.31.8",
+    "drizzle-orm": "^0.45.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "drizzle-orm": ">=0.45.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    }
   },
   "files": [
     "dist",
