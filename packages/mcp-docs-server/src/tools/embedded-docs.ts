@@ -48,27 +48,35 @@ const KNOWN_MASTRA_PACKAGES = [
 ] as const;
 
 // Helper to get package info using local-pkg (works across all package managers)
-async function getPackageRootPath(packageName: string): Promise<{ rootPath: string; version: string } | null> {
-  if (packageInfoCache.has(packageName)) {
-    return packageInfoCache.get(packageName)!;
+async function getPackageRootPath(
+  packageName: string,
+  projectPath: string,
+): Promise<{ rootPath: string; version: string } | null> {
+  const cacheKey = `${packageName}:${projectPath}`;
+  if (packageInfoCache.has(cacheKey)) {
+    return packageInfoCache.get(cacheKey)!;
   }
 
   try {
-    const info = await getPackageInfo(packageName);
+    // Resolve package from the project's node_modules
+    const info = await getPackageInfo(packageName, {
+      paths: [path.join(projectPath, 'node_modules')],
+    });
     if (info?.rootPath) {
       const result = { rootPath: info.rootPath, version: info.version || 'unknown' };
-      packageInfoCache.set(packageName, result);
-      void logger.debug('Resolved package with local-pkg', { packageName, ...result });
+      packageInfoCache.set(cacheKey, result);
+      void logger.debug('Resolved package with local-pkg', { packageName, projectPath, ...result });
       return result;
     }
   } catch (err) {
     void logger.debug('Package not found or error resolving', {
       packageName,
+      projectPath,
       error: err instanceof Error ? err.message : String(err),
     });
   }
 
-  packageInfoCache.set(packageName, null);
+  packageInfoCache.set(cacheKey, null);
   return null;
 }
 
@@ -88,7 +96,7 @@ async function getInstalledMastraPackages(projectPath: string): Promise<string[]
 
   // Check known packages using local-pkg (works with npm, yarn, pnpm, etc.)
   for (const packageName of KNOWN_MASTRA_PACKAGES) {
-    const packageInfo = await getPackageRootPath(packageName);
+    const packageInfo = await getPackageRootPath(packageName, projectPath);
 
     if (packageInfo) {
       const docsPath = path.join(packageInfo.rootPath, 'dist', 'docs');
@@ -119,23 +127,24 @@ async function getInstalledMastraPackages(projectPath: string): Promise<string[]
 }
 
 // Helper to read SOURCE_MAP.json using package root from local-pkg
-async function readSourceMap(packageName: string): Promise<SourceMap | null> {
-  if (sourceMapCache.has(packageName)) return sourceMapCache.get(packageName)!;
+async function readSourceMap(packageName: string, projectPath: string): Promise<SourceMap | null> {
+  const cacheKey = `${packageName}:${projectPath}`;
+  if (sourceMapCache.has(cacheKey)) return sourceMapCache.get(cacheKey)!;
 
   try {
-    const packageInfo = await getPackageRootPath(packageName);
+    const packageInfo = await getPackageRootPath(packageName, projectPath);
     if (!packageInfo) {
-      sourceMapCache.set(packageName, null);
+      sourceMapCache.set(cacheKey, null);
       return null;
     }
 
     const sourceMapPath = path.join(packageInfo.rootPath, 'dist', 'docs', 'SOURCE_MAP.json');
     const content = await fs.readFile(sourceMapPath, 'utf-8');
     const sourceMap = JSON.parse(content) as SourceMap;
-    sourceMapCache.set(packageName, sourceMap);
+    sourceMapCache.set(cacheKey, sourceMap);
     return sourceMap;
   } catch {
-    sourceMapCache.set(packageName, null);
+    sourceMapCache.set(cacheKey, null);
     return null;
   }
 }
@@ -382,7 +391,7 @@ export const readSourceMapTool = {
   execute: async (args: { package: string; projectPath: string; filter?: string }) => {
     void logger.debug('Executing readMastraSourceMap tool', { args });
 
-    const sourceMap = await readSourceMap(args.package);
+    const sourceMap = await readSourceMap(args.package, args.projectPath);
     if (!sourceMap) return `No SOURCE_MAP.json found for ${args.package}.`;
 
     let exports = Object.entries(sourceMap.exports);
@@ -465,7 +474,7 @@ export const findExportTool = {
   }) => {
     void logger.debug('Executing findMastraExport tool', { args });
 
-    const sourceMap = await readSourceMap(args.package);
+    const sourceMap = await readSourceMap(args.package, args.projectPath);
     if (!sourceMap) return `No SOURCE_MAP.json found for ${args.package}.`;
 
     const exportInfo = sourceMap.exports[args.exportName];
@@ -483,7 +492,7 @@ Run getMastraExports with package="${args.package}" to see all available exports
 Run getMastraExports with package="${args.package}" to see all available exports.`;
     }
 
-    const packageInfo = await getPackageRootPath(args.package);
+    const packageInfo = await getPackageRootPath(args.package, args.projectPath);
     if (!packageInfo) {
       return `Package ${args.package} not found. Make sure it's installed.`;
     }
@@ -581,7 +590,7 @@ export const readEmbeddedDocsTool = {
   execute: async (args: { package: string; projectPath: string; topic?: string; file?: string }) => {
     void logger.debug('Executing readMastraEmbeddedDocs tool', { args });
 
-    const packageInfo = await getPackageRootPath(args.package);
+    const packageInfo = await getPackageRootPath(args.package, args.projectPath);
     if (!packageInfo) {
       return `Package ${args.package} not found. Make sure it's installed.`;
     }
@@ -718,7 +727,7 @@ export const searchEmbeddedDocsTool = {
     const results: Array<{ pkg: string; file: string; excerpt: string; score: number }> = [];
 
     for (const pkg of packages) {
-      const packageInfo = await getPackageRootPath(pkg);
+      const packageInfo = await getPackageRootPath(pkg, args.projectPath);
       if (!packageInfo) continue;
 
       const docsPath = path.join(packageInfo.rootPath, 'dist', 'docs');
