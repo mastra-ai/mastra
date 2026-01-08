@@ -3,12 +3,12 @@
 '@internal/playground': patch
 ---
 
-Add MASTRA_SERVER_URL environment variable support for cloud deployments
+Add MASTRA_SERVER_URL support and auto-detect from request origin
 
-Allows setting the full server URL via environment variable when running the playground in containerized/cloud environments where the external URL differs from the internal host/port.
+The playground now automatically uses `window.location.origin` as the server URL, so cloud deployments work without any configuration. Users visiting `https://myapp.com/` will have the playground connect to that URL automatically.
+
+You can still override with `MASTRA_SERVER_URL` env var if needed:
 
 ```bash
-MASTRA_SERVER_URL=https://myapp.com node ./index.mjs
+MASTRA_SERVER_URL=https://custom-api.com node ./index.mjs
 ```
-
-When set, this takes priority over the constructed `${protocol}://${host}:${port}` endpoint.
