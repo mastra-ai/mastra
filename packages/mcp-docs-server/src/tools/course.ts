@@ -581,7 +581,8 @@ export const startMastraCourse = {
 
 export const getMastraCourseStatus = {
   name: 'getMastraCourseStatus',
-  description: '[🎓 COURSE] Gets the current status of the Mastra Course, including which lessons and steps have been completed',
+  description:
+    '[🎓 COURSE] Gets the current status of the Mastra Course, including which lessons and steps have been completed',
   parameters: z.object({}),
   execute: async (_args: Record<string, never>) => {
     try {
