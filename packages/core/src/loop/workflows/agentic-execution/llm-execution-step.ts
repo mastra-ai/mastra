@@ -143,12 +143,41 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         });
         break;
 
+      case 'text-start': {
+        // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
+        // This is needed because, for example, OpenAI reasoning models send separate itemIds for
+        // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
+        // preserved so that when memory is replayed, OpenAI sees the required
+        // following item for the reasoning part.
+        if (chunk.payload.providerMetadata) {
+          runState.setState({
+            providerOptions: chunk.payload.providerMetadata,
+          });
+        }
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
       case 'text-delta': {
         const textDeltasFromState = runState.state.textDeltas;
         textDeltasFromState.push(chunk.payload.text);
         runState.setState({
           textDeltas: textDeltasFromState,
           isStreaming: true,
+        });
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
+      case 'text-end': {
+        // Clear providerOptions to prevent text's providerMetadata from leaking
+        // into subsequent parts (similar to reasoning-end clearing)
+        runState.setState({
+          providerOptions: undefined,
         });
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
@@ -563,10 +592,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           });
 
           try {
+            // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+            const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              tracingContext,
+              tracingContext: stepTracingContext,
               requestContext,
               model,
               steps: inputData.output?.steps || [],
@@ -944,6 +975,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           // Get current processor retry count from iteration data
           const currentRetryCount = inputData.processorRetryCount || 0;
 
+          // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+          const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -952,7 +985,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
-            tracingContext,
+            tracingContext: outputStepTracingContext,
             requestContext,
             retryCount: currentRetryCount,
           });

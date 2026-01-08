@@ -8,6 +8,17 @@ import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
+/**
+ * Content item type for assistant message content parts.
+ */
+interface ContentItem {
+  type: string;
+  metadata?: {
+    mode?: string;
+    completionResult?: unknown;
+  };
+}
+
 export interface AssistantMessageProps {
   hasModelList?: boolean;
 }
@@ -16,7 +27,12 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 
-  const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
+  const isNotAssistantTextResponse = (data.content as readonly ContentItem[]).every(
+    ({ type, metadata }) =>
+      type === 'tool-call' ||
+      type === 'reasoning' ||
+      (type === 'text' && metadata?.mode === 'network' && metadata?.completionResult),
+  );
 
   const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
 
@@ -33,7 +49,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
           }}
         />
       </div>
-      {!isToolCallAndOrReasoning && (
+      {!isNotAssistantTextResponse && (
         <div className={cn('h-6 pt-4 flex gap-2 items-center', { 'pb-1': showModelUsed })}>
           {showModelUsed && (
             <div className="flex items-center gap-1.5">

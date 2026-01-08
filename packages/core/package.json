@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.19",
+  "version": "1.0.0-beta.20",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -169,6 +169,16 @@
       "require": {
         "types": "./dist/agent/message-list/index.d.ts",
         "default": "./dist/agent/message-list/index.cjs"
+      }
+    },
+    "./loop/server": {
+      "import": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.js"
+      },
+      "require": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.cjs"
       }
     },
     "./storage/constants": {

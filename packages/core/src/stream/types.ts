@@ -17,6 +17,7 @@ import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { ScorerResult } from '../loop';
 import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -466,12 +467,14 @@ interface NetworkStepFinishPayload {
   runId: string;
 }
 
-interface NetworkFinishPayload {
+interface NetworkFinishPayload<OUTPUT extends OutputSchema = undefined> {
   task: string;
   primitiveId: string;
   primitiveType: string;
   prompt: string;
   result: string;
+  /** Structured output object when structuredOutput option is provided */
+  object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
   isComplete?: boolean;
   completionReason: string;
   iteration: number;
@@ -479,6 +482,23 @@ interface NetworkFinishPayload {
   threadResourceId?: string;
   isOneOff: boolean;
   usage: LanguageModelUsage;
+}
+
+interface NetworkValidationStartPayload {
+  runId: string;
+  iteration: number;
+  checksCount: number;
+}
+
+interface NetworkValidationEndPayload {
+  runId: string;
+  iteration: number;
+  passed: boolean;
+  results: ScorerResult[];
+  duration: number;
+  timedOut: boolean;
+  reason?: string;
+  maxIterationReached: boolean;
 }
 
 interface ToolCallApprovalPayload {
@@ -502,7 +522,7 @@ export type DataChunkType = {
   id?: string;
 };
 
-export type NetworkChunkType =
+export type NetworkChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
   | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
@@ -514,9 +534,13 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
-  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
+  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
+  | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })
+  | (BaseChunkType & { type: 'network-validation-end'; payload: NetworkValidationEndPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent });
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent })
+  | (BaseChunkType & { type: 'network-object'; payload: { object: PartialSchemaOutput<OUTPUT> } })
+  | (BaseChunkType & { type: 'network-object-result'; payload: { object: InferSchemaOutput<OUTPUT> } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 export type AgentChunkType<OUTPUT extends OutputSchema = undefined> =

@@ -13,7 +13,7 @@ import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
+import { Tabs, TabList, Tab, TabContent } from '@/components/ui/elements/tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { WorkflowStepDetailContent } from './workflow-step-detail';
 
@@ -119,7 +119,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
       </EntityHeader>
 
       <div className="flex-1 overflow-auto border-t-sm border-border1 flex flex-col">
-        <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
+        <Tabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
           <TabList>
             <Tab value="current-run">Current Run</Tab>
             <Tab value="run-options">Run Options</Tab>
@@ -179,7 +179,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               <WorkflowStepDetailContent />
             </TabContent>
           )}
-        </PlaygroundTabs>
+        </Tabs>
       </div>
     </div>
   );
