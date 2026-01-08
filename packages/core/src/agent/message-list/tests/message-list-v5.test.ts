@@ -2,10 +2,13 @@ import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 
 import { isToolUIPart } from '@internal/ai-sdk-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
+import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
-import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
-import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
+
+// Use TypeDetector's static methods for V4/V5 detection
+const hasAIV5CoreMessageCharacteristics = TypeDetector.hasAIV5CoreMessageCharacteristics;
+const hasAIV5UIMessageCharacteristics = TypeDetector.hasAIV5UIMessageCharacteristics;
 
 const threadId = 'test-thread';
 const resourceId = 'test-resource';

@@ -9,7 +9,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   prefetch?: boolean | null;
   children: React.ReactNode;
   size?: 'md' | 'lg';
-  variant?: 'default' | 'light';
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
 }
@@ -22,23 +22,41 @@ const sizeClasses = {
 const variantClasses = {
   default: 'bg-surface2 hover:bg-surface4 text-icon3 hover:text-icon6 disabled:opacity-50',
   light: 'bg-surface3 hover:bg-surface5 text-icon6 disabled:opacity-50',
+  outline: 'bg-transparent hover:bg-surface2 text-icon3 hover:text-icon6 disabled:opacity-50',
+  ghost: 'bg-transparent border-transparent hover:bg-surface2 text-icon3 hover:text-icon6 disabled:opacity-50',
 };
 
-export const Button = ({ className, as, size = 'md', variant = 'default', ...props }: ButtonProps) => {
-  const Component = as || 'button';
+export function buttonVariants(options?: { variant?: ButtonProps['variant']; size?: ButtonProps['size'] }) {
+  const variant = options?.variant || 'default';
+  const size = options?.size || 'md';
 
-  return (
-    <Component
-      className={clsx(
-        'bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
-        variantClasses[variant],
-        sizeClasses[size],
-        className,
-        {
-          'cursor-not-allowed': props.disabled,
-        },
-      )}
-      {...props}
-    />
+  return clsx(
+    'bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
+    variantClasses[variant],
+    sizeClasses[size],
   );
-};
+}
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, as, size = 'md', variant = 'default', ...props }, ref) => {
+    const Component = as || 'button';
+
+    return (
+      <Component
+        ref={ref}
+        className={clsx(
+          'bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
+          variantClasses[variant],
+          sizeClasses[size],
+          className,
+          {
+            'cursor-not-allowed': props.disabled,
+          },
+        )}
+        {...props}
+      />
+    );
+  },
+);
+
+Button.displayName = 'Button';

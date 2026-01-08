@@ -39,19 +39,19 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "publicKey",
       type: "string",
-      description: "Langfuse API key",
+      description: "Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.",
       required: false,
     },
     {
       name: "secretKey",
       type: "string",
-      description: "Langfuse secret key",
+      description: "Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.",
       required: false,
     },
     {
       name: "baseUrl",
       type: "string",
-      description: "Langfuse host URL",
+      description: "Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.",
       required: false,
     },
     {
@@ -102,6 +102,17 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { LangfuseExporter } from "@mastra/langfuse";
+
+// Reads from LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
+const exporter = new LangfuseExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { LangfuseExporter } from "@mastra/langfuse";

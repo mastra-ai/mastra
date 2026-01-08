@@ -639,6 +639,500 @@ describe('BraintrustExporter', () => {
     });
   });
 
+  describe('AI SDK v5 Message Conversion', () => {
+    it('should convert AI SDK v5 user messages to OpenAI format', async () => {
+      const llmSpan = createMockSpan({
+        id: 'ai-sdk-v5-user',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'system', content: 'You are helpful.' },
+          { role: 'user', content: [{ type: 'text', text: 'Hello!' }] },
+        ],
+        output: { text: 'Hi there!' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            { role: 'system', content: 'You are helpful.' },
+            { role: 'user', content: 'Hello!' },
+          ],
+        }),
+      );
+    });
+
+    it('should convert AI SDK v5 assistant messages with tool calls to OpenAI format', async () => {
+      const llmSpan = createMockSpan({
+        id: 'ai-sdk-v5-tools',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'Let me calculate.' },
+              { type: 'tool-call', toolCallId: 'call_123', toolName: 'calculator', args: { a: 2, b: 2 } },
+            ],
+          },
+        ],
+        output: { text: 'The answer is 4.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            { role: 'user', content: 'What is 2+2?' },
+            {
+              role: 'assistant',
+              content: 'Let me calculate.',
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    });
+
+    it('should convert AI SDK v5 tool result messages to OpenAI format', async () => {
+      const llmSpan = createMockSpan({
+        id: 'ai-sdk-v5-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: 'Calculate 2+2' },
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_123', output: { result: 4 } }],
+          },
+        ],
+        output: { text: '4' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            { role: 'user', content: 'Calculate 2+2' },
+            { role: 'tool', content: '{"result":4}', tool_call_id: 'call_123' },
+          ],
+        }),
+      );
+    });
+
+    it('should handle mixed OpenAI and AI SDK v5 message formats', async () => {
+      const llmSpan = createMockSpan({
+        id: 'mixed-formats',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'system', content: 'Be helpful.' }, // Already OpenAI format
+          { role: 'user', content: [{ type: 'text', text: 'Hi' }] }, // AI SDK v5 format
+          { role: 'assistant', content: 'Hello!' }, // Already OpenAI format
+        ],
+        output: { text: 'Done' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            { role: 'system', content: 'Be helpful.' },
+            { role: 'user', content: 'Hi' },
+            { role: 'assistant', content: 'Hello!' },
+          ],
+        }),
+      );
+    });
+
+    it('should handle tool calls with input field instead of args', async () => {
+      const llmSpan = createMockSpan({
+        id: 'tool-input-field',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', toolCallId: 'call_456', toolName: 'search', input: { query: 'test' } }],
+          },
+        ],
+        output: { text: 'Found it.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'call_456',
+                  type: 'function',
+                  function: { name: 'search', arguments: '{"query":"test"}' },
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    });
+
+    it('should handle tool results with v4 result field instead of output', async () => {
+      const llmSpan = createMockSpan({
+        id: 'tool-result-v4',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: 'Calculate 2+2' },
+          {
+            role: 'tool',
+            // AI SDK v4 uses 'result' instead of 'output'
+            content: [{ type: 'tool-result', toolCallId: 'call_123', result: { answer: 4, operation: 'add' } }],
+          },
+        ],
+        output: { text: '4' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            { role: 'user', content: 'Calculate 2+2' },
+            { role: 'tool', content: '{"answer":4,"operation":"add"}', tool_call_id: 'call_123' },
+          ],
+        }),
+      );
+    });
+
+    it('should handle empty content arrays gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'empty-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: [] },
+          { role: 'assistant', content: [] },
+        ],
+        output: { text: 'Response' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            { role: 'user', content: '' },
+            { role: 'assistant', content: '' },
+          ],
+        }),
+      );
+    });
+
+    it('should handle image content parts with placeholder', async () => {
+      const llmSpan = createMockSpan({
+        id: 'image-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              { type: 'image', image: 'base64data...', mimeType: 'image/png' },
+            ],
+          },
+        ],
+        output: { text: 'I see a cat.' },
+        attributes: { model: 'gpt-4-vision' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'user', content: 'What is in this image?\n[image]' }],
+        }),
+      );
+    });
+
+    it('should handle file content parts with filename', async () => {
+      const llmSpan = createMockSpan({
+        id: 'file-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyze this document' },
+              { type: 'file', filename: 'report.pdf', data: 'base64data...' },
+            ],
+          },
+        ],
+        output: { text: 'Analysis complete.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'user', content: 'Analyze this document\n[file: report.pdf]' }],
+        }),
+      );
+    });
+
+    it('should handle file content parts without filename', async () => {
+      const llmSpan = createMockSpan({
+        id: 'file-no-name',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Check this file' },
+              { type: 'file', data: 'base64data...' },
+            ],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'user', content: 'Check this file\n[file]' }],
+        }),
+      );
+    });
+
+    it('should handle reasoning content parts with text preview', async () => {
+      const llmSpan = createMockSpan({
+        id: 'reasoning-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'assistant',
+            content: [
+              { type: 'reasoning', text: 'Let me think about this step by step...' },
+              { type: 'text', text: 'The answer is 42.' },
+            ],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'claude-3' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            {
+              role: 'assistant',
+              content: '[reasoning: Let me think about this step by step...]\nThe answer is 42.',
+            },
+          ],
+        }),
+      );
+    });
+
+    it('should truncate long reasoning text in preview', async () => {
+      const longReasoning = 'A'.repeat(200);
+      const llmSpan = createMockSpan({
+        id: 'long-reasoning',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'assistant',
+            content: [
+              { type: 'reasoning', text: longReasoning },
+              { type: 'text', text: 'Done.' },
+            ],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'claude-3' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [
+            {
+              role: 'assistant',
+              content: `[reasoning: ${'A'.repeat(100)}...]\nDone.`,
+            },
+          ],
+        }),
+      );
+    });
+
+    it('should handle unknown content types gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'unknown-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Hello' },
+              { type: 'custom-type', data: 'some data' },
+            ],
+          },
+        ],
+        output: { text: 'Hi!' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'user', content: 'Hello\n[custom-type]' }],
+        }),
+      );
+    });
+
+    it('should handle null/undefined tool results gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'null-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_123', output: null }],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'tool', content: '', tool_call_id: 'call_123' }],
+        }),
+      );
+    });
+
+    it('should handle undefined tool results (missing output/result fields)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'undefined-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_456' }], // no output or result field
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: [{ role: 'tool', content: '', tool_call_id: 'call_456' }],
+        }),
+      );
+    });
+  });
+
   describe('Span Updates', () => {
     it('should log updates to existing spans', async () => {
       // First, start a span

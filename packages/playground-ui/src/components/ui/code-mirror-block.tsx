@@ -1,5 +1,5 @@
 import ReactCodeMirror, { ReactCodeMirrorProps } from '@uiw/react-codemirror';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { json } from '@codemirror/lang-json';
 import { CopyButton } from '@/components/ui/copy-button';
 

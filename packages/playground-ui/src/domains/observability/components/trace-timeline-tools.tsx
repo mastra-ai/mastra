@@ -4,8 +4,10 @@ import { UISpanType } from '../types';
 import { SearchField } from '@/components/ui/elements';
 import { useThrottledCallback } from 'use-debounce';
 import { Fragment, useEffect, useState } from 'react';
-import { Button, CombinedButtons } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
+import { CombinedButtons } from '@/components/ui/elements/buttons';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
+import { Icon } from '@/ds/icons/Icon';
 
 type TraceTimelineLegendProps = {
   spans?: SpanRecord[];
@@ -73,10 +75,10 @@ export function TraceTimelineTools({
             <Fragment key={item}>
               <Button
                 onClick={() => handleToggle(item as UISpanType)}
-                isFaded={isFaded}
+                className={isFaded ? 'opacity-40' : ''}
                 style={{ color: !isFaded ? spanUI?.color : undefined, backgroundColor: spanUI?.bgColor }}
               >
-                {spanUI?.icon && spanUI.icon}
+                {spanUI?.icon && <Icon>{spanUI.icon}</Icon>}
                 {spanUI?.label}
               </Button>
             </Fragment>
@@ -85,15 +87,19 @@ export function TraceTimelineTools({
         {hasOtherSpanTypes && (
           <Button
             onClick={() => handleToggle('other' as UISpanType)}
-            isFaded={fadedTypes?.includes('other')}
+            className={fadedTypes?.includes('other') ? 'opacity-40' : ''}
             style={{ color: !fadedTypes?.includes('other') ? undefined : undefined, backgroundColor: undefined }}
           >
-            <CircleDashedIcon />
+            <Icon>
+              <CircleDashedIcon />
+            </Icon>
             Other
           </Button>
         )}
         <Button onClick={onLegendReset} disabled={fadedTypes?.length === 0}>
-          <XIcon />
+          <Icon>
+            <XIcon />
+          </Icon>
         </Button>
       </CombinedButtons>
     </div>
