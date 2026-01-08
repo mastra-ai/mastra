@@ -107,7 +107,7 @@ export default function VersionControl({
         >
           <div className="flex items-center gap-2">
             <VersionLabel />
-            {currentVersion === "v1" ? "Latest Version" : "Legacy"}
+            {currentVersion === "v1" ? "Latest Version" : "v0"}
           </div>
           <TriggerIcon />
         </Button>
