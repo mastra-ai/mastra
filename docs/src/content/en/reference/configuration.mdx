@@ -57,11 +57,44 @@ export const mastra = new Mastra({
 
 ### bundler.externals
 
-Controls which packages are excluded from the bundle (inside `.mastra/output`) and installed separately through a package manager.
+**Type:** `boolean | string[]`
+
+When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
+
+By default, `mastra build` sets this option to `true`. If you deploy your project to [Mastra Cloud](/docs/v1/mastra-cloud/overview), it also sets this option to `true`.
+
+Here's an overview of what the different values mean:
+
+- `true`: All dependencies listed in your project's `package.json` are marked as external
+- `false`: No dependencies are marked as external; everything is bundled together
+- `string[]`: An array of package names to mark as external, the rest will be bundled together
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["some-package", "another-package"],
+  },
+});
+```
 
 ### bundler.sourcemap
 
-Enables source map generation for debugging bundled code inside `.mastra/output`.
+**Type:** `boolean`  
+**Default:** `false`
+
+Enables source map generation for the bundled output.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    sourcemap: true,
+  },
+});
+```
 
 ### bundler.transpilePackages
 
@@ -69,7 +102,9 @@ Enables source map generation for debugging bundled code inside `.mastra/output`
 
 ### server.apiRoutes
 
-By default, Mastra automatically exposes registered agents and workflows via its server. For additional behavior you can define your own HTTP routes.
+**Type:** `ApiRoute[]`
+
+Mastra automatically exposes registered agents and workflows via its server. For additional behavior you can define your own HTTP routes.
 
 Visit the [Custom API routes](/docs/v1/server/custom-api-routes) documentation to learn more.
 
@@ -108,6 +143,9 @@ export const mastra = new Mastra({
 ### server.onError
 
 ### server.port
+
+**Type:** `number`  
+**Default:** `4111`
 
 ### server.studioBase
 
