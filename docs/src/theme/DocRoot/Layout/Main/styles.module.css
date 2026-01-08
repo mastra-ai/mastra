@@ -5,6 +5,7 @@
   flex-basis: 0%;
   justify-content: center;
   min-width: 0;
+  transition: max-width 0.3s ease-in-out;
 }
 
 @media (min-width: 997px) {
@@ -41,14 +42,14 @@
 
   .docItemWrapperChatbotHidden {
     max-width: calc(
-      var(--ifm-container-width) + var(--chatbot-sidebar-width)
+      var(--ifm-container-width) + var(--chatbot-sidebar-hidden-width)
     ) !important;
   }
 
   .docItemWrapperEnhanced.docItemWrapperChatbotHidden {
     max-width: calc(
       var(--ifm-container-width) + var(--doc-sidebar-width) +
-        var(--chatbot-sidebar-width)
+        var(--chatbot-sidebar-hidden-width)
     ) !important;
   }
 }

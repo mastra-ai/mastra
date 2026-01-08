@@ -19,6 +19,7 @@
     position: fixed;
     bottom: 0;
     right: 0;
+    transition: width 0.3s ease-in-out;
   }
 
   .chatbotSidebarContainerHidden {
