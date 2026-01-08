@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -349,21 +350,62 @@ export interface WorkflowRunState {
  * Result object passed to the onFinish callback when a workflow completes.
  */
 export interface WorkflowFinishCallbackResult {
+  /** The final status of the workflow */
   status: WorkflowRunStatus;
+  /** The workflow result (only for successful workflows) */
   result?: any;
+  /** Error details (only for failed workflows) */
   error?: SerializedError;
+  /** All step results */
   steps: Record<string, StepResult<any, any, any, any>>;
+  /** Tripwire info (only if failure was due to tripwire) */
   tripwire?: StepTripwireInfo;
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The final workflow state */
+  state: Record<string, any>;
 }
 
 /**
  * Error info object passed to the onError callback when a workflow fails.
  */
 export interface WorkflowErrorCallbackInfo {
+  /** The failure status (either 'failed' or 'tripwire') */
   status: 'failed' | 'tripwire';
+  /** Error details */
   error?: SerializedError;
+  /** All step results */
   steps: Record<string, StepResult<any, any, any, any>>;
+  /** Tripwire info (only if status is 'tripwire') */
   tripwire?: StepTripwireInfo;
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The final workflow state */
+  state: Record<string, any>;
 }
 
 export interface WorkflowOptions {

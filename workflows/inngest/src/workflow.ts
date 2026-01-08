@@ -231,6 +231,9 @@ export class InngestWorkflow<
         // Create InngestPubSub instance with the publish function from Inngest context
         const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
+        // Create requestContext before execute so we can reuse it in finalize
+        const requestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
+
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
           z.infer<TState>,
@@ -246,7 +249,7 @@ export class InngestWorkflow<
           initialState,
           pubsub,
           retryConfig: this.retryConfig,
-          requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
+          requestContext,
           resume,
           timeTravel,
           perStep,
@@ -274,7 +277,15 @@ export class InngestWorkflow<
             // Invoke lifecycle callbacks (onFinish and onError)
             // Use invokeLifecycleCallbacksInternal to call the real implementation
             // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
-            await engine.invokeLifecycleCallbacksInternal(result as any);
+            await engine.invokeLifecycleCallbacksInternal({
+              ...(result as any),
+              runId,
+              workflowId: this.id,
+              resourceId,
+              input: inputData,
+              requestContext,
+              state: (result as any).state ?? initialState ?? {},
+            });
           }
 
           // Throw NonRetriableError if failed to ensure Inngest marks the run as failed
