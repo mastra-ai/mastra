@@ -1,0 +1,31 @@
+{
+  "name": "client-js-e2e-tests-zod-v4",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/server": "workspace:*",
+    "@mastra/hono": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/observability": "workspace:*",
+    "@hono/node-server": "^1.14.3",
+    "hono": "^4.6.0",
+    "get-port": "^7.1.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@internal/client-js-test-utils": "workspace:*",
+    "@mastra/client-js": "workspace:*",
+    "vitest": "catalog:",
+    "typescript": "catalog:"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "^4.1.12"
+    }
+  }
+}

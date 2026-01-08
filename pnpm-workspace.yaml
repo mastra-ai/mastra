@@ -14,6 +14,9 @@ packages:
   - observability/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
+  - e2e-tests/client-js/_test-utils
+  - e2e-tests/client-js/zod-v3
+  - e2e-tests/client-js/zod-v4
 
 catalog:
   '@vitest/coverage-v8': 4.0.12
