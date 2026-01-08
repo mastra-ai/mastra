@@ -31,24 +31,24 @@ import styles from "./styles.module.css";
 import { TextShimmer } from "./text-shimmer";
 
 function LeftClickableBorder({
-  toggleSidebar,
+  onClick,
   hiddenChatbotSidebar,
   onMouseDown,
 }: {
-  toggleSidebar: () => void;
+  onClick: (e: React.MouseEvent) => void;
   hiddenChatbotSidebar: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
 }) {
   return (
     <div
       className="absolute top-0 bottom-0 -left-2 w-4 h-full cursor-col-resize z-100"
-      onClick={toggleSidebar}
+      onClick={onClick}
       onMouseDown={onMouseDown}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
-          toggleSidebar();
+          onClick(e as unknown as React.MouseEvent);
         }
       }}
       title={hiddenChatbotSidebar ? "Expand chatbot" : "Collapse chatbot"}
@@ -61,9 +61,17 @@ export default function ChatbotSidebar() {
   const { isHidden: hiddenChatbotSidebar, toggle } = useChatbotSidebar();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(400);
+
+  // Width constants (kept in sync with CSS defaults)
+  const SIDEBAR_MIN_WIDTH = 250;
+  const SIDEBAR_MAX_WIDTH = 600;
+  const SIDEBAR_DEFAULT_WIDTH = 400;
+
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const hasDraggedRef = useRef(false);
+  const startXRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!hiddenChatbotSidebar) {
@@ -89,10 +97,22 @@ export default function ChatbotSidebar() {
     toggle();
   }, [toggle, hiddenSidebar]);
 
+  // Click wrapper: only toggle if the pointer interaction wasn't a drag
+  const handleToggleClick = useCallback((e: React.MouseEvent) => {
+    if (hasDraggedRef.current) return;
+    toggleSidebar();
+  }, [toggleSidebar]);
+
   // Handle drag to resize sidebar
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    hasDraggedRef.current = false;
+    startXRef.current = e.clientX;
     setIsDragging(true);
+    // disable transitions for main/sidebar while dragging
+    document.documentElement.style.setProperty("--chatbot-transition-duration", "0s");
+    // set cursor globally
+    document.body.style.cursor = "col-resize";
   }, []);
 
   useEffect(() => {
@@ -101,11 +121,15 @@ export default function ChatbotSidebar() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!sidebarRef.current) return;
 
-      const newWidth = window.innerWidth - e.clientX;
-      const minWidth = 250;
-      const maxWidth = 600;
+      const startX = startXRef.current ?? e.clientX;
+      const moved = Math.abs(e.clientX - startX);
+      if (moved > 0) {
+        hasDraggedRef.current = true;
+      }
 
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
+      const newWidth = window.innerWidth - e.clientX;
+
+      if (newWidth >= SIDEBAR_MIN_WIDTH && newWidth <= SIDEBAR_MAX_WIDTH) {
         setSidebarWidth(newWidth);
         document.documentElement.style.setProperty(
           "--chatbot-sidebar-width",
@@ -116,6 +140,10 @@ export default function ChatbotSidebar() {
 
     const handleMouseUp = () => {
       setIsDragging(false);
+      startXRef.current = null;
+      // restore transitions and cursor
+      document.documentElement.style.setProperty("--chatbot-transition-duration", "0.3s");
+      document.body.style.cursor = "";
     };
 
     document.addEventListener("mousemove", handleMouseMove);
@@ -124,8 +152,10 @@ export default function ChatbotSidebar() {
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.documentElement.style.setProperty("--chatbot-transition-duration", "0.3s");
     };
-  }, [isDragging]);
+  }, [isDragging, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]);
 
   const {
     conversation,
@@ -189,14 +219,10 @@ export default function ChatbotSidebar() {
         hiddenChatbotSidebar && styles.chatbotSidebarContainerHidden,
         isDragging && "select-none",
       )}
-      style={
-        !hiddenChatbotSidebar && sidebarWidth
-          ? { width: `${sidebarWidth}px` }
-          : undefined
-      }
+      style={!hiddenChatbotSidebar ? { width: `${sidebarWidth}px` } : undefined}
     >
       <LeftClickableBorder
-        toggleSidebar={toggleSidebar}
+        onClick={handleToggleClick}
         hiddenChatbotSidebar={hiddenChatbotSidebar}
         onMouseDown={handleMouseDown}
       />

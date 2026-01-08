@@ -1,6 +1,7 @@
 :root {
   --chatbot-sidebar-width: 400px;
   --chatbot-sidebar-hidden-width: 40px;
+  --chatbot-transition-duration: 0.3s;
 }
 
 .chatbotSidebarContainer {
@@ -19,7 +20,7 @@
     position: fixed;
     bottom: 0;
     right: 0;
-    transition: width 0.3s ease-in-out;
+    transition: width var(--chatbot-transition-duration, 0.3s) ease-in-out;
   }
 
   .chatbotSidebarContainerHidden {

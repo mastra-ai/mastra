@@ -5,7 +5,7 @@
   flex-basis: 0%;
   justify-content: center;
   min-width: 0;
-  transition: max-width 0.3s ease-in-out;
+  transition: max-width var(--chatbot-transition-duration, 0.3s) ease-in-out;
 }
 
 @media (min-width: 997px) {
