@@ -1,5 +1,6 @@
 import { connect, Index } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, CreateTableOptions, Table, TableLike } from '@lancedb/lancedb';
+import { Field, FixedSizeList, Float32, Schema, Utf8 } from 'apache-arrow';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
@@ -32,11 +33,11 @@ interface LanceIndexConfig extends IndexConfig {
 }
 
 interface LanceUpsertVectorParams extends UpsertVectorParams {
-  tableName: string;
+  tableName?: string;
 }
 
 interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
-  tableName: string;
+  tableName?: string;
   columns?: string[];
   includeAllColumns?: boolean;
 }
@@ -100,6 +101,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
   async query({
     tableName,
+    indexName,
     queryVector,
     filter,
     includeVector = false,
@@ -113,7 +115,11 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       }
 
       if (!tableName) {
-        throw new Error('tableName is required');
+        if (indexName) {
+          tableName = indexName;
+        } else {
+          throw new Error('tableName or indexName is required');
+        }
       }
 
       if (!queryVector) {
@@ -248,14 +254,24 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     return translator.translate(prefixedFilter);
   }
 
-  async upsert({ tableName, vectors, metadata = [], ids = [] }: LanceUpsertVectorParams): Promise<string[]> {
+  async upsert({
+    tableName,
+    indexName = 'vector',
+    vectors,
+    metadata = [],
+    ids = [],
+  }: LanceUpsertVectorParams): Promise<string[]> {
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
       }
 
+      if (!tableName && indexName) {
+        tableName = indexName;
+      }
+
       if (!tableName) {
-        throw new Error('tableName is required');
+        throw new Error('tableName or indexName is required');
       }
 
       if (!vectors || !Array.isArray(vectors) || vectors.length === 0) {
@@ -275,14 +291,9 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     }
 
     try {
+      let table: Table;
       const tables = await this.lanceClient.tableNames();
-      if (!tables.includes(tableName)) {
-        throw new Error(`Table ${tableName} does not exist`);
-      }
 
-      const table = await this.lanceClient.openTable(tableName);
-
-      // Generate IDs if not provided
       const vectorIds = ids.length === vectors.length ? ids : vectors.map((_, i) => ids[i] || crypto.randomUUID());
 
       // Create data with metadata fields expanded at the top level
@@ -308,7 +319,13 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         return rowData;
       });
 
-      await table.add(data, { mode: 'overwrite' });
+      if (!tables.includes(tableName!)) {
+        // Create new table with inferred schema from data
+        table = await this.lanceClient.createTable(tableName!, data);
+      } else {
+        table = await this.lanceClient.openTable(tableName!);
+        await table.add(data, { mode: 'overwrite' });
+      }
 
       return vectorIds;
     } catch (error: any) {
@@ -442,7 +459,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       }
 
       if (!tableName) {
-        throw new Error('tableName is required');
+        if (indexName) {
+          tableName = indexName;
+          indexName = 'vector';
+        } else {
+          throw new Error('tableName or indexName is required');
+        }
       }
 
       if (!indexName) {
@@ -466,13 +488,23 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     try {
       const tables = await this.lanceClient.tableNames();
-      if (!tables.includes(tableName)) {
-        throw new Error(
-          `Table ${tableName} does not exist. Please create the table first by calling createTable() method.`,
-        );
+      if (!tables.includes(tableName!)) {
+        // Create empty table to allow index creation
+        const schema = new Schema([
+          new Field('id', new Utf8()),
+          new Field('vector', new FixedSizeList(dimension, new Field('item', new Float32()))),
+          new Field('created_at', new Float32(), true), // Optional column for metadata-less rows
+        ]);
+        await this.lanceClient.createTable(tableName!, [], { schema });
       }
 
-      const table = await this.lanceClient.openTable(tableName);
+      const table = await this.lanceClient.openTable(tableName!);
+
+      // Check if index exists to prevent rebuilding
+      const existingIndices = await table.listIndices();
+      if (existingIndices.some((idx: any) => idx.columns.includes(indexName))) {
+        return;
+      }
 
       // Convert metric to LanceDB metric
       type LanceMetric = 'cosine' | 'l2' | 'dot';
@@ -575,6 +607,33 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     try {
       const tables = await this.lanceClient.tableNames();
 
+      // First check if indexName corresponds to a table
+      if (tables.includes(indexName)) {
+        const table = await this.lanceClient.openTable(indexName);
+        const tableIndices = await table.listIndices();
+        // default vector column index
+        const vectorIndex = tableIndices.find(index => index.columns.includes('vector'));
+
+        if (vectorIndex) {
+          const stats = await table.indexStats(vectorIndex.name);
+          if (!stats) {
+            throw new Error(`Index stats not found for index: ${vectorIndex.name}`);
+          }
+
+          const schema = await table.schema();
+          const vectorCol = 'vector';
+
+          const vectorField = schema.fields.find(field => field.name === vectorCol);
+          const dimension = vectorField?.type?.['listSize'] || 0;
+
+          return {
+            dimension: dimension,
+            metric: stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined,
+            count: stats.numIndexedRows,
+          };
+        }
+      }
+
       for (const tableName of tables) {
         this.logger.debug('Checking table:' + tableName);
         const table = await this.lanceClient.openTable(tableName);
@@ -639,6 +698,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     }
     try {
       const tables = await this.lanceClient.tableNames();
+
+      // Check if indexName is a table name
+      if (tables.includes(indexName)) {
+        await this.lanceClient.dropTable(indexName);
+        return;
+      }
 
       for (const tableName of tables) {
         const table = await this.lanceClient.openTable(tableName);
@@ -777,16 +842,25 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       // We need to find which table has this column as an index
       const tables = await this.lanceClient.tableNames();
 
-      for (const tableName of tables) {
+      let targetTables = tables;
+      let targetColumn = indexName;
+
+      // Check if indexName is a table name
+      if (tables.includes(indexName)) {
+        targetTables = [indexName];
+        targetColumn = 'vector';
+      }
+
+      for (const tableName of targetTables) {
         this.logger.debug('Checking table:' + tableName);
         const table = await this.lanceClient.openTable(tableName);
 
         try {
           const schema = await table.schema();
-          const hasColumn = schema.fields.some(field => field.name === indexName);
+          const hasColumn = schema.fields.some(field => field.name === targetColumn);
 
           if (hasColumn) {
-            this.logger.debug(`Found column ${indexName} in table ${tableName}`);
+            this.logger.debug(`Found column ${targetColumn} in table ${tableName}`);
 
             let whereClause: string;
             if ('id' in params && params.id) {
@@ -839,7 +913,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
                 // Skip special fields
                 if (key !== '_distance') {
                   // Handle vector field specially to avoid nested properties
-                  if (key === indexName) {
+                  if (key === targetColumn) {
                     // If we're about to update this vector anyway, use the new value
                     if (update.vector) {
                       rowData[key] = update.vector;
@@ -881,7 +955,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         }
       }
 
-      throw new Error(`No table found with column/index '${indexName}'`);
+      throw new Error(`No table found with column/index '${indexName}' (or table '${indexName}')`);
     } catch (error: any) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -935,17 +1009,26 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       // We need to find which table has this column as an index
       const tables = await this.lanceClient.tableNames();
 
-      for (const tableName of tables) {
+      let targetTables = tables;
+      let targetColumn = indexName;
+
+      // Check if indexName is a table name
+      if (tables.includes(indexName)) {
+        targetTables = [indexName];
+        targetColumn = 'vector';
+      }
+
+      for (const tableName of targetTables) {
         this.logger.debug('Checking table:' + tableName);
         const table = await this.lanceClient.openTable(tableName);
 
         try {
           // Try to get the schema to check if this table has the column we're looking for
           const schema = await table.schema();
-          const hasColumn = schema.fields.some(field => field.name === indexName);
+          const hasColumn = schema.fields.some(field => field.name === targetColumn);
 
           if (hasColumn) {
-            this.logger.debug(`Found column ${indexName} in table ${tableName}`);
+            this.logger.debug(`Found column ${targetColumn} in table ${tableName}`);
             await table.delete(`id = '${id}'`);
             return;
           }
@@ -1066,16 +1149,25 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       // We need to find which table has this column as an index
       const tables = await this.lanceClient.tableNames();
 
-      for (const tableName of tables) {
+      let targetTables = tables;
+      let targetColumn = indexName;
+
+      // Check if indexName is a table name
+      if (tables.includes(indexName)) {
+        targetTables = [indexName];
+        targetColumn = 'vector';
+      }
+
+      for (const tableName of targetTables) {
         this.logger.debug('Checking table:' + tableName);
         const table = await this.lanceClient.openTable(tableName);
 
         try {
           const schema = await table.schema();
-          const hasColumn = schema.fields.some(field => field.name === indexName);
+          const hasColumn = schema.fields.some(field => field.name === targetColumn);
 
           if (hasColumn) {
-            this.logger.debug(`Found column ${indexName} in table ${tableName}`);
+            this.logger.debug(`Found column ${targetColumn} in table ${tableName}`);
 
             if (ids) {
               // Delete by IDs
