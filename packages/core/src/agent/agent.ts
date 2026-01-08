@@ -49,6 +49,7 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
+import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -2204,7 +2205,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds, resumeSchema });
+                return suspend?.(suspendPayload, {
+                  resumeLabel: suspendedStepIds,
+                  resumeSchema: JSON.stringify(zodToJsonSchema(resumeSchema)),
+                });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -3074,6 +3078,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       routing: mergedOptions?.routing,
       onIterationComplete: mergedOptions?.onIterationComplete,
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
+      mastra: this.#mastra,
     });
   }
 
@@ -3103,6 +3108,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const runId = options.runId;
     const requestContextToUse = options?.requestContext || new RequestContext();
 
+    // Merge default network options with call-specific options
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const mergedOptions = {
+      ...defaultNetworkOptions,
+      ...options,
+      // Deep merge nested objects
+      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+    };
+
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
@@ -3111,8 +3126,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const threadId =
       threadIdFromContext ||
-      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || options?.memory?.resource;
+      (typeof mergedOptions?.memory?.thread === 'string'
+        ? mergedOptions?.memory?.thread
+        : mergedOptions?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
 
     return await networkLoop({
       networkName: this.name,
@@ -3120,15 +3137,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       runId,
       routingAgent: this,
       routingAgentOptions: {
-        modelSettings: options?.modelSettings,
-        memory: options?.memory,
+        modelSettings: mergedOptions?.modelSettings,
+        memory: mergedOptions?.memory,
       },
       generateId: () => this.#mastra?.generateId() || randomUUID(),
-      maxIterations: options?.maxSteps || 1,
+      maxIterations: mergedOptions?.maxSteps || 1,
       messages: [],
       threadId,
       resourceId,
       resumeData,
+      validation: mergedOptions?.completion,
+      routing: mergedOptions?.routing,
+      onIterationComplete: mergedOptions?.onIterationComplete,
+      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
+      mastra: this.#mastra,
     });
   }
 

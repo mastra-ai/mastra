@@ -398,7 +398,7 @@ interface AgentExecutionStartPayload {
 
 interface AgentExecutionApprovalPayload {
   agentId: string;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
   usage: LanguageModelUsage;
   runId: string;
   args: string;
@@ -408,7 +408,7 @@ interface AgentExecutionApprovalPayload {
 interface AgentExecutionSuspendedPayload {
   agentId: string;
   suspendPayload: any;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
   usage: LanguageModelUsage;
   runId: string;
   args: string;
@@ -543,7 +543,7 @@ interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 }
 
 interface ToolCallSuspendedPayload {
@@ -551,7 +551,7 @@ interface ToolCallSuspendedPayload {
   toolName: string;
   suspendPayload: any;
   args: Record<string, any>;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 }
 
 export type DataChunkType = {
