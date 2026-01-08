@@ -6,7 +6,6 @@ import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -17,7 +16,7 @@ import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<OUTPUT extends OutputSchema | undefined = undefined> {
+interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
@@ -42,7 +41,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT extends OutputSchema | undef
   toolCallId?: string;
 }
 
-export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,

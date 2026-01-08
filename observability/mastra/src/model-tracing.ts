@@ -17,7 +17,7 @@ import type {
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
-import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
 
 import { extractUsageMetrics } from './usage';
 
@@ -152,7 +152,7 @@ export class ModelSpanTracker {
   /**
    * End the current Model execution step with token usage, finish reason, output, and metadata
    */
-  #endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<any, OUTPUT>) {
+  #endStepSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>) {
     if (!this.#currentStepSpan) return;
 
     // Extract all data from step-finish chunk
@@ -273,7 +273,7 @@ export class ModelSpanTracker {
   /**
    * Handle text chunk spans (text-start/delta/end)
    */
-  #handleTextChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleTextChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'text-start':
         this.#startChunkSpan('text');
@@ -293,7 +293,7 @@ export class ModelSpanTracker {
   /**
    * Handle reasoning chunk spans (reasoning-start/delta/end)
    */
-  #handleReasoningChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleReasoningChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'reasoning-start':
         this.#startChunkSpan('reasoning');
@@ -313,7 +313,7 @@ export class ModelSpanTracker {
   /**
    * Handle tool call chunk spans (tool-call-input-streaming-start/delta/end, tool-call)
    */
-  #handleToolCallChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleToolCallChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'tool-call-input-streaming-start':
         this.#startChunkSpan('tool-call', {
@@ -349,7 +349,7 @@ export class ModelSpanTracker {
   /**
    * Handle object chunk spans (object, object-result)
    */
-  #handleObjectChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleObjectChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'object':
         // Start span on first partial object chunk (only if not already started)
@@ -370,7 +370,7 @@ export class ModelSpanTracker {
    * Handle tool-output chunks from sub-agents.
    * Consolidates streaming text/reasoning deltas into a single span per tool call.
    */
-  #handleToolOutputChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleToolOutputChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     if (chunk.type !== 'tool-output') return;
 
     const payload = chunk.payload as {

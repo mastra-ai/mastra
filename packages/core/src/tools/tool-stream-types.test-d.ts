@@ -22,7 +22,6 @@ describe('ToolStream', () => {
     });
 
     it('should be compatible with partial object streams from structured output', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const storyPlanSchema = z.object({
         storyTitle: z.string(),
         chapters: z.array(

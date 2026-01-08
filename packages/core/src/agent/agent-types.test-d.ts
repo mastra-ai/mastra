@@ -54,14 +54,13 @@ describe('Agent Type Tests', () => {
       // OutputSchema includes: ZodType, Schema, JSONSchema7, undefined
       // After the fix, defaultOptions.structuredOutput.schema should accept all of these
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const zodSchema = z.object({ name: z.string() });
 
       // This tests that Zod schemas are valid OutputSchema types
       expectTypeOf<typeof zodSchema>().toExtend<OutputSchema>();
 
       // Test with a discriminated union (from the original issue)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
       const zodDiscriminatedUnion = z.discriminatedUnion('status', [
         z.object({ status: z.literal('success'), data: z.string() }),
         z.object({ status: z.literal('error'), error: z.string() }),

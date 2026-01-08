@@ -16,7 +16,7 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
-import type { InferSchemaOutput, OutputSchema } from '../../../stream/base/schema';
+import type { InferSchemaOutput } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
@@ -30,7 +30,7 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -47,7 +47,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   logger?: IMastraLogger;
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
+async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
   messageList,
@@ -493,7 +493,7 @@ function executeStreamWithFallbackModels<T>(
   };
 }
 
-export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
   messageId,
@@ -546,7 +546,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       let rawResponse: any;
 
       const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
-        outputStream: MastraModelOutput<OUTPUT | undefined>;
+        outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
@@ -576,7 +576,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
-          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           model,
           tools,
@@ -798,13 +798,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           );
         }
 
-        const outputStream = new MastraModelOutput({
+        const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
             modelId: currentStep.model.modelId,
             provider: currentStep.model.provider,
             version: currentStep.model.specificationVersion,
           },
-          stream: modelResult as ReadableStream<ChunkType>,
+          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
           messageList,
           messageId,
           options: {

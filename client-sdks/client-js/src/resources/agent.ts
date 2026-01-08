@@ -13,7 +13,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
+import type { MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
@@ -36,7 +36,7 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
-async function executeToolCallAndRespond({
+async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
   resourceId,
@@ -44,8 +44,8 @@ async function executeToolCallAndRespond({
   requestContext,
   respondFn,
 }: {
-  params: StreamParams<any>;
-  response: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>>;
+  params: StreamParams<OUTPUT>;
+  response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -297,15 +297,15 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   // Backward compatibility overload
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT = undefined>(
     params: StreamParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT = undefined>(
     messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
@@ -344,7 +344,7 @@ export class Agent extends BaseResource {
     );
 
     if (response.finishReason === 'tool-calls') {
-      return executeToolCallAndRespond({
+      return executeToolCallAndRespond<OUTPUT>({
         response,
         params,
         resourceId,
@@ -1412,7 +1412,7 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async stream<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT>(
     messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
@@ -1425,7 +1425,7 @@ export class Agent extends BaseResource {
     }
   >;
   // Backward compatibility overload
-  async stream<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT = undefined>(
     params: StreamParams<OUTPUT>,
   ): Promise<
     Response & {
@@ -1436,7 +1436,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async stream<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT = undefined>(
     messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
@@ -1467,7 +1467,7 @@ export class Agent extends BaseResource {
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema) as OUTPUT,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
           }
         : undefined,
     };

@@ -7,7 +7,7 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
+import type { MastraModelOutput } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
@@ -153,7 +153,7 @@ export class AgentBuilder extends Agent {
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async stream<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT = undefined>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
@@ -183,7 +183,7 @@ export class AgentBuilder extends Agent {
     return super.stream(messages, enhancedOptions);
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generate<OUTPUT = undefined>(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT>,
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {

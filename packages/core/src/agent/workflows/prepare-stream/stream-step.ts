@@ -5,7 +5,6 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
@@ -32,7 +31,7 @@ interface StreamStepOptions {
   autoResumeSuspendedTools?: boolean;
 }
 
-export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createStreamStep<OUTPUT = undefined>({
   capabilities,
   runId,
   returnScorerData,
@@ -52,10 +51,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
+    outputSchema: z.union([z.instanceof(MastraModelOutput<OUTPUT>), z.instanceof(AISDKV5OutputStream<OUTPUT>)]),
     execute: async ({ inputData, tracingContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
