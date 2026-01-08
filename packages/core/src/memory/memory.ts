@@ -211,10 +211,14 @@ https://mastra.ai/en/docs/memory/overview`,
 
   public setStorage(storage: MastraStorage) {
     this._storage = augmentWithInit(storage);
+    // Invalidate cached processors since they hold references to the old storage
+    this.#invalidateProcessorCache();
   }
 
   public setVector(vector: MastraVector) {
     this.vector = vector;
+    // Invalidate cached SemanticRecall since it depends on the vector store
+    this.#cachedSemanticRecall = undefined;
   }
 
   public setEmbedder(
@@ -229,6 +233,18 @@ https://mastra.ai/en/docs/memory/overview`,
     if (embedderOptions) {
       this.embedderOptions = embedderOptions;
     }
+    // Invalidate cached SemanticRecall since it depends on the embedder
+    this.#cachedSemanticRecall = undefined;
+  }
+
+  /**
+   * Invalidates all cached processor instances.
+   * Called when dependencies (storage, vector, embedder) change.
+   */
+  #invalidateProcessorCache() {
+    this.#cachedSemanticRecall = undefined;
+    this.#cachedWorkingMemory = undefined;
+    this.#cachedMessageHistory = undefined;
   }
 
   /**
@@ -636,7 +652,6 @@ https://mastra.ai/en/docs/memory/overview`,
 
       if (!hasSemanticRecall) {
         // Reuse cached SemanticRecall instance if available
-        // This is critical for preserving the embeddingCache across calls
         if (!this.#cachedSemanticRecall) {
           const semanticConfig =
             typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
@@ -718,7 +733,6 @@ https://mastra.ai/en/docs/memory/overview`,
 
       if (!hasSemanticRecall) {
         // Reuse cached SemanticRecall instance if available
-        // This is critical for preserving the embeddingCache across calls and sharing between input/output
         if (!this.#cachedSemanticRecall) {
           const semanticRecallConfig =
             typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};

@@ -1,11 +1,10 @@
 /**
- * Test for issue #11455: SemanticRecall embedding cache not reused across getInputProcessors calls
+ * Tests for processor instance caching in MastraMemory
  *
- * The bug: MastraMemory.getInputProcessors() creates new SemanticRecall instances on each call,
- * which means the internal embeddingCache is never reused, leading to:
- * - Unnecessary embedding API calls
- * - Increased latency
- * - Wasted money on embeddings that were already computed
+ * These tests verify that getInputProcessors() and getOutputProcessors() return
+ * cached processor instances rather than creating new ones each call. This is important
+ * because processors like SemanticRecall have internal caches (embeddingCache) that
+ * should persist across calls to avoid redundant embedding API calls.
  *
  * @see https://github.com/mastra-ai/mastra/issues/11455
  */
@@ -94,8 +93,7 @@ describe('MastraMemory Processor Caching (Issue #11455)', () => {
       expect(semanticRecall1).toBeDefined();
       expect(semanticRecall2).toBeDefined();
 
-      // BUG: Currently this fails because new instances are created each time
-      // The fix should ensure the same instance is returned
+      // Same instance should be returned to preserve internal caches
       expect(semanticRecall1).toBe(semanticRecall2);
     });
 
@@ -156,8 +154,7 @@ describe('MastraMemory Processor Caching (Issue #11455)', () => {
       const messageList2 = new MessageList();
       messageList2.add([message], 'input');
 
-      // Second call with SAME content via NEW processor instance
-      // BUG: Currently this calls embedder again because it's a new instance with empty cache
+      // Second call with same content - should use cached embedding
       await semanticRecall2.processInput({
         messages: [message],
         messageList: messageList2,
@@ -165,8 +162,7 @@ describe('MastraMemory Processor Caching (Issue #11455)', () => {
         requestContext,
       });
 
-      // After the fix, embedder should NOT be called again (cache hit)
-      // Currently this fails with 2 calls because cache is not preserved
+      // Embedder should NOT be called again (cache hit from shared instance)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
   });
@@ -198,7 +194,7 @@ describe('MastraMemory Processor Caching (Issue #11455)', () => {
       expect(semanticRecall1).toBeDefined();
       expect(semanticRecall2).toBeDefined();
 
-      // BUG: Currently this fails because new instances are created each time
+      // Same instance should be returned to preserve internal caches
       expect(semanticRecall1).toBe(semanticRecall2);
     });
   });
@@ -299,8 +295,7 @@ describe('MastraMemory Processor Caching (Issue #11455)', () => {
         requestContext,
       });
 
-      // BUG: Currently embedder is called again because output processor is a different instance
-      // After fix, should still be 1 (cache hit from shared instance)
+      // Embedder should NOT be called again (cache hit from shared instance between input/output)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
   });
