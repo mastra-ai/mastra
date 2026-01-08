@@ -68,7 +68,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
-    "eslint-plugin-storybook": "^9.1.12",
+    "eslint-plugin-storybook": "^10.1.11",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "rollup-plugin-node-externals": "^8.0.1",
