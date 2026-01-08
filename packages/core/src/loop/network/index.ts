@@ -5,19 +5,27 @@ import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
+import type { InferSchemaOutput } from '../../stream/base/schema';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 import type { CompletionConfig, CompletionContext } from './validation';
-import { runValidation, formatCompletionFeedback, runDefaultCompletionCheck, generateFinalResult } from './validation';
+import {
+  runValidation,
+  formatCompletionFeedback,
+  runDefaultCompletionCheck,
+  generateFinalResult,
+  generateStructuredFinalResult,
+} from './validation';
 
 async function getRoutingAgent({
   requestContext,
@@ -1491,6 +1499,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   resumeData,
   autoResumeSuspendedTools,
   mastra,
+  structuredOutput,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1524,10 +1533,16 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     result: string;
     isComplete: boolean;
   }) => void | Promise<void>;
+  /**
+   * Structured output configuration for the network's final result.
+   * When provided, generates a structured response matching the schema.
+   */
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
   mastra?: Mastra;
-}) {
+}): Promise<MastraAgentNetworkStream<OUTPUT>> {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
 
@@ -1645,6 +1660,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
+      structuredObject: z.any().optional(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
@@ -1695,6 +1711,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       // Run either configured scorers or the default LLM completion check
       let completionResult;
       let generatedFinalResult: string | undefined;
+      let structuredObject: InferSchemaOutput<OUTPUT> | undefined;
 
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
@@ -1706,11 +1723,28 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
             agent: routingAgent,
             routingConfig: routing,
           });
-          generatedFinalResult = await generateFinalResult(routingAgentToUse, completionContext, {
-            writer,
-            stepId: generateId(),
-            runId: runIdToUse,
-          });
+
+          // Use structured output generation if schema is provided
+          if (structuredOutput?.schema) {
+            const structuredResult = await generateStructuredFinalResult(
+              routingAgentToUse,
+              completionContext,
+              structuredOutput,
+              {
+                writer,
+                stepId: generateId(),
+                runId: runIdToUse,
+              },
+            );
+            generatedFinalResult = structuredResult.text;
+            structuredObject = structuredResult.object;
+          } else {
+            generatedFinalResult = await generateFinalResult(routingAgentToUse, completionContext, {
+              writer,
+              stepId: generateId(),
+              runId: runIdToUse,
+            });
+          }
 
           // Save finalResult to memory if the LLM provided one
           await saveFinalResultIfProvided({
@@ -1744,11 +1778,29 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         // Capture finalResult from default check
         generatedFinalResult = defaultResult.finalResult;
 
+        // If completed and structured output is requested, generate it
+        if (defaultResult.passed && structuredOutput?.schema) {
+          const structuredResult = await generateStructuredFinalResult(
+            routingAgentToUse,
+            completionContext,
+            structuredOutput,
+            {
+              writer,
+              stepId: generateId(),
+              runId,
+            },
+          );
+          if (structuredResult.text) {
+            generatedFinalResult = structuredResult.text;
+          }
+          structuredObject = structuredResult.object;
+        }
+
         // Save finalResult to memory if the LLM provided one
         if (defaultResult.passed) {
           await saveFinalResultIfProvided({
             memory: await routingAgent.getMemory({ requestContext }),
-            finalResult: defaultResult.finalResult,
+            finalResult: generatedFinalResult || defaultResult.finalResult,
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
@@ -1829,6 +1881,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         return {
           ...inputData,
           ...(generatedFinalResult ? { result: generatedFinalResult } : {}),
+          ...(structuredObject !== undefined ? { structuredObject } : {}),
           isComplete: true,
           validationPassed: true,
           completionReason: completionResult.completionReason || 'Task complete',
@@ -1852,6 +1905,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
+      structuredObject: z.any().optional(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
@@ -1864,14 +1918,19 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
+      object: z.any().optional(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
       validationPassed: z.boolean().optional(),
     }),
     execute: async ({ inputData, writer }) => {
+      // Extract structuredObject and rename to object for the payload
+      const { structuredObject, ...restInputData } = inputData;
+
       const finalData = {
-        ...inputData,
+        ...restInputData,
+        ...(structuredObject !== undefined ? { object: structuredObject } : {}),
         ...(maxIterations && inputData.iteration >= maxIterations
           ? { completionReason: `Max iterations reached: ${maxIterations}` }
           : {}),
