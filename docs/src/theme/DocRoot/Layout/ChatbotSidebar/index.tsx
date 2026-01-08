@@ -30,6 +30,12 @@ import { useChatbotSidebar } from "./context";
 import styles from "./styles.module.css";
 import { TextShimmer } from "./text-shimmer";
 
+interface LeftClickableBorderProps {
+  onClick: (e: React.MouseEvent) => void;
+  hiddenChatbotSidebar: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+}
+
 // Sidebar width bounds and default. Keep in sync with CSS `:root` defaults.
 const SIDEBAR_MIN_WIDTH = 250;
 const SIDEBAR_MAX_WIDTH = 600;
@@ -39,11 +45,7 @@ function LeftClickableBorder({
   onClick,
   hiddenChatbotSidebar,
   onMouseDown,
-}: {
-  onClick: (e: React.MouseEvent) => void;
-  hiddenChatbotSidebar: boolean;
-  onMouseDown: (e: React.MouseEvent) => void;
-}) {
+}: LeftClickableBorderProps) {
   return (
     <div
       className="absolute top-0 bottom-0 -left-2 w-4 h-full cursor-col-resize z-100"
