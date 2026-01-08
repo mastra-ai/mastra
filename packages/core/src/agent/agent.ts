@@ -72,6 +72,7 @@ import type {
   AgentInstructions,
   DynamicAgentInstructions,
   AgentMethodType,
+  StructuredOutputOptions,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -3088,7 +3089,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       validation: mergedOptions?.completion,
       routing: mergedOptions?.routing,
       onIterationComplete: mergedOptions?.onIterationComplete,
-      structuredOutput: options?.structuredOutput,
+      structuredOutput: (options?.structuredOutput ?? defaultNetworkOptions?.structuredOutput) as
+        | StructuredOutputOptions<OUTPUT>
+        | undefined,
     });
   }
 
