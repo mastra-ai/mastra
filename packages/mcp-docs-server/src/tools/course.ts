@@ -451,7 +451,7 @@ async function mergeCourseStates(currentState: CourseState, newState: CourseStat
 export const startMastraCourse = {
   name: 'startMastraCourse',
   description:
-    'Starts the Mastra Course. If the user is not registered, they will be prompted to register first. Otherwise, it will start at the first lesson or pick up where they last left off. ALWAYS ask the user for their email address if they are not registered. DO NOT assume their email address, they must confirm their email and that they want to register.',
+    '[🎓 COURSE] Starts the Mastra Course. If the user is not registered, they will be prompted to register first. Otherwise, it will start at the first lesson or pick up where they last left off. ALWAYS ask the user for their email address if they are not registered. DO NOT assume their email address, they must confirm their email and that they want to register.',
   parameters: z.object({
     email: z.string().email().optional().describe('Email address for registration if not already registered. '),
   }),
@@ -581,7 +581,7 @@ export const startMastraCourse = {
 
 export const getMastraCourseStatus = {
   name: 'getMastraCourseStatus',
-  description: 'Gets the current status of the Mastra Course, including which lessons and steps have been completed',
+  description: '[🎓 COURSE] Gets the current status of the Mastra Course, including which lessons and steps have been completed',
   parameters: z.object({}),
   execute: async (_args: Record<string, never>) => {
     try {
@@ -673,7 +673,7 @@ export const getMastraCourseStatus = {
 export const startMastraCourseLesson = {
   name: 'startMastraCourseLesson',
   description:
-    'Starts a specific lesson in the Mastra Course. If the lesson has been started before, it will resume from the first incomplete step',
+    '[🎓 COURSE] Starts a specific lesson in the Mastra Course. If the lesson has been started before, it will resume from the first incomplete step',
   parameters: _courseLessonSchema,
   execute: async (args: z.infer<typeof _courseLessonSchema>) => {
     try {
@@ -736,7 +736,7 @@ export const startMastraCourseLesson = {
 export const nextMastraCourseStep = {
   name: 'nextMastraCourseStep',
   description:
-    'Advances to the next step in the current Mastra Course lesson. If all steps in the current lesson are completed, it will move to the next lesson',
+    '[🎓 COURSE] Advances to the next step in the current Mastra Course lesson. If all steps in the current lesson are completed, it will move to the next lesson',
   parameters: z.object({}),
   execute: async (_args: Record<string, never>) => {
     try {
@@ -835,7 +835,7 @@ export const nextMastraCourseStep = {
 export const clearMastraCourseHistory = {
   name: 'clearMastraCourseHistory',
   description:
-    'Clears all Mastra Course progress history and starts over from the beginning. This action cannot be undone',
+    '[🎓 COURSE] Clears all Mastra Course progress history and starts over from the beginning. This action cannot be undone',
   parameters: _confirmationSchema,
   execute: async (args: z.infer<typeof _confirmationSchema>) => {
     try {

@@ -146,16 +146,48 @@ async function readSourceMap(packageName: string): Promise<SourceMap | null> {
 
 export const getMastraHelpTool = {
   name: 'getMastraHelp',
-  description: `START HERE when working with Mastra code or implementing Mastra features.
+  description: `🚀 START HERE - Complete guide to Mastra documentation tools.
 
-    Use this when you need to:
-    - Understand how to use Mastra APIs (agents, tools, workflows, memory, RAG, etc.)
-    - Implement features with Mastra packages
-    - Find documentation for Mastra code
-    - Look up Mastra type definitions and code examples
-    - Learn about Mastra architecture and patterns
+    This MCP server provides TWO documentation sources:
 
-    This tool explains the complete embedded documentation system and guides you to the right tools for your needs.`,
+    ## 📦 LOCAL PACKAGE DOCS (Recommended for Development)
+    SOURCE: Your installed @mastra packages in node_modules
+    VERSION: Matches your installed code exactly
+
+    ADVANTAGES:
+    - ✅ Version-matched to your code
+    - ✅ Complete TypeScript type definitions
+    - ✅ Works offline
+    - ✅ SOURCE_MAP.json with exact exports
+
+    TOOLS: listMastraPackages, getMastraExports, getMastraExportDetails, readMastraDocs, searchMastraDocs
+    USE WHEN: Writing code, implementing features, checking APIs, debugging
+
+    ## 🌐 REMOTE WEBSITE DOCS (For Latest Info & Learning)
+    SOURCE: mastra.ai website
+    VERSION: Latest published documentation
+
+    ADVANTAGES:
+    - ✅ Always up-to-date
+    - ✅ Blog posts and announcements
+    - ✅ Migration guides
+    - ✅ Curated examples
+
+    TOOLS: mastraDocs, mastraBlog, mastraExamples, mastraChanges, mastraMigration
+    USE WHEN: Learning concepts, checking latest features, migration help
+
+    ## 🎓 INTERACTIVE COURSE
+    TOOLS: startMastraCourse, getMastraCourseStatus, etc.
+    USE WHEN: User wants guided learning experience
+
+    ---
+
+    RECOMMENDED WORKFLOW:
+    1. For coding: listMastraPackages → getMastraExports → getMastraExportDetails
+    2. For learning: mastraDocs
+    3. Version mismatch: mastraChanges → mastraMigration
+
+    This tool shows you which packages are installed and provides detailed guidance on using all available documentation tools.`,
   parameters: z.object({
     projectPath: z
       .string()
@@ -176,50 +208,94 @@ To use these tools, install Mastra packages like:
 Then rebuild/reinstall to generate embedded docs.`;
     }
 
-    return `# Mastra Documentation System
+    return `# Mastra Documentation System - Complete Guide
 
-Found ${packages.length} Mastra package(s) with embedded documentation:
+This MCP server provides **TWO** documentation sources. Choose based on your needs:
+
+---
+
+## 📦 LOCAL PACKAGE DOCS (Your Installed Packages)
+
+Found ${packages.length} installed package(s) with embedded documentation:
 ${packages.map(pkg => `- ${pkg}`).join('\n')}
 
-## Available Documentation Tools
+**SOURCE**: Your node_modules (matches installed code version)
+**USE WHEN**: Writing code, implementing features, debugging, checking APIs
 
-Use these tools to learn about and implement Mastra features:
+### Available LOCAL Tools:
 
-### 1. **listMastraPackages** - Discover available packages
-   When to use: Start here to see what Mastra packages are installed
-   Returns: List of packages with documentation
+**1. listMastraPackages** - List installed packages
+   Returns: Packages with embedded docs
 
-### 2. **getMastraExports** - Explore package APIs
-   When to use: After choosing a package, see what classes/functions/types it exports
+**2. getMastraExports** - Explore package API surface
    Example: See all exports from @mastra/core (Agent, Tool, Workflow, etc.)
-   Returns: List of exports with their source file locations
+   Returns: List of exports with source file locations
 
-### 3. **getMastraExportDetails** - Get detailed API reference
-   When to use: When you need type definitions or implementation code for a specific export
-   Example: Get full details on the Agent class, createTool function, etc.
-   Returns: TypeScript type definitions and optionally source code
+**3. getMastraExportDetails** - Get type definitions & code
+   Example: Get full TypeScript types for Agent class
+   Returns: Complete type definitions and optionally implementation source
 
-### 4. **readMastraDocs** - Read topic-based guides
-   When to use: Learn about concepts like agents, tools, memory, workflows
-   Example: Read all documentation about implementing agents
-   Returns: Comprehensive guides and examples
+**4. readMastraDocs** - Read comprehensive guides
+   Example: Read documentation about agents, tools, workflows, memory
+   Returns: Topic-based guides and examples from your installed version
 
-### 5. **searchMastraDocs** - Search across all documentation
-   When to use: Find specific information across all packages
-   Example: Search for "memory processors" or "tool composition"
-   Returns: Relevant excerpts from documentation
+**5. searchMastraDocs** - Search local documentation
+   Example: Search for "memory processors" or "semantic recall"
+   Returns: Relevant excerpts from your installed docs
 
-## Typical Workflow
+### Typical LOCAL Workflow:
+1. listMastraPackages → see what's installed
+2. getMastraExports → explore package API
+3. getMastraExportDetails → get type definitions
+4. readMastraDocs → learn concepts
+5. searchMastraDocs → find specific info
 
-1. Start with **listMastraPackages** to see what's available
-2. Use **getMastraExports** to explore a package's API surface
-3. Use **getMastraExportDetails** for specific type definitions
-4. Use **readMastraDocs** to learn concepts and patterns
-5. Use **searchMastraDocs** when looking for specific topics
+---
 
-## Next Steps
+## 🌐 REMOTE WEBSITE DOCS (mastra.ai)
 
-Run **listMastraPackages** to see your installed packages and start exploring!`;
+**SOURCE**: https://mastra.ai (latest published documentation)
+**USE WHEN**: Learning new concepts, checking latest features, migration guides
+
+### Available REMOTE Tools:
+
+**mastraDocs** - Browse official documentation
+   Latest guides, references, and tutorials
+
+**mastraBlog** - Read blog posts and announcements
+   News, features, changelogs
+
+**mastraExamples** - Get curated code examples
+   Full example applications
+
+**mastraChanges** - View package changelogs
+   See what's new in each version
+
+**mastraMigration** - Get migration guides
+   Upgrade between versions
+
+⚠️ **Version Note**: Remote docs show latest published version. For API reference matching YOUR code, use LOCAL tools above.
+
+---
+
+## 🎓 INTERACTIVE COURSE
+
+**startMastraCourse**, **getMastraCourseStatus**, **startMastraCourseLesson**, **nextMastraCourseStep**, **clearMastraCourseHistory**
+
+Guided learning experience with hands-on exercises.
+
+---
+
+## Quick Start Recommendations
+
+**If you're writing code**: Use LOCAL tools
+   → Start with listMastraPackages
+
+**If you're learning**: Use REMOTE tools
+   → Start with mastraDocs
+
+**If version differs**: Check changes
+   → mastraChanges → mastraMigration`;
   },
 };
 
@@ -229,7 +305,7 @@ Run **listMastraPackages** to see your installed packages and start exploring!`;
 
 export const listInstalledPackagesTool = {
   name: 'listMastraPackages',
-  description: `Discover which Mastra packages are installed and have documentation available.
+  description: `[📦 LOCAL PACKAGES] Discover which Mastra packages are installed and have documentation available.
 
     Use this when you need to:
     - See what Mastra packages you can work with
@@ -285,7 +361,7 @@ Install Mastra packages to get started:
 
 export const readSourceMapTool = {
   name: 'getMastraExports',
-  description: `Explore the complete API surface of a Mastra package - see all classes, functions, types, and constants.
+  description: `[📦 LOCAL PACKAGES] Explore the complete API surface of a Mastra package - see all classes, functions, types, and constants.
 
     Use this when you need to:
     - Discover what APIs a Mastra package provides (Agent, Tool, Workflow, etc.)
@@ -348,7 +424,7 @@ Try running without a filter to see all available exports.`
 
 export const findExportTool = {
   name: 'getMastraExportDetails',
-  description: `Get complete API reference for a specific Mastra export - type definitions, interfaces, and optionally source code.
+  description: `[📦 LOCAL PACKAGES] Get complete API reference for a specific Mastra export - type definitions, interfaces, and optionally source code.
 
     Use this when you need to:
     - Understand how to use a specific Mastra class or function (Agent, Tool, Workflow, etc.)
@@ -477,7 +553,7 @@ Run getMastraExports with package="${args.package}" to see all available exports
 
 export const readEmbeddedDocsTool = {
   name: 'readMastraDocs',
-  description: `Read comprehensive guides and documentation on Mastra concepts, patterns, and implementation examples.
+  description: `[📦 LOCAL PACKAGES] Read comprehensive guides and documentation on Mastra concepts, patterns, and implementation examples.
 
     Use this when you need to:
     - Learn how to implement Mastra features (agents, tools, workflows, memory, RAG, etc.)
@@ -606,7 +682,7 @@ Run readMastraDocs with package="${args.package}" (without topic parameter) to s
 
 export const searchEmbeddedDocsTool = {
   name: 'searchMastraDocs',
-  description: `Search across all Mastra documentation to find specific information, patterns, or examples.
+  description: `[📦 LOCAL PACKAGES] Search across all Mastra documentation to find specific information, patterns, or examples.
 
     Use this when you need to:
     - Find specific topics or concepts quickly (e.g., "memory processors", "tool composition")
