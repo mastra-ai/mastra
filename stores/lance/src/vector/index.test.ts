@@ -75,7 +75,7 @@ describe('Lance vector store tests', () => {
 
         const stats = await vectorDB.describeIndex({ indexName: indexOnColumn + '_idx' });
 
-        expect(stats?.metric).toBe('l2');
+        expect(stats?.metric).toBe('euclidean');
       });
     });
 
@@ -156,7 +156,7 @@ describe('Lance vector store tests', () => {
         expect(stats).toBeDefined();
         expect(stats?.dimension).toBe(3);
         expect(stats?.count).toBe(300);
-        expect(stats?.metric).toBe('l2');
+        expect(stats?.metric).toBe('euclidean');
       });
 
       it('should throw error for non-existent index', async () => {

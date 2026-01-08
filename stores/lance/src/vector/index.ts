@@ -320,12 +320,11 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       });
 
       if (!tables.includes(tableName!)) {
-        // Create new table with inferred schema from data
-        table = await this.lanceClient.createTable(tableName!, data);
-      } else {
-        table = await this.lanceClient.openTable(tableName!);
-        await table.add(data, { mode: 'overwrite' });
+        throw new Error(`Table ${tableName} does not exist`);
       }
+
+      table = await this.lanceClient.openTable(tableName!);
+      await table.add(data, { mode: 'overwrite' });
 
       return vectorIds;
     } catch (error: any) {
@@ -500,12 +499,6 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
       const table = await this.lanceClient.openTable(tableName!);
 
-      // Check if index exists to prevent rebuilding
-      const existingIndices = await table.listIndices();
-      if (existingIndices.some((idx: any) => idx.columns.includes(indexName))) {
-        return;
-      }
-
       // Convert metric to LanceDB metric
       type LanceMetric = 'cosine' | 'l2' | 'dot';
       let metricType: LanceMetric | undefined;
@@ -628,7 +621,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
           return {
             dimension: dimension,
-            metric: stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined,
+            metric:
+              stats.distanceType === 'l2'
+                ? 'euclidean'
+                : stats.distanceType === 'dot'
+                  ? 'dotproduct'
+                  : (stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined),
             count: stats.numIndexedRows,
           };
         }
@@ -656,7 +654,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
           return {
             dimension: dimension,
-            metric: stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined,
+            metric:
+              stats.distanceType === 'l2'
+                ? 'euclidean'
+                : stats.distanceType === 'dot'
+                  ? 'dotproduct'
+                  : (stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined),
             count: stats.numIndexedRows,
           };
         }
@@ -744,7 +747,18 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       });
     }
     try {
-      await this.lanceClient.dropAllTables();
+      const tables = await this.lanceClient.tableNames();
+      for (const table of tables) {
+        try {
+          await this.lanceClient.dropTable(table);
+        } catch (err: any) {
+          // Ignore if table not found, it might have been deleted by another process or inconsistent state
+          const errorMessage = err?.message || '';
+          if (!errorMessage.includes('not found') && !errorMessage.includes('Table')) {
+            throw err;
+          }
+        }
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -857,16 +871,16 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
         try {
           const schema = await table.schema();
-          const hasColumn = schema.fields.some(field => field.name === targetColumn);
+          const hasColumn = schema.fields.some((field: any) => field.name === targetColumn);
 
           if (hasColumn) {
             this.logger.debug(`Found column ${targetColumn} in table ${tableName}`);
 
-            let whereClause: string;
+            let whereClause = '';
+
             if ('id' in params && params.id) {
               whereClause = `id = '${params.id}'`;
             } else if ('filter' in params && params.filter) {
-              // Use filter translator to build SQL WHERE clause
               const translator = new LanceFilterTranslator();
               const processFilterKeys = (filter: Record<string, any>): Record<string, any> => {
                 const processedFilter: Record<string, any> = {};
@@ -883,69 +897,26 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
               };
 
               const prefixedFilter = processFilterKeys(params.filter as Record<string, any>);
-              whereClause = translator.translate(prefixedFilter) || '';
+              whereClause = translator.translate(prefixedFilter);
+            }
 
-              if (!whereClause) {
-                throw new Error('Failed to translate filter to SQL');
+            if (whereClause) {
+              const updateValues: Record<string, any> = {};
+
+              if (update.vector) {
+                updateValues[targetColumn] = update.vector;
               }
-            } else {
-              throw new Error('Either id or filter must be provided');
-            }
 
-            // Query for existing records that match
-            const existingRecords = await table
-              .query()
-              .where(whereClause)
-              .select(schema.fields.map(field => field.name))
-              .toArray();
-
-            if (existingRecords.length === 0) {
-              this.logger.info(`No records found matching criteria in table ${tableName}`);
-              return;
-            }
-
-            // Update each matching record
-            const updatedRecords = existingRecords.map(record => {
-              const rowData: Record<string, any> = {};
-
-              // Copy all existing field values except special fields
-              Object.entries(record).forEach(([key, value]) => {
-                // Skip special fields
-                if (key !== '_distance') {
-                  // Handle vector field specially to avoid nested properties
-                  if (key === targetColumn) {
-                    // If we're about to update this vector anyway, use the new value
-                    if (update.vector) {
-                      rowData[key] = update.vector;
-                    } else {
-                      // Ensure vector is a plain array
-                      if (Array.isArray(value)) {
-                        rowData[key] = [...value];
-                      } else if (typeof value === 'object' && value !== null) {
-                        // Handle vector objects by converting to array if needed
-                        rowData[key] = Array.from(value as any[]);
-                      } else {
-                        rowData[key] = value;
-                      }
-                    }
-                  } else {
-                    rowData[key] = value;
-                  }
-                }
-              });
-
-              // Apply metadata updates if provided
               if (update.metadata) {
                 Object.entries(update.metadata).forEach(([key, value]) => {
-                  rowData[`metadata_${key}`] = value;
+                  updateValues[`metadata_${key}`] = value;
                 });
               }
 
-              return rowData;
-            });
-
-            // Update all records
-            await table.add(updatedRecords, { mode: 'overwrite' });
+              if (Object.keys(updateValues).length > 0) {
+                await table.update({ where: whereClause, values: updateValues });
+              }
+            }
             return;
           }
         } catch (err) {
@@ -1025,7 +996,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         try {
           // Try to get the schema to check if this table has the column we're looking for
           const schema = await table.schema();
-          const hasColumn = schema.fields.some(field => field.name === targetColumn);
+          const hasColumn = schema.fields.some((field: any) => field.name === targetColumn);
 
           if (hasColumn) {
             this.logger.debug(`Found column ${targetColumn} in table ${tableName}`);
@@ -1164,14 +1135,14 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
         try {
           const schema = await table.schema();
-          const hasColumn = schema.fields.some(field => field.name === targetColumn);
+          const hasColumn = schema.fields.some((field: any) => field.name === targetColumn);
 
           if (hasColumn) {
             this.logger.debug(`Found column ${targetColumn} in table ${tableName}`);
 
             if (ids) {
               // Delete by IDs
-              const idsConditions = ids.map(id => `id = '${id}'`).join(' OR ');
+              const idsConditions = ids.map((id: string) => `id = '${id}'`).join(' OR ');
               await table.delete(idsConditions);
             } else if (filter) {
               // Delete by filter using SQL WHERE clause
