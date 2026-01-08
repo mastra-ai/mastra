@@ -103,15 +103,6 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
-  // Cached processor instances for reuse across calls
-  // This prevents creating new instances each time getInputProcessors/getOutputProcessors is called,
-  // which is important because processors like SemanticRecall have internal caches (e.g., embeddingCache)
-  // that should persist across calls to avoid redundant embedding API calls.
-  // See: https://github.com/mastra-ai/mastra/issues/11455
-  #cachedSemanticRecall?: SemanticRecall;
-  #cachedWorkingMemory?: WorkingMemory;
-  #cachedMessageHistory?: MessageHistory;
-
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
     this.id = config.id ?? config.name ?? 'default-memory';
@@ -211,14 +202,10 @@ https://mastra.ai/en/docs/memory/overview`,
 
   public setStorage(storage: MastraStorage) {
     this._storage = augmentWithInit(storage);
-    // Invalidate cached processors since they hold references to the old storage
-    this.#invalidateProcessorCache();
   }
 
   public setVector(vector: MastraVector) {
     this.vector = vector;
-    // Invalidate cached SemanticRecall since it depends on the vector store
-    this.#cachedSemanticRecall = undefined;
   }
 
   public setEmbedder(
@@ -233,18 +220,6 @@ https://mastra.ai/en/docs/memory/overview`,
     if (embedderOptions) {
       this.embedderOptions = embedderOptions;
     }
-    // Invalidate cached SemanticRecall since it depends on the embedder
-    this.#cachedSemanticRecall = undefined;
-  }
-
-  /**
-   * Invalidates all cached processor instances.
-   * Called when dependencies (storage, vector, embedder) change.
-   */
-  #invalidateProcessorCache() {
-    this.#cachedSemanticRecall = undefined;
-    this.#cachedWorkingMemory = undefined;
-    this.#cachedMessageHistory = undefined;
   }
 
   /**
@@ -568,18 +543,17 @@ https://mastra.ai/en/docs/memory/overview`,
       const hasWorkingMemory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'working-memory');
 
       if (!hasWorkingMemory) {
-        // Reuse cached WorkingMemory instance if available
-        if (!this.#cachedWorkingMemory) {
-          // Convert string template to WorkingMemoryTemplate format
-          let template: { format: 'markdown' | 'json'; content: string } | undefined;
-          if (typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.template) {
-            template = {
-              format: 'markdown',
-              content: effectiveConfig.workingMemory.template,
-            };
-          }
+        // Convert string template to WorkingMemoryTemplate format
+        let template: { format: 'markdown' | 'json'; content: string } | undefined;
+        if (typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.template) {
+          template = {
+            format: 'markdown',
+            content: effectiveConfig.workingMemory.template,
+          };
+        }
 
-          this.#cachedWorkingMemory = new WorkingMemory({
+        processors.push(
+          new WorkingMemory({
             storage: memoryStore,
             template,
             scope: typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory.scope : undefined,
@@ -588,10 +562,8 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
-          });
-        }
-
-        processors.push(this.#cachedWorkingMemory);
+          }),
+        );
       }
     }
 
@@ -609,15 +581,12 @@ https://mastra.ai/en/docs/memory/overview`,
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
       if (!hasMessageHistory) {
-        // Reuse cached MessageHistory instance if available
-        if (!this.#cachedMessageHistory) {
-          this.#cachedMessageHistory = new MessageHistory({
+        processors.push(
+          new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-          });
-        }
-
-        processors.push(this.#cachedMessageHistory);
+          }),
+        );
       }
     }
 
@@ -651,25 +620,21 @@ https://mastra.ai/en/docs/memory/overview`,
       const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
 
       if (!hasSemanticRecall) {
-        // Reuse cached SemanticRecall instance if available
-        if (!this.#cachedSemanticRecall) {
-          const semanticConfig =
-            typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+        const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
-          // Use the Memory class's index name for consistency with memory.recall()
-          const indexName = this.getEmbeddingIndexName();
+        // Use the Memory class's index name for consistency with memory.recall()
+        const indexName = this.getEmbeddingIndexName();
 
-          this.#cachedSemanticRecall = new SemanticRecall({
+        processors.push(
+          new SemanticRecall({
             storage: memoryStore,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
             indexName,
             ...semanticConfig,
-          });
-        }
-
-        processors.push(this.#cachedSemanticRecall);
+          }),
+        );
       }
     }
 
@@ -732,25 +697,22 @@ https://mastra.ai/en/docs/memory/overview`,
       const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
 
       if (!hasSemanticRecall) {
-        // Reuse cached SemanticRecall instance if available
-        if (!this.#cachedSemanticRecall) {
-          const semanticRecallConfig =
-            typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+        const semanticRecallConfig =
+          typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
-          // Use the Memory class's index name for consistency with memory.recall()
-          const indexName = this.getEmbeddingIndexName();
+        // Use the Memory class's index name for consistency with memory.recall()
+        const indexName = this.getEmbeddingIndexName();
 
-          this.#cachedSemanticRecall = new SemanticRecall({
+        processors.push(
+          new SemanticRecall({
             storage: memoryStore,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
             indexName,
             ...semanticRecallConfig,
-          });
-        }
-
-        processors.push(this.#cachedSemanticRecall);
+          }),
+        );
       }
     }
 
@@ -768,15 +730,12 @@ https://mastra.ai/en/docs/memory/overview`,
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
       if (!hasMessageHistory) {
-        // Reuse cached MessageHistory instance if available
-        if (!this.#cachedMessageHistory) {
-          this.#cachedMessageHistory = new MessageHistory({
+        processors.push(
+          new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-          });
-        }
-
-        processors.push(this.#cachedMessageHistory);
+          }),
+        );
       }
     }
 
