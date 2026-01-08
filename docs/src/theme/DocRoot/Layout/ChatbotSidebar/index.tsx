@@ -31,7 +31,7 @@ import styles from "./styles.module.css";
 import { TextShimmer } from "./text-shimmer";
 
 interface LeftClickableBorderProps {
-  onClick: (e: React.MouseEvent) => void;
+  onClick: (e: React.MouseEvent | React.KeyboardEvent) => void;
   hiddenChatbotSidebar: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
 }
@@ -55,7 +55,7 @@ function LeftClickableBorder({
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
-          onClick(e as unknown as React.MouseEvent);
+          onClick(e);
         }
       }}
       title={hiddenChatbotSidebar ? "Expand chatbot" : "Collapse chatbot"}
@@ -101,7 +101,7 @@ export default function ChatbotSidebar() {
 
   // Click wrapper: only toggle if the pointer interaction wasn't a drag
   const handleToggleClick = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | React.KeyboardEvent) => {
       if (hasDraggedRef.current) return;
       toggleSidebar();
     },
