@@ -13,7 +13,7 @@
       window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
       window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
       window.MASTRA_SERVER_PROTOCOL = '%%MASTRA_SERVER_PROTOCOL%%';
-      window.MASTRA_SERVER_URL = '%%MASTRA_SERVER_URL%%' || window.location.origin;
+      window.MASTRA_SERVER_URL = '%%MASTRA_AUTO_DETECT_URL%%' === 'true' ? window.location.origin : '';
 
       function connectSSE() {
         const basePath = window.MASTRA_STUDIO_BASE_PATH || '';

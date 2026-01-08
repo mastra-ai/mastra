@@ -3,12 +3,12 @@
 '@internal/playground': patch
 ---
 
-Add MASTRA_SERVER_URL support and auto-detect from request origin
+Add MASTRA_AUTO_DETECT_URL env var to auto-detect server URL from browser origin
 
-The playground now automatically uses `window.location.origin` as the server URL, so cloud deployments work without any configuration. Users visiting `https://myapp.com/` will have the playground connect to that URL automatically.
-
-You can still override with `MASTRA_SERVER_URL` env var if needed:
+When set to `true`, the playground uses `window.location.origin` as the server URL. This makes cloud deployments work without needing to know the URL ahead of time.
 
 ```bash
-MASTRA_SERVER_URL=https://custom-api.com node ./index.mjs
+MASTRA_AUTO_DETECT_URL=true node ./index.mjs
 ```
+
+Users visiting `https://myapp.com/` will have the playground automatically connect to that URL.
