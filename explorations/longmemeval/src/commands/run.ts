@@ -452,11 +452,17 @@ Active evaluations:`;
 
     // Create agent with the specified model
     const agentInstructions = `You are a helpful assistant with access to extensive conversation history. 
-When answering questions, carefully review the conversation history to identify and use any relevant user preferences, interests, or specific details they have mentioned.
-For example, if the user previously mentioned they prefer a specific software, tool, or approach, tailor your recommendations to match their stated preferences.
-Be specific rather than generic when the user has expressed clear preferences in past conversations. If there is a clear preference, focus in on that, and do not add additional irrelevant information.`;
+When answering questions, carefully review the conversation history to identify and use any relevant user preferences, interests, or specific details they have mentioned.`;
 
     const omDebugPath = join(questionDir, 'om.md');
+
+    const today = `Todays date is ${new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(meta.questionDate || Date.now()))}`;
+
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
@@ -464,7 +470,19 @@ Be specific rather than generic when the user has expressed clear preferences in
       // model: 'anthropic/claude-haiku-4-5',
       // model: 'cerebras/zai-glm-4.6',
       // model: 'cerebras/gpt-oss-120b',
-      instructions: agentInstructions,
+      instructions: [
+        { role: 'system', content: agentInstructions },
+        ...(meta.questionDate
+          ? [
+              {
+                role: 'system' as const,
+                content: today,
+              },
+            ]
+          : []),
+        // prevent openai prompt caching
+        { role: 'system', content: `\ncache: ${Math.random()}` },
+      ],
       tools: observationalMemory
         ? {
             recall: observationalMemory?.getRecallTool(),
@@ -515,26 +533,13 @@ Be specific rather than generic when the user has expressed clear preferences in
 
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
-    const today = `Todays date is ${new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(meta.questionDate || Date.now()))}`;
     let response = await agent.generate(meta.question + `\n${today}`, {
       threadId: evalThreadId,
       resourceId: meta.resourceId,
       modelSettings: {
         temperature: 0,
       },
-      context: meta.questionDate
-        ? [
-            {
-              role: 'system',
-              content: today,
-            },
-          ]
-        : undefined,
+      context: [],
     });
 
     console.log(
@@ -584,7 +589,6 @@ Be specific rather than generic when the user has expressed clear preferences in
         modelSettings: {
           temperature: 0,
         },
-        context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
       });
 
       const retryResult = await metric.measure(input, retryResponse.text);
@@ -622,7 +626,6 @@ Be specific rather than generic when the user has expressed clear preferences in
           modelSettings: {
             temperature: 0,
           },
-          context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
         });
 
         improvedHypothesis = improvedResponse.text;
