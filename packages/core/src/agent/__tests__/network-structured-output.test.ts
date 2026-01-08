@@ -4,14 +4,17 @@
  *
  * These tests verify the planned implementation of structured output
  * support in agent.network() method.
+ *
+ * Tests are designed to FAIL until the feature is implemented (TDD approach).
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
+import type { NetworkOptions } from '../agent.types';
 
 describe('Agent Network - Structured Output', () => {
   const memory = new MockMemory();
@@ -31,42 +34,58 @@ describe('Agent Network - Structured Output', () => {
     confidence: 0.95,
   };
 
-  describe('NetworkOptions with structuredOutput', () => {
-    it('should accept structuredOutput option with schema', async () => {
-      // Routing response - selects no primitive (self-handle)
-      const routingResponse = JSON.stringify({
+  // Helper to create a mock model that handles routing properly
+  function createNetworkMockModel(options: {
+    routingResponse?: object;
+    completionResponse?: object;
+    finalResult?: object | string;
+  }) {
+    const routingResponse = JSON.stringify(
+      options.routingResponse ?? {
         primitiveId: 'none',
         primitiveType: 'none',
         prompt: '',
-        selectionReason: 'Task can be handled directly',
-      });
+        selectionReason: 'Task handled directly',
+      },
+    );
 
-      // Completion check response with structured output
-      const completionResponse = JSON.stringify({
+    const completionResponse = JSON.stringify(
+      options.completionResponse ?? {
         isComplete: true,
         completionReason: 'Task completed',
-        finalResult: JSON.stringify(structuredResult),
-      });
+        finalResult:
+          typeof options.finalResult === 'string'
+            ? options.finalResult
+            : JSON.stringify(options.finalResult ?? structuredResult),
+      },
+    );
 
-      let callCount = 0;
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => {
-          callCount++;
-          const text = callCount === 1 ? routingResponse : completionResponse;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [{ type: 'text', text }],
-            warnings: [],
-          };
-        },
-        doStream: async () => ({
+    let generateCallCount = 0;
+    let streamCallCount = 0;
+
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        generateCallCount++;
+        // First call is routing, subsequent calls are completion check
+        const text = generateCallCount === 1 ? routingResponse : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        streamCallCount++;
+        // Stream returns appropriate JSON based on call order
+        const responseText = streamCallCount === 1 ? routingResponse : completionResponse;
+        return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
+            { type: 'text-delta', id: 'text-1', delta: responseText },
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
@@ -76,22 +95,94 @@ describe('Agent Network - Structured Output', () => {
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
-        }),
-      });
+        };
+      },
+    });
+  }
+
+  describe('NetworkOptions type should include structuredOutput', () => {
+    it('should have structuredOutput as a valid option in NetworkOptions type', () => {
+      // This test verifies the TYPE includes structuredOutput
+      // It will fail at compile time until NetworkOptions is updated
+
+      type HasStructuredOutput = NetworkOptions extends { structuredOutput?: unknown } ? true : false;
+
+      // When structuredOutput is added to NetworkOptions, this will be true
+      const hasOption: HasStructuredOutput = false as HasStructuredOutput;
+
+      // This assertion should PASS once the type is updated
+      // For now, we expect it to be false (feature not implemented)
+      expect(hasOption).toBe(true);
+    });
+  });
+
+  describe('MastraAgentNetworkStream should have object getter', () => {
+    it('should expose .object getter that returns a Promise', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
 
       const networkAgent = new Agent({
         id: 'test-network',
         name: 'Test Network',
-        instructions: 'You are a test network agent',
+        instructions: 'Test',
         model: mockModel,
         memory,
       });
 
-      // This test validates that the API accepts structuredOutput option
-      // The actual implementation will be added later
-      const stream = await networkAgent.network('Analyze this task', {
+      const stream = await networkAgent.network('Test task', {
         requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented in NetworkOptions
+      });
+
+      // Consume stream
+      for await (const _chunk of stream) {
+        // Process
+      }
+
+      // Test that .object getter exists
+      // This will fail until MastraAgentNetworkStream is updated
+      expect(stream).toHaveProperty('object');
+      expect(typeof (stream as any).object?.then).toBe('function'); // Should be a Promise
+    });
+  });
+
+  describe('MastraAgentNetworkStream should have objectStream getter', () => {
+    it('should expose .objectStream getter that returns a ReadableStream', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Test task', {
+        requestContext,
+      });
+
+      // Test that .objectStream getter exists
+      // This will fail until MastraAgentNetworkStream is updated
+      expect(stream).toHaveProperty('objectStream');
+      expect((stream as any).objectStream).toBeInstanceOf(ReadableStream);
+    });
+  });
+
+  describe('Structured output with schema option', () => {
+    it('should return typed object when structuredOutput.schema is provided', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test structured output',
+        model: mockModel,
+        memory,
+      });
+
+      // This will have a type error until NetworkOptions includes structuredOutput
+      const stream = await networkAgent.network('Analyze this', {
+        requestContext,
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
         structuredOutput: {
           schema: resultSchema,
         },
@@ -99,338 +190,24 @@ describe('Agent Network - Structured Output', () => {
 
       // Consume stream
       for await (const _chunk of stream) {
-        // Process chunks
-      }
-
-      // Verify stream completed
-      const status = await stream.status;
-      expect(status).toBeDefined();
-    });
-
-    it('should accept structuredOutput with custom model', async () => {
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Direct handling',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
-
-      const structuringModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 15, totalTokens: 20 },
-          content: [{ type: 'text', text: JSON.stringify(structuredResult) }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'structuring-model', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 15, totalTokens: 20 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
-
-      const networkAgent = new Agent({
-        id: 'test-network',
-        name: 'Test Network',
-        instructions: 'Test network with custom structuring model',
-        model: mockModel,
-        memory,
-      });
-
-      // Test that structuredOutput.model option is accepted
-      const stream = await networkAgent.network('Process this request', {
-        requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
-        structuredOutput: {
-          schema: resultSchema,
-          model: structuringModel,
-        },
-      });
-
-      for await (const _chunk of stream) {
-        // Consume
-      }
-
-      expect(await stream.status).toBeDefined();
-    });
-  });
-
-  describe('MastraAgentNetworkStream object getter', () => {
-    it('should resolve object promise with typed result when structuredOutput is provided', async () => {
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Handling directly',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
-
-      const networkAgent = new Agent({
-        id: 'test-network',
-        name: 'Test Network',
-        instructions: 'Test',
-        model: mockModel,
-        memory,
-      });
-
-      const stream = await networkAgent.network('Get structured result', {
-        requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
-        structuredOutput: {
-          schema: resultSchema,
-        },
-      });
-
-      // Consume stream first
-      for await (const _chunk of stream) {
         // Process
       }
 
-      // Test that .object getter exists and returns promise
-      // @ts-expect-error - object getter not yet implemented
-      if (typeof stream.object !== 'undefined') {
-        // @ts-expect-error - object getter not yet implemented
-        const result = await stream.object;
-        expect(result).toBeDefined();
-        expect(result.summary).toBe(structuredResult.summary);
-        expect(result.recommendations).toEqual(structuredResult.recommendations);
-        expect(result.confidence).toBe(structuredResult.confidence);
-      }
-    });
+      // Get the structured object
+      const result = await (stream as any).object;
 
-    it('should return undefined from object getter when no structuredOutput provided', async () => {
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'No structured output requested',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Plain text result' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
-
-      const networkAgent = new Agent({
-        id: 'test-network',
-        name: 'Test Network',
-        instructions: 'Test',
-        model: mockModel,
-        memory,
-      });
-
-      const stream = await networkAgent.network('Get plain result', {
-        requestContext,
-      });
-
-      for await (const _chunk of stream) {
-        // Consume
-      }
-
-      // @ts-expect-error - object getter not yet implemented
-      if (typeof stream.object !== 'undefined') {
-        // @ts-expect-error - object getter not yet implemented
-        const result = await stream.object;
-        expect(result).toBeUndefined();
-      }
-    });
-  });
-
-  describe('MastraAgentNetworkStream objectStream getter', () => {
-    it('should stream partial objects during generation', async () => {
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Streaming structured output',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            // Simulate streaming JSON in parts
-            { type: 'text-delta', id: 'text-1', delta: '{"summary":' },
-            { type: 'text-delta', id: 'text-1', delta: '"Task completed",' },
-            { type: 'text-delta', id: 'text-1', delta: '"recommendations":["Rec 1",' },
-            { type: 'text-delta', id: 'text-1', delta: '"Rec 2"],' },
-            { type: 'text-delta', id: 'text-1', delta: '"confidence":0.95}' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
-
-      const networkAgent = new Agent({
-        id: 'test-network',
-        name: 'Test Network',
-        instructions: 'Test streaming',
-        model: mockModel,
-        memory,
-      });
-
-      const stream = await networkAgent.network('Stream structured output', {
-        requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
-        structuredOutput: {
-          schema: resultSchema,
-        },
-      });
-
-      const partialObjects: any[] = [];
-
-      // @ts-expect-error - objectStream getter not yet implemented
-      if (typeof stream.objectStream !== 'undefined') {
-        // @ts-expect-error - objectStream getter not yet implemented
-        for await (const partial of stream.objectStream) {
-          partialObjects.push(partial);
-        }
-
-        // Should have received multiple partial objects
-        expect(partialObjects.length).toBeGreaterThan(0);
-
-        // Last partial should be complete
-        const lastPartial = partialObjects[partialObjects.length - 1];
-        expect(lastPartial.summary).toBeDefined();
-        expect(lastPartial.recommendations).toBeDefined();
-        expect(lastPartial.confidence).toBeDefined();
-      }
+      // These assertions will fail until the feature is implemented
+      expect(result).toBeDefined();
+      expect(result).not.toBeUndefined();
+      expect(result.summary).toBe(structuredResult.summary);
+      expect(result.recommendations).toEqual(structuredResult.recommendations);
+      expect(result.confidence).toBe(structuredResult.confidence);
     });
   });
 
   describe('Network chunk types for structured output', () => {
-    it('should emit network-object chunks during streaming', async () => {
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Emitting object chunks',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
+    it('should emit network-object-result chunk with typed object', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
 
       const networkAgent = new Agent({
         id: 'test-network',
@@ -440,77 +217,29 @@ describe('Agent Network - Structured Output', () => {
         memory,
       });
 
-      const stream = await networkAgent.network('Check object chunks', {
+      const stream = await networkAgent.network('Check chunks', {
         requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
         structuredOutput: {
           schema: resultSchema,
         },
       });
 
-      const objectChunks: any[] = [];
       let objectResultChunk: any = null;
 
       for await (const chunk of stream) {
-        // Collect network-object chunks (partial objects during streaming)
-        if (chunk.type === 'network-object') {
-          objectChunks.push(chunk);
-        }
-        // Collect network-object-result chunk (final validated object)
         if (chunk.type === 'network-object-result') {
           objectResultChunk = chunk;
         }
       }
 
-      // When implemented, should emit network-object chunks
-      // and a final network-object-result chunk
-      // For now, this test documents the expected behavior
+      // This will fail until the feature emits network-object-result chunks
+      expect(objectResultChunk).not.toBeNull();
+      expect(objectResultChunk.object).toEqual(structuredResult);
     });
 
-    it('should include object in NetworkFinishPayload when structuredOutput provided', async () => {
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Include object in finish payload',
-      });
-
-      const completionResponse = JSON.stringify({
-        isComplete: true,
-        completionReason: 'Complete with structured output',
-        finalResult: JSON.stringify(structuredResult),
-      });
-
-      let callCount = 0;
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => {
-          callCount++;
-          const text = callCount === 1 ? routingResponse : completionResponse;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [{ type: 'text', text }],
-            warnings: [],
-          };
-        },
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
+    it('should include object property in NetworkFinishPayload', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
 
       const networkAgent = new Agent({
         id: 'test-network',
@@ -522,7 +251,7 @@ describe('Agent Network - Structured Output', () => {
 
       const stream = await networkAgent.network('Check finish payload', {
         requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
         structuredOutput: {
           schema: resultSchema,
         },
@@ -537,15 +266,83 @@ describe('Agent Network - Structured Output', () => {
       }
 
       expect(finishPayload).toBeDefined();
-      // When implemented, finishPayload should have an object property
-      // expect(finishPayload.object).toEqual(structuredResult);
+      // This will fail until NetworkFinishPayload includes object property
+      expect(finishPayload).toHaveProperty('object');
+      expect(finishPayload.object).toEqual(structuredResult);
+    });
+  });
+
+  describe('Streaming partial objects', () => {
+    it('should stream partial objects via objectStream', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test streaming',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Stream test', {
+        requestContext,
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
+        structuredOutput: {
+          schema: resultSchema,
+        },
+      });
+
+      const partialObjects: any[] = [];
+
+      // This will fail until objectStream is implemented
+      const objectStream = (stream as any).objectStream;
+      expect(objectStream).toBeDefined();
+
+      if (objectStream) {
+        for await (const partial of objectStream) {
+          partialObjects.push(partial);
+        }
+      }
+
+      // Should have received at least one partial object
+      expect(partialObjects.length).toBeGreaterThan(0);
+    });
+
+    it('should emit network-object chunks during streaming', async () => {
+      const mockModel = createNetworkMockModel({ finalResult: structuredResult });
+
+      const networkAgent = new Agent({
+        id: 'test-network',
+        name: 'Test Network',
+        instructions: 'Test object chunks',
+        model: mockModel,
+        memory,
+      });
+
+      const stream = await networkAgent.network('Partial chunks test', {
+        requestContext,
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
+        structuredOutput: {
+          schema: resultSchema,
+        },
+      });
+
+      const objectChunks: any[] = [];
+
+      for await (const chunk of stream) {
+        if (chunk.type === 'network-object') {
+          objectChunks.push(chunk);
+        }
+      }
+
+      // This will fail until network-object chunks are emitted
+      expect(objectChunks.length).toBeGreaterThan(0);
     });
   });
 
   describe('Structured output with sub-agents', () => {
-    it('should generate structured output after sub-agent execution', async () => {
-      // Sub-agent response
-      const subAgentResponse = 'Detailed analysis of the topic with findings and recommendations.';
+    it('should generate structured output after sub-agent completes', async () => {
+      const subAgentResponse = 'Detailed analysis results from sub-agent.';
 
       const subAgentMockModel = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -576,17 +373,17 @@ describe('Agent Network - Structured Output', () => {
       const subAgent = new Agent({
         id: 'research-agent',
         name: 'Research Agent',
-        description: 'Performs detailed research and analysis',
-        instructions: 'Research and analyze topics thoroughly',
+        description: 'Performs detailed research',
+        instructions: 'Research topics thoroughly',
         model: subAgentMockModel,
       });
 
-      // Routing selects sub-agent first, then completion
+      // Routing agent selects sub-agent
       const routingSelectAgent = JSON.stringify({
         primitiveId: 'research-agent',
         primitiveType: 'agent',
-        prompt: 'Analyze the given topic',
-        selectionReason: 'Sub-agent needed for research',
+        prompt: 'Analyze this topic',
+        selectionReason: 'Delegating to research agent',
       });
 
       const completionResponse = JSON.stringify({
@@ -595,11 +392,11 @@ describe('Agent Network - Structured Output', () => {
         finalResult: JSON.stringify(structuredResult),
       });
 
-      let generateCount = 0;
+      let callCount = 0;
       const routingMockModel = new MockLanguageModelV2({
         doGenerate: async () => {
-          generateCount++;
-          const text = generateCount === 1 ? routingSelectAgent : completionResponse;
+          callCount++;
+          const text = callCount === 1 ? routingSelectAgent : completionResponse;
           return {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -613,7 +410,7 @@ describe('Agent Network - Structured Output', () => {
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'routing-model', timestamp: new Date(0) },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(structuredResult) },
+            { type: 'text-delta', id: 'text-1', delta: completionResponse },
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
@@ -637,70 +434,37 @@ describe('Agent Network - Structured Output', () => {
 
       const stream = await networkAgent.network('Research and summarize', {
         requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
         structuredOutput: {
           schema: resultSchema,
         },
       });
 
       let agentExecutionSeen = false;
-      let finishPayload: any = null;
 
       for await (const chunk of stream) {
         if (chunk.type === 'agent-execution-end') {
           agentExecutionSeen = true;
         }
-        if (chunk.type === 'network-execution-event-finish') {
-          finishPayload = chunk.payload;
-        }
       }
 
       expect(agentExecutionSeen).toBe(true);
-      expect(finishPayload).toBeDefined();
-      // When implemented: expect(finishPayload.object).toEqual(structuredResult);
+
+      // Get structured result
+      const result = await (stream as any).object;
+
+      // This will fail until structured output is implemented
+      expect(result).toBeDefined();
+      expect(result).toEqual(structuredResult);
     });
   });
 
-  describe('Structured output validation', () => {
-    it('should validate output against schema', async () => {
-      // Invalid response missing required fields
-      const invalidResult = {
-        summary: 'Only summary provided',
-        // Missing: recommendations, confidence
-      };
+  describe('Error handling and validation', () => {
+    it('should validate output against provided schema', async () => {
+      // Return invalid data missing required fields
+      const invalidResult = { summary: 'Only summary' }; // Missing recommendations and confidence
 
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Test validation',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: JSON.stringify(invalidResult) },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
+      const mockModel = createNetworkMockModel({ finalResult: invalidResult });
 
       const networkAgent = new Agent({
         id: 'test-network',
@@ -710,73 +474,51 @@ describe('Agent Network - Structured Output', () => {
         memory,
       });
 
-      const stream = await networkAgent.network('Test schema validation', {
+      const stream = await networkAgent.network('Test validation', {
         requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
         structuredOutput: {
           schema: resultSchema,
-          errorStrategy: 'strict', // Should throw on validation failure
+          errorStrategy: 'strict',
         },
       });
 
-      // When implemented with strict errorStrategy, this should throw
-      // or handle the validation error appropriately
-      for await (const _chunk of stream) {
-        // Consume
+      // With strict strategy, should throw or return error
+      let errorOccurred = false;
+      try {
+        for await (const _chunk of stream) {
+          // Consume
+        }
+        await (stream as any).object;
+      } catch (e) {
+        errorOccurred = true;
       }
+
+      // This will fail until validation is implemented
+      expect(errorOccurred).toBe(true);
     });
 
-    it('should use fallback value when errorStrategy is fallback', async () => {
+    it('should use fallback value when validation fails with fallback strategy', async () => {
+      const invalidResult = { invalid: 'data' };
       const fallbackValue = {
-        summary: 'Fallback summary',
+        summary: 'Fallback',
         recommendations: [],
         confidence: 0,
       };
 
-      const routingResponse = JSON.stringify({
-        primitiveId: 'none',
-        primitiveType: 'none',
-        prompt: '',
-        selectionReason: 'Test fallback',
-      });
-
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: routingResponse }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'invalid json {{{' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      });
+      const mockModel = createNetworkMockModel({ finalResult: invalidResult });
 
       const networkAgent = new Agent({
         id: 'test-network',
         name: 'Test Network',
-        instructions: 'Test fallback strategy',
+        instructions: 'Test fallback',
         model: mockModel,
         memory,
       });
 
       const stream = await networkAgent.network('Test fallback', {
         requestContext,
-        // @ts-expect-error - structuredOutput not yet implemented
+        // @ts-expect-error - structuredOutput not yet in NetworkOptions
         structuredOutput: {
           schema: resultSchema,
           errorStrategy: 'fallback',
@@ -788,44 +530,43 @@ describe('Agent Network - Structured Output', () => {
         // Consume
       }
 
-      // When implemented: expect(await stream.object).toEqual(fallbackValue);
+      const result = await (stream as any).object;
+
+      // This will fail until fallback is implemented
+      expect(result).toEqual(fallbackValue);
     });
   });
 
   describe('Backward compatibility', () => {
-    it('should work without structuredOutput option (existing behavior)', async () => {
+    it('should work without structuredOutput option (existing behavior preserved)', async () => {
+      // Use a mock scorer to ensure completion without needing default completion check
+      const mockScorer = {
+        id: 'pass-scorer',
+        name: 'Pass Scorer',
+        run: vi.fn().mockResolvedValue({ score: 1, reason: 'Passed' }),
+      };
+
       const routingResponse = JSON.stringify({
         primitiveId: 'none',
         primitiveType: 'none',
         prompt: '',
-        selectionReason: 'Plain text response',
+        selectionReason: 'Handled directly',
       });
 
-      const completionResponse = JSON.stringify({
-        isComplete: true,
-        completionReason: 'Done',
-        finalResult: 'This is a plain text result without structured output',
-      });
-
-      let callCount = 0;
       const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => {
-          callCount++;
-          const text = callCount === 1 ? routingResponse : completionResponse;
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            content: [{ type: 'text', text }],
-            warnings: [],
-          };
-        },
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        }),
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Plain text streaming result' },
+            { type: 'text-delta', id: 'text-1', delta: routingResponse },
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
@@ -846,9 +587,12 @@ describe('Agent Network - Structured Output', () => {
         memory,
       });
 
-      // Call without structuredOutput - should work as before
-      const stream = await networkAgent.network('Get plain result', {
+      // Call WITHOUT structuredOutput - existing behavior
+      const stream = await networkAgent.network('Plain request', {
         requestContext,
+        completion: {
+          scorers: [mockScorer as any],
+        },
       });
 
       let finishPayload: any = null;
@@ -859,42 +603,13 @@ describe('Agent Network - Structured Output', () => {
         }
       }
 
+      // Existing behavior should still work
       expect(finishPayload).toBeDefined();
       expect(finishPayload.result).toBeDefined();
       expect(typeof finishPayload.result).toBe('string');
+
+      // object should be undefined when no structuredOutput provided
+      expect(finishPayload.object).toBeUndefined();
     });
-  });
-});
-
-describe('generateFinalResult with user schema', () => {
-  // These tests are for the validation.ts module changes
-
-  it('should use user-provided schema for final result generation', async () => {
-    // This test documents the expected behavior of generateFinalResult
-    // when a user schema is provided
-
-    const userSchema = z.object({
-      answer: z.string(),
-      sources: z.array(z.string()),
-    });
-
-    // The generateFinalResult function should:
-    // 1. Accept an optional structuredOutputOptions parameter
-    // 2. Use the user's schema instead of the default finalResultSchema
-    // 3. Return { object: InferSchemaOutput<OUTPUT> } instead of { text: string }
-
-    // Test placeholder - actual implementation will be tested when feature is built
-    expect(userSchema).toBeDefined();
-  });
-
-  it('should stream partial objects through writer when generating structured output', async () => {
-    // This test documents the expected streaming behavior
-
-    // The generateFinalResult function should:
-    // 1. Write 'network-object' chunks to the writer as partial objects stream
-    // 2. Write a final 'network-object-result' chunk with the complete object
-
-    // Test placeholder
-    expect(true).toBe(true);
   });
 });
