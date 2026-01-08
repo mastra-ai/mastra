@@ -536,6 +536,11 @@
       "permanent": true
     },
     {
+      "source": "/guides/deployment",
+      "destination": "/docs/deployment/cloud-providers",
+      "permanent": true
+    },
+    {
       "source": "/examples/v1/voice/text-to-speech",
       "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech",
       "permanent": true
@@ -558,76 +563,6 @@
     {
       "source": "/examples/v1",
       "destination": "/docs/v1/getting-started/start",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/setup",
-      "destination": "/docs/deployment/mastra-cloud/setting-up",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/deployment",
-      "destination": "/docs/deployment/mastra-cloud/setting-up",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/workflow-runners",
-      "destination": "/reference/workflows/run",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/studio",
-      "destination": "/docs/getting-started/studio",
-      "permanent": true
-    },
-    {
-      "source": "/docs/memory/message-history",
-      "destination": "/reference/client-js/memory",
-      "permanent": true
-    },
-    {
-      "source": "/models/providers/siliconflow-cn",
-      "destination": "/models/providers/siliconflow",
-      "permanent": true
-    },
-    {
-      "source": "/guides/deployment/:path*",
-      "destination": "/docs/deployment/cloud-providers/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server/auth/firebase",
-      "destination": "/reference/auth/firebase",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server/auth/:path*",
-      "destination": "/docs/auth/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/mastra-server",
-      "destination": "/docs/deployment/building-mastra",
-      "permanent": true
-    },
-    {
-      "source": "/docs/rag/graph-rag",
-      "destination": "/reference/rag/graph-rag",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server/middleware",
-      "destination": "/docs/server-db/middleware",
-      "permanent": true
-    },
-    {
-      "source": "/guides/agent-frameworks/ai-sdk",
-      "destination": "/docs/frameworks/agentic-uis/ai-sdk",
-      "permanent": true
-    },
-    {
-      "source": "/reference/server/express-adapter",
-      "destination": "/docs/frameworks/servers/express",
       "permanent": true
     }
   ]
