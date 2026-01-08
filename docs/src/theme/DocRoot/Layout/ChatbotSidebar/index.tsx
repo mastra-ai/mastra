@@ -36,6 +36,10 @@ interface LeftClickableBorderProps {
   onMouseDown: (e: React.MouseEvent) => void;
 }
 
+const SIDEBAR_DEFAULT_WIDTH = 400;
+const SIDEBAR_MIN_WIDTH = 250;
+const SIDEBAR_MAX_WIDTH = 600;
+
 function LeftClickableBorder({
   onClick,
   hiddenChatbotSidebar,
@@ -64,23 +68,29 @@ export default function ChatbotSidebar() {
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  const [sidebarWidth, setSidebarWidth] = useState(400);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const hasDraggedRef = useRef(false);
   const startXRef = useRef<number | null>(null);
 
-  const minWidthRef = useRef(250);
-  const maxWidthRef = useRef(600);
+  const minWidthRef = useRef(SIDEBAR_MIN_WIDTH);
+  const maxWidthRef = useRef(SIDEBAR_MAX_WIDTH);
+  const originalTransitionDurationRef = useRef("0.3s");
 
   useEffect(() => {
     const rootStyles = getComputedStyle(document.documentElement);
+    const defaultWidth =
+      parseInt(
+        rootStyles.getPropertyValue("--chatbot-sidebar-default-width"),
+      ) || SIDEBAR_DEFAULT_WIDTH;
+    setSidebarWidth(defaultWidth);
     minWidthRef.current =
       parseInt(rootStyles.getPropertyValue("--chatbot-sidebar-min-width")) ||
-      250;
+      SIDEBAR_MIN_WIDTH;
     maxWidthRef.current =
       parseInt(rootStyles.getPropertyValue("--chatbot-sidebar-max-width")) ||
-      600;
+      SIDEBAR_MAX_WIDTH;
   }, []);
 
   useEffect(() => {
@@ -122,6 +132,13 @@ export default function ChatbotSidebar() {
     hasDraggedRef.current = false;
     startXRef.current = e.clientX;
     setIsDragging(true);
+
+    // Save original transition duration
+    originalTransitionDurationRef.current =
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--chatbot-transition-duration",
+      ) || "0.3s";
+
     // disable transitions for main/sidebar while dragging
     document.documentElement.style.setProperty(
       "--chatbot-transition-duration",
@@ -160,7 +177,7 @@ export default function ChatbotSidebar() {
       // restore transitions and cursor
       document.documentElement.style.setProperty(
         "--chatbot-transition-duration",
-        "0.3s",
+        originalTransitionDurationRef.current,
       );
       document.body.style.cursor = "";
     };
@@ -174,7 +191,7 @@ export default function ChatbotSidebar() {
       document.body.style.cursor = "";
       document.documentElement.style.setProperty(
         "--chatbot-transition-duration",
-        "0.3s",
+        originalTransitionDurationRef.current,
       );
     };
   }, [isDragging]);
