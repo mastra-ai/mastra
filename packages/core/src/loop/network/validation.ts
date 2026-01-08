@@ -385,9 +385,35 @@ export async function runDefaultCompletionCheck(
 ): Promise<ScorerResult> {
   const start = Date.now();
 
+  // Build compact list of completed primitives from network messages
+  const completedPrimitives = context.messages
+    .map(m => {
+      try {
+        if (typeof m.content === 'string') return null;
+
+        const text = m.content.parts?.[0]?.type === 'text' ? m.content.parts?.[0]?.text : null;
+
+        if (text?.includes('"isNetwork":true')) {
+          const parsed = JSON.parse(text);
+          if (parsed.isNetwork) {
+            return `${parsed.primitiveType} "${parsed.primitiveId}"`;
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  const completedSection =
+    completedPrimitives.length > 0 ? `\n\nPrimitives already executed: ${completedPrimitives.join(', ')}` : '';
+
   const completionPrompt = `
     The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} has contributed to the task.
     This is the result: ${JSON.stringify(context.primitiveResult)}
+    
+    ${completedSection}
 
     You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. 
     Only return true if the task is complete according to the system instructions.
