@@ -72,6 +72,7 @@ import type {
   AgentInstructions,
   DynamicAgentInstructions,
   AgentMethodType,
+  StructuredOutputOptions,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -3041,7 +3042,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
+  async network<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: MultiPrimitiveExecutionOptions<OUTPUT>,
+  ) {
     const requestContextToUse = options?.requestContext || new RequestContext();
 
     // Merge default network options with call-specific options
@@ -3069,7 +3073,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         : mergedOptions?.memory?.thread?.id);
     const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
 
-    return await networkLoop({
+    return await networkLoop<OUTPUT>({
       networkName: this.name,
       requestContext: requestContextToUse,
       runId,
@@ -3086,6 +3090,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       validation: mergedOptions?.completion,
       routing: mergedOptions?.routing,
       onIterationComplete: mergedOptions?.onIterationComplete,
+      structuredOutput: (options?.structuredOutput ?? defaultNetworkOptions?.structuredOutput) as
+        | StructuredOutputOptions<OUTPUT>
+        | undefined,
     });
   }
 
