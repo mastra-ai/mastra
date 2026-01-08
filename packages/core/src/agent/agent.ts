@@ -2213,11 +2213,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 while (firstSuspendedStepPath.length > 0) {
                   const key = firstSuspendedStepPath.shift();
                   if (key) {
-                    if (!workflow.steps[key]) {
+                    if (!wflowStep.steps[key]) {
                       this.logger.warn(`Suspended step '${key}' not found in workflow '${workflowName}'`);
                       break;
                     }
-                    wflowStep = workflow.steps[key] as any;
+                    wflowStep = wflowStep.steps[key] as any;
                   }
                 }
                 const resumeSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
@@ -2226,7 +2226,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 }
                 return suspend?.(suspendPayload, {
                   resumeLabel: suspendedStepIds,
-                  resumeSchema: JSON.stringify(zodToJsonSchema(resumeSchema)),
+                  resumeSchema: resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined,
                 });
               } else {
                 // This is to satisfy the execute fn's return value for typescript

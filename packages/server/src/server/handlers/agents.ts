@@ -916,7 +916,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline network tool call',
   description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 

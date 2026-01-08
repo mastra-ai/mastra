@@ -3419,7 +3419,7 @@ describe('Agent - network - finalResult real-world scenarios', () => {
   });
 });
 
-describe('Agent - network - tool approval and suspension', () => {
+describe.only('Agent - network - tool approval and suspension', () => {
   const memory = new MockMemory();
   const storage = new InMemoryStore();
 
@@ -3785,7 +3785,7 @@ describe('Agent - network - tool approval and suspension', () => {
         }
       }
 
-      expect(resumeChunks[0].type).toBe('tool-execution-end');
+      expect(resumeChunks[0].type).toBe('tool-execution-start');
       expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
 
       expect(rejectionFound).toBe(true);

@@ -13,4 +13,4 @@ Add human-in-the-loop (HITL) support to agent networks
 - Add suspend/resume capabilities to agent network
 - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
 
-`agent.resumeNetwork`, `agent.approveNetworkTooCall`, `agent.declineNetworkToolCall`
+`agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`

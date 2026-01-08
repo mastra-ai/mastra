@@ -50,7 +50,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
       };
       requireApprovalMetadata?: {
-        [primitiveId: string]: {
+        [toolName: string]: {
           toolCallId: string;
           toolName: string;
           args: Record<string, any>;
@@ -58,7 +58,7 @@ export type MastraUIMessageMetadata = {
         };
       };
       suspendedTools?: {
-        [primitiveId: string]: {
+        [toolName: string]: {
           toolCallId: string;
           toolName: string;
           args: Record<string, any>;

@@ -581,7 +581,6 @@ export async function createNetworkLoop({
           };
         }
         if (chunk.type === 'tool-call-suspended') {
-          console.dir({ chunk }, { depth: null });
           suspendedTools = {
             ...(suspendedTools ?? {}),
             [inputData.primitiveId]: {
@@ -846,11 +845,11 @@ export async function createNetworkLoop({
         while (firstSuspendedStepPath.length > 0) {
           const key = firstSuspendedStepPath.shift();
           if (key) {
-            if (!wf.steps[key]) {
+            if (!wflowStep.steps[key]) {
               mastra?.getLogger()?.warn(`Suspended step '${key}' not found in workflow '${workflowId}'`);
               break;
             }
-            wflowStep = wf.steps[key] as any;
+            wflowStep = wflowStep.steps[key] as any;
           }
         }
         resumeSchema = JSON.stringify(zodToJsonSchema((wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema));
@@ -889,7 +888,7 @@ export async function createNetworkLoop({
                           args: input,
                           suspendPayload,
                           runId,
-                          type: 'suspensions',
+                          type: 'suspension',
                           resumeSchema,
                           workflowId,
                           primitiveType: 'workflow',
@@ -1549,7 +1548,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   let resumeDataFromTask: any | undefined;
   let runIdFromTask: string | undefined;
   if (autoResumeSuspendedTools && threadId) {
-    console.dir({ autoResumeSuspendedTools, threadId });
     let lastAssistantMessage: MastraDBMessage | undefined;
     let requireApprovalMetadata: Record<string, any> | undefined;
     let suspendedTools: Record<string, any> | undefined;
@@ -1564,9 +1562,10 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       });
 
       if (recallResult && recallResult.messages?.length > 0) {
-        const messages = [...recallResult.messages]?.filter(message => message.role === 'assistant');
+        const messages = [...recallResult.messages]?.reverse()?.filter(message => message.role === 'assistant');
         lastAssistantMessage = messages[0];
       }
+      console.dir({ lastAssistantMessage, messages: recallResult?.messages }, { depth: null });
       if (lastAssistantMessage) {
         const { metadata } = lastAssistantMessage.content;
         if (metadata?.requireApprovalMetadata) {
@@ -1620,12 +1619,8 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     }
   }
 
-  console.dir({ resumeDataFromTask, runIdFromTask, runId });
-
   const runIdToUse = runIdFromTask ?? runId;
   const resumeDataToUse = resumeDataFromTask ?? resumeData;
-
-  console.dir({ resumeDataToUse, runIdToUse }, { depth: null });
 
   const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
 

@@ -344,7 +344,10 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       );
 
     setIsRunning(true);
-    setNetworkToolCallApprovals(prev => ({ ...prev, [toolName]: { status: 'approved' } }));
+    setNetworkToolCallApprovals(prev => ({
+      ...prev,
+      [runId ? `${runId}-${toolName}` : toolName]: { status: 'approved' },
+    }));
 
     const agent = baseClient.getAgent(agentId);
     const response = await agent.approveNetworkToolCall({ runId: networkRunId });

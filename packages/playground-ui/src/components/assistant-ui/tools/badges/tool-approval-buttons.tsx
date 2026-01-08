@@ -52,7 +52,8 @@ export const ToolApprovalButtons = ({
   };
 
   const toolCallApprovalStatus = isNetwork
-    ? networkToolCallApprovals?.[toolName]?.status
+    ? networkToolCallApprovals?.[toolApprovalMetadata?.runId ? `${toolApprovalMetadata.runId}-${toolName}` : toolName]
+        ?.status
     : toolCallApprovals?.[toolCallId]?.status;
 
   if (toolApprovalMetadata && !toolCalled) {

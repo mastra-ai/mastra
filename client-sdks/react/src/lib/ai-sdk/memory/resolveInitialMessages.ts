@@ -53,6 +53,7 @@ interface ChildMessage {
 }
 
 export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMessage[] => {
+  const messagesLength = messages.length;
   return messages.map((message, index) => {
     // Check if message contains network execution data
     const networkPart = message.parts.find(
@@ -151,7 +152,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
               mode: 'network' as const,
               selectionReason: selectionReason,
               agentInput: json.input,
-              hasMoreMessages: index < messages.length - 1,
+              hasMoreMessages: index < messagesLength - 1,
               from:
                 primitiveType === 'agent'
                   ? ('AGENT' as const)

@@ -331,7 +331,9 @@ export class CoreToolBuilder extends MastraBase {
               suspendData = args;
               const newSuspendOptions = {
                 ...(suspendOptions ?? {}),
-                resumeSchema: suspendOptions?.resumeSchema ?? JSON.stringify(zodToJsonSchema(resumeSchema)),
+                resumeSchema:
+                  suspendOptions?.resumeSchema ??
+                  (resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined),
               };
               return execOptions.suspend?.(args, newSuspendOptions);
             },

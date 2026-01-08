@@ -41,7 +41,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
 
-  const toolCalled = result?.hasMoreMessages ?? undefined;
+  const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
 
   useWorkflowStream(result);
 
