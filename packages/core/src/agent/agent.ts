@@ -33,7 +33,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { EntityType, SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
@@ -390,14 +390,26 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
-      options: { validateInputs: false },
+      options: {
+        validateInputs: false,
+        tracingPolicy: {
+          // mark all workflow spans related to processor execution as internal
+          internal: InternalSpans.WORKFLOW,
+        },
+      },
     });
 
-    for (const processorOrWorkflow of validProcessors) {
+    for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
-      const step = isProcessorWorkflow(processorOrWorkflow)
-        ? processorOrWorkflow
-        : createStep(processorOrWorkflow as Exclude<T, ProcessorWorkflow>);
+      let step;
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        step = processorOrWorkflow;
+      } else {
+        // Set processorIndex on the processor for span attributes
+        const processor = processorOrWorkflow as Exclude<T, ProcessorWorkflow>;
+        processor.processorIndex = index;
+        step = createStep(processor);
+      }
       workflow = workflow.then(step);
     }
 

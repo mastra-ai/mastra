@@ -58,7 +58,7 @@ class TestExporter implements ObservabilityExporter {
   private logs: string[] = [];
 
   async exportTracingEvent(event: TracingEvent) {
-    const logMessage = `[TestExporter] ${event.type}: ${event.exportedSpan.type} "${event.exportedSpan.name}" (trace: ${event.exportedSpan.traceId.slice(-8)}, span: ${event.exportedSpan.id.slice(-8)})`;
+    const logMessage = `[TestExporter] ${event.type}: ${event.exportedSpan.type} "${event.exportedSpan.name}" (entity: ${event.exportedSpan.entityName ?? event.exportedSpan.entityId}, trace: ${event.exportedSpan.traceId.slice(-8)}, span: ${event.exportedSpan.id.slice(-8)})`;
 
     // Store log for potential test failure reporting
     this.logs.push(logMessage);
