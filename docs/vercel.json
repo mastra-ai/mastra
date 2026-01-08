@@ -536,11 +536,6 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
       "source": "/examples/v1/voice/text-to-speech",
       "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech",
       "permanent": true
