@@ -2275,7 +2275,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 ✖ Required
   → at [2].content`;
           await expect(result.object).rejects.toThrow(expectedErrorMessage);
-          await expect(result.object).rejects.toThrow(expectedErrorMessage);
         });
       });
     });
