@@ -114,7 +114,7 @@ export async function createHonoServer(
     tools: options.tools,
     taskStore: a2aTaskStore,
     bodyLimitOptions,
-    openapiPath: '/openapi.json',
+    openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
   });
 
