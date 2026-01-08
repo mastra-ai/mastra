@@ -4,7 +4,7 @@ import { CopyButton } from '../../copy-button';
 import { useMemo, useState } from 'react';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { tags as t } from '@lezer/highlight';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { ButtonsGroup } from '@/components/ui/containers';
 import { Section } from '@/components/ui/elements/section';
@@ -58,7 +58,7 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         <ButtonsGroup>
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
-            <Button variant="ghost" onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+            <Button onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
               {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
             </Button>
           )}

@@ -139,6 +139,12 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
           }
         }
 
+        // Handle case where LLM passes empty object or no memory field
+        if (inputData.memory === undefined || inputData.memory === null) {
+          // No data to update - return existing data unchanged
+          return { success: true, message: 'No memory data provided, existing memory unchanged.' };
+        }
+
         let newData: unknown;
         if (typeof inputData.memory === 'string') {
           try {

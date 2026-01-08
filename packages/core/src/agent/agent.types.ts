@@ -3,6 +3,7 @@ import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../eval
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { CompletionConfig } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -12,24 +13,104 @@ import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
 
-export type MultiPrimitiveExecutionOptions = {
+// Re-export completion types for convenience
+export type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
+
+/**
+ * Configuration for the routing agent's behavior.
+ */
+export interface NetworkRoutingConfig {
+  /**
+   * Additional instructions appended to the routing agent's system prompt.
+   *
+   * @example
+   * ```typescript
+   * routing: {
+   *   additionalInstructions: `
+   *     Prefer using the 'coder' agent for implementation tasks.
+   *     Always use the 'reviewer' agent before marking complete.
+   *   `,
+   * }
+   * ```
+   */
+  additionalInstructions?: string;
+
+  /**
+   * Whether to include verbose reasoning about why primitives were/weren't selected.
+   * @default false
+   */
+  verboseIntrospection?: boolean;
+}
+
+/**
+ * Full configuration options for agent.network() execution.
+ */
+export type NetworkOptions = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
+
   /** Unique identifier for this execution run */
   runId?: string;
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext;
 
-  /** Maximum number of steps to run */
+  /** Maximum number of iterations to run */
   maxSteps?: number;
 
-  /** tracing context for span hierarchy and metadata */
+  /** Tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
+
+  /**
+   * Routing configuration - controls how primitives are selected.
+   */
+  routing?: NetworkRoutingConfig;
+
+  /**
+   * Completion configuration - controls when the task is considered done.
+   *
+   * Uses MastraScorers that return 0 (not complete) or 1 (complete).
+   * By default, the LLM evaluates completion.
+   *
+   * @example
+   * ```typescript
+   * import { createScorer } from '@mastra/core/evals';
+   *
+   * const testsScorer = createScorer({
+   *   id: 'tests',
+   *   description: 'Run tests',
+   * }).generateScore(async () => {
+   *   const result = await exec('npm test');
+   *   return result.exitCode === 0 ? 1 : 0;
+   * });
+   *
+   * // Use scorers for completion
+   * completion: {
+   *   scorers: [testsScorer],
+   * }
+   * ```
+   */
+  completion?: CompletionConfig;
+
+  /**
+   * Callback fired after each iteration completes.
+   */
+  onIterationComplete?: (context: {
+    iteration: number;
+    primitiveId: string;
+    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
+    result: string;
+    isComplete: boolean;
+  }) => void | Promise<void>;
 };
+
+/**
+ * @deprecated Use NetworkOptions instead
+ */
+export type MultiPrimitiveExecutionOptions = NetworkOptions;
 
 export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Custom instructions that override the agent's default instructions for this execution */
