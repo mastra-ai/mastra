@@ -14699,5 +14699,187 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
     });
+
+    it('should provide all expected properties in onFinish callback', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const onFinishResults: any[] = [];
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => {
+          return { value: 42 };
+        },
+        inputSchema: z.object({ inputValue: z.string() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-properties-workflow',
+        inputSchema: z.object({ inputValue: z.string() }),
+        outputSchema: z.object({ value: z.number() }),
+        steps: [step1],
+        retryConfig: { attempts: 0 },
+        options: {
+          onFinish: result => {
+            onFinishResults.push(result);
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-onFinish-properties-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { inputValue: 'test-input' } });
+
+      expect(result.status).toBe('success');
+      expect(onFinishResults.length).toBe(1);
+
+      const callbackResult = onFinishResults[0];
+
+      // Verify new properties are present
+      expect(callbackResult.runId).toBeDefined();
+      expect(typeof callbackResult.runId).toBe('string');
+
+      expect(callbackResult.workflowId).toBe('test-onFinish-properties-workflow');
+
+      expect(callbackResult.getInitData).toBeDefined();
+      expect(typeof callbackResult.getInitData).toBe('function');
+      expect(callbackResult.getInitData()).toEqual({ inputValue: 'test-input' });
+
+      expect(callbackResult.mastra).toBeDefined();
+
+      expect(callbackResult.requestContext).toBeDefined();
+
+      expect(callbackResult.logger).toBeDefined();
+
+      expect(callbackResult.state).toBeDefined();
+      expect(typeof callbackResult.state).toBe('object');
+
+      srv.close();
+    });
+
+    it('should provide all expected properties in onError callback', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const onErrorResults: any[] = [];
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Intentional failure for property test');
+        },
+        inputSchema: z.object({ inputValue: z.string() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onError-properties-workflow',
+        inputSchema: z.object({ inputValue: z.string() }),
+        outputSchema: z.object({ value: z.number() }),
+        steps: [failingStep],
+        retryConfig: { attempts: 0 },
+        options: {
+          onError: errorInfo => {
+            onErrorResults.push(errorInfo);
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-onError-properties-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { inputValue: 'test-input' } });
+
+      expect(result.status).toBe('failed');
+      expect(onErrorResults.length).toBe(1);
+
+      const callbackResult = onErrorResults[0];
+
+      // Verify new properties are present
+      expect(callbackResult.runId).toBeDefined();
+      expect(typeof callbackResult.runId).toBe('string');
+
+      expect(callbackResult.workflowId).toBe('test-onError-properties-workflow');
+
+      expect(callbackResult.getInitData).toBeDefined();
+      expect(typeof callbackResult.getInitData).toBe('function');
+      expect(callbackResult.getInitData()).toEqual({ inputValue: 'test-input' });
+
+      expect(callbackResult.mastra).toBeDefined();
+
+      expect(callbackResult.requestContext).toBeDefined();
+
+      expect(callbackResult.logger).toBeDefined();
+
+      expect(callbackResult.state).toBeDefined();
+      expect(typeof callbackResult.state).toBe('object');
+
+      srv.close();
+    });
   });
 }, 80e3);
