@@ -764,8 +764,8 @@ importers:
         specifier: ^0.6.5
         version: 0.6.5
       commander:
-        specifier: ^12.1.0
-        version: 12.1.0
+        specifier: ^14.0.2
+        version: 14.0.2
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
