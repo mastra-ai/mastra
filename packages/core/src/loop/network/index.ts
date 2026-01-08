@@ -4,11 +4,13 @@ import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
+import type { InferSchemaOutput } from '../../stream/base/schema';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
@@ -21,8 +23,6 @@ import {
   generateFinalResult,
   generateStructuredFinalResult,
 } from './validation';
-import type { StructuredOutputOptions } from '../../agent/types';
-import type { InferSchemaOutput } from '../../stream/base/schema';
 
 async function getRoutingAgent({
   requestContext,

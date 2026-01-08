@@ -1,4 +1,4 @@
-import { ReadableStream, TransformStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { Run } from '../workflows';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 import type { ChunkType } from './types';
