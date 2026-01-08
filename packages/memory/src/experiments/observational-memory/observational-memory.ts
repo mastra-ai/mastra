@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
@@ -9,7 +9,9 @@ import type {
   ProcessOutputResultArgs,
 } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import xxhash from 'xxhash-wasm';
+import { z } from 'zod';
 
 import {
   buildObserverSystemPrompt,
@@ -25,13 +27,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import { TokenCounter } from './token-counter';
-import type {
-  ObserverConfig,
-  ReflectorConfig,
-  ThresholdRange,
-  ModelSettings,
-  ProviderOptions,
-} from './types';
+import type { ObserverConfig, ReflectorConfig, ThresholdRange, ModelSettings, ProviderOptions } from './types';
 
 /**
  * Debug event emitted when observation-related events occur.
@@ -690,7 +686,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     patterns?: Record<string, string[]>;
   }> {
     const agent = this.getObserverAgent();
-    
+
     // Format existing patterns into the observations if present
     let observationsWithPatterns = existingObservations;
     if (existingPatterns && Object.keys(existingPatterns).length > 0) {
@@ -705,7 +701,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       patternsContent += '\n</patterns>';
       observationsWithPatterns = (observationsWithPatterns || '') + patternsContent;
     }
-    
+
     const prompt = buildObserverPrompt(observationsWithPatterns, messagesToObserve);
 
     const result = await agent.generate(prompt, {
@@ -737,7 +733,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     patterns?: Record<string, string[]>,
   ): Promise<{ observations: string; suggestedContinuation?: string; patterns?: Record<string, string[]> }> {
     const agent = this.getReflectorAgent();
-    
+
     // Format patterns into the observations if present
     let observationsWithPatterns = observations;
     if (patterns && Object.keys(patterns).length > 0) {
@@ -752,7 +748,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       patternsContent += '\n</patterns>';
       observationsWithPatterns += patternsContent;
     }
-    
+
     const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
 
     // First attempt
@@ -1395,10 +1391,8 @@ ${formattedMessages}
       // Calculate total tokens including patterns
       // Merge existing patterns with new patterns to get the full picture
       const existingPatterns = freshRecord?.patterns ?? record.patterns ?? {};
-      const mergedPatterns = result.patterns 
-        ? this.mergePatterns(existingPatterns, result.patterns)
-        : existingPatterns;
-      
+      const mergedPatterns = result.patterns ? this.mergePatterns(existingPatterns, result.patterns) : existingPatterns;
+
       let totalTokenCount = this.tokenCounter.countObservations(newObservations);
       if (Object.keys(mergedPatterns).length > 0) {
         const patternsString = this.formatPatternsForTokenCount(mergedPatterns);
@@ -1831,5 +1825,175 @@ ${formattedMessages}
    */
   getReflectorConfig(): ResolvedReflectorConfig {
     return this.reflectorConfig;
+  }
+
+  /**
+   * Create a tool that allows the agent to ask a "recall agent" questions about memory.
+   *
+   * The recall agent sees the same context as the main agent (observations, patterns,
+   * unobserved messages from other threads, current thread messages) and can answer
+   * questions like "how many trips did the user take?" or "list all the user's pets".
+   *
+   * The response is returned directly to the main agent - no parsing or storage side effects.
+   *
+   * @param config Optional configuration for the recall tool
+   * @returns A Mastra tool that can be added to an agent's tools
+   *
+   * @example
+   * ```ts
+   * const om = new ObservationalMemory({ storage, ... });
+   *
+   * const agent = new Agent({
+   *   tools: { recall: om.getRecallTool() },
+   *   // ...
+   * });
+   * ```
+   */
+  getRecallTool(config?: {
+    /** Override the model used for recall (defaults to observer model) */
+    model?: MastraModelConfig;
+    /** Override the tool description */
+    description?: string;
+  }) {
+    const model = config?.model ?? this.observerConfig.model;
+
+    // Cached recall agent instance
+    let recallAgent: Agent | null = null;
+
+    return createTool({
+      id: 'recall',
+      description:
+        config?.description ??
+        "Ask a question about the user's history or recall specific information from memory. " +
+          'Use this when you need to count items, list things, or answer questions that require ' +
+          'searching through past conversations.',
+      inputSchema: z.object({
+        question: z
+          .string()
+          .describe(
+            "The question to ask about the user's history. Be specific. " +
+              'Examples: "How many trips did the user take?", "List all the user\'s pets", ' +
+              '"What restaurants has the user mentioned?"',
+          ),
+      }),
+      execute: async (inputData, context) => {
+        const { question } = inputData;
+
+        // Get thread/resource context from the tool execution context
+        const threadId = context?.agent?.threadId;
+        const resourceId = context?.agent?.resourceId;
+
+        if (!threadId) {
+          return {
+            success: false,
+            error: 'No thread context available for recall.',
+          };
+        }
+
+        try {
+          // Get OM record for observations and patterns
+          const ids = this.getStorageIds(threadId, resourceId);
+          const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+
+          if (!record) {
+            return {
+              success: false,
+              error: 'No memory record found for this conversation.',
+            };
+          }
+
+          // For resource scope, build unobserved context blocks from other threads
+          // (these aren't in context?.agent?.messages since that only has current thread)
+          let unobservedContextBlocks: string | undefined;
+          if (this.scope === 'resource') {
+            const historicalMessages = await this.loadUnobservedMessages(threadId, resourceId, record.lastObservedAt);
+            if (historicalMessages.length > 0) {
+              const messagesByThread = this.groupMessagesByThread(historicalMessages);
+              unobservedContextBlocks = await this.formatUnobservedContextBlocks(messagesByThread, threadId);
+            }
+          }
+
+          // Get thread metadata for current task and suggested response
+          const thread = await this.storage.getThreadById({ threadId });
+          const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+          const currentTask = threadOMMetadata?.currentTask;
+          const suggestedResponse = threadOMMetadata?.suggestedResponse;
+          const patterns = record.patterns;
+
+          // Format the OM context (observations, patterns, current task, etc.)
+          const formattedContext = this.formatObservationsForContext(
+            record.activeObservations || '',
+            currentTask,
+            suggestedResponse,
+            unobservedContextBlocks,
+            patterns,
+          );
+
+          // Convert current agent loop messages to MastraDBMessage format
+          // These are the processed messages the main agent sees (minus system messages)
+          const agentMessages = context?.agent?.messages || [];
+          const mastraMessages = convertMessages(agentMessages).to('Mastra.V2') as MastraDBMessage[];
+
+          // Format messages for the recall prompt
+          const formattedMessages = mastraMessages
+            .filter(m => m.role !== 'system')
+            .map(m => {
+              const role = m.role.charAt(0).toUpperCase() + m.role.slice(1);
+              const content =
+                m.content?.parts
+                  ?.map((p: any) => p.text || (p.toolInvocation ? `[Tool: ${p.toolInvocation.toolName}]` : ''))
+                  .filter(Boolean)
+                  .join(' ') || '';
+              return `**${role}:** ${content}`;
+            })
+            .filter(m => !m.endsWith(': '))
+            .join('\n\n');
+
+          // Build the recall prompt
+          const systemPrompt = `
+Your task is to answer the following question based on the available context:
+"${question}"
+
+=== CONTEXT ===
+
+${formattedContext}
+
+=== RECENT MESSAGES ===
+
+${formattedMessages}
+
+=== INSTRUCTIONS ===
+
+- Answer the question directly and concisely
+- If counting items, provide the count and list the items
+- If the information is not available, say so clearly
+- Use the observations and patterns to inform your answer
+- Be specific and cite relevant details from the context`;
+
+          // Create the recall agent if not already created
+          if (!recallAgent) {
+            recallAgent = new Agent({
+              id: 'recall-agent',
+              name: 'Recall Agent',
+              instructions: `You are a memory recall assistant. You have access to the user's conversation history and observations.`,
+              model,
+            });
+          }
+
+          // Call the recall agent
+          const result = await recallAgent.generate(question, { instructions: systemPrompt });
+
+          return {
+            success: true,
+            response: result.text,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Recall failed',
+          };
+        }
+      },
+    });
   }
 }
