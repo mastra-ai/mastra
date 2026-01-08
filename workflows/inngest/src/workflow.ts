@@ -232,7 +232,9 @@ export class InngestWorkflow<
         const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
         // Create requestContext before execute so we can reuse it in finalize
-        const requestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
+        const requestContext = new RequestContext(
+          Object.entries(event.data.requestContext ?? {}) as [string, {} | undefined][],
+        );
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
