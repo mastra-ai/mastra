@@ -268,7 +268,7 @@ const sidebars = {
         {
           type: "doc",
           id: "server/mastra-server",
-          label: "Server Configuration",
+          label: "Overview",
         },
         {
           type: "doc",
