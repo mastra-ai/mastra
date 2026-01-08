@@ -511,10 +511,12 @@ export class PrepareCommand {
           model: model, // Real model for Observer
           // Using defaults (observationThreshold: 10000)
           observationThreshold: 30000,
+          recognizePatterns: false,
         },
         reflector: {
           model: model, // Real model for Reflector
           reflectionThreshold: 20000,
+          recognizePatterns: false,
           // Using defaults (reflectionThreshold: 30000)
         },
         scope: observationalMemoryConfig.scope,

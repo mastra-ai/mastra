@@ -433,11 +433,12 @@ Active evaluations:`;
         observer: {
           model: retry4o.model,
           observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
-          focus: observationalMemoryConfig.focus,
+          recognizePatterns: false,
         },
         reflector: {
           model: retry4o.model,
           reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+          recognizePatterns: false,
         },
         scope: observationalMemoryConfig.scope,
       });
@@ -464,6 +465,11 @@ Be specific rather than generic when the user has expressed clear preferences in
       // model: 'cerebras/zai-glm-4.6',
       // model: 'cerebras/gpt-oss-120b',
       instructions: agentInstructions,
+      tools: observationalMemory
+        ? {
+            recall: observationalMemory?.getRecallTool(),
+          }
+        : undefined,
       memory,
       // For OM, use processors instead of memory
       // OM handles message loading itself via cursor-based loadUnobservedMessages
