@@ -11,7 +11,7 @@ When deploying your Mastra application to production, it runs as an HTTP server 
 
 :::info
 
-This page covers the `server` configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+This page covers the [`server`](/reference/v1/configuration#server-options) configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), visit [Server Adapters](/docs/v1/server/server-adapters).
 
 :::
 
@@ -29,13 +29,11 @@ The server provides:
 - Configuration of port
 - Configuration of body limit
 
-See the [Middleware](/docs/v1/server/middleware) and
-[Custom API Routes](/docs/v1/server/custom-api-routes) pages for details on
-adding additional server behaviour.
+Visit the [Middleware](/docs/v1/server/middleware) and [Custom API Routes](/docs/v1/server/custom-api-routes) docs for details on adding additional server behaviour.
 
 ## Server configuration
 
-You can configure server `port`, `host`, `studioBase`, and `timeout` in the Mastra instance.
+You can configure various aspects of the Mastra server by passing a [`server`](/reference/v1/configuration#server-options) object to the `Mastra` constructor in your `src/mastra/index.ts` file. For example, by changing the default port and host:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -44,13 +42,15 @@ export const mastra = new Mastra({
   server: {
     port: 3000, // Defaults to 4111
     host: "0.0.0.0", // Defaults to 'localhost'
-    studioBase: "/my-mastra-studio", // Sub-path for the studio (optional)
-    timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
 
-The `studioBase` option allows you to host Mastra Studio on a sub-path of your existing application. For example, with `studioBase: "/my-mastra-studio"`, the studio will be available at `http://your-host:port/my-mastra-studio` instead of the root.
+:::info
+
+Visit the [Configuration Reference](/reference/v1/configuration#server-options) for a full list of available server options.
+
+:::
 
 ## TypeScript configuration
 
@@ -73,26 +73,11 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 }
 ```
 
-> This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
+:::info
 
-## CORS configuration
+This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
 
-Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  server: {
-    cors: {
-      origin: ["https://example.com"], // Allow specific origins or '*' for all
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"],
-      credentials: false,
-    },
-  },
-});
-```
+:::
 
 ## Stream data redaction
 
