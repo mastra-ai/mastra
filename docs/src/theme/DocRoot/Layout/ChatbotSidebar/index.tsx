@@ -98,10 +98,13 @@ export default function ChatbotSidebar() {
   }, [toggle, hiddenSidebar]);
 
   // Click wrapper: only toggle if the pointer interaction wasn't a drag
-  const handleToggleClick = useCallback((e: React.MouseEvent) => {
-    if (hasDraggedRef.current) return;
-    toggleSidebar();
-  }, [toggleSidebar]);
+  const handleToggleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (hasDraggedRef.current) return;
+      toggleSidebar();
+    },
+    [toggleSidebar],
+  );
 
   // Handle drag to resize sidebar
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -110,7 +113,10 @@ export default function ChatbotSidebar() {
     startXRef.current = e.clientX;
     setIsDragging(true);
     // disable transitions for main/sidebar while dragging
-    document.documentElement.style.setProperty("--chatbot-transition-duration", "0s");
+    document.documentElement.style.setProperty(
+      "--chatbot-transition-duration",
+      "0s",
+    );
     // set cursor globally
     document.body.style.cursor = "col-resize";
   }, []);
@@ -133,7 +139,7 @@ export default function ChatbotSidebar() {
         setSidebarWidth(newWidth);
         document.documentElement.style.setProperty(
           "--chatbot-sidebar-width",
-          `${newWidth}px`
+          `${newWidth}px`,
         );
       }
     };
@@ -142,7 +148,10 @@ export default function ChatbotSidebar() {
       setIsDragging(false);
       startXRef.current = null;
       // restore transitions and cursor
-      document.documentElement.style.setProperty("--chatbot-transition-duration", "0.3s");
+      document.documentElement.style.setProperty(
+        "--chatbot-transition-duration",
+        "0.3s",
+      );
       document.body.style.cursor = "";
     };
 
@@ -153,7 +162,10 @@ export default function ChatbotSidebar() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
-      document.documentElement.style.setProperty("--chatbot-transition-duration", "0.3s");
+      document.documentElement.style.setProperty(
+        "--chatbot-transition-duration",
+        "0.3s",
+      );
     };
   }, [isDragging, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]);
 
