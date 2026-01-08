@@ -767,8 +767,8 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
+        specifier: ^17.2.3
+        version: 17.2.3
       drizzle-kit:
         specifier: ^0.30.5
         version: 0.30.6
@@ -1988,8 +1988,8 @@ importers:
         specifier: ^2.2.1
         version: 2.2.1
       dotenv:
-        specifier: ^16.6.1
-        version: 16.6.1
+        specifier: ^17.2.3
+        version: 17.2.3
       hono:
         specifier: ^4.11.3
         version: 4.11.3
