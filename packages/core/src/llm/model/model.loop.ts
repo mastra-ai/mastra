@@ -288,6 +288,8 @@ export class MastraLLMVNext extends MastraBase {
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
+            // Include the response messages (with tool calls) for proper thread view rendering
+            // @see https://github.com/mastra-ai/mastra/issues/11735
             modelSpanTracker?.endGeneration({
               output: {
                 files: props?.files,
@@ -297,6 +299,8 @@ export class MastraLLMVNext extends MastraBase {
                 sources: props?.sources,
                 text: props?.text,
                 warnings: props?.warnings,
+                // Full response messages including tool calls and tool results (issue #11735)
+                messages: messageList.get.response.aiV5.model(),
               },
               attributes: {
                 finishReason: props?.finishReason,

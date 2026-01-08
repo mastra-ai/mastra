@@ -637,6 +637,70 @@ describe('BraintrustExporter', () => {
         }),
       );
     });
+
+    /**
+     * Test for GitHub issue #11735: Thread view truncated for last turn in Braintrust
+     *
+     * When an LLM response includes tool calls and tool results, the output should
+     * be transformed to a direct array of messages in OpenAI format so that
+     * Braintrust's Thread view can display the full conversation including
+     * intermediate tool calls and results.
+     *
+     * @see https://github.com/mastra-ai/mastra/issues/11735
+     */
+    it('should format LLM output as direct messages array for Thread view when output.messages is present (issue #11735)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'thread-view-llm-output-messages',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'What is 2+2?' }],
+        output: {
+          text: 'Let me calculate. The answer is 4.',
+          messages: [
+            { role: 'assistant', content: [{ type: 'text', text: 'Let me calculate.' }] },
+            {
+              role: 'assistant',
+              content: [{ type: 'tool-call', toolCallId: 'call_123', toolName: 'calculator', args: { a: 2, b: 2 } }],
+            },
+            {
+              role: 'tool',
+              content: [{ type: 'tool-result', toolCallId: 'call_123', output: { result: 4 } }],
+            },
+            { role: 'assistant', content: [{ type: 'text', text: 'The answer is 4.' }] },
+          ],
+        },
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // When output.messages is present, it should be transformed to a direct array
+      // of messages in OpenAI format for the Thread view to display tool calls
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: [
+            { role: 'assistant', content: 'Let me calculate.' },
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+                },
+              ],
+            },
+            { role: 'tool', content: '{"result":4}', tool_call_id: 'call_123' },
+            { role: 'assistant', content: 'The answer is 4.' },
+          ],
+        }),
+      );
+    });
   });
 
   describe('AI SDK v5 Message Conversion', () => {
@@ -1128,6 +1192,261 @@ describe('BraintrustExporter', () => {
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
           input: [{ role: 'tool', content: '', tool_call_id: 'call_456' }],
+        }),
+      );
+    });
+  });
+
+  describe('LLM Output Messages Conversion', () => {
+    /**
+     * Tests for output messages array conversion to OpenAI format.
+     * When the output contains a messages array (from multi-step tool calls),
+     * it should be converted to OpenAI format for proper Braintrust thread view rendering.
+     */
+
+    it('should convert output messages array to OpenAI format for thread view', async () => {
+      const llmSpan = createMockSpan({
+        id: 'output-messages-llm',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'system', content: 'You are helpful.' },
+          { role: 'user', content: 'What is 2+2?' },
+        ],
+        output: {
+          text: 'The answer is 4.',
+          messages: [
+            {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: 'Let me calculate that.' },
+                { type: 'tool-call', toolCallId: 'call_123', toolName: 'calculator', args: { a: 2, b: 2 } },
+              ],
+            },
+            {
+              role: 'tool',
+              content: [{ type: 'tool-result', toolCallId: 'call_123', result: 4 }],
+            },
+            {
+              role: 'assistant',
+              content: 'The answer is 4.',
+            },
+          ],
+        },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Output should be the messages array in OpenAI format (not the object with text/messages)
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: [
+            {
+              role: 'assistant',
+              content: 'Let me calculate that.',
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+                },
+              ],
+            },
+            { role: 'tool', content: '4', tool_call_id: 'call_123' },
+            { role: 'assistant', content: 'The answer is 4.' },
+          ],
+        }),
+      );
+    });
+
+    it('should handle output with multiple tool calls and results', async () => {
+      const llmSpan = createMockSpan({
+        id: 'multi-tool-output',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'Get weather and time' }],
+        output: {
+          text: 'Done!',
+          messages: [
+            {
+              role: 'assistant',
+              content: [
+                { type: 'tool-call', toolCallId: 'weather_1', toolName: 'get_weather', args: { city: 'NYC' } },
+                { type: 'tool-call', toolCallId: 'time_1', toolName: 'get_time', args: { timezone: 'EST' } },
+              ],
+            },
+            {
+              role: 'tool',
+              content: [{ type: 'tool-result', toolCallId: 'weather_1', result: { temp: 72 } }],
+            },
+            {
+              role: 'tool',
+              content: [{ type: 'tool-result', toolCallId: 'time_1', result: { time: '3:00 PM' } }],
+            },
+            {
+              role: 'assistant',
+              content: 'It is 72°F in NYC and the time is 3:00 PM EST.',
+            },
+          ],
+        },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: [
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'weather_1',
+                  type: 'function',
+                  function: { name: 'get_weather', arguments: '{"city":"NYC"}' },
+                },
+                {
+                  id: 'time_1',
+                  type: 'function',
+                  function: { name: 'get_time', arguments: '{"timezone":"EST"}' },
+                },
+              ],
+            },
+            { role: 'tool', content: '{"temp":72}', tool_call_id: 'weather_1' },
+            { role: 'tool', content: '{"time":"3:00 PM"}', tool_call_id: 'time_1' },
+            { role: 'assistant', content: 'It is 72°F in NYC and the time is 3:00 PM EST.' },
+          ],
+        }),
+      );
+    });
+
+    it('should fallback to single assistant message when output has no messages array', async () => {
+      const llmSpan = createMockSpan({
+        id: 'no-messages-output',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'Hello' }],
+        output: { text: 'Hi there!' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should fallback to single assistant message
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: { role: 'assistant', content: 'Hi there!' },
+        }),
+      );
+    });
+
+    it('should fallback to empty assistant message when output is empty', async () => {
+      const llmSpan = createMockSpan({
+        id: 'empty-output',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'Hello' }],
+        output: {},
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: { role: 'assistant', content: '' },
+        }),
+      );
+    });
+
+    it('should fallback when messages array is empty', async () => {
+      const llmSpan = createMockSpan({
+        id: 'empty-messages-output',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'Hello' }],
+        output: { text: 'Response', messages: [] },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Empty messages array should fallback to single assistant message
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: { role: 'assistant', content: 'Response' },
+        }),
+      );
+    });
+
+    it('should handle output messages with AI SDK v5 format (input field instead of args)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'v5-output-messages',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'Search for cats' }],
+        output: {
+          text: 'Found results!',
+          messages: [
+            {
+              role: 'assistant',
+              content: [{ type: 'tool-call', toolCallId: 'search_1', toolName: 'search', input: { query: 'cats' } }],
+            },
+            {
+              role: 'tool',
+              content: [{ type: 'tool-result', toolCallId: 'search_1', output: { results: ['cat1', 'cat2'] } }],
+            },
+            { role: 'assistant', content: 'Found results!' },
+          ],
+        },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: [
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'search_1',
+                  type: 'function',
+                  function: { name: 'search', arguments: '{"query":"cats"}' },
+                },
+              ],
+            },
+            { role: 'tool', content: '{"results":["cat1","cat2"]}', tool_call_id: 'search_1' },
+            { role: 'assistant', content: 'Found results!' },
+          ],
         }),
       );
     });
