@@ -568,31 +568,32 @@ export async function createNetworkLoop({
         if (chunk.type === 'tool-call-approval') {
           requireApprovalMetadata = {
             ...(requireApprovalMetadata ?? {}),
-            [agentId]: {
+            [inputData.primitiveId]: {
               resumeSchema: chunk.payload.resumeSchema,
-              toolCallId: chunk.payload.toolCallId,
-              args: inputData.prompt,
-              agentId,
+              args: { prompt: inputData.prompt },
+              toolName: inputData.primitiveId,
+              toolCallId: inputData.primitiveId,
               runId,
               type: 'approval',
               primitiveType: 'agent',
-              primitiveId: agentId,
+              primitiveId: inputData.primitiveId,
             },
           };
         }
         if (chunk.type === 'tool-call-suspended') {
+          console.dir({ chunk }, { depth: null });
           suspendedTools = {
             ...(suspendedTools ?? {}),
-            [agentId]: {
+            [inputData.primitiveId]: {
               suspendPayload: chunk.payload.suspendPayload,
               resumeSchema: chunk.payload.resumeSchema,
-              toolCallId: chunk.payload.toolCallId,
-              args: inputData.prompt,
-              agentId,
+              toolName: inputData.primitiveId,
+              toolCallId: inputData.primitiveId,
+              args: { prompt: inputData.prompt },
               runId,
               type: 'suspension',
               primitiveType: 'agent',
-              primitiveId: agentId,
+              primitiveId: inputData.primitiveId,
             },
           };
         }
@@ -660,20 +661,22 @@ export async function createNetworkLoop({
         await writer.write({
           type: requireApprovalMetadata ? 'agent-execution-approval' : 'agent-execution-suspended',
           payload: {
-            args: inputData.prompt,
+            args: { prompt: inputData.prompt },
             agentId,
             runId: stepId,
+            toolName: inputData.primitiveId,
+            toolCallId: inputData.primitiveId,
             usage: await result.usage,
             selectionReason: inputData.selectionReason,
             ...(requireApprovalMetadata
               ? {
-                  resumeSchema: requireApprovalMetadata[agentId].resumeSchema,
+                  resumeSchema: requireApprovalMetadata[inputData.primitiveId].resumeSchema,
                 }
               : {}),
             ...(suspendedTools
               ? {
-                  resumeSchema: suspendedTools[agentId].resumeSchema,
-                  suspendPayload: suspendedTools[agentId].suspendPayload,
+                  resumeSchema: suspendedTools[inputData.primitiveId].resumeSchema,
+                  suspendPayload: suspendedTools[inputData.primitiveId].suspendPayload,
                 }
               : {}),
           },
@@ -681,10 +684,10 @@ export async function createNetworkLoop({
           runId,
         });
         return await suspend({
-          ...(requireApprovalMetadata ? { requireToolApproval: requireApprovalMetadata[agentId] } : {}),
+          ...(requireApprovalMetadata ? { requireToolApproval: requireApprovalMetadata[inputData.primitiveId] } : {}),
           ...(suspendedTools
             ? {
-                toolCallSuspended: suspendedTools[agentId].suspendPayload,
+                toolCallSuspended: suspendedTools[inputData.primitiveId].suspendPayload,
                 args: inputData.prompt,
                 agentId,
               }
@@ -882,7 +885,7 @@ export async function createNetworkLoop({
                 ? {
                     metadata: {
                       suspendedTools: {
-                        [workflowId]: {
+                        [inputData.primitiveId]: {
                           args: input,
                           suspendPayload,
                           runId,
@@ -890,7 +893,9 @@ export async function createNetworkLoop({
                           resumeSchema,
                           workflowId,
                           primitiveType: 'workflow',
-                          primitiveId: workflowId,
+                          primitiveId: inputData.primitiveId,
+                          toolName: inputData.primitiveId,
+                          toolCallId: inputData.primitiveId,
                         },
                       },
                     },
@@ -916,6 +921,8 @@ export async function createNetworkLoop({
             runId: stepId,
             usage: await stream.usage,
             selectionReason: inputData.selectionReason,
+            toolName: inputData.primitiveId,
+            toolCallId: inputData.primitiveId,
           },
           from: ChunkFrom.NETWORK,
           runId,
@@ -1027,6 +1034,21 @@ export async function createNetworkLoop({
 
       const toolCallId = generateId();
 
+      await writer?.write({
+        type: 'tool-execution-start',
+        payload: {
+          args: {
+            ...inputData,
+            args: inputDataToUse,
+            toolName: toolId,
+            toolCallId,
+          },
+          runId,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
       // Check if approval is required
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
@@ -1073,7 +1095,7 @@ export async function createNetworkLoop({
                         isNetwork: true,
                         selectionReason: inputData.selectionReason,
                         primitiveType: inputData.primitiveType,
-                        primitiveId: toolId,
+                        primitiveId: inputData.primitiveId,
                         finalResult: { result: '', toolCallId },
                         input: inputDataToUse,
                       }),
@@ -1083,15 +1105,15 @@ export async function createNetworkLoop({
                   metadata: {
                     mode: 'network',
                     requireApprovalMetadata: {
-                      [toolId]: {
+                      [inputData.primitiveId]: {
                         toolCallId,
-                        toolName: toolId,
+                        toolName: inputData.primitiveId,
                         args: inputDataToUse,
                         type: 'approval',
                         resumeSchema: requireApprovalResumeSchema,
                         runId,
                         primitiveType: 'tool',
-                        primitiveId: toolId,
+                        primitiveId: inputData.primitiveId,
                       },
                     },
                   },
@@ -1105,7 +1127,7 @@ export async function createNetworkLoop({
           await writer?.write({
             type: 'tool-execution-approval',
             payload: {
-              toolName: toolId,
+              toolName: inputData.primitiveId,
               toolCallId,
               args: inputDataToUse,
               selectionReason: inputData.selectionReason,
@@ -1116,7 +1138,7 @@ export async function createNetworkLoop({
 
           return suspend({
             requireToolApproval: {
-              toolName: toolId,
+              toolName: inputData.primitiveId,
               args: inputDataToUse,
               toolCallId,
             },
@@ -1138,7 +1160,7 @@ export async function createNetworkLoop({
                           isNetwork: true,
                           selectionReason: inputData.selectionReason,
                           primitiveType: inputData.primitiveType,
-                          primitiveId: toolId,
+                          primitiveId: inputData.primitiveId,
                           finalResult: { result: rejectionResult, toolCallId },
                           input: inputDataToUse,
                         }),
@@ -1155,7 +1177,7 @@ export async function createNetworkLoop({
 
             const endPayload = {
               task: inputData.task,
-              primitiveId: toolId,
+              primitiveId: inputData.primitiveId,
               primitiveType: inputData.primitiveType,
               result: rejectionResult,
               isComplete: false,
@@ -1175,21 +1197,6 @@ export async function createNetworkLoop({
           }
         }
       }
-
-      await writer?.write({
-        type: 'tool-execution-start',
-        payload: {
-          args: {
-            ...inputData,
-            args: inputDataToUse,
-            toolName: toolId,
-            toolCallId,
-          },
-          runId,
-        },
-        from: ChunkFrom.NETWORK,
-        runId,
-      });
 
       let toolSuspendPayload: any;
 
@@ -1227,9 +1234,9 @@ export async function createNetworkLoop({
                       metadata: {
                         mode: 'network',
                         suspendedTools: {
-                          [toolId]: {
+                          [inputData.primitiveId]: {
                             toolCallId,
-                            toolName: toolId,
+                            toolName: inputData.primitiveId,
                             args: inputDataToUse,
                             suspendPayload,
                             type: 'suspension',
@@ -1238,7 +1245,7 @@ export async function createNetworkLoop({
                               JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
                             runId,
                             primitiveType: 'tool',
-                            primitiveId: toolId,
+                            primitiveId: inputData.primitiveId,
                           },
                         },
                       },
@@ -1252,7 +1259,7 @@ export async function createNetworkLoop({
               await writer?.write({
                 type: 'tool-execution-suspended',
                 payload: {
-                  toolName: toolId,
+                  toolName: inputData.primitiveId,
                   toolCallId,
                   args: inputDataToUse,
                   resumeSchema:
@@ -1280,7 +1287,7 @@ export async function createNetworkLoop({
       if (toolSuspendPayload) {
         return await suspend({
           toolCallSuspended: toolSuspendPayload,
-          toolName: toolId,
+          toolName: inputData.primitiveId,
           args: inputDataToUse,
           toolCallId,
         });
@@ -1317,7 +1324,7 @@ export async function createNetworkLoop({
 
       const endPayload = {
         task: inputData.task,
-        primitiveId: toolId,
+        primitiveId: inputData.primitiveId,
         primitiveType: inputData.primitiveType,
         result: finalResult,
         isComplete: false,
@@ -1542,34 +1549,39 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   let resumeDataFromTask: any | undefined;
   let runIdFromTask: string | undefined;
   if (autoResumeSuspendedTools && threadId) {
+    console.dir({ autoResumeSuspendedTools, threadId });
     let lastAssistantMessage: MastraDBMessage | undefined;
     let requireApprovalMetadata: Record<string, any> | undefined;
     let suspendedTools: Record<string, any> | undefined;
     // get last assistant message from memory
     const memory = await routingAgent.getMemory({ requestContext });
-    const recallResult = await memory?.recall({
-      threadId: threadId,
-      resourceId: resourceId || networkName,
-    });
-    if (recallResult && recallResult.messages?.length > 0) {
-      const messages = [...recallResult.messages]?.filter(message => message.role === 'assistant');
-      lastAssistantMessage = messages[0];
-    }
-    if (lastAssistantMessage) {
-      const { metadata } = lastAssistantMessage.content;
-      if (metadata?.requireApprovalMetadata) {
-        requireApprovalMetadata = metadata.requireApprovalMetadata;
-      }
-      if (metadata?.suspendedTools) {
-        suspendedTools = metadata.suspendedTools;
-      }
 
-      if (requireApprovalMetadata || suspendedTools) {
-        const suspendedToolsArr = Object.values({ ...suspendedTools, ...requireApprovalMetadata });
-        const firstSuspendedTool = suspendedToolsArr[0]; //only one primitive/tool gets suspended at a time, so there'll only be one item
-        try {
-          const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
-          const systemInstructions = `
+    const threadExists = await memory?.getThreadById({ threadId });
+    if (threadExists) {
+      const recallResult = await memory?.recall({
+        threadId: threadId,
+        resourceId: resourceId || networkName,
+      });
+
+      if (recallResult && recallResult.messages?.length > 0) {
+        const messages = [...recallResult.messages]?.filter(message => message.role === 'assistant');
+        lastAssistantMessage = messages[0];
+      }
+      if (lastAssistantMessage) {
+        const { metadata } = lastAssistantMessage.content;
+        if (metadata?.requireApprovalMetadata) {
+          requireApprovalMetadata = metadata.requireApprovalMetadata;
+        }
+        if (metadata?.suspendedTools) {
+          suspendedTools = metadata.suspendedTools;
+        }
+
+        if (requireApprovalMetadata || suspendedTools) {
+          const suspendedToolsArr = Object.values({ ...suspendedTools, ...requireApprovalMetadata });
+          const firstSuspendedTool = suspendedToolsArr[0]; //only one primitive/tool gets suspended at a time, so there'll only be one item
+          try {
+            const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
+            const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
             Your job is to construct the resumeData for the tool call using the messages available to you and the schema passed.
             You will generate an object that matches this schema: ${JSON.stringify(firstSuspendedTool.resumeSchema)}.
@@ -1579,36 +1591,41 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
               "resumeData": "string"
             }
           `;
-          const messageList = new MessageList();
+            const messageList = new MessageList();
 
-          messageList.addSystem(systemInstructions);
-          messageList.add(task, 'user');
+            messageList.addSystem(systemInstructions);
+            messageList.add(task, 'user');
 
-          const result = llm.stream({
-            methodType: 'generate',
-            requestContext,
-            messageList,
-            agentId: routingAgent.id,
-            tracingContext: routingAgentOptions?.tracingContext!,
-            structuredOutput: {
-              schema: z.object({
-                resumeData: z.string(),
-              }),
-            },
-          });
+            const result = llm.stream({
+              methodType: 'generate',
+              requestContext,
+              messageList,
+              agentId: routingAgent.id,
+              tracingContext: routingAgentOptions?.tracingContext!,
+              structuredOutput: {
+                schema: z.object({
+                  resumeData: z.string(),
+                }),
+              },
+            });
 
-          const object = await result.object;
-          resumeDataFromTask = JSON.parse(object.resumeData);
-          runIdFromTask = firstSuspendedTool.runId;
-        } catch (error) {
-          mastra?.getLogger()?.error(`Error generating resume data for network agent ${routingAgent.id}`, error);
+            const object = await result.object;
+            resumeDataFromTask = JSON.parse(object.resumeData);
+            runIdFromTask = firstSuspendedTool.runId;
+          } catch (error) {
+            mastra?.getLogger()?.error(`Error generating resume data for network agent ${routingAgent.id}`, error);
+          }
         }
       }
     }
   }
 
+  console.dir({ resumeDataFromTask, runIdFromTask, runId });
+
   const runIdToUse = runIdFromTask ?? runId;
   const resumeDataToUse = resumeDataFromTask ?? resumeData;
+
+  console.dir({ resumeDataToUse, runIdToUse }, { depth: null });
 
   const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
 

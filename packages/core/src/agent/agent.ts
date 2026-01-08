@@ -307,6 +307,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         throw mastraError;
       }
 
+      Object.entries(agents || {}).forEach(([_agentName, agent]) => {
+        if (this.#mastra) {
+          agent.__registerMastra(this.#mastra);
+        }
+      });
+
       return agents;
     });
   }

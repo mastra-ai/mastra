@@ -26,17 +26,22 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
+  const isNetwork = metadata?.mode === 'network';
+
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
-  const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
-  const suspendedTools = metadata?.mode === 'stream' && metadata?.suspendedTools;
+  const requireApprovalMetadata =
+    (metadata?.mode === 'stream' || metadata?.mode === 'network') && metadata?.requireApprovalMetadata;
+  const suspendedTools = (metadata?.mode === 'stream' || metadata?.mode === 'network') && metadata?.suspendedTools;
 
   const toolApprovalMetadata = requireApprovalMetadata
     ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
     : undefined;
 
   const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
+
+  const toolCalled = result?.hasMoreMessages ?? undefined;
 
   useWorkflowStream(result);
 
@@ -48,6 +53,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
+        toolName={toolName}
+        isNetwork={isNetwork}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        toolCalled={toolCalled}
       />
     );
   }
@@ -64,6 +73,9 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
         suspendPayload={suspendedToolMetadata?.suspendPayload}
+        toolName={toolName}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
       />
     );
   }
@@ -78,6 +90,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
       suspendPayload={suspendedToolMetadata?.suspendPayload}
+      isNetwork={isNetwork}
+      toolCalled={toolCalled}
     />
   );
 };

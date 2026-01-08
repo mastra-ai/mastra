@@ -3980,7 +3980,7 @@ describe('Agent - network - tool approval and suspension', () => {
 
       // Register agents with Mastra for storage access
       const mastra = new Mastra({
-        agents: { networkAgent, subAgent },
+        agents: { networkAgent },
         storage,
         logger: false,
       });

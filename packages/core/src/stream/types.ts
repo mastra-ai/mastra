@@ -12,7 +12,6 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
-import type z from 'zod';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -396,22 +395,18 @@ interface AgentExecutionStartPayload {
   runId: string;
 }
 
-interface AgentExecutionApprovalPayload {
+interface AgentExecutionApprovalPayload extends ToolCallApprovalPayload {
   agentId: string;
-  resumeSchema: string;
   usage: LanguageModelUsage;
   runId: string;
-  args: string;
   selectionReason: string;
 }
 
-interface AgentExecutionSuspendedPayload {
+interface AgentExecutionSuspendedPayload extends ToolCallSuspendedPayload {
   agentId: string;
   suspendPayload: any;
-  resumeSchema: string;
   usage: LanguageModelUsage;
   runId: string;
-  args: string;
   selectionReason: string;
 }
 
@@ -454,14 +449,12 @@ interface WorkflowExecutionEndPayload {
   runId: string;
 }
 
-interface WorkflowExecutionSuspendPayload {
+interface WorkflowExecutionSuspendPayload extends ToolCallSuspendedPayload {
   name: string;
   workflowId: string;
   suspendPayload: any;
-  resumeSchema: z.ZodType<any>;
   usage: LanguageModelUsage;
   runId: string;
-  args: Record<string, unknown>;
   selectionReason: string;
 }
 

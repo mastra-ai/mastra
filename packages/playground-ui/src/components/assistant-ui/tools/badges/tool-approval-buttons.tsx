@@ -1,33 +1,59 @@
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
 import { useToolCall } from '@/services/tool-call-provider';
-import { MastraUIMessage } from '@mastra/react';
 import { Check, X } from 'lucide-react';
 
 export interface ToolApprovalButtonsProps {
   toolCallId: string;
+  toolName: string;
   toolCalled: boolean;
   toolApprovalMetadata:
     | {
         toolCallId: string;
         toolName: string;
         args: Record<string, any>;
+        runId?: string;
       }
     | undefined;
+  isNetwork: boolean;
 }
 
-export const ToolApprovalButtons = ({ toolCalled, toolCallId, toolApprovalMetadata }: ToolApprovalButtonsProps) => {
-  const { approveToolcall, declineToolcall, isRunning, toolCallApprovals } = useToolCall();
+export const ToolApprovalButtons = ({
+  toolCalled,
+  toolCallId,
+  toolApprovalMetadata,
+  toolName,
+  isNetwork,
+}: ToolApprovalButtonsProps) => {
+  const {
+    approveToolcall,
+    declineToolcall,
+    isRunning,
+    toolCallApprovals,
+    approveNetworkToolcall,
+    declineNetworkToolcall,
+    networkToolCallApprovals,
+  } = useToolCall();
 
   const handleApprove = () => {
-    approveToolcall(toolCallId);
+    if (isNetwork) {
+      approveNetworkToolcall(toolName, toolApprovalMetadata?.runId);
+    } else {
+      approveToolcall(toolCallId);
+    }
   };
 
   const handleDecline = () => {
-    declineToolcall(toolCallId);
+    if (isNetwork) {
+      declineNetworkToolcall(toolName, toolApprovalMetadata?.runId);
+    } else {
+      declineToolcall(toolCallId);
+    }
   };
 
-  const toolCallApprovalStatus = toolCallApprovals?.[toolCallId]?.status;
+  const toolCallApprovalStatus = isNetwork
+    ? networkToolCallApprovals?.[toolName]?.status
+    : toolCallApprovals?.[toolCallId]?.status;
 
   if (toolApprovalMetadata && !toolCalled) {
     return (
