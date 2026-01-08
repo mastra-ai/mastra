@@ -157,7 +157,7 @@ export class BraintrustExporter extends BaseExporter {
   private useProvidedLogger: boolean;
   private providedLogger?: Logger<true>;
 
-  constructor(config: BraintrustExporterConfig) {
+  constructor(config: BraintrustExporterConfig = {}) {
     super(config);
 
     if (config.braintrustLogger) {
@@ -166,15 +166,25 @@ export class BraintrustExporter extends BaseExporter {
       this.providedLogger = config.braintrustLogger;
       this.config = config;
     } else {
+      // Read credentials from config or environment variables
+      const apiKey = config.apiKey ?? process.env.BRAINTRUST_API_KEY;
+      const endpoint = config.endpoint ?? process.env.BRAINTRUST_ENDPOINT;
+
       // Validate apiKey for creating loggers per trace
-      if (!config.apiKey) {
-        this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
+      if (!apiKey) {
+        this.setDisabled(
+          `Missing required API key. Set BRAINTRUST_API_KEY environment variable or pass apiKey in config.`,
+        );
         this.config = null as any;
         this.useProvidedLogger = false;
         return;
       }
       this.useProvidedLogger = false;
-      this.config = config;
+      this.config = {
+        ...config,
+        apiKey,
+        endpoint,
+      };
     }
   }
 
@@ -357,6 +367,11 @@ export class BraintrustExporter extends BaseExporter {
     // Check if trace already exists - reuse existing trace data
     if (this.traceMap.has(span.traceId)) {
       this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
+      return;
+    }
+
+    // Guard against null config (when exporter is disabled)
+    if (!this.config) {
       return;
     }
 
