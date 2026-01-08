@@ -10,13 +10,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
+import type { SemanticRecall } from '../processors/memory/semantic-recall';
+import { RequestContext } from '../request-context';
 import type { MastraStorage, MemoryStorage } from '../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../vector';
+
 import { MockMemory } from './mock';
-import { SemanticRecall } from '../processors/memory/semantic-recall';
-import { MessageList } from '../agent/message-list';
-import { RequestContext } from '../request-context';
-import type { MastraDBMessage } from '../agent/message-list';
 
 describe('MastraMemory Processor Caching (Issue #11455)', () => {
   let mockStorage: MastraStorage;
