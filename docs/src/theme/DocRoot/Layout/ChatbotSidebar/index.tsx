@@ -36,11 +36,6 @@ interface LeftClickableBorderProps {
   onMouseDown: (e: React.MouseEvent) => void;
 }
 
-// Sidebar width bounds and default. Keep in sync with CSS `:root` defaults.
-const SIDEBAR_MIN_WIDTH = 250;
-const SIDEBAR_MAX_WIDTH = 600;
-const SIDEBAR_DEFAULT_WIDTH = 400;
-
 function LeftClickableBorder({
   onClick,
   hiddenChatbotSidebar,
@@ -69,11 +64,24 @@ export default function ChatbotSidebar() {
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [sidebarWidth, setSidebarWidth] = useState(400);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const hasDraggedRef = useRef(false);
   const startXRef = useRef<number | null>(null);
+
+  const minWidthRef = useRef(250);
+  const maxWidthRef = useRef(600);
+
+  useEffect(() => {
+    const rootStyles = getComputedStyle(document.documentElement);
+    minWidthRef.current =
+      parseInt(rootStyles.getPropertyValue("--chatbot-sidebar-min-width")) ||
+      250;
+    maxWidthRef.current =
+      parseInt(rootStyles.getPropertyValue("--chatbot-sidebar-max-width")) ||
+      600;
+  }, []);
 
   useEffect(() => {
     if (!hiddenChatbotSidebar) {
@@ -129,7 +137,7 @@ export default function ChatbotSidebar() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!sidebarRef.current) return;
 
-      const startX = startXRef.current ?? e.clientX;
+      const startX = startXRef.current!;
       const moved = Math.abs(e.clientX - startX);
       if (moved > 0) {
         hasDraggedRef.current = true;
@@ -137,7 +145,7 @@ export default function ChatbotSidebar() {
 
       const newWidth = window.innerWidth - e.clientX;
 
-      if (newWidth >= SIDEBAR_MIN_WIDTH && newWidth <= SIDEBAR_MAX_WIDTH) {
+      if (newWidth >= minWidthRef.current && newWidth <= maxWidthRef.current) {
         setSidebarWidth(newWidth);
         document.documentElement.style.setProperty(
           "--chatbot-sidebar-width",
