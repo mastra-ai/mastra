@@ -37,13 +37,13 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "apiKey",
       type: "string",
-      description: "Braintrust API key",
+      description: "Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Custom Braintrust endpoint",
+      description: "Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.",
       required: false,
     },
     {
@@ -94,6 +94,17 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { BraintrustExporter } from "@mastra/braintrust";
+
+// Reads from BRAINTRUST_API_KEY, BRAINTRUST_ENDPOINT
+const exporter = new BraintrustExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { BraintrustExporter } from "@mastra/braintrust";
