@@ -6,7 +6,7 @@
     "@manypkg/get-packages": "^3.1.0",
     "globby": "^14.1.0",
     "resolve.exports": "^2.0.3",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.16"
   },
   "scripts": {
     "test": "vitest"

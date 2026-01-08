@@ -20,8 +20,8 @@
   "devDependencies": {
     "@types/koa": "^2.15.0",
     "@types/koa-bodyparser": "^4.3.13",
-    "@types/node": "22.13.17",
-    "tsx": "^4.19.3",
+    "@types/node": "22.19.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "version": "0.0.1",
