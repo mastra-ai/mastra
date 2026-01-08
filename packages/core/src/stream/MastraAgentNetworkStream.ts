@@ -136,7 +136,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
               // Handle network-object chunks (partial objects during streaming)
               if (innerChunk.type === 'network-object') {
                 if (objectStreamController) {
-                  objectStreamController.enqueue((innerChunk as any).object);
+                  objectStreamController.enqueue((innerChunk as any).payload?.object);
                 }
                 controller.enqueue(innerChunk);
               }
@@ -144,7 +144,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
               else if (innerChunk.type === 'network-object-result') {
                 if (!objectResolved) {
                   objectResolved = true;
-                  objectDeferredPromise.resolve((innerChunk as any).object);
+                  objectDeferredPromise.resolve((innerChunk as any).payload?.object);
                   if (objectStreamController) {
                     objectStreamController.close();
                   }

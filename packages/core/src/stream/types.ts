@@ -539,8 +539,8 @@ export type NetworkChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'network-validation-end'; payload: NetworkValidationEndPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
   | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent })
-  | (BaseChunkType & { type: 'network-object'; object: PartialSchemaOutput<OUTPUT> })
-  | (BaseChunkType & { type: 'network-object-result'; object: InferSchemaOutput<OUTPUT> });
+  | (BaseChunkType & { type: 'network-object'; payload: { object: PartialSchemaOutput<OUTPUT> } })
+  | (BaseChunkType & { type: 'network-object-result'; payload: { object: InferSchemaOutput<OUTPUT> } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 export type AgentChunkType<OUTPUT extends OutputSchema = undefined> =

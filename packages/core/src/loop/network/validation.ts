@@ -607,9 +607,11 @@ export async function generateStructuredFinalResult<OUTPUT extends OutputSchema 
     Use the conversation history and primitive results to craft the response.
   `;
 
+  // Cast structuredOutputOptions to the expected type - OUTPUT already extends OutputSchema
+  // so the conditional OUTPUT extends OutputSchema ? OUTPUT : never evaluates to OUTPUT
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
-    structuredOutput: structuredOutputOptions,
+    structuredOutput: structuredOutputOptions as StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>,
   });
 
   const { writer, stepId, runId: streamRunId } = streamContext ?? {};
@@ -618,12 +620,13 @@ export async function generateStructuredFinalResult<OUTPUT extends OutputSchema 
   // Stream partial objects via network-object chunks
   for await (const partialObject of stream.objectStream) {
     if (canStream && partialObject) {
+      // Cast via unknown because the generic OUTPUT is opaque at this point
       await writer.write({
         type: 'network-object',
-        object: partialObject,
+        payload: { object: partialObject },
         from: ChunkFrom.NETWORK,
         runId: streamRunId,
-      } as NetworkChunkType);
+      } as unknown as NetworkChunkType);
     }
   }
 
@@ -632,12 +635,13 @@ export async function generateStructuredFinalResult<OUTPUT extends OutputSchema 
 
   // Emit final object-result chunk
   if (canStream && finalObject) {
+    // Cast via unknown because the generic OUTPUT is opaque at this point
     await writer.write({
       type: 'network-object-result',
-      object: finalObject,
+      payload: { object: finalObject },
       from: ChunkFrom.NETWORK,
       runId: streamRunId,
-    } as NetworkChunkType);
+    } as unknown as NetworkChunkType);
   }
 
   return {
