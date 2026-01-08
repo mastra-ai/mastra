@@ -30,6 +30,11 @@ import { useChatbotSidebar } from "./context";
 import styles from "./styles.module.css";
 import { TextShimmer } from "./text-shimmer";
 
+// Sidebar width bounds and default. Keep in sync with CSS `:root` defaults.
+const SIDEBAR_MIN_WIDTH = 250;
+const SIDEBAR_MAX_WIDTH = 600;
+const SIDEBAR_DEFAULT_WIDTH = 400;
+
 function LeftClickableBorder({
   onClick,
   hiddenChatbotSidebar,
@@ -61,11 +66,6 @@ export default function ChatbotSidebar() {
   const { isHidden: hiddenChatbotSidebar, toggle } = useChatbotSidebar();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-
-  // Width constants (kept in sync with CSS defaults)
-  const SIDEBAR_MIN_WIDTH = 250;
-  const SIDEBAR_MAX_WIDTH = 600;
-  const SIDEBAR_DEFAULT_WIDTH = 400;
 
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -167,7 +167,7 @@ export default function ChatbotSidebar() {
         "0.3s",
       );
     };
-  }, [isDragging, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]);
+  }, [isDragging]);
 
   const {
     conversation,
