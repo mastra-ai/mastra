@@ -1,5 +1,4 @@
 import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
-import { ConsoleLogger } from '@mastra/core/logger';
 import { OtelExporter } from '@mastra/otel-exporter';
 import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
@@ -40,8 +39,6 @@ export class ArizeExporter extends OtelExporter {
   name = 'arize';
 
   constructor(config: ArizeExporterConfig = {}) {
-    const logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
-
     // Read configuration from config or environment variables
     // Priority: config > ARIZE_* env vars > PHOENIX_* env vars
     const spaceId = config.spaceId ?? process.env.ARIZE_SPACE_ID;
