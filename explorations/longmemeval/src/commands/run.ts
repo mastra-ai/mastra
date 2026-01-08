@@ -17,6 +17,138 @@ import { getMemoryOptions, observationalMemoryConfig } from '../config';
 import { makeRetryModel } from '../retry-model';
 import { DatasetLoader } from '../data/loader';
 
+// Rate limit configuration
+const RATE_LIMIT_TOKEN_THRESHOLD = 50000; // Pause if remaining tokens below this
+
+// Shared rate limiter state across all workers
+const rateLimiter = {
+  remainingTokens: 999999,
+  remainingRequests: 999999,
+  isWaiting: false,
+  waitPromise: null as Promise<void> | null,
+};
+
+/**
+ * Update rate limiter state from response headers
+ */
+function updateRateLimiterFromResponse(response: any): void {
+  const headers = response?.response?.headers;
+  if (!headers) return;
+
+  rateLimiter.remainingTokens = parseInt(headers['x-ratelimit-remaining-tokens-minute'] || '999999', 10);
+  rateLimiter.remainingRequests = parseInt(headers['x-ratelimit-remaining-requests-minute'] || '999999', 10);
+}
+
+/**
+ * Wait for rate limit to reset (shared across all workers)
+ */
+async function waitForRateLimit(waitSeconds: number, reason: string): Promise<void> {
+  // If already waiting, just join the existing wait
+  if (rateLimiter.isWaiting && rateLimiter.waitPromise) {
+    return rateLimiter.waitPromise;
+  }
+
+  rateLimiter.isWaiting = true;
+  console.log(chalk.yellow(`\n⏳ ${reason}. Waiting ${waitSeconds}s...`));
+
+  rateLimiter.waitPromise = (async () => {
+    await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+    rateLimiter.isWaiting = false;
+    rateLimiter.remainingTokens = 999999; // Reset after wait
+    rateLimiter.remainingRequests = 999999;
+    console.log(chalk.green(`✓ Resuming after rate limit pause`));
+  })();
+
+  return rateLimiter.waitPromise;
+}
+
+/**
+ * Check rate limit before making a request
+ */
+async function checkRateLimitBeforeRequest(): Promise<void> {
+  // If already waiting, join the wait
+  if (rateLimiter.isWaiting && rateLimiter.waitPromise) {
+    await rateLimiter.waitPromise;
+    return;
+  }
+
+  // Check if we're approaching limits
+  if (rateLimiter.remainingTokens < RATE_LIMIT_TOKEN_THRESHOLD || rateLimiter.remainingRequests < 5) {
+    await waitForRateLimit(
+      60,
+      `Rate limit approaching (${rateLimiter.remainingTokens} tokens, ${rateLimiter.remainingRequests} requests remaining)`,
+    );
+  }
+}
+
+/**
+ * Check rate limit headers after response and update state
+ */
+async function checkRateLimitAndWait(
+  response: any,
+  spinner?: Ora | { updateStatus: (status: string) => void },
+): Promise<void> {
+  updateRateLimiterFromResponse(response);
+
+  if (rateLimiter.remainingTokens < RATE_LIMIT_TOKEN_THRESHOLD || rateLimiter.remainingRequests < 5) {
+    const updateStatus = (status: string) => {
+      if (spinner && 'updateStatus' in spinner) {
+        spinner.updateStatus(status);
+      } else if (spinner && 'text' in spinner) {
+        spinner.text = status;
+      }
+    };
+    updateStatus(`Rate limited - waiting...`);
+    await waitForRateLimit(
+      60,
+      `Rate limit approaching (${rateLimiter.remainingTokens} tokens, ${rateLimiter.remainingRequests} requests remaining)`,
+    );
+  }
+}
+
+/**
+ * Wrapper to handle 429 errors with retry
+ */
+async function withRateLimitRetry<T>(
+  fn: () => Promise<T>,
+  spinner?: Ora | { updateStatus: (status: string) => void },
+  maxRetries = 3,
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Check rate limit before request
+    await checkRateLimitBeforeRequest();
+
+    try {
+      const result = await fn();
+      // Update rate limiter from successful response
+      updateRateLimiterFromResponse(result);
+      return result;
+    } catch (error: any) {
+      // Check if it's a 429 rate limit error
+      if (error?.statusCode === 429 || error?.message?.includes('Too Many Requests')) {
+        const retryAfter = parseInt(error?.responseHeaders?.['retry-after'] || '60', 10);
+
+        const updateStatus = (status: string) => {
+          if (spinner && 'updateStatus' in spinner) {
+            spinner.updateStatus(status);
+          } else if (spinner && 'text' in spinner) {
+            spinner.text = status;
+          }
+        };
+        updateStatus(`Rate limited (429) - waiting ${retryAfter}s...`);
+
+        await waitForRateLimit(retryAfter, `Rate limited (429 error)`);
+
+        if (attempt < maxRetries) {
+          continue; // Retry
+        }
+      }
+      throw error; // Re-throw if not rate limit or max retries exceeded
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 export interface RunOptions {
   dataset: DatasetType;
   memoryConfig: MemoryConfigType;
@@ -431,12 +563,12 @@ Active evaluations:`;
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         storage: omStorage,
         observer: {
-          model: retry4o.model,
+          // model: retry4o.model,
           observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
           recognizePatterns: false,
         },
         reflector: {
-          model: retry4o.model,
+          // model: retry4o.model,
           reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
           recognizePatterns: false,
         },
@@ -466,9 +598,9 @@ When answering questions, carefully review the conversation history to identify 
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
-      model: modelProvider,
+      // model: modelProvider,
       // model: 'anthropic/claude-haiku-4-5',
-      // model: 'cerebras/zai-glm-4.6',
+      model: 'cerebras/zai-glm-4.7',
       // model: 'cerebras/gpt-oss-120b',
       instructions: [
         { role: 'system', content: agentInstructions },
@@ -483,11 +615,11 @@ When answering questions, carefully review the conversation history to identify 
         // prevent openai prompt caching
         { role: 'system', content: `\ncache: ${Math.random()}` },
       ],
-      tools: observationalMemory
-        ? {
-            recall: observationalMemory?.getRecallTool(),
-          }
-        : undefined,
+      // tools: observationalMemory
+      //   ? {
+      //       recall: observationalMemory?.getRecallTool(),
+      //     }
+      //   : undefined,
       memory,
       // For OM, use processors instead of memory
       // OM handles message loading itself via cursor-based loadUnobservedMessages
@@ -533,14 +665,18 @@ When answering questions, carefully review the conversation history to identify 
 
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
-    let response = await agent.generate(meta.question + `\n${today}`, {
-      threadId: evalThreadId,
-      resourceId: meta.resourceId,
-      modelSettings: {
-        temperature: 0,
-      },
-      context: [],
-    });
+    let response = await withRateLimitRetry(
+      () =>
+        agent.generate(meta.question + `\n${today}`, {
+          threadId: evalThreadId,
+          resourceId: meta.resourceId,
+          modelSettings: {
+            temperature: 0,
+          },
+          context: [],
+        }),
+      spinner,
+    );
 
     console.log(
       response.text +
@@ -552,7 +688,8 @@ When answering questions, carefully review the conversation history to identify 
     const evalAgent = new Agent({
       id: 'longmemeval-metric-agent',
       name: 'LongMemEval Metric Agent',
-      model: retry4o.model,
+      model: 'cerebras/gpt-oss-120b',
+      // model: retry4o.model,
       instructions:
         'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct.',
     });
@@ -568,7 +705,7 @@ When answering questions, carefully review the conversation history to identify 
       answer: meta.answer,
     });
 
-    const result = await metric.measure(input, response.text);
+    const result = await withRateLimitRetry(() => metric.measure(input, response.text), spinner);
     let isCorrect = result.score === 1;
 
     // Check if there's an improved version - if so, we'll only retry that one
@@ -583,15 +720,19 @@ When answering questions, carefully review the conversation history to identify 
       updateStatus(`Retry ${retryCount}/${maxRetries} for ${meta.questionId}...`);
 
       const retryThreadId = `eval_retry_${meta.questionId}_${retryCount}_${Date.now()}`;
-      const retryResponse = await agent.generate(meta.question, {
-        threadId: retryThreadId,
-        resourceId: meta.resourceId,
-        modelSettings: {
-          temperature: 0,
-        },
-      });
+      const retryResponse = await withRateLimitRetry(
+        () =>
+          agent.generate(meta.question, {
+            threadId: retryThreadId,
+            resourceId: meta.resourceId,
+            modelSettings: {
+              temperature: 0,
+            },
+          }),
+        spinner,
+      );
 
-      const retryResult = await metric.measure(input, retryResponse.text);
+      const retryResult = await withRateLimitRetry(() => metric.measure(input, retryResponse.text), spinner);
       if (retryResult.score === 1) {
         isCorrect = true;
         // Update response to the successful retry for logging
@@ -620,13 +761,17 @@ When answering questions, carefully review the conversation history to identify 
         // Create a separate thread for the improved question evaluation
         const improvedThreadId = `eval_improved_${meta.questionId}_${Date.now()}`;
 
-        const improvedResponse = await agent.generate(improvedQuestion, {
-          threadId: improvedThreadId,
-          resourceId: meta.resourceId,
-          modelSettings: {
-            temperature: 0,
-          },
-        });
+        const improvedResponse = await withRateLimitRetry(
+          () =>
+            agent.generate(improvedQuestion, {
+              threadId: improvedThreadId,
+              resourceId: meta.resourceId,
+              modelSettings: {
+                temperature: 0,
+              },
+            }),
+          spinner,
+        );
 
         improvedHypothesis = improvedResponse.text;
       }
@@ -636,7 +781,7 @@ When answering questions, carefully review the conversation history to identify 
         answer: improvedAnswer,
       });
 
-      const improvedResult = await metric.measure(improvedInput, improvedHypothesis);
+      const improvedResult = await withRateLimitRetry(() => metric.measure(improvedInput, improvedHypothesis!), spinner);
       improvedIsCorrect = improvedResult.score === 1;
 
       // Retry improved version: always retry at least once, up to 5 times if requiresRetry is set
@@ -647,16 +792,22 @@ When answering questions, carefully review the conversation history to identify 
         updateStatus(`Retry improved ${improvedRetryCount}/${improvedMaxRetries} for ${meta.questionId}...`);
 
         const retryThreadId = `eval_improved_retry_${meta.questionId}_${improvedRetryCount}_${Date.now()}`;
-        const retryResponse = await agent.generate(improvedQuestion, {
-          threadId: retryThreadId,
-          resourceId: meta.resourceId,
-          modelSettings: {
-            temperature: 0,
-          },
-          context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
-        });
+        const retryResponse = await withRateLimitRetry(
+          () =>
+            agent.generate(improvedQuestion, {
+              threadId: retryThreadId,
+              resourceId: meta.resourceId,
+              modelSettings: {
+                temperature: 0,
+              },
+              context: meta.questionDate
+                ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }]
+                : undefined,
+            }),
+          spinner,
+        );
 
-        const retryResult = await metric.measure(improvedInput, retryResponse.text);
+        const retryResult = await withRateLimitRetry(() => metric.measure(improvedInput, retryResponse.text), spinner);
         if (retryResult.score === 1) {
           improvedIsCorrect = true;
           improvedHypothesis = retryResponse.text;
