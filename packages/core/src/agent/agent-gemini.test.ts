@@ -236,6 +236,44 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
+    it('should return structured output from network', async () => {
+      const helperAgent = new Agent({
+        id: 'research-helper',
+        name: 'Research Helper',
+        instructions: 'You provide brief research summaries when asked.',
+        model: MODEL,
+      });
+
+      const agent = new Agent({
+        id: 'structured-network-agent',
+        name: 'Structured Network Agent',
+        instructions: 'You coordinate research tasks. Delegate to researchHelper for research.',
+        model: MODEL,
+        agents: { helperAgent },
+        memory,
+      });
+
+      const resultSchema = z.object({
+        summary: z.string().describe('Brief summary'),
+        confidence: z.number().min(0).max(1).describe('Confidence score'),
+      });
+
+      const stream = await agent.network('Research AI briefly', {
+        requestContext,
+        structuredOutput: { schema: resultSchema },
+      });
+
+      // Consume stream
+      for await (const _ of stream) {
+      }
+
+      // Verify structured output
+      const result = await stream.object;
+      expect(result).toBeDefined();
+      expect(typeof result!.summary).toBe('string');
+      expect(typeof result!.confidence).toBe('number');
+    }, 30000);
+
     it('should handle empty user message with system context in network', async () => {
       const helperAgent = new Agent({
         id: 'helper-agent',

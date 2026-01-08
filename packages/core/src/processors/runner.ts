@@ -1079,6 +1079,7 @@ export class ProcessorRunner {
     messageList: MessageList,
     idsBeforeProcessing: string[],
     check: ReturnType<MessageList['makeMessageSourceChecker']>,
+    defaultSource: 'input' | 'response' = 'input',
   ) {
     const deletedIds = idsBeforeProcessing.filter(i => !messages.some(m => m.id === i));
     if (deletedIds.length) {
@@ -1095,7 +1096,7 @@ export class ProcessorRunner {
           '';
         messageList.addSystem(systemText);
       } else {
-        messageList.add(message, check.getSource(message) || 'input');
+        messageList.add(message, check.getSource(message) || defaultSource);
       }
     }
   }

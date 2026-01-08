@@ -642,26 +642,6 @@ export function createStep<
                   systemMessages: (systemMessages ?? []) as CoreMessage[],
                 });
 
-                // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
-                const applyMessages = (msgs: MastraDBMessage[]) => {
-                  const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
-                  if (deletedIds.length) {
-                    passThrough.messageList!.removeByIds(deletedIds);
-                  }
-                  for (const message of msgs) {
-                    passThrough.messageList!.removeByIds([message.id]);
-                    if (message.role === 'system') {
-                      const systemText =
-                        (message.content?.content as string | undefined) ??
-                        message.content?.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-                        '';
-                      passThrough.messageList!.addSystem(systemText);
-                    } else {
-                      passThrough.messageList!.add(message, check.getSource(message) || 'input');
-                    }
-                  }
-                };
-
                 if (result instanceof MessageList) {
                   // Validate same instance
                   if (result !== passThrough.messageList) {
@@ -679,12 +659,24 @@ export function createStep<
                   };
                 } else if (Array.isArray(result)) {
                   // Processor returned an array of messages
-                  applyMessages(result as MastraDBMessage[]);
+                  ProcessorRunner.applyMessagesToMessageList(
+                    result as MastraDBMessage[],
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                    'input',
+                  );
                   return { ...passThrough, messages: result };
                 } else if (result && 'messages' in result && 'systemMessages' in result) {
                   // Processor returned { messages, systemMessages }
                   const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                  applyMessages(typedResult.messages);
+                  ProcessorRunner.applyMessagesToMessageList(
+                    typedResult.messages,
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                    'input',
+                  );
                   passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                   return {
                     ...passThrough,
@@ -851,26 +843,6 @@ export function createStep<
                   messageList: passThrough.messageList,
                 });
 
-                // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
-                const applyMessages = (msgs: MastraDBMessage[]) => {
-                  const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
-                  if (deletedIds.length) {
-                    passThrough.messageList!.removeByIds(deletedIds);
-                  }
-                  for (const message of msgs) {
-                    passThrough.messageList!.removeByIds([message.id]);
-                    if (message.role === 'system') {
-                      const systemText =
-                        (message.content?.content as string | undefined) ??
-                        message.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                        '';
-                      passThrough.messageList!.addSystem(systemText);
-                    } else {
-                      passThrough.messageList!.add(message, check.getSource(message) || 'response');
-                    }
-                  }
-                };
-
                 if (result instanceof MessageList) {
                   // Validate same instance
                   if (result !== passThrough.messageList) {
@@ -888,12 +860,24 @@ export function createStep<
                   };
                 } else if (Array.isArray(result)) {
                   // Processor returned an array of messages
-                  applyMessages(result as MastraDBMessage[]);
+                  ProcessorRunner.applyMessagesToMessageList(
+                    result as MastraDBMessage[],
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                    'response',
+                  );
                   return { ...passThrough, messages: result };
                 } else if (result && 'messages' in result && 'systemMessages' in result) {
                   // Processor returned { messages, systemMessages }
                   const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                  applyMessages(typedResult.messages);
+                  ProcessorRunner.applyMessagesToMessageList(
+                    typedResult.messages,
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                    'response',
+                  );
                   passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                   return {
                     ...passThrough,
@@ -933,26 +917,6 @@ export function createStep<
                   steps: steps ?? [],
                 });
 
-                // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
-                const applyMessages = (msgs: MastraDBMessage[]) => {
-                  const deletedIds = idsBeforeProcessing.filter(i => !msgs.some(m => m.id === i));
-                  if (deletedIds.length) {
-                    passThrough.messageList!.removeByIds(deletedIds);
-                  }
-                  for (const message of msgs) {
-                    passThrough.messageList!.removeByIds([message.id]);
-                    if (message.role === 'system') {
-                      const systemText =
-                        (message.content?.content as string | undefined) ??
-                        message.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                        '';
-                      passThrough.messageList!.addSystem(systemText);
-                    } else {
-                      passThrough.messageList!.add(message, check.getSource(message) || 'response');
-                    }
-                  }
-                };
-
                 if (result instanceof MessageList) {
                   // Validate same instance
                   if (result !== passThrough.messageList) {
@@ -970,12 +934,24 @@ export function createStep<
                   };
                 } else if (Array.isArray(result)) {
                   // Processor returned an array of messages
-                  applyMessages(result as MastraDBMessage[]);
+                  ProcessorRunner.applyMessagesToMessageList(
+                    result as MastraDBMessage[],
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                    'response',
+                  );
                   return { ...passThrough, messages: result };
                 } else if (result && 'messages' in result && 'systemMessages' in result) {
                   // Processor returned { messages, systemMessages }
                   const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                  applyMessages(typedResult.messages);
+                  ProcessorRunner.applyMessagesToMessageList(
+                    typedResult.messages,
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                    'response',
+                  );
                   passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                   return {
                     ...passThrough,
