@@ -16,7 +16,7 @@ import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLangua
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
     describe('single provider-executed tool call and result', () => {
-      let result: MastraModelOutput;
+      let result: MastraModelOutput<unknown>;
 
       beforeEach(async () => {
         result = await loopFn({
@@ -248,7 +248,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
   describe.skip('dynamic tools', () => {
     describe('single dynamic tool call and result', () => {
-      let result: MastraModelOutput;
+      let result: MastraModelOutput<unknown>;
 
       beforeEach(async () => {
         result = await loopFn({
@@ -789,7 +789,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
   });
 
   describe('tool execution errors', () => {
-    let result: MastraModelOutput;
+    let result: MastraModelOutput<unknown>;
 
     beforeEach(async () => {
       result = await loopFn({

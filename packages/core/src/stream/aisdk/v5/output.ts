@@ -12,58 +12,57 @@ import type { MessageList } from '../../../agent/message-list';
 import type { LLMStepResult, StructuredOutputOptions } from '../../../agent/types';
 import type { TracingContext } from '../../../observability';
 import type { MastraModelOutput } from '../../base/output';
-import type { InferSchemaOutput, OutputSchema } from '../../base/schema';
 import type { ChunkType, StepTripwireData } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
 
-export type AISDKV5FullOutput<OUTPUT extends OutputSchema = undefined> = {
+export type AISDKV5FullOutput<OUTPUT = undefined> = {
   text: string;
-  usage: LLMStepResult['usage'];
+  usage: LLMStepResult<OUTPUT>['usage'];
   steps: LLMStepResult<OUTPUT>[];
-  finishReason: LLMStepResult['finishReason'];
-  warnings: LLMStepResult['warnings'];
-  providerMetadata: LLMStepResult['providerMetadata'];
-  request: LLMStepResult['request'];
+  finishReason: LLMStepResult<OUTPUT>['finishReason'];
+  warnings: LLMStepResult<OUTPUT>['warnings'];
+  providerMetadata: LLMStepResult<OUTPUT>['providerMetadata'];
+  request: LLMStepResult<OUTPUT>['request'];
   reasoning: {
-    providerMetadata: LLMStepResult['providerMetadata'];
+    providerMetadata: LLMStepResult<OUTPUT>['providerMetadata'];
     text: string;
     type: 'reasoning';
   }[];
   reasoningText: string | undefined;
-  toolCalls: ReturnType<typeof convertMastraChunkToAISDKv5>[];
-  toolResults: ReturnType<typeof convertMastraChunkToAISDKv5>[];
-  sources: ReturnType<typeof convertMastraChunkToAISDKv5>[];
+  toolCalls: ReturnType<typeof convertMastraChunkToAISDKv5<OUTPUT>>[];
+  toolResults: ReturnType<typeof convertMastraChunkToAISDKv5<OUTPUT>>[];
+  sources: ReturnType<typeof convertMastraChunkToAISDKv5<OUTPUT>>[];
   files: unknown[];
-  response: LLMStepResult['response'];
-  content: LLMStepResult['content'];
-  totalUsage: LLMStepResult['usage'];
+  response: LLMStepResult<OUTPUT>['response'];
+  content: LLMStepResult<OUTPUT>['content'];
+  totalUsage: LLMStepResult<OUTPUT>['usage'];
   error: Error | string | { message: string; stack: string } | undefined;
   tripwire: StepTripwireData | undefined;
   traceId: string | undefined;
-  object?: InferSchemaOutput<OUTPUT>;
+  object?: OUTPUT;
 };
 
-type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+type AISDKV5OutputStreamOptions<OUTPUT = undefined> = {
   toolCallStreaming?: boolean;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   tracingContext?: TracingContext;
 };
 
-export type AIV5FullStreamPart<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined
+export type AIV5FullStreamPart<OUTPUT = undefined> = OUTPUT extends undefined
   ? TextStreamPart<ToolSet>
   :
       | TextStreamPart<ToolSet>
       | {
           type: 'object';
-          object: InferSchemaOutput<OUTPUT>;
+          object: OUTPUT;
         };
-export type AIV5FullStreamType<OUTPUT extends OutputSchema = undefined> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
+export type AIV5FullStreamType<OUTPUT = undefined> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
 
-export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
+export class AISDKV5OutputStream<OUTPUT = undefined> {
   #modelOutput: MastraModelOutput<OUTPUT>;
   #options: AISDKV5OutputStreamOptions<OUTPUT>;
   #messageList: MessageList;
@@ -191,7 +190,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   get sources() {
     return this.#modelOutput.sources.then(sources =>
       sources.map(source => {
-        return convertMastraChunkToAISDKv5({
+        return convertMastraChunkToAISDKv5<OUTPUT>({
           chunk: source,
         });
       }),
@@ -203,7 +202,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       files
         .map(file => {
           if (file.type === 'file') {
-            const result = convertMastraChunkToAISDKv5({
+            const result = convertMastraChunkToAISDKv5<OUTPUT>({
               chunk: file,
             });
             return result && 'file' in result ? result.file : undefined;
@@ -228,7 +227,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   get toolCalls() {
     return this.#modelOutput.toolCalls.then(toolCalls =>
       toolCalls.map(toolCall => {
-        return convertMastraChunkToAISDKv5({
+        return convertMastraChunkToAISDKv5<OUTPUT>({
           chunk: toolCall,
         });
       }),
@@ -238,7 +237,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   get toolResults() {
     return this.#modelOutput.toolResults.then(toolResults =>
       toolResults.map(toolResult => {
-        return convertMastraChunkToAISDKv5({
+        return convertMastraChunkToAISDKv5<OUTPUT>({
           chunk: toolResult,
         });
       }),
@@ -317,14 +316,14 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
    * Stream of all chunks in AI SDK v5 format.
    */
   get fullStream(): AIV5FullStreamType<OUTPUT> {
-    let startEvent: OutputChunkType;
+    let startEvent: OutputChunkType<OUTPUT>;
     let hasStarted: boolean = false;
 
     // let stepCounter = 1;
 
     return this.#modelOutput.fullStream.pipeThrough(
       new TransformStream<
-        ChunkType<OUTPUT> | NonNullable<OutputChunkType>,
+        ChunkType<OUTPUT> | NonNullable<OutputChunkType<OUTPUT>>,
         TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>
       >({
         transform(chunk, controller) {
@@ -337,7 +336,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
           }
 
           if (chunk.type === 'step-start' && !startEvent) {
-            startEvent = convertMastraChunkToAISDKv5({
+            startEvent = convertMastraChunkToAISDKv5<OUTPUT>({
               chunk,
             });
             // stepCounter++;

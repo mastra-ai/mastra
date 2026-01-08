@@ -1,6 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
@@ -9,10 +8,11 @@ import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createToolCallStep } from './tool-call-step';
 
-export function createAgenticExecutionWorkflow<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema = undefined,
->({ models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
+export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
+  models,
+  _internal,
+  ...rest
+}: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
     models,
     _internal,

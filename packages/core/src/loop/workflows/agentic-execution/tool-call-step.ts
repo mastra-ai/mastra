@@ -1,7 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -25,10 +24,7 @@ type AddToolMetadataOptions = {
     }
 );
 
-export function createToolCallStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
   messageList,
   options,
