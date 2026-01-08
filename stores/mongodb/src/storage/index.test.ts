@@ -22,13 +22,46 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: MongoDBConfig = {
   id: 'mongodb-test-store',
-  url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
+  uri: process.env.MONGODB_URL || 'mongodb://localhost:27017',
   dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
 };
 
+// Tests for GitHub issue #11697 - MongoDBStore constructor uri/url handling
+// https://github.com/mastra-ai/mastra/issues/11697
+describe('MongoDBStore constructor (#11697)', () => {
+  it('should accept "uri" parameter (recommended)', () => {
+    expect(() => {
+      new MongoDBStore({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept "url" parameter for backward compatibility', () => {
+    expect(() => {
+      new MongoDBStore({
+        id: 'test',
+        url: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+      });
+    }).not.toThrow();
+  });
+
+  it('should throw clear error when neither uri nor url is provided', () => {
+    expect(() => {
+      new MongoDBStore({
+        id: 'test',
+        dbName: 'test_db',
+      } as any);
+    }).toThrow(/uri.*url|connection/i);
+  });
+});
+
 // Helper to create a connectorHandler from MongoClient
 const createConnectorHandler = async (): Promise<{ handler: ConnectorHandler; client: MongoClient }> => {
-  const client = new MongoClient(TEST_CONFIG.url!);
+  const client = new MongoClient(TEST_CONFIG.uri!);
   await client.connect();
   const db = client.db(TEST_CONFIG.dbName);
 

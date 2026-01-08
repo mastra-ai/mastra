@@ -21,6 +21,7 @@ npm install @mastra/mongodb
 import { MongoDBVector } from '@mastra/mongodb';
 
 const vectorDB = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'vector_db',
 });
@@ -62,6 +63,7 @@ await vectorDB.disconnect();
 import { MongoDBStore } from '@mastra/mongodb';
 
 const store = new MongoDBStore({
+  id: 'mongodb-store',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'mastra',
 });
@@ -100,6 +102,7 @@ const { messages } = await store.listMessages({ threadId: 'thread-123' });
 
 The MongoDB vector store is initialized with:
 
+- `id`: Unique identifier for this store instance
 - `uri`: MongoDB connection string (with credentials and options)
 - `dbName`: Name of the database to use
 
@@ -107,6 +110,7 @@ Example:
 
 ```typescript
 const vectorDB = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'vector_db',
 });

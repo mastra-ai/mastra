@@ -34,6 +34,7 @@ After generating embeddings, you need to store them in a database that supports 
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });

@@ -25,7 +25,8 @@ Ensure you have a MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instan
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 ```
@@ -148,7 +149,8 @@ MongoDB storage includes built-in vector search capabilities for AI applications
 import { MongoDBVector } from "@mastra/mongodb";
 
 const vectorStore = new MongoDBVector({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
