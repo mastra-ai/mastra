@@ -44,7 +44,7 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^4.3.19",
+    "ai": "^5.0.0",
     "eslint": "^9.37.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
