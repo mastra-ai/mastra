@@ -34,7 +34,6 @@ export class GoogleCloudPubSub extends PubSub {
   async init(topicName: string) {
     try {
       await this.pubsub.createTopic(topicName);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       // no-op
     }
@@ -45,7 +44,6 @@ export class GoogleCloudPubSub extends PubSub {
       });
       this.activeSubscriptions[topicName] = sub;
       return sub;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       // no-op
     }

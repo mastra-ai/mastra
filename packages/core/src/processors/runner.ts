@@ -10,7 +10,7 @@ import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
+import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ProcessorStepOutput } from './step-schema';
 import { isProcessorWorkflow } from './index';
@@ -31,7 +31,7 @@ import type {
  * Tracks state for stream processing across chunks.
  * Used by both legacy processors and workflow processors.
  */
-export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
+export class ProcessorState<OUTPUT = undefined> {
   private accumulatedText = '';
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
@@ -292,7 +292,7 @@ export class ProcessorRunner {
   /**
    * Process a stream part through all output processors with state management
    */
-  async processPart<OUTPUT extends OutputSchema>(
+  async processPart<OUTPUT>(
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
@@ -451,7 +451,7 @@ export class ProcessorRunner {
     }
   }
 
-  async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
+  async runOutputProcessorsForStream<OUTPUT = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {

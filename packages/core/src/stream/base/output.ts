@@ -22,13 +22,12 @@ import type {
 } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
-import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
 
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
  * This wraps the output to ensure properties maintain their context when destructured.
  */
-export function createDestructurableOutput<OUTPUT extends OutputSchema = undefined>(
+export function createDestructurableOutput<OUTPUT = undefined>(
   output: MastraModelOutput<OUTPUT>,
 ): MastraModelOutput<OUTPUT> {
   return new Proxy(output, {
@@ -47,7 +46,7 @@ export function createDestructurableOutput<OUTPUT extends OutputSchema = undefin
   }) as MastraModelOutput<OUTPUT>;
 }
 
-type PromiseResults<OUTPUT extends OutputSchema = undefined> = Pick<
+type PromiseResults<OUTPUT = undefined> = Pick<
   LLMStepResult<OUTPUT>,
   | 'text'
   | 'reasoning'
@@ -63,18 +62,18 @@ type PromiseResults<OUTPUT extends OutputSchema = undefined> = Pick<
   | 'request'
 > & {
   suspendPayload: any;
-  object: InferSchemaOutput<OUTPUT>;
+  object: OUTPUT;
   reasoningText: string | undefined;
   totalUsage: LLMStepResult<OUTPUT>['usage'];
   steps: LLMStepResult<OUTPUT>[];
   finishReason: LLMStepResult<OUTPUT>['finishReason'];
 };
 
-type DelayedPromises<OUTPUT extends OutputSchema = undefined> = {
+type DelayedPromises<OUTPUT = undefined> = {
   [K in keyof PromiseResults<OUTPUT>]: DelayedPromise<PromiseResults<OUTPUT>[K]>;
 };
 
-export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
@@ -110,7 +109,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
-  #bufferedObject: InferSchemaOutput<OUTPUT> | undefined;
+  #bufferedObject: OUTPUT | undefined;
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #bufferedSources: LLMStepResult<OUTPUT>['sources'] = [];
   #bufferedReasoning: LLMStepResult<OUTPUT>['reasoning'] = [];
@@ -712,7 +711,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   });
                 }
                 if (self.#delayedPromises.object.status.type !== 'resolved') {
-                  self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                  self.#delayedPromises.object.resolve(undefined as OUTPUT);
                 }
               }
 
@@ -817,7 +816,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         flush: () => {
           if (self.#delayedPromises.object.status.type === 'pending') {
             // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
-            self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+            self.#delayedPromises.object.resolve(undefined as OUTPUT);
           }
 
           // If stream ends in suspended state (e.g., tool-call-approval), resolve promises with partial results
@@ -1171,7 +1170,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    */
   get objectStream() {
     return this.#createEventedStream().pipeThrough(
-      new TransformStream<ChunkType<OUTPUT>, PartialSchemaOutput<OUTPUT>>({
+      new TransformStream<ChunkType<OUTPUT>, Partial<OUTPUT>>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
             controller.enqueue(chunk.object);
@@ -1184,11 +1183,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /**
    * Stream of individual array elements when output schema is an array type.
    */
-  get elementStream(): ReadableStream<InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never> {
+  get elementStream(): ReadableStream<OUTPUT extends Array<infer T> ? T : never> {
     let publishedElements = 0;
 
     return this.#createEventedStream().pipeThrough(
-      new TransformStream<ChunkType<OUTPUT>, InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never>({
+      new TransformStream<ChunkType<OUTPUT>, OUTPUT extends Array<infer T> ? T : never>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
             if (Array.isArray(chunk.object)) {
@@ -1248,7 +1247,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       !this.#options.structuredOutput?.schema &&
       this.#delayedPromises.object.status.type === 'pending'
     ) {
-      this.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+      this.#delayedPromises.object.resolve(undefined as OUTPUT);
     }
 
     return this.#getDelayedPromise(this.#delayedPromises.object);
