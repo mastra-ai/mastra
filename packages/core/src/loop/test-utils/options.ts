@@ -436,6 +436,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 {
                   "content": [
                     {
+                      "input": {
+                        "value": "value",
+                      },
                       "output": {
                         "type": "text",
                         "value": "result1",
@@ -1272,6 +1275,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               {
                 "content": [
                   {
+                    "input": {
+                      "value": "value",
+                    },
                     "output": {
                       "type": "text",
                       "value": "result1",
@@ -1671,13 +1677,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "messages": [
                 {
                   "content": {
+                    "content": "test-input",
+                    "experimental_attachments": undefined,
                     "format": 2,
+                    "metadata": undefined,
                     "parts": [
                       {
                         "text": "test-input",
                         "type": "text",
                       },
                     ],
+                    "reasoning": undefined,
+                    "toolInvocations": undefined,
                   },
                   "createdAt": 2024-01-01T00:00:00.000Z,
                   "id": "msg-1",
