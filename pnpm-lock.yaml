@@ -2397,8 +2397,8 @@ importers:
   packages/fastembed:
     dependencies:
       fastembed:
-        specifier: ^1.14.4
-        version: 1.14.4
+        specifier: ^2.1.0
+        version: 2.1.0
     devDependencies:
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -7878,8 +7878,16 @@ packages:
     resolution: {integrity: sha512-MKu7RTkEBp8tvn0ZhBIjQwC1CHA+q8rzTYXAVklOTJEo/SZwCewVL+IcEuj4CoA5DnJ1IhyjkBquxN2dFVnEHg==}
     engines: {node: '>=18'}
 
+  '@huggingface/hub@2.7.1':
+    resolution: {integrity: sha512-XzDVwF8ISi1R7JL+KP44ax4LbG/RhYRyfwaWTg/+zCaCDLTLpIW8LGDgBVQsuSkBBHiPdWp8PaNUGZ04yQCIOQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   '@huggingface/tasks@0.12.30':
     resolution: {integrity: sha512-A1ITdxbEzx9L8wKR8pF7swyrTLxWNDFIGDLUWInxvks2ruQ8PLRBZe8r0EcjC3CDdtlj9jV1V4cgV35K/iy3GQ==}
+
+  '@huggingface/tasks@0.19.75':
+    resolution: {integrity: sha512-yTz6Hs3KcalPhlzMAUtjEGO0W21e5s661LGm2U0vEJRn/sanLTgP2QWL0lL/IvrAh+Ybiz7iNIcYtJcVOuCndg==}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -13431,8 +13439,8 @@ packages:
     resolution: {integrity: sha512-pfX9uG9Ki0yekDHx2SiuRIyFdyAr1kMIMitPvb0YBo8SUfKvia7w7FIyd/l6av85pFYRhZscS75MwMnbvY+hcQ==}
     hasBin: true
 
-  fastembed@1.14.4:
-    resolution: {integrity: sha512-ZU9hpQRkYKPD/k0A6NzFe/Z9voSU3Saxve/1kLY9aS9iyUJYLJPI/3gsDgRA9uxwIMi8w7/tjH1lRW8K1N+wWA==}
+  fastembed@2.1.0:
+    resolution: {integrity: sha512-oQkpcRHBppJ3+a3w9dU0uytSY0N1cnEa/iVMc8AXEd+tvT529GekOEFhNviJy89R3lvQXF6cdIMTXHj1Gi00xQ==}
 
   fastify-plugin@5.1.0:
     resolution: {integrity: sha512-FAIDA8eovSt5qcDgcBvDuX/v0Cjz0ohGhENZ/wpc3y+oZCY2afZ9Baqql3g/lC+OHRnciQol4ww7tuthOb9idw==}
@@ -21508,7 +21516,15 @@ snapshots:
     dependencies:
       '@huggingface/tasks': 0.12.30
 
+  '@huggingface/hub@2.7.1':
+    dependencies:
+      '@huggingface/tasks': 0.19.75
+    optionalDependencies:
+      cli-progress: 3.12.0
+
   '@huggingface/tasks@0.12.30': {}
+
+  '@huggingface/tasks@0.19.75': {}
 
   '@humanfs/core@0.19.1': {}
 
@@ -28060,9 +28076,10 @@ snapshots:
     dependencies:
       strnum: 2.1.1
 
-  fastembed@1.14.4:
+  fastembed@2.1.0:
     dependencies:
       '@anush008/tokenizers': 0.0.0
+      '@huggingface/hub': 2.7.1
       onnxruntime-node: 1.21.0
       progress: 2.0.3
       tar: 6.2.1
