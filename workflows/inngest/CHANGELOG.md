@@ -1,5 +1,111 @@
 # @mastra/inngest
 
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Add support for `retries` and `scorers` parameters across all `createStep` overloads.
+  ([#11495](https://github.com/mastra-ai/mastra/pull/11495))
+
+  The `createStep` function now includes support for the `retries` and `scorers` fields across all step creation patterns, enabling step-level retry configuration and AI evaluation support for regular steps, agent-based steps, and tool-based steps.
+
+  ```typescript
+  import { init } from '@mastra/inngest';
+  import { z } from 'zod';
+
+  const { createStep } = init(inngest);
+
+  // 1. Regular step with retries
+  const regularStep = createStep({
+    id: 'api-call',
+    inputSchema: z.object({ url: z.string() }),
+    outputSchema: z.object({ data: z.any() }),
+    retries: 3, // ← Will retry up to 3 times on failure
+    execute: async ({ inputData }) => {
+      const response = await fetch(inputData.url);
+      return { data: await response.json() };
+    },
+  });
+
+  // 2. Agent step with retries and scorers
+  const agentStep = createStep(myAgent, {
+    retries: 3,
+    scorers: [{ id: 'accuracy-scorer', scorer: myAccuracyScorer }],
+  });
+
+  // 3. Tool step with retries and scorers
+  const toolStep = createStep(myTool, {
+    retries: 2,
+    scorers: [{ id: 'quality-scorer', scorer: myQualityScorer }],
+  });
+  ```
+
+  This change ensures API consistency across all `createStep` overloads. All step types now support retry and evaluation configurations.
+
+  This is a non-breaking change - steps without these parameters continue to work exactly as before.
+
+  Fixes #9351
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Unified `getWorkflowRunById` and `getWorkflowRunExecutionResult` into a single API that returns `WorkflowState` with both metadata and execution state. ([#11429](https://github.com/mastra-ai/mastra/pull/11429))
+
+  **What changed:**
+  - `getWorkflowRunById` now returns a unified `WorkflowState` object containing metadata (runId, workflowName, resourceId, createdAt, updatedAt) along with processed execution state (status, result, error, payload, steps)
+  - Added optional `fields` parameter to request only specific fields for better performance
+  - Added optional `withNestedWorkflows` parameter to control nested workflow step inclusion
+  - Removed `getWorkflowRunExecutionResult` - use `getWorkflowRunById` instead (breaking change)
+  - Removed `/execution-result` API endpoints from server (breaking change)
+  - Removed `runExecutionResult()` method from client SDK (breaking change)
+  - Removed `GetWorkflowRunExecutionResultResponse` type from client SDK (breaking change)
+
+  **Before:**
+
+  ```typescript
+  // Had to call two different methods for different data
+  const run = await workflow.getWorkflowRunById(runId); // Returns raw WorkflowRun with snapshot
+  const result = await workflow.getWorkflowRunExecutionResult(runId); // Returns processed execution state
+  ```
+
+  **After:**
+
+  ```typescript
+  // Single method returns everything
+  const run = await workflow.getWorkflowRunById(runId);
+  // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+
+  // Request only specific fields for better performance (avoids expensive step fetching)
+  const status = await workflow.getWorkflowRunById(runId, { fields: ['status'] });
+
+  // Skip nested workflow steps for faster response
+  const run = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+  ```
+
+  **Why:** The previous API required calling two separate methods to get complete workflow run information. This unification simplifies the API surface and gives users control over performance - fetching all steps (especially nested workflows) can be expensive, so the `fields` and `withNestedWorkflows` options let users request only what they need.
+
+- Add cron scheduling support to Inngest workflows. Workflows can now be automatically triggered on a schedule by adding a `cron` property along with optional `inputData` and `initialState`: ([#11518](https://github.com/mastra-ai/mastra/pull/11518))
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'scheduled-workflow',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ result: z.string() }),
+    steps: [step1],
+    cron: '0 0 * * *', // Run daily at midnight
+    inputData: { value: 'scheduled-run' }, // Optional inputData for the scheduled workflow run
+    initialState: { count: 0 }, // Optional initialState for the scheduled workflow run
+  });
+  ```
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+
 ## 1.0.0-beta.10
 
 ### Minor Changes
