@@ -12,12 +12,7 @@ npm install @mastra/observability
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import {
-  Observability,
-  DefaultExporter,
-  CloudExporter,
-  SensitiveDataFilter,
-} from '@mastra/observability';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
@@ -25,12 +20,10 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-app',
         exporters: [
-          new DefaultExporter(),   // Persists traces for Mastra Studio
-          new CloudExporter(),     // Sends to Mastra Cloud
+          new DefaultExporter(), // Persists traces for Mastra Studio
+          new CloudExporter(), // Sends to Mastra Cloud
         ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(),
-        ],
+        spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
   }),
@@ -40,7 +33,7 @@ export const mastra = new Mastra({
 ## Features
 
 - **Auto-instrumentation** - Traces agent runs, LLM calls, tool executions, and workflows
-- **Pluggable Exporters** - Built-in support for Studio and Cloud, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
+- **Pluggable Exporters** - Exporters for Studio and Cloud, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
 - **Sampling Strategies** - Always, ratio-based, or custom sampling
 - **Span Processors** - Transform or filter span data before export
 - **OpenTelemetry Compatible** - Standard trace/span ID formats for integration
