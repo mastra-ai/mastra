@@ -49,7 +49,7 @@
     "@types/express": "^5.0.0",
     "@types/koa": "^3.0.0",
     "@types/koa-bodyparser": "^4.3.13",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.3",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
@@ -62,7 +62,7 @@
     "inngest-cli": "^1.12.1",
     "koa": "^3.1.0",
     "koa-bodyparser": "^4.4.1",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

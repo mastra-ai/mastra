@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.3",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
@@ -95,7 +95,7 @@
   },
   "resolutions": {
     "typescript": "^5.9.3",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.3",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3",

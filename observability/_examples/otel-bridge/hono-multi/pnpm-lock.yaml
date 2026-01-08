@@ -20,10 +20,10 @@ importers:
         specifier: ^1.0.1
         version: 1.1.0(hono@4.11.3)
       '@types/node':
-        specifier: ^20.19.0
+        specifier: ^20.19.27
         version: 20.19.27
       dotenv:
-        specifier: ^17.2.0
+        specifier: ^17.2.3
         version: 17.2.3
       specifier-resolution-node:
         specifier: ^1.1.4
@@ -35,7 +35,7 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^2.0.0
+        specifier: ^2.1.9
         version: 2.1.9(@types/node@20.19.27)
 
   instrumentation:
@@ -105,7 +105,7 @@ importers:
         version: 1.38.0
     devDependencies:
       '@types/node':
-        specifier: ^20.19.0
+        specifier: ^20.19.27
         version: 20.19.27
       prettier:
         specifier: ^3.6.2
@@ -160,7 +160,7 @@ importers:
         version: 4.3.5
     devDependencies:
       '@types/node':
-        specifier: ^20.19.0
+        specifier: ^20.19.27
         version: 20.19.27
       mastra:
         specifier: link:../../../../../packages/cli
@@ -169,7 +169,7 @@ importers:
         specifier: ^3.6.2
         version: 3.7.4
       tsx:
-        specifier: ^4.19.2
+        specifier: ^4.21.0
         version: 4.21.0
       typescript:
         specifier: ^5.9.3
@@ -197,13 +197,13 @@ importers:
         version: 4.11.3
     devDependencies:
       '@types/node':
-        specifier: ^20.19.0
+        specifier: ^20.19.27
         version: 20.19.27
       prettier:
         specifier: ^3.6.2
         version: 3.7.4
       tsx:
-        specifier: ^4.19.2
+        specifier: ^4.21.0
         version: 4.21.0
       typescript:
         specifier: ^5.9.3
@@ -231,13 +231,13 @@ importers:
         version: 4.11.3
     devDependencies:
       '@types/node':
-        specifier: ^20.19.0
+        specifier: ^20.19.27
         version: 20.19.27
       prettier:
         specifier: ^3.6.2
         version: 3.7.4
       tsx:
-        specifier: ^4.19.2
+        specifier: ^4.21.0
         version: 4.21.0
       typescript:
         specifier: ^5.9.3

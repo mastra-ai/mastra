@@ -40,7 +40,7 @@
     "@observability/test-utils": "workspace:*",
     "@types/node": "^20.19.0",
     "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
