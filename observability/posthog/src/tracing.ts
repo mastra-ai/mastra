@@ -64,7 +64,9 @@ interface MastraContent {
 type SpanData = string | MastraMessage[] | Record<string, unknown> | unknown;
 
 export interface PosthogExporterConfig extends BaseExporterConfig {
-  apiKey: string;
+  /** PostHog API key. Defaults to POSTHOG_API_KEY environment variable. */
+  apiKey?: string;
+  /** PostHog host URL. Defaults to POSTHOG_HOST environment variable or US region. */
   host?: string;
   flushAt?: number;
   flushInterval?: number;
@@ -86,7 +88,7 @@ type TraceMetadata = {
 
 export class PosthogExporter extends BaseExporter {
   name = 'posthog';
-  private client: PostHog;
+  private client: PostHog | null;
   private config: PosthogExporterConfig;
   private traceMap = new Map<string, TraceMetadata>();
 
@@ -95,18 +97,22 @@ export class PosthogExporter extends BaseExporter {
   private static readonly DEFAULT_FLUSH_AT = 20;
   private static readonly DEFAULT_FLUSH_INTERVAL = 10000;
 
-  constructor(config: PosthogExporterConfig) {
+  constructor(config: PosthogExporterConfig = {}) {
     super(config);
-    this.config = config;
 
-    if (!config.apiKey) {
-      this.setDisabled('Missing required API key');
-      this.client = null as any;
+    // Read API key from config or environment variable
+    const apiKey = config.apiKey ?? process.env.POSTHOG_API_KEY;
+
+    if (!apiKey) {
+      this.setDisabled('Missing required API key. Set POSTHOG_API_KEY environment variable or pass apiKey in config.');
+      this.client = null;
+      this.config = config;
       return;
     }
 
-    const clientConfig = this.buildClientConfig(config);
-    this.client = new PostHog(config.apiKey, clientConfig);
+    this.config = { ...config, apiKey };
+    const clientConfig = this.buildClientConfig(this.config);
+    this.client = new PostHog(apiKey, clientConfig);
     this.logInitialization(config.serverless ?? false, clientConfig);
   }
 
@@ -227,7 +233,7 @@ export class PosthogExporter extends BaseExporter {
       const parentIsRootSpan = this.isParentRootSpan(span, traceData);
       const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
 
-      this.client.capture({
+      this.client?.capture({
         distinctId,
         event: eventName,
         properties,
@@ -286,7 +292,7 @@ export class PosthogExporter extends BaseExporter {
     const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
     Object.assign(traceProperties, customMetadata);
 
-    this.client.capture({
+    this.client?.capture({
       distinctId,
       event: '$ai_trace',
       properties: traceProperties,
@@ -301,7 +307,7 @@ export class PosthogExporter extends BaseExporter {
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0);
 
-    this.client.capture({
+    this.client?.capture({
       distinctId,
       event: eventName,
       properties,
