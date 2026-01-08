@@ -186,7 +186,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (callbackArg.status !== 'paused') {
       // Invoke lifecycle callbacks before returning
       await this.invokeLifecycleCallbacks({
-        ...callbackArg,
+        status: callbackArg.status,
+        result: callbackArg.result,
+        error: callbackArg.error,
+        steps: callbackArg.steps,
+        tripwire: undefined,
         runId: params.runId,
         workflowId: params.workflowId,
         resourceId: undefined,

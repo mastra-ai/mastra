@@ -633,7 +633,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         if (lastOutput.result.status !== 'paused') {
           // Invoke lifecycle callbacks before returning
           await this.invokeLifecycleCallbacks({
-            ...result,
+            status: result.status,
+            result: result.result,
+            error: result.error,
+            steps: result.steps,
+            tripwire: result.tripwire,
             runId,
             workflowId,
             resourceId,
@@ -714,7 +718,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     await this.invokeLifecycleCallbacks({
-      ...result,
+      status: result.status,
+      result: result.result,
+      error: result.error,
+      steps: result.steps,
+      tripwire: result.tripwire,
       runId,
       workflowId,
       resourceId,

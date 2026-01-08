@@ -278,13 +278,17 @@ export class InngestWorkflow<
             // Use invokeLifecycleCallbacksInternal to call the real implementation
             // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
             await engine.invokeLifecycleCallbacksInternal({
-              ...(result as any),
+              status: result.status,
+              result: 'result' in result ? result.result : undefined,
+              error: 'error' in result ? result.error : undefined,
+              steps: result.steps,
+              tripwire: 'tripwire' in result ? result.tripwire : undefined,
               runId,
               workflowId: this.id,
               resourceId,
               input: inputData,
               requestContext,
-              state: (result as any).state ?? initialState ?? {},
+              state: result.state ?? initialState ?? {},
             });
           }
 
