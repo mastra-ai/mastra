@@ -2468,19 +2468,20 @@ export class Run<
   protected async _validateInitialState(initialState: z.input<TState>) {
     let initialStateToUse = initialState;
     if (this.validateInputs) {
-      let inputSchema: z.ZodType<any> | undefined = this.stateSchema;
+      let stateSchema: z.ZodType<any> | undefined = this.stateSchema;
 
-      if (inputSchema) {
-        const validatedInputData = await inputSchema.safeParseAsync(initialState);
+      if (stateSchema) {
+        const validatedInitialState = await stateSchema.safeParseAsync(initialState);
 
-        if (!validatedInputData.success) {
-          const errors = getZodErrors(validatedInputData.error);
+        if (!validatedInitialState.success) {
+          const errors = getZodErrors(validatedInitialState.error);
           throw new Error(
-            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+            'Invalid initial state: \n' +
+              errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
           );
         }
 
-        initialStateToUse = validatedInputData.data;
+        initialStateToUse = validatedInitialState.data;
       }
     }
 

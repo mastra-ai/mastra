@@ -29,8 +29,8 @@ importers:
         specifier: ^5.3.0
         version: 5.4.1
       dotenv:
-        specifier: ^16.4.7
-        version: 16.5.0
+        specifier: ^17.2.3
+        version: 17.2.3
       ora:
         specifier: ^9.0.0
         version: 9.0.0
@@ -236,8 +236,8 @@ packages:
     resolution: {integrity: sha512-/+40ljC3ONVnYIttjMWrlL51nItDAbBrq2upN8BPyvGU/2n5Oxw3tbNwORCaNuNqLJnxGqOfjUuhsv7l5Q4IsQ==}
     engines: {node: '>=18.20'}
 
-  dotenv@16.5.0:
-    resolution: {integrity: sha512-m/C+AwOAr9/W1UOIZUo232ejMNnJAJtYQjUbHoNTBNTJSvqzzDh7vnrei3o3r3m9blf6ZoDkvcw0VmozNRFJxg==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   esbuild@0.25.5:
@@ -445,7 +445,7 @@ snapshots:
 
   cli-spinners@3.3.0: {}
 
-  dotenv@16.5.0: {}
+  dotenv@17.2.3: {}
 
   esbuild@0.25.5:
     optionalDependencies:
