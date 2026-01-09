@@ -24,7 +24,6 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -129,7 +128,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
+export type StreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;

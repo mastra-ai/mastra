@@ -1,11 +1,5 @@
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type {
-  PartialSchemaOutput,
-  OutputSchema,
-  DataChunkType,
-  ChunkType,
-  MastraFinishReason,
-} from '@mastra/core/stream';
+import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
 
 import type {
   InferUIMessageChunk,
@@ -30,9 +24,9 @@ export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
   return reason;
 }
 
-export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
+export type OutputChunkType<OUTPUT = undefined> =
   | TextStreamPart<ToolSet>
-  | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | ObjectStreamPart<Partial<OUTPUT>>
   | DataChunkType
   | undefined;
 
@@ -40,7 +34,7 @@ export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; paylo
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
-export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
+export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,
   mode = 'stream',
 }: {

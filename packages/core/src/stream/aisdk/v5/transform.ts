@@ -7,7 +7,6 @@ import type {
 import type { LanguageModelV3FinishReason, LanguageModelV3Usage } from '@ai-sdk/provider-v6';
 import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
-import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
@@ -254,12 +253,12 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   return;
 }
 
-export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
+export type OutputChunkType<OUTPUT = undefined> =
   | TextStreamPart<ToolSet>
-  | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | ObjectStreamPart<Partial<OUTPUT>>
   | undefined;
 
-export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
+export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,
   mode = 'stream',
 }: {

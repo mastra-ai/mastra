@@ -23,7 +23,6 @@ import type { Processor } from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
-import type { OutputSchema } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -68,7 +67,7 @@ import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
-export type AgentStepOptions<TOutput extends OutputSchema = undefined> = Omit<
+export type AgentStepOptions<TOutput = undefined> = Omit<
   AgentExecutionOptions<TOutput> & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
