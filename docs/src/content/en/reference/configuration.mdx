@@ -430,7 +430,8 @@ export const mastra = new Mastra({
 
 ### bundler.externals
 
-**Type:** `boolean | string[]`
+**Type:** `boolean | string[]`  
+**Default:** `true`
 
 When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
 
@@ -471,7 +472,8 @@ export const mastra = new Mastra({
 
 ### bundler.transpilePackages
 
-**Type:** `string[]`
+**Type:** `string[]`  
+**Default:** `[]`
 
 List of packages whose source code should be transpiled through esbuild during the build process. Use this for dependencies that contain TypeScript or other code that needs compilation before bundling.
 
