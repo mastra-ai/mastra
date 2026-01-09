@@ -170,7 +170,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
         if (result.success) {
           return {
             success: true,
-            value: result.data as OUTPUT,
+            value: result.data,
           };
         } else {
           return {
