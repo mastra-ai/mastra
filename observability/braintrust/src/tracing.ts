@@ -685,11 +685,21 @@ export class BraintrustExporter extends BaseExporter {
 
   /**
    * Transforms MODEL_GENERATION output to Braintrust Thread view format.
+   * If output contains a messages array (with tool calls and results), returns it as an array in OpenAI format.
+   * Otherwise, returns a single assistant message.
    */
   private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
-      const { text, ...rest } = output;
-      return { role: 'assistant', content: text, ...rest };
+      // If output has a messages array, convert to OpenAI format and return as array
+      // This enables the thread view to show tool calls and intermediate steps
+      // @see https://github.com/mastra-ai/mastra/issues/11735
+      if (output && Array.isArray(output.messages) && output.messages.length > 0) {
+        return output.messages.map((msg: any) => this.convertAISDKMessage(msg));
+      }
+
+      // Fallback: return single assistant message
+      const { text } = output || {};
+      return { role: 'assistant', content: text || '' };
     }
 
     return output;
