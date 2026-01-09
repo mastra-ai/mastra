@@ -204,3 +204,24 @@ You should now be able to chat with your agent in the browser.
 </Steps>
 
 Congratulations! You have successfully integrated Mastra with CopilotKit using a separate server approach. Your CopilotKit frontend now communicates with a standalone Mastra agent server.
+
+## Deployment
+
+When deploying your Mastra server with CopilotKit, you must exclude `@copilotkit/runtime` from the bundle. This package contains dependencies that are not compatible with bundling and will cause 500 errors if included.
+
+:::note
+
+This issue doesn't occur during development with `mastra dev` since it doesn't require bundling. However, anyone running `mastra build` for deployment will encounter this issue.
+
+:::
+
+Add the `@copilotkit/runtime` package to your bundler externals configuration:
+
+```typescript title="src/mastra/index.ts" 
+export const mastra = new Mastra({
+  bundler: {
+    externals: ['@copilotkit/runtime'],
+  },
+ // Rest of the configuration...
+});
+```
