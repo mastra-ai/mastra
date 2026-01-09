@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Slider } from '@/components/ui/slider';
 
 import { Label } from '@/components/ui/label';
@@ -20,34 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cleanProviderId } from './agent-metadata/utils';
-
-/**
- * Check if the model is a newer Claude model (4.5+) that doesn't allow
- * both temperature and top_p to be specified simultaneously.
- * See: https://github.com/mastra-ai/mastra/issues/11760
- */
-function isAnthropicModelWithSamplingRestriction(provider?: string, modelId?: string): boolean {
-  if (!provider) return false;
-  const cleanProvider = cleanProviderId(provider).toLowerCase();
-  if (cleanProvider !== 'anthropic') return false;
-
-  // Claude 4.5+ models have the restriction
-  // Model IDs like: claude-sonnet-4-5, claude-haiku-4-5, claude-4-5-sonnet, etc.
-  if (!modelId) return true; // Default to restricted for anthropic if no modelId
-  const lowerModelId = modelId.toLowerCase();
-
-  // Check for version 4.5+ patterns specifically
-  // Must match version 4.5 or higher (4-5, 4.5, 5-0, 5.0, etc.)
-  // But NOT match 3-5 or 3.5 (Claude 3.5 Sonnet, etc.)
-  // Patterns: claude-*-4-5, claude-haiku-4-5, claude-sonnet-4-5, claude-opus-4-5
-  // Also future versions: 5-0, 5-5, 6-0, etc.
-  const is45OrNewer =
-    /[^0-9]4[.-]5/.test(lowerModelId) || // Matches 4-5 or 4.5 but not 34-5
-    /[^0-9][5-9][.-]\d/.test(lowerModelId); // Matches 5-0, 6-0, etc. for future versions
-
-  return is45OrNewer;
-}
+import { isAnthropicModelWithSamplingRestriction } from '../utils/model-restrictions';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -98,20 +71,29 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   // Check if this model has the temperature/topP mutual exclusion restriction
   const hasSamplingRestriction = isAnthropicModelWithSamplingRestriction(agent?.provider, agent?.modelId);
 
+  // Track whether we've already cleared topP for the current agent/model to avoid infinite loops
+  const clearedTopPRef = useRef<string | null>(null);
+
   // For models with sampling restriction, auto-clear topP if both values are set
   // This handles users who have both values from localStorage or defaults
   useEffect(() => {
-    if (
-      hasSamplingRestriction &&
-      settings?.modelSettings?.temperature !== undefined &&
-      settings?.modelSettings?.topP !== undefined
-    ) {
+    const agentModelKey = `${agent?.provider}-${agent?.modelId}`;
+
+    // Reset tracking when switching to a non-restricted model
+    if (!hasSamplingRestriction) {
+      clearedTopPRef.current = null;
+      return;
+    }
+
+    // Only clear topP once per agent/model combination when topP is defined
+    if (settings?.modelSettings?.topP !== undefined && clearedTopPRef.current !== agentModelKey) {
+      clearedTopPRef.current = agentModelKey;
       setSettings({
         ...settings,
         modelSettings: { ...settings.modelSettings, topP: undefined },
       });
     }
-  }, [hasSamplingRestriction, agent?.provider, agent?.modelId]);
+  }, [hasSamplingRestriction, agent?.provider, agent?.modelId, settings, setSettings]);
 
   if (isLoading || isMemoryLoading) {
     return <Skeleton className="h-full" />;

@@ -19,6 +19,8 @@ const localStorageMock = (() => {
 
 Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
+import { isAnthropicModelWithSamplingRestriction } from '../../utils/model-restrictions';
+
 /**
  * Test file for use-agent-settings-state.ts
  *
@@ -46,25 +48,6 @@ describe('use-agent-settings-state defaults', () => {
     expect(modelSettings.topP).toBe(1);
   });
 });
-
-// Inline the function for testing (since it's not exported from agent-settings.tsx)
-function isAnthropicModelWithSamplingRestriction(provider?: string, modelId?: string): boolean {
-  if (!provider) return false;
-  const cleanProvider = provider.includes('.') ? provider.split('.')[0] : provider;
-  if (cleanProvider.toLowerCase() !== 'anthropic') return false;
-
-  if (!modelId) return true;
-  const lowerModelId = modelId.toLowerCase();
-
-  // Check for version 4.5+ patterns specifically
-  // Must match version 4.5 or higher (4-5, 4.5, 5-0, 5.0, etc.)
-  // But NOT match 3-5 or 3.5 (Claude 3.5 Sonnet, etc.)
-  const is45OrNewer =
-    /[^0-9]4[.-]5/.test(lowerModelId) || // Matches 4-5 or 4.5 but not 34-5
-    /[^0-9][5-9][.-]\d/.test(lowerModelId); // Matches 5-0, 6-0, etc. for future versions
-
-  return is45OrNewer;
-}
 
 describe('isAnthropicModelWithSamplingRestriction', () => {
   it('should return false for non-Anthropic providers', () => {
