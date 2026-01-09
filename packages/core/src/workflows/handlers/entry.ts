@@ -184,7 +184,7 @@ export async function executeEntry(
         workflowId,
         runId,
         executionPath: [...executionContext.executionPath, idx!],
-        stepExecutionPath: executionContext.stepExecutionPath,
+        stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
         suspendedPaths: executionContext.suspendedPaths,
         resumeLabels: executionContext.resumeLabels,
         retryConfig: executionContext.retryConfig,
