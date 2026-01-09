@@ -1,5 +1,41 @@
 # @mastra/otel-exporter
 
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- feat(observability): add zero-config environment variable support for all exporters ([#11686](https://github.com/mastra-ai/mastra/pull/11686))
+
+  All observability exporters now support zero-config setup via environment variables. Set the appropriate environment variables and instantiate exporters with no configuration:
+  - **Langfuse**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`
+  - **Braintrust**: `BRAINTRUST_API_KEY`, `BRAINTRUST_ENDPOINT`
+  - **PostHog**: `POSTHOG_API_KEY`, `POSTHOG_HOST`
+  - **Arize/Phoenix**: `ARIZE_SPACE_ID`, `ARIZE_API_KEY`, `ARIZE_PROJECT_NAME`, `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`, `PHOENIX_PROJECT_NAME`
+  - **OTEL Providers**:
+    - Dash0: `DASH0_API_KEY`, `DASH0_ENDPOINT`, `DASH0_DATASET`
+    - SigNoz: `SIGNOZ_API_KEY`, `SIGNOZ_REGION`, `SIGNOZ_ENDPOINT`
+    - New Relic: `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_ENDPOINT`
+    - Traceloop: `TRACELOOP_API_KEY`, `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT`
+    - Laminar: `LMNR_PROJECT_API_KEY`, `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID`
+
+  Example usage:
+
+  ```typescript
+  // Zero-config - reads from environment variables
+  new LangfuseExporter();
+  new BraintrustExporter();
+  new PosthogExporter();
+  new ArizeExporter();
+  new OtelExporter({ provider: { signoz: {} } });
+  ```
+
+  Explicit configuration still works and takes precedence over environment variables.
+
+### Patch Changes
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
 ## 1.0.0-beta.11
 
 ### Patch Changes
