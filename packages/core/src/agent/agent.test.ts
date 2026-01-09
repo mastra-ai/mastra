@@ -1763,6 +1763,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // The initial title ("New Chat") doesn't matter - generateTitle option wins
       // After generation, the titleGenerated flag is set to prevent future regeneration
       expect(titleGenerationCallCount).toBe(1);
+      expect(agentCallCount).toBe(1); // Main agent should still be called
       expect(updatedThreadTitle).toBe('Help with coding project');
       expect(updatedMetadata.titleGenerated).toBe(true);
     });
