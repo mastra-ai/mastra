@@ -2931,17 +2931,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
         // Generate title if needed
         // Note: Message saving is now handled by MessageHistory output processor
-        if (thread.title?.startsWith('New Thread')) {
-          const config = memory.getMergedThreadConfig(memoryConfig);
+        // Use titleGenerated metadata flag to track if title has been generated
+        // This supports pre-created threads (via client SDK) that may have custom titles
+        const config = memory.getMergedThreadConfig(memoryConfig);
+        const {
+          shouldGenerate,
+          model: titleModel,
+          instructions: titleInstructions,
+        } = this.resolveTitleGenerationConfig(config.generateTitle);
+
+        const titleAlreadyGenerated = thread.metadata?.titleGenerated === true;
+
+        if (shouldGenerate && !titleAlreadyGenerated) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
-
-          const {
-            shouldGenerate,
-            model: titleModel,
-            instructions: titleInstructions,
-          } = this.resolveTitleGenerationConfig(config.generateTitle);
-
-          if (shouldGenerate && userMessage) {
+          if (userMessage) {
             const title = await this.genTitle(
               userMessage,
               requestContext,
@@ -2955,7 +2958,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 resourceId,
                 memoryConfig,
                 title,
-                metadata: thread.metadata,
+                metadata: { ...thread.metadata, titleGenerated: true },
               });
             }
           }

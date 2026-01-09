@@ -508,33 +508,35 @@ export class AgentLegacyHandler {
             const promises: Promise<any>[] = [];
 
             // Add title generation to promises if needed
-            if (thread.title?.startsWith('New Thread')) {
-              const config = memory.getMergedThreadConfig(memoryConfig);
-              const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
+            // Use titleGenerated metadata flag to track if title has been generated
+            // This supports pre-created threads (via client SDK) that may have custom titles
+            const config = memory.getMergedThreadConfig(memoryConfig);
+            const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
-              const {
-                shouldGenerate,
-                model: titleModel,
-                instructions: titleInstructions,
-              } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
+            const {
+              shouldGenerate,
+              model: titleModel,
+              instructions: titleInstructions,
+            } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-              if (shouldGenerate && userMessage) {
-                promises.push(
-                  this.capabilities
-                    .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
-                    .then(title => {
-                      if (title) {
-                        return memory.createThread({
-                          threadId: thread.id,
-                          resourceId,
-                          memoryConfig,
-                          title,
-                          metadata: thread.metadata,
-                        });
-                      }
-                    }),
-                );
-              }
+            const titleAlreadyGenerated = thread.metadata?.titleGenerated === true;
+
+            if (shouldGenerate && !titleAlreadyGenerated && userMessage) {
+              promises.push(
+                this.capabilities
+                  .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
+                  .then(title => {
+                    if (title) {
+                      return memory.createThread({
+                        threadId: thread.id,
+                        resourceId,
+                        memoryConfig,
+                        title,
+                        metadata: { ...thread.metadata, titleGenerated: true },
+                      });
+                    }
+                  }),
+              );
             }
 
             if (promises.length > 0) {

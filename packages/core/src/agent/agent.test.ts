@@ -1627,6 +1627,140 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
+    it('should generate title for pre-created thread with custom title (issue #11757)', async () => {
+      // This test validates that generateTitle works for pre-created threads
+      // When threads are created via client SDK before the first message (common for URL routing),
+      // title generation should still trigger based on the titleGenerated metadata flag
+      // See: https://github.com/mastra-ai/mastra/issues/11757
+      let titleGenerationCallCount = 0;
+      let agentCallCount = 0;
+      let updatedThreadTitle = '';
+
+      const mockMemory = new MockMemory();
+
+      // Pre-create the thread with a CUSTOM title (simulating client SDK pre-creation)
+      // This is a common pattern: apps create threads before the first message for URL routing
+      const customTitle = 'New Chat'; // Custom title without titleGenerated metadata flag
+      const threadId = 'pre-created-thread-custom-title';
+      await mockMemory.saveThread({
+        thread: {
+          id: threadId,
+          title: customTitle,
+          resourceId: 'user-123',
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        },
+      });
+
+      // Override getMergedThreadConfig to return generateTitle: true
+      mockMemory.getMergedThreadConfig = () => {
+        return {
+          generateTitle: true,
+        };
+      };
+
+      // Track when createThread is called to update title
+      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
+      mockMemory.createThread = async (params: any) => {
+        if (params.title && params.title !== customTitle) {
+          updatedThreadTitle = params.title;
+        }
+        return originalCreateThread(params);
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Help with coding project',
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Agent Response',
+              };
+            }
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Help with coding project',
+                content: [{ type: 'text', text: 'Help with coding project' }],
+                warnings: [],
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: 'Agent Response',
+                content: [{ type: 'text', text: 'Agent Response' }],
+                warnings: [],
+              };
+            }
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'pre-created-thread-agent',
+        name: 'Pre-created Thread Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      // Send first message to the pre-created thread
+      if (version === 'v1') {
+        await agent.generateLegacy('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId, // Use existing thread ID (not object with title)
+          },
+        });
+      } else {
+        await agent.generate('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId, // Use existing thread ID (not object with title)
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Title generation should trigger because:
+      // 1. generateTitle: true is configured
+      // 2. Thread doesn't have titleGenerated metadata flag set
+      // The fix uses metadata flag instead of checking if title starts with "New Thread"
+      expect(titleGenerationCallCount).toBe(1);
+      expect(updatedThreadTitle).toBe('Help with coding project');
+    });
+
     it('should handle errors in title generation gracefully', async () => {
       const mockMemory = new MockMemory();
 
