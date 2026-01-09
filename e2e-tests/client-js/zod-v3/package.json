@@ -2,6 +2,7 @@
   "name": "client-js-e2e-tests-zod-v3",
   "version": "1.0.0",
   "type": "module",
+  "private": true,
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"

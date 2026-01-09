@@ -44,7 +44,10 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
 
       // Reset storage to start fresh
       try {
-        await fetch(`${baseUrl}/e2e/reset-storage`, { method: 'POST' });
+        const res = await fetch(`${baseUrl}/e2e/reset-storage`, { method: 'POST' });
+        if (!res.ok) {
+          throw new Error(`reset-storage failed: ${res.status} ${res.statusText}`);
+        }
       } catch (e) {
         console.warn('Could not reset storage, continuing anyway:', e);
       }
@@ -73,6 +76,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
         expect(response.pagination).toBeDefined();
       });
 
@@ -83,6 +87,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
 
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
+        expect(response.spans.length).toBeGreaterThan(0);
         expect(response.pagination).toBeDefined();
         expect(response.pagination.perPage).toBe(5);
       });
@@ -97,6 +102,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
 
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
+        expect(response.spans.length).toBeGreaterThan(0);
         expect(Array.isArray(response.spans)).toBe(true);
 
         // All returned spans should have entityType 'agent'
@@ -108,7 +114,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
       it('should list traces filtered by entityId', async () => {
         const response = await client.listTraces({
           filters: {
-            entityId: 'testAgent',
+            entityId: agentName,
           },
           pagination: { page: 0, perPage: 10 },
         });
@@ -116,10 +122,11 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
 
         // All returned spans should have entityId 'testAgent'
         for (const span of response.spans) {
-          expect(span.entityId).toBe('testAgent');
+          expect(span.entityId).toBe(agentName);
         }
       });
 
@@ -127,7 +134,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         const response = await client.listTraces({
           filters: {
             entityType: EntityType.AGENT,
-            entityId: 'testAgent',
+            entityId: agentName,
           },
           pagination: { page: 0, perPage: 10 },
         });
@@ -135,11 +142,12 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
 
         // All returned spans should match both filters
         for (const span of response.spans) {
           expect(span.entityType).toBe(EntityType.AGENT);
-          expect(span.entityId).toBe('testAgent');
+          expect(span.entityId).toBe(agentName);
         }
       });
 
@@ -159,6 +167,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
 
         // All returned spans should have startedAt >= oneHourAgo
         for (const span of response.spans) {
@@ -183,6 +192,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
 
         // All returned spans should have startedAt within the range
         for (const span of response.spans) {
@@ -207,6 +217,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
       });
 
       it('should list traces with combined filters (entityType + startedAt)', async () => {
@@ -225,6 +236,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
 
         // All returned spans should match both filters
         for (const span of response.spans) {
@@ -245,6 +257,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
 
         // Verify descending order
         for (let i = 1; i < response.spans.length; i++) {
@@ -263,6 +276,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
+        expect(response.spans.length).toBeGreaterThan(0);
       });
     });
 
@@ -272,27 +286,21 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         const listResponse = await client.listTraces({
           pagination: { page: 0, perPage: 1 },
         });
-
         if (listResponse.spans.length === 0) {
-          console.warn('No traces available for getTrace test');
-          return;
+          throw new Error('No traces available for getTrace test (setup likely failed)');
         }
-
         const traceId = listResponse.spans[0].traceId;
         const response = await client.getTrace(traceId);
-
         expect(response).toBeDefined();
         expect(response.traceId).toBe(traceId);
         expect(response.spans).toBeDefined();
         expect(Array.isArray(response.spans)).toBe(true);
         expect(response.spans.length).toBeGreaterThan(0);
-
         // All spans should belong to the same trace
         for (const span of response.spans) {
           expect(span.traceId).toBe(traceId);
         }
       });
-
       it('should return 404 for non-existent trace', async () => {
         await expect(client.getTrace('non-existent-trace-id-12345')).rejects.toThrow();
       });

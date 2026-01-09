@@ -6,28 +6,6 @@ import { Hono } from 'hono';
 import getPort from 'get-port';
 
 /**
- * Configuration for the test server setup
- */
-export interface ServerSetupConfig {
-  /**
-   * Create the Mastra instance for the test server.
-   * This allows different test configurations to use different setups.
-   */
-  createMastra: () => Mastra | Promise<Mastra>;
-
-  /**
-   * Create the HTTP server with the Mastra instance.
-   * Returns a tuple of [server, baseUrl].
-   */
-  createServer: (mastra: Mastra, port: number) => Promise<[Server, string]>;
-
-  /**
-   * Optional callback after server starts
-   */
-  onServerReady?: (baseUrl: string, mastra: Mastra) => Promise<void>;
-}
-
-/**
  * Configuration for the test server setup factory
  */
 export interface TestServerSetupConfig {
@@ -53,7 +31,7 @@ export async function waitForServer(baseUrl: string, maxAttempts = 30): Promise<
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  throw new Error(`Server did not start within ${maxAttempts * 500}ms`);
+  throw new Error(`Server at ${baseUrl}/api/agents did not respond within ${maxAttempts * 500}ms`);
 }
 
 /**
