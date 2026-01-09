@@ -24,7 +24,8 @@ export class TokenCounter {
    */
   countString(text: string): number {
     if (!text) return 0;
-    return this.encoder.encode(text).length;
+    // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
+    return this.encoder.encode(text, 'all').length;
   }
 
   /**
@@ -81,7 +82,8 @@ export class TokenCounter {
       overhead += toolResultCount * TokenCounter.TOKENS_PER_MESSAGE;
     }
 
-    return this.encoder.encode(tokenString).length + overhead;
+    // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
+    return this.encoder.encode(tokenString, 'all').length + overhead;
   }
 
   /**

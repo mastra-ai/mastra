@@ -18,6 +18,7 @@ import { ObscureThreadIdsCommand } from './commands/obscure-thread-ids';
 import { SessionsCommand } from './commands/sessions';
 import { DeterministicIdsCommand } from './commands/deterministic-ids';
 import { ListPartialCommand } from './commands/list-partial';
+import { TokensCommand } from './commands/tokens';
 
 const program = new Command();
 
@@ -852,6 +853,35 @@ program
         preparedDataDir: options.preparedDataDir,
       });
       await command.run();
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// Tokens command - estimate token counts for questions
+program
+  .command('tokens')
+  .description('Estimate token counts for LongMemEval questions')
+  .requiredOption('-d, --dataset <dataset>', 'Dataset to use (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .option('-q, --question-id <id>', 'Analyze a specific question by ID')
+  .option('-o, --offset <n>', 'Skip first n questions', parseInt)
+  .option('-s, --subset <n>', 'Analyze only n questions (after offset)', parseInt)
+  .option('-p, --prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
+  .option('--sessions', 'Show per-session breakdown')
+  .option('--top <n>', 'Show top N largest questions in aggregate view', parseInt)
+  .action(async options => {
+    try {
+      const tokensCommand = new TokensCommand();
+      await tokensCommand.run({
+        dataset: options.dataset,
+        questionId: options.questionId,
+        offset: options.offset,
+        subset: options.subset,
+        preparedDataDir: options.preparedData,
+        showSessions: options.sessions,
+        topN: options.top,
+      });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
       process.exit(1);
