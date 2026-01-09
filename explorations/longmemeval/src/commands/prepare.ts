@@ -21,7 +21,7 @@ import { makeRetryModel } from '../retry-model';
 import { google } from '@ai-sdk/google';
 import { makeDeterministicIds } from './deterministic-ids';
 
-const retry4o = makeRetryModel(google('gemini-2.5-flash'));
+const geminiFlash = makeRetryModel(google('gemini-2.5-flash'));
 
 export interface PrepareOptions {
   dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
@@ -115,7 +115,7 @@ export class PrepareCommand {
     }
 
     const model = needsRealModel
-      ? retry4o.model
+      ? geminiFlash.model
       : new MockLanguageModelV1({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -170,9 +170,9 @@ export class PrepareCommand {
         progressText += `\nEmbedding cache: ${embeddingCacheStats.cacheHits} hits, ${embeddingCacheStats.cacheMisses} misses (${(hitRate * 100).toFixed(1)}% hit rate)`;
       }
 
-      progressText += `\nRate limit count: ${retry4o.state.rateLimitCount}`;
-      if (retry4o.state.pauseTime > 0 && retry4o.state.pause)
-        progressText += ` (paused, waiting for ${retry4o.state.pauseTime}ms)`;
+      progressText += `\nRate limit count: ${geminiFlash.state.rateLimitCount}`;
+      if (geminiFlash.state.pauseTime > 0 && geminiFlash.state.pause)
+        progressText += ` (paused, waiting for ${geminiFlash.state.pauseTime}ms)`;
 
       if (activeQuestions.size > 0) {
         progressText += '\n\nActive questions:';
