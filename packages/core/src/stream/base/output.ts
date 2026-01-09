@@ -12,7 +12,6 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
-import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import type {
   ChunkType,
   LanguageModelUsage,
