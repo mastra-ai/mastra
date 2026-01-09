@@ -860,7 +860,12 @@ export async function createNetworkLoop({
             wflowStep = wflowStep.steps[key] as any;
           }
         }
-        resumeSchema = JSON.stringify(zodToJsonSchema((wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema));
+        const wflowStepSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
+        if (wflowStepSchema) {
+          resumeSchema = JSON.stringify(zodToJsonSchema(wflowStepSchema));
+        } else {
+          resumeSchema = '';
+        }
       }
 
       const finalResult = JSON.stringify({
@@ -1592,9 +1597,10 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         if (requireApprovalMetadata || suspendedTools) {
           const suspendedToolsArr = Object.values({ ...suspendedTools, ...requireApprovalMetadata });
           const firstSuspendedTool = suspendedToolsArr[0]; //only one primitive/tool gets suspended at a time, so there'll only be one item
-          try {
-            const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
-            const systemInstructions = `
+          if (firstSuspendedTool.resumeSchema) {
+            try {
+              const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
+              const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
             Your job is to construct the resumeData for the tool call using the messages available to you and the schema passed.
             You will generate an object that matches this schema: ${firstSuspendedTool.resumeSchema}.
@@ -1604,32 +1610,33 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
               "resumeData": "string"
             }
           `;
-            const messageList = new MessageList();
+              const messageList = new MessageList();
 
-            messageList.addSystem(systemInstructions);
-            messageList.add(task, 'user');
+              messageList.addSystem(systemInstructions);
+              messageList.add(task, 'user');
 
-            const result = llm.stream({
-              methodType: 'generate',
-              requestContext,
-              messageList,
-              agentId: routingAgent.id,
-              tracingContext: routingAgentOptions?.tracingContext!,
-              structuredOutput: {
-                schema: z.object({
-                  resumeData: z.string(),
-                }),
-              },
-            });
+              const result = llm.stream({
+                methodType: 'generate',
+                requestContext,
+                messageList,
+                agentId: routingAgent.id,
+                tracingContext: routingAgentOptions?.tracingContext!,
+                structuredOutput: {
+                  schema: z.object({
+                    resumeData: z.string(),
+                  }),
+                },
+              });
 
-            const object = await result.object;
-            const resumeDataFromLLM = JSON.parse(object.resumeData);
-            if (Object.keys(resumeDataFromLLM).length > 0) {
-              resumeDataFromTask = resumeDataFromLLM;
-              runIdFromTask = firstSuspendedTool.runId;
+              const object = await result.object;
+              const resumeDataFromLLM = JSON.parse(object.resumeData);
+              if (Object.keys(resumeDataFromLLM).length > 0) {
+                resumeDataFromTask = resumeDataFromLLM;
+                runIdFromTask = firstSuspendedTool.runId;
+              }
+            } catch (error) {
+              mastra?.getLogger()?.error(`Error generating resume data for network agent ${routingAgent.id}`, error);
             }
-          } catch (error) {
-            mastra?.getLogger()?.error(`Error generating resume data for network agent ${routingAgent.id}`, error);
           }
         }
       }
@@ -2002,7 +2009,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     .then(finalStep)
     .commit();
 
-  // Register mastra instance with workflows for storage access (needed for suspend/resume)
   const mastraInstance = routingAgent.getMastraInstance();
   if (mastraInstance) {
     mainWorkflow.__registerMastra(mastraInstance);
