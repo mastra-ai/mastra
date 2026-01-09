@@ -2685,6 +2685,9 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
+      local-pkg:
+        specifier: ^1.1.2
+        version: 1.1.2
       zod:
         specifier: ^3.25.76
         version: 3.25.76
