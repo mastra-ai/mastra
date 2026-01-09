@@ -7,6 +7,82 @@
  */
 
 /**
+ * Extracts the JSON schema from a schema object.
+ * Handles both AI SDK Schema format (with jsonSchema property) and raw JSON schemas.
+ */
+function extractJsonSchema(schema: any): Record<string, any> | undefined {
+  if (!schema) return undefined;
+
+  // AI SDK Schema format - has jsonSchema property
+  if (schema.jsonSchema && typeof schema.jsonSchema === 'object') {
+    return schema.jsonSchema;
+  }
+
+  // Already a JSON schema object (has 'type' property)
+  if (schema.type && typeof schema.type === 'string') {
+    return schema;
+  }
+
+  // Zod schema - check for _def.typeName
+  if (schema._def?.typeName) {
+    // Return a placeholder indicating it's a Zod schema
+    // The actual JSON schema conversion should happen earlier in the pipeline
+    return { _zodType: schema._def.typeName };
+  }
+
+  return undefined;
+}
+
+/**
+ * Cleans a tools object for observability output.
+ * Extracts only essential fields: type, id, description, and JSON schemas.
+ *
+ * @param tools - The tools object (Record<string, Tool>)
+ * @returns A cleaned tools object suitable for observability
+ */
+export function cleanToolsForObservability(
+  tools: Record<string, any> | undefined,
+): Record<string, any> | undefined {
+  if (!tools || typeof tools !== 'object') return undefined;
+
+  const cleaned: Record<string, any> = {};
+
+  for (const [name, tool] of Object.entries(tools)) {
+    if (!tool || typeof tool !== 'object') continue;
+
+    const cleanedTool: Record<string, any> = {
+      type: tool.type ?? 'function',
+    };
+
+    // Add id if present and different from name
+    if (tool.id && tool.id !== name) {
+      cleanedTool.id = tool.id;
+    }
+
+    // Add description
+    if (tool.description) {
+      cleanedTool.description = tool.description;
+    }
+
+    // Extract input schema (parameters)
+    const inputSchema = extractJsonSchema(tool.parameters);
+    if (inputSchema) {
+      cleanedTool.inputSchema = inputSchema;
+    }
+
+    // Extract output schema
+    const outputSchema = extractJsonSchema(tool.outputSchema);
+    if (outputSchema) {
+      cleanedTool.outputSchema = outputSchema;
+    }
+
+    cleaned[name] = cleanedTool;
+  }
+
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
+
+/**
  * Default keys to strip from objects during deep cleaning.
  * These are typically internal/sensitive fields that shouldn't be traced.
  */
