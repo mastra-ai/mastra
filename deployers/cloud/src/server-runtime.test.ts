@@ -113,7 +113,7 @@ describe('CloudDeployer Server Runtime', () => {
       expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
       expect(entry).toContain('const vector = new LibSQLVector({');
-      expect(entry).toContain('connectionUrl: process.env.MASTRA_STORAGE_URL');
+      expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
 
       expect(entry).toContain('await storage.init()');
       expect(entry).toContain('mastra?.setStorage(storage)');

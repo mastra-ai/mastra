@@ -11,12 +11,37 @@ The OpenSearchVector class provides vector search using [OpenSearch](https://ope
 
 ## Constructor Options
 
+The constructor accepts all [OpenSearch ClientOptions](https://opensearch.org/docs/latest/clients/javascript/index/) plus a required `id` field.
+
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "id",
       type: "string",
-      description: "OpenSearch connection URL (e.g., 'http://localhost:9200')",
+      description: "Unique identifier for this vector store instance",
+    },
+    {
+      name: "node",
+      type: "string | string[] | NodeOptions | NodeOptions[]",
+      description: "OpenSearch node URL(s) (e.g., 'http://localhost:9200')",
+    },
+    {
+      name: "auth",
+      type: "BasicAuth | BearerAuth | AwsSigv4Auth",
+      description: "Authentication configuration",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "ConnectionOptions",
+      description: "SSL/TLS configuration",
+      isOptional: true,
+    },
+    {
+      name: "compression",
+      type: "'gzip'",
+      description: "Enable gzip compression",
+      isOptional: true,
     },
   ]}
 />

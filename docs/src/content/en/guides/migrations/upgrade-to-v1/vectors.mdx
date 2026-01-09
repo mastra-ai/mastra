@@ -29,7 +29,6 @@ To migrate, add an `id` field to your vector store constructor.
   const pineconeStore = new PineconeVector({
 +   id: 'pinecone-production',
     apiKey: process.env.PINECONE_API_KEY,
-    environment: process.env.PINECONE_ENVIRONMENT,
   });
 ```
 
