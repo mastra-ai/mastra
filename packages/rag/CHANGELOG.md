@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 2.0.0-beta.6
+
+### Patch Changes
+
+- Remove unnecessary `ai` package peer dependency to enable compatibility with AI SDK v6. The rag package doesn't directly use the ai package, so this peer dependency was unnecessarily constraining version compatibility. ([#11724](https://github.com/mastra-ai/mastra/pull/11724))
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
 ## 2.0.0-beta.5
 
 ### Minor Changes
