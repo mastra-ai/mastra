@@ -1,5 +1,26 @@
 # @mastra/server
 
+## 1.0.0-beta.22
+
+### Patch Changes
+
+- Fixed orderBy query parameter parsing for memory endpoints. The listMessages and listThreads endpoints now correctly parse orderBy when passed as a JSON string in URL query parameters, matching the existing behavior for include and filter parameters. ([#11767](https://github.com/mastra-ai/mastra/pull/11767))
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Fix 'Memory is not initialized' error in playground for agents with sub-agents but no memory ([#11780](https://github.com/mastra-ai/mastra/pull/11780))
+
+  When using agents with sub-agents (e.g., agent networks) but no memory configured, the playground UI would log HTTPException errors when fetching messages for sub-agents without memory.
+
+  Changed GET /api/memory/threads/:threadId/messages to return empty messages `{ messages: [], uiMessages: [] }` instead of throwing 400 error when memory is not configured for the requested agent.
+
+- Updated dependencies [[`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526)]:
+  - @mastra/core@1.0.0-beta.22
+
 ## 1.0.0-beta.21
 
 ### Patch Changes
