@@ -2932,7 +2932,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         // Generate title if needed
         // Note: Message saving is now handled by MessageHistory output processor
         // Use titleGenerated metadata flag to track if title has been generated
-        // This supports pre-created threads (via client SDK) that may have custom titles
+        // This supports pre-created threads (via client SDK) with any title
         const config = memory.getMergedThreadConfig(memoryConfig);
         const {
           shouldGenerate,

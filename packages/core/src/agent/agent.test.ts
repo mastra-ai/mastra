@@ -1627,20 +1627,21 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
-    it('should generate title for pre-created thread with custom title (issue #11757)', async () => {
-      // This test validates that generateTitle works for pre-created threads
-      // When threads are created via client SDK before the first message (common for URL routing),
-      // title generation should still trigger based on the titleGenerated metadata flag
+    it('should generate title for pre-created thread with any title (issue #11757)', async () => {
+      // This test validates that generateTitle works for pre-created threads with ANY title.
+      // When generateTitle: true is configured, title generation should trigger regardless of
+      // the initial title, using the titleGenerated metadata flag to prevent re-generation.
       // See: https://github.com/mastra-ai/mastra/issues/11757
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
       let updatedThreadTitle = '';
+      let updatedMetadata: Record<string, unknown> = {};
 
       const mockMemory = new MockMemory();
 
       // Pre-create the thread with a CUSTOM title (simulating client SDK pre-creation)
       // This is a common pattern: apps create threads before the first message for URL routing
-      const customTitle = 'New Chat'; // Custom title without titleGenerated metadata flag
+      const customTitle = 'New Chat'; // Any custom title - generateTitle should still work
       const threadId = 'pre-created-thread-custom-title';
       await mockMemory.saveThread({
         thread: {
@@ -1659,11 +1660,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
       };
 
-      // Track when createThread is called to update title
+      // Track when createThread is called to update title and metadata
       const originalCreateThread = mockMemory.createThread.bind(mockMemory);
       mockMemory.createThread = async (params: any) => {
         if (params.title && params.title !== customTitle) {
           updatedThreadTitle = params.title;
+        }
+        if (params.metadata) {
+          updatedMetadata = params.metadata;
         }
         return originalCreateThread(params);
       };
@@ -1756,9 +1760,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Title generation should trigger because:
       // 1. generateTitle: true is configured
       // 2. Thread doesn't have titleGenerated metadata flag set
-      // The fix uses metadata flag instead of checking if title starts with "New Thread"
+      // The initial title ("New Chat") doesn't matter - generateTitle option wins
+      // After generation, the titleGenerated flag is set to prevent future regeneration
       expect(titleGenerationCallCount).toBe(1);
       expect(updatedThreadTitle).toBe('Help with coding project');
+      expect(updatedMetadata.titleGenerated).toBe(true);
     });
 
     it('should handle errors in title generation gracefully', async () => {

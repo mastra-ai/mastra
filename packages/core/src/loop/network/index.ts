@@ -214,7 +214,7 @@ export async function prepareMemoryStep({
 
   // Add title generation to promises if needed (non-blocking)
   // Use titleGenerated metadata flag to track if title has been generated
-  // This supports pre-created threads (via client SDK) that may have custom titles
+  // This supports pre-created threads (via client SDK) with any title
   if (thread && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 

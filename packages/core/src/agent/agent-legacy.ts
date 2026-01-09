@@ -509,7 +509,7 @@ export class AgentLegacyHandler {
 
             // Add title generation to promises if needed
             // Use titleGenerated metadata flag to track if title has been generated
-            // This supports pre-created threads (via client SDK) that may have custom titles
+            // This supports pre-created threads (via client SDK) with any title
             const config = memory.getMergedThreadConfig(memoryConfig);
             const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
