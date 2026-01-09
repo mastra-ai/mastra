@@ -115,11 +115,11 @@ const ModelsDevProviderSchema = z
     name: z.string(),
     url: z.string().optional(),
     npm: z.string().optional(),
-    models: z.record(ModelsDevModelSchema),
+    models: z.record(z.string(), ModelsDevModelSchema),
   })
   .passthrough();
 
-const ModelsDevResponseSchema = z.record(ModelsDevProviderSchema);
+const ModelsDevResponseSchema = z.record(z.string(), ModelsDevProviderSchema);
 
 type ModelsDevProvider = z.infer<typeof ModelsDevProviderSchema>;
 

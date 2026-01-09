@@ -5,13 +5,12 @@ import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
-import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType } from '../../stream';
+import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
@@ -19,13 +18,7 @@ import type { Step, SuspendOptions } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 import type { CompletionConfig, CompletionContext } from './validation';
-import {
-  runValidation,
-  formatCompletionFeedback,
-  runDefaultCompletionCheck,
-  generateFinalResult,
-  generateStructuredFinalResult,
-} from './validation';
+import { runValidation, formatCompletionFeedback, runDefaultCompletionCheck, generateFinalResult } from './validation';
 
 /**
  * Type for ID generator function that can optionally accept context
@@ -416,14 +409,18 @@ export async function createNetworkLoop({
         },
       ];
 
+      const routingSchema = z.object({
+        primitiveId: z.string().describe('The id of the primitive to be called'),
+        primitiveType: PRIMITIVE_TYPES.describe('The type of the primitive to be called'),
+        prompt: z.string().describe('The json string or text value to be sent to the primitive'),
+        selectionReason: z.string().describe('The reason you picked the primitive'),
+      });
+
+      type RoutingResult = z.infer<typeof routingSchema>;
+
       const options = {
         structuredOutput: {
-          schema: z.object({
-            primitiveId: z.string().describe('The id of the primitive to be called'),
-            primitiveType: PRIMITIVE_TYPES.describe('The type of the primitive to be called'),
-            prompt: z.string().describe('The json string or text value to be sent to the primitive'),
-            selectionReason: z.string().describe('The reason you picked the primitive'),
-          }),
+          schema: routingSchema,
         },
         requestContext: requestContext,
         maxSteps: 1,
@@ -442,7 +439,7 @@ export async function createNetworkLoop({
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
-      const object = result.object;
+      const object = result.object as RoutingResult;
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 
@@ -1543,7 +1540,7 @@ export async function createNetworkLoop({
   return { networkWorkflow };
 }
 
-export async function networkLoop<OUTPUT = undefined>({
+export async function networkLoop<OUTPUT>({
   networkName,
   requestContext,
   runId,
@@ -1725,7 +1722,6 @@ export async function networkLoop<OUTPUT = undefined>({
       primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
-      structuredObject: z.any().optional(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
@@ -1776,7 +1772,6 @@ export async function networkLoop<OUTPUT = undefined>({
       // Run either configured scorers or the default LLM completion check
       let completionResult;
       let generatedFinalResult: string | undefined;
-      let structuredObject: OUTPUT | undefined;
 
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
@@ -1842,24 +1837,6 @@ export async function networkLoop<OUTPUT = undefined>({
 
         // Capture finalResult from default check
         generatedFinalResult = defaultResult.finalResult;
-
-        // If completed and structured output is requested, generate it
-        if (defaultResult.passed && structuredOutput?.schema) {
-          const structuredResult = await generateStructuredFinalResult(
-            routingAgentToUse,
-            completionContext,
-            structuredOutput,
-            {
-              writer,
-              stepId: generateId(),
-              runId,
-            },
-          );
-          if (structuredResult.text) {
-            generatedFinalResult = structuredResult.text;
-          }
-          structuredObject = structuredResult.object;
-        }
 
         // Save finalResult to memory if the LLM provided one
         if (defaultResult.passed) {
@@ -1946,7 +1923,6 @@ export async function networkLoop<OUTPUT = undefined>({
         return {
           ...inputData,
           ...(generatedFinalResult ? { result: generatedFinalResult } : {}),
-          ...(structuredObject !== undefined ? { structuredObject } : {}),
           isComplete: true,
           validationPassed: true,
           completionReason: completionResult.completionReason || 'Task complete',
@@ -1970,7 +1946,6 @@ export async function networkLoop<OUTPUT = undefined>({
       primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
-      structuredObject: z.any().optional(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
@@ -1983,19 +1958,14 @@ export async function networkLoop<OUTPUT = undefined>({
       primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
-      object: z.any().optional(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
       validationPassed: z.boolean().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      // Extract structuredObject and rename to object for the payload
-      const { structuredObject, ...restInputData } = inputData;
-
       const finalData = {
-        ...restInputData,
-        ...(structuredObject !== undefined ? { object: structuredObject } : {}),
+        ...inputData,
         ...(maxIterations && inputData.iteration >= maxIterations
           ? { completionReason: `Max iterations reached: ${maxIterations}` }
           : {}),

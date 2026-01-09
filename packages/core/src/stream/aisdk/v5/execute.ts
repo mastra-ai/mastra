@@ -6,7 +6,8 @@ import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
-import { getResponseFormat } from '../../base/schema';
+import type { StandardSchema } from '../../../schema/type';
+import { getResponseFormat, toJSONSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
@@ -20,7 +21,7 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
   return newObj;
 }
 
-type ExecutionProps<OUTPUT = undefined> = {
+type ExecutionProps<OUTPUT> = {
   runId: string;
   model: MastraLanguageModel;
   providerOptions?: SharedProviderOptions;
@@ -32,9 +33,9 @@ type ExecutionProps<OUTPUT = undefined> = {
     abortSignal?: AbortSignal;
   };
   includeRawChunks?: boolean;
-  modelSettings?: LoopOptions['modelSettings'];
+  modelSettings?: LoopOptions<ToolSet, OUTPUT>['modelSettings'];
   onResult: OnResult;
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT, StandardSchema<OUTPUT>>;
   /**
   Additional HTTP headers to be sent with the request.
   Only applicable for HTTP-based providers.
@@ -45,7 +46,7 @@ type ExecutionProps<OUTPUT = undefined> = {
   generateId?: IdGenerator;
 };
 
-export function execute<OUTPUT = undefined>({
+export function execute<OUTPUT>({
   runId,
   model,
   providerOptions,
@@ -86,7 +87,7 @@ export function execute<OUTPUT = undefined>({
       : 'direct'
     : undefined;
 
-  const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
+  const responseFormat = structuredOutput?.schema ? getResponseFormat(toJSONSchema(structuredOutput.schema)) : undefined;
 
   let prompt = inputMessages;
 

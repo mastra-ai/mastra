@@ -3,8 +3,8 @@ import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
-import type { ZodSchema } from 'zod';
+import { z } from 'zod/v3';
+import type { ZodSchema } from 'zod/v3';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -38,8 +38,8 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWork
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { createStandardSchema } from '../schema/standard-schema';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { OutputSchema } from '../stream/base/schema';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -129,7 +129,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
-  #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  #defaultOptions: DynamicArgument<AgentExecutionOptions<unknown>>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
@@ -903,7 +903,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * console.log(options.maxSteps); // 5
    * ```
    */
-  public getDefaultOptions<OUTPUT = undefined>({
+  public getDefaultOptions<OUTPUT>({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultOptions !== 'function') {
@@ -2698,7 +2698,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT = undefined>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
+  async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -2767,7 +2767,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             : new OpenAISchemaCompatLayer(modelInfo);
 
           if (compatLayer.shouldApply() && options.structuredOutput.schema) {
-            options.structuredOutput.schema = compatLayer.processZodType(options.structuredOutput.schema);
+            // options.structuredOutput.schema = compatLayer.processZodType(options.structuredOutput.schema);
           }
         }
       }
@@ -3272,11 +3272,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const executeOptions = {
       ...mergedOptions,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...(mergedOptions.structuredOutput as StructuredOutputOptions<OUTPUT>),
+            schema: createStandardSchema<OUTPUT>(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages,
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as InnerAgentExecutionOptions<OUTPUT>;
+    } satisfies InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);
 
@@ -3313,7 +3319,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     return fullOutput;
   }
 
-  async stream<OUTPUT = undefined>(
+  async stream<OUTPUT>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
@@ -3351,11 +3357,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const executeOptions = {
       ...mergedOptions,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...(mergedOptions.structuredOutput as StructuredOutputOptions<OUTPUT>),
+            schema: createStandardSchema<OUTPUT>(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as InnerAgentExecutionOptions<OUTPUT>;
+    } satisfies InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);
 
@@ -3395,7 +3407,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * );
    * ```
    */
-  async resumeStream<OUTPUT = undefined>(
+  async resumeStream<OUTPUT>(
     resumeData: any,
     streamOptions?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
@@ -3429,13 +3441,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const result = await this.#execute({
       ...mergedStreamOptions,
+      structuredOutput: mergedStreamOptions.structuredOutput
+        ? {
+            ...(mergedStreamOptions.structuredOutput as StructuredOutputOptions<OUTPUT>),
+            schema: createStandardSchema<OUTPUT>(mergedStreamOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages: [],
       resumeContext: {
         resumeData,
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
-    } as InnerAgentExecutionOptions<OUTPUT>);
+    } satisfies InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -3473,7 +3491,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * );
    * ```
    */
-  async resumeGenerate<OUTPUT = undefined>(
+  async resumeGenerate<OUTPUT>(
     resumeData: any,
     options?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
@@ -3517,6 +3535,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const result = await this.#execute({
       ...mergedOptions,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...(mergedOptions.structuredOutput as StructuredOutputOptions<OUTPUT>),
+            schema: createStandardSchema<OUTPUT>(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages: [],
       resumeContext: {
         resumeData,
@@ -3525,7 +3549,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as InnerAgentExecutionOptions<OUTPUT>);
+    } satisfies InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -3575,7 +3599,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  async approveToolCall<OUTPUT = undefined>(
+  async approveToolCall<OUTPUT>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
     return this.resumeStream({ approved: true }, options);
@@ -3596,7 +3620,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  async declineToolCall<OUTPUT = undefined>(
+  async declineToolCall<OUTPUT>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
     return this.resumeStream({ approved: false }, options);

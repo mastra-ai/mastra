@@ -13,7 +13,7 @@ import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-interface MapResultsStepOptions<OUTPUT = undefined> {
+interface MapResultsStepOptions<OUTPUT> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
@@ -26,7 +26,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   methodType: AgentMethodType;
 }
 
-export function createMapResultsStep<OUTPUT = undefined>({
+export function createMapResultsStep<OUTPUT>({
   capabilities,
   options,
   resourceId,

@@ -13,7 +13,7 @@ import {
 } from '@internal/ai-sdk-v5/test';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v3';
 import type { loop } from '../loop';
 import type { ChunkType } from '../../stream/types';
 import {
@@ -4885,7 +4885,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         },
       });
 
-      expect((await convertAsyncIterableToArray(await result.fullStream)).slice(0, 3)).toStrictEqual([
+      expect((await convertAsyncIterableToArray(result.fullStream)).slice(0, 3)).toStrictEqual([
         {
           type: 'start',
           runId: 'test-run-id',

@@ -253,12 +253,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   return;
 }
 
-export type OutputChunkType<OUTPUT = undefined> =
-  | TextStreamPart<ToolSet>
-  | ObjectStreamPart<Partial<OUTPUT>>
-  | undefined;
+export type OutputChunkType<OUTPUT> = TextStreamPart<ToolSet> | ObjectStreamPart<Partial<OUTPUT>> | undefined;
 
-export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
+export function convertMastraChunkToAISDKv5<OUTPUT>({
   chunk,
   mode = 'stream',
 }: {

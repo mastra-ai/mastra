@@ -10,7 +10,7 @@ import {
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -138,7 +138,7 @@ export class MastraLLMVNext extends MastraBase {
     ];
   }
 
-  stream<Tools extends ToolSet, OUTPUT = undefined>({
+  stream<Tools extends ToolSet, OUTPUT>({
     resumeContext,
     runId,
     stopWhen = stepCountIs(5),

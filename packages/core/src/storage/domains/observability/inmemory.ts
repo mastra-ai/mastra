@@ -217,8 +217,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
     }
 
-    // Sort by orderBy field
-    const { field: sortField, direction: sortDirection } = orderBy;
+    // Sort by orderBy field (with defaults)
+    const sortField = orderBy?.field ?? 'startedAt';
+    const sortDirection = orderBy?.direction ?? 'DESC';
 
     matchingRootSpans.sort((a, b) => {
       if (sortField === 'endedAt') {
@@ -241,9 +242,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
     });
 
-    // Apply pagination
+    // Apply pagination (with defaults)
     const total = matchingRootSpans.length;
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
     const start = page * perPage;
     const end = start + perPage;
 

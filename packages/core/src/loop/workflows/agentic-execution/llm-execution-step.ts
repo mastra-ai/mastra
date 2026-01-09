@@ -13,6 +13,7 @@ import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
+import type { StandardSchema } from '../../../schema/type';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -20,6 +21,7 @@ import type { InferSchemaOutput } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
+  MastraModelStructuredOutputOptions,
   ModelManagerModelConfig,
   TextStartPayload,
 } from '../../../stream/types';
@@ -30,15 +32,15 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
-type ProcessOutputStreamOptions<OUTPUT = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT> = {
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
-  outputStream: MastraModelOutput<OUTPUT>;
+  outputStream: MastraModelOutput<OUTPUT | undefined>;
   runState: AgenticRunState;
   options?: LoopConfig<OUTPUT>;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT | undefined>>;
   responseFromModel: {
     warnings: any;
     request: any;
@@ -47,7 +49,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
 };
 
-async function processOutputStream<OUTPUT = undefined>({
+async function processOutputStream<OUTPUT>({
   tools,
   messageId,
   messageList,
@@ -493,7 +495,7 @@ function executeStreamWithFallbackModels<T>(
   };
 }
 
-export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
+export function createLLMExecutionStep<Tools extends ToolSet, OUTPUT>({
   models,
   _internal,
   messageId,
@@ -521,7 +523,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
-}: OuterLLMRun<TOOLS, OUTPUT>) {
+}: OuterLLMRun<Tools, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
   return createStep<
@@ -546,10 +548,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
 
       const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
-        outputStream: MastraModelOutput<OUTPUT>;
+        outputStream: MastraModelOutput<OUTPUT | undefined>;
         runState: AgenticRunState;
         callBail?: boolean;
-        stepTools?: TOOLS;
+        stepTools?: Tools;
       }>(
         models,
         logger,
@@ -571,12 +573,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         const currentStep: {
           model: MastraLanguageModel;
-          tools?: TOOLS | undefined;
-          toolChoice?: ToolChoice<TOOLS> | undefined;
-          activeTools?: (keyof TOOLS)[] | undefined;
+          tools?: Tools | undefined;
+          toolChoice?: ToolChoice<Tools> | undefined;
+          activeTools?: (keyof Tools)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
-          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
         } = {
           model,
           tools,
@@ -645,13 +647,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               // Return via bail to properly signal the tripwire
               return {
                 callBail: true,
-                outputStream: new MastraModelOutput({
+                outputStream: new MastraModelOutput<OUTPUT | undefined>({
                   model: {
                     modelId: model.modelId,
                     provider: model.provider,
                     version: model.specificationVersion,
                   },
-                  stream: new ReadableStream({
+                  stream: new ReadableStream<ChunkType<OUTPUT | undefined>>({
                     start(c) {
                       c.close();
                     },
@@ -754,7 +756,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 options,
                 modelSettings: currentStep.modelSettings,
                 includeRawChunks,
-                structuredOutput: currentStep.structuredOutput,
+                structuredOutput: currentStep.structuredOutput as
+                  | StructuredOutputOptions<OUTPUT, StandardSchema<OUTPUT>>
+                  | undefined,
                 // Merge headers: modelConfig headers first, then modelSettings overrides them
                 // Only create object if there are actual headers to avoid passing empty {}
                 headers:
@@ -798,20 +802,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           );
         }
 
-        const outputStream = new MastraModelOutput<OUTPUT>({
+        const outputStream = new MastraModelOutput<OUTPUT | undefined>({
           model: {
             modelId: currentStep.model.modelId,
             provider: currentStep.model.provider,
             version: currentStep.model.specificationVersion,
           },
-          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
+          stream: modelResult as ReadableStream<ChunkType<OUTPUT | undefined>>,
           messageList,
           messageId,
           options: {
             runId,
             toolCallStreaming,
             includeRawChunks,
-            structuredOutput: currentStep.structuredOutput,
+            structuredOutput: currentStep.structuredOutput as MastraModelStructuredOutputOptions<OUTPUT> | undefined,
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,

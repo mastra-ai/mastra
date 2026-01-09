@@ -49,11 +49,13 @@ export const spanIdField = z.string().describe('Unique span identifier within a 
 const spanNameField = z.string().describe('Human-readable span name');
 const parentSpanIdField = z.string().describe('Parent span reference (null = root span)');
 const spanTypeField = z.nativeEnum(SpanType).describe('Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.)');
-const attributesField = z.record(z.unknown()).describe('Span-type specific attributes (e.g., model, tokens, tools)');
-const metadataField = z.record(z.unknown()).describe('User-defined metadata for custom filtering');
+const attributesField = z
+  .record(z.string(), z.unknown())
+  .describe('Span-type specific attributes (e.g., model, tokens, tools)');
+const metadataField = z.record(z.string(), z.unknown()).describe('User-defined metadata for custom filtering');
 const tagsField = z.array(z.string()).describe('Labels for filtering traces (only on the root span)');
 const scopeField = z
-  .record(z.unknown())
+  .record(z.string(), z.unknown())
   .describe('Arbitrary package/app version info (e.g., {"core": "1.0.0", "memory": "1.0.0", "gitSha": "abcd1234"})');
 const linksField = z.array(z.unknown()).describe('References to related spans in other traces');
 const inputField = z.unknown().describe('Input data passed to the span');
@@ -320,8 +322,8 @@ export const tracesOrderBySchema = z
 export const listTracesArgsSchema = z
   .object({
     filters: tracesFilterSchema.optional().describe('Optional filters to apply'),
-    pagination: paginationArgsSchema.default({}).describe('Pagination settings'),
-    orderBy: tracesOrderBySchema.default({}).describe('Ordering configuration (defaults to startedAt desc)'),
+    pagination: paginationArgsSchema.optional().describe('Pagination settings'),
+    orderBy: tracesOrderBySchema.optional().describe('Ordering configuration (defaults to startedAt desc)'),
   })
   .describe('Arguments for listing traces');
 

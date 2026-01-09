@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import type { MockedFunction } from 'vitest';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 import { MastraModelInput } from './input';
 
@@ -35,9 +35,12 @@ class TestMastraModelInput extends MastraModelInput {
 
         // Convert custom input format to Mastra ChunkType
         const chunk: ChunkType = {
+          // @ts-expect-error - test implementation
           type: 'custom-message',
           runId,
+          // @ts-expect-error - test implementation
           from: 'test-converter',
+          // @ts-expect-error - test implementation
           payload: {
             originalId: value.id || 'unknown',
             content: value.content || value.message || 'no content',
@@ -65,8 +68,8 @@ function createMockStream<T>(parts: T[]): ReadableStream<T> {
 
 describe('MastraModelInput', () => {
   let testInput: TestMastraModelInput;
-  let mockCreateStream: vi.MockedFunction<CreateStream>;
-  let mockOnResult: vi.MockedFunction<OnResult>;
+  let mockCreateStream: MockedFunction<CreateStream>;
+  let mockOnResult: MockedFunction<OnResult>;
 
   beforeEach(() => {
     testInput = new TestMastraModelInput({ name: 'test-input' });
@@ -154,7 +157,7 @@ describe('MastraModelInput', () => {
     it('should handle rawResponse fallback to response', async () => {
       mockCreateStream.mockResolvedValue({
         stream: createMockStream([]),
-        warnings: {},
+        warnings: [],
         request: {},
         response: { fallback: 'response' },
       });
@@ -184,7 +187,7 @@ describe('MastraModelInput', () => {
     it('should handle empty rawResponse and response', async () => {
       mockCreateStream.mockResolvedValue({
         stream: createMockStream([]),
-        warnings: {},
+        warnings: [],
         request: {},
       });
 
@@ -243,7 +246,7 @@ describe('MastraModelInput', () => {
 
       mockCreateStream.mockResolvedValue({
         stream: createMockStream([{ id: 'test', content: 'test message' }]),
-        warnings: {},
+        warnings: [],
         request: {},
         rawResponse: {},
       });
@@ -267,7 +270,7 @@ describe('MastraModelInput', () => {
     it('should close the controller when transform completes successfully', async () => {
       mockCreateStream.mockResolvedValue({
         stream: createMockStream([]),
-        warnings: {},
+        warnings: [],
         request: {},
         rawResponse: {},
       });

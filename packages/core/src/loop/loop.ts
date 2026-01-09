@@ -4,10 +4,12 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
+import type { OutputSchema } from '../stream/base/schema';
+import type { MastraModelStructuredOutputOptions } from '../stream/types';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
+export function loop<Tools extends ToolSet, OUTPUT>({
   resumeContext,
   models,
   logger,
@@ -141,7 +143,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      structuredOutput: rest.structuredOutput,
+      structuredOutput: rest.structuredOutput as MastraModelStructuredOutputOptions<OUTPUT> | undefined,
       outputProcessors,
       returnScorerData,
       tracingContext: rest.modelSpanTracker?.getTracingContext(),

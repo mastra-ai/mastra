@@ -12,13 +12,14 @@ import type { MessageList } from '../../../agent/message-list';
 import type { LLMStepResult, StructuredOutputOptions } from '../../../agent/types';
 import type { TracingContext } from '../../../observability';
 import type { MastraModelOutput } from '../../base/output';
+import type { InferSchemaOutput, OutputSchema } from '../../base/schema';
 import type { ChunkType, StepTripwireData } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
 
-export type AISDKV5FullOutput<OUTPUT = undefined> = {
+export type AISDKV5FullOutput<OUTPUT> = {
   text: string;
   usage: LLMStepResult<OUTPUT>['usage'];
   steps: LLMStepResult<OUTPUT>[];
@@ -32,9 +33,9 @@ export type AISDKV5FullOutput<OUTPUT = undefined> = {
     type: 'reasoning';
   }[];
   reasoningText: string | undefined;
-  toolCalls: ReturnType<typeof convertMastraChunkToAISDKv5<OUTPUT>>[];
-  toolResults: ReturnType<typeof convertMastraChunkToAISDKv5<OUTPUT>>[];
-  sources: ReturnType<typeof convertMastraChunkToAISDKv5<OUTPUT>>[];
+  toolCalls: ReturnType<typeof convertMastraChunkToAISDKv5>[];
+  toolResults: ReturnType<typeof convertMastraChunkToAISDKv5>[];
+  sources: ReturnType<typeof convertMastraChunkToAISDKv5>[];
   files: unknown[];
   response: LLMStepResult<OUTPUT>['response'];
   content: LLMStepResult<OUTPUT>['content'];
@@ -42,27 +43,27 @@ export type AISDKV5FullOutput<OUTPUT = undefined> = {
   error: Error | string | { message: string; stack: string } | undefined;
   tripwire: StepTripwireData | undefined;
   traceId: string | undefined;
-  object?: OUTPUT;
+  object?: InferSchemaOutput<OUTPUT>;
 };
 
-type AISDKV5OutputStreamOptions<OUTPUT = undefined> = {
+type AISDKV5OutputStreamOptions<OUTPUT> = {
   toolCallStreaming?: boolean;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   tracingContext?: TracingContext;
 };
 
-export type AIV5FullStreamPart<OUTPUT = undefined> = OUTPUT extends undefined
+export type AIV5FullStreamPart<OUTPUT> = OUTPUT extends undefined
   ? TextStreamPart<ToolSet>
   :
       | TextStreamPart<ToolSet>
       | {
           type: 'object';
-          object: OUTPUT;
+          object: InferSchemaOutput<OUTPUT>;
         };
-export type AIV5FullStreamType<OUTPUT = undefined> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
+export type AIV5FullStreamType<OUTPUT> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
 
-export class AISDKV5OutputStream<OUTPUT = undefined> {
+export class AISDKV5OutputStream<OUTPUT> {
   #modelOutput: MastraModelOutput<OUTPUT>;
   #options: AISDKV5OutputStreamOptions<OUTPUT>;
   #messageList: MessageList;
@@ -190,7 +191,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
   get sources() {
     return this.#modelOutput.sources.then(sources =>
       sources.map(source => {
-        return convertMastraChunkToAISDKv5<OUTPUT>({
+        return convertMastraChunkToAISDKv5({
           chunk: source,
         });
       }),
@@ -202,7 +203,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
       files
         .map(file => {
           if (file.type === 'file') {
-            const result = convertMastraChunkToAISDKv5<OUTPUT>({
+            const result = convertMastraChunkToAISDKv5({
               chunk: file,
             });
             return result && 'file' in result ? result.file : undefined;
@@ -227,7 +228,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
   get toolCalls() {
     return this.#modelOutput.toolCalls.then(toolCalls =>
       toolCalls.map(toolCall => {
-        return convertMastraChunkToAISDKv5<OUTPUT>({
+        return convertMastraChunkToAISDKv5({
           chunk: toolCall,
         });
       }),
@@ -237,7 +238,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
   get toolResults() {
     return this.#modelOutput.toolResults.then(toolResults =>
       toolResults.map(toolResult => {
-        return convertMastraChunkToAISDKv5<OUTPUT>({
+        return convertMastraChunkToAISDKv5({
           chunk: toolResult,
         });
       }),
@@ -294,7 +295,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
     return this.#modelOutput.steps.then(steps => steps);
   }
 
-  get content(): LLMStepResult['content'] {
+  get content(): LLMStepResult<OUTPUT>['content'] {
     return this.#messageList.get.response.aiV5.modelContent();
   }
 
@@ -336,7 +337,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
           }
 
           if (chunk.type === 'step-start' && !startEvent) {
-            startEvent = convertMastraChunkToAISDKv5<OUTPUT>({
+            startEvent = convertMastraChunkToAISDKv5({
               chunk,
             });
             // stepCounter++;
@@ -398,7 +399,7 @@ export class AISDKV5OutputStream<OUTPUT = undefined> {
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
       traceId: this.traceId,
-      ...(object ? { object } : {}),
+      ...(object ? { object: object as InferSchemaOutput<OUTPUT> } : {}),
     };
 
     fullOutput.response.messages = this.#modelOutput.messageList.get.response.aiV5.model();

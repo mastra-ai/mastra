@@ -9,7 +9,7 @@ import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@i
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v3';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
@@ -1716,12 +1716,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             runId,
             models,
             structuredOutput: {
-              schema: jsonSchema({
-                type: 'object',
-                properties: { content: { type: 'string' } },
-                required: ['content'],
-                additionalProperties: false,
-              }),
+              schema: createStandardSchema<{ content: string }>(
+                jsonSchema({
+                  type: 'object',
+                  properties: { content: { type: 'string' } },
+                  required: ['content'],
+                  additionalProperties: false,
+                }).jsonSchema,
+              ),
             },
             messageList: createMessageListWithUserMessage(),
           });

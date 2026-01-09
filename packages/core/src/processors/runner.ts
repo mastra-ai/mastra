@@ -27,11 +27,7 @@ import type {
 /**
  * Implementation of processor state management
  */
-/**
- * Tracks state for stream processing across chunks.
- * Used by both legacy processors and workflow processors.
- */
-export class ProcessorState<OUTPUT = undefined> {
+export class ProcessorState<OUTPUT> {
   private accumulatedText = '';
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
@@ -336,7 +332,7 @@ export class ProcessorRunner {
               {
                 phase: 'outputStream',
                 part: processedPart,
-                streamParts: state.streamParts as ChunkType[],
+                streamParts: state.streamParts,
                 state: state.customState,
                 messageList,
                 retryCount,
@@ -383,8 +379,8 @@ export class ProcessorRunner {
             state.addPart(processedPart);
 
             const result = await processor.processOutputStream({
-              part: processedPart as ChunkType,
-              streamParts: state.streamParts as ChunkType[],
+              part: processedPart,
+              streamParts: state.streamParts,
               state: state.customState,
               abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
@@ -451,7 +447,7 @@ export class ProcessorRunner {
     }
   }
 
-  async runOutputProcessorsForStream<OUTPUT = undefined>(
+  async runOutputProcessorsForStream<OUTPUT>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {

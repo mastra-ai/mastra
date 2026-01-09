@@ -1,178 +1,299 @@
-/**
- * Test for Zod v4 JSON Schema compatibility issue
- *
- * This test reproduces the bug where:
- * 1. OpenAISchemaCompatLayer.processZodType() adds .transform() to handle .optional(), .nullable(), .default()
- * 2. When the processed schema is converted to JSON Schema via asJsonSchema()
- * 3. It throws "Transforms cannot be represented in JSON Schema"
- *
- * Bug Report Pattern:
- * ```typescript
- * const schema = z.object({
- *   rate: z.string().nullish().default(""),
- * });
- * const result = await agent.generate(prompt, { structuredOutput: { schema } });
- * // Error: Transforms cannot be represented in JSON Schema
- * ```
- */
-
-import { describe, it, expect, vi } from 'vitest';
+import type { JSONSchema7 } from '@internal/ai-sdk-v5';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
-import { asJsonSchema } from './schema';
+import { getTransformedSchema, getResponseFormat, toJSONSchema } from './schema';
 
-// Mock zod to use zod/v4
-vi.mock('zod', async () => {
-  const zodV4 = await import('zod/v4');
-  return {
-    z: zodV4.z,
-  };
+describe('getTransformedSchema', () => {
+  describe('object schemas', () => {
+    it('should return object schema with outputFormat "object"', () => {
+      const schema: JSONSchema7 = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'number' },
+        },
+        required: ['name', 'age'],
+      };
+
+      const result = getTransformedSchema(schema);
+      expect(result.outputFormat).toBe('object');
+      expect(result.jsonSchema).toEqual(schema);
+    });
+  });
+
+  describe('array schemas', () => {
+    it('should wrap array schema in object with "elements" property', () => {
+      const schema: JSONSchema7 = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'array',
+        items: { type: 'string' },
+      };
+
+      const result = getTransformedSchema(schema);
+
+      expect(result.outputFormat).toBe('array');
+      expect(result.jsonSchema).toEqual({
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          elements: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['elements'],
+        additionalProperties: false,
+      });
+    });
+
+    it('should handle array of objects', () => {
+      const schema: JSONSchema7 = {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'number' },
+            name: { type: 'string' },
+          },
+        },
+      };
+
+      const result = getTransformedSchema(schema);
+
+      expect(result.outputFormat).toBe('array');
+      expect(result.jsonSchema).toMatchInlineSnapshot(`
+        {
+          "$schema": undefined,
+          "additionalProperties": false,
+          "properties": {
+            "elements": {
+              "items": {
+                "properties": {
+                  "id": {
+                    "type": "number",
+                  },
+                  "name": {
+                    "type": "string",
+                  },
+                },
+                "type": "object",
+              },
+              "type": "array",
+            },
+          },
+          "required": [
+            "elements",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+  });
+
+  describe('enum schemas', () => {
+    it('should wrap string enum in object with "result" property', () => {
+      const schema: JSONSchema7 = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'string',
+        enum: ['red', 'green', 'blue'],
+      };
+
+      const result = getTransformedSchema(schema);
+      expect(result.outputFormat).toBe('enum');
+      expect(result.jsonSchema).toEqual({
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          result: { type: 'string', enum: ['red', 'green', 'blue'] },
+        },
+        required: ['result'],
+        additionalProperties: false,
+      });
+    });
+
+    it('should handle number enum', () => {
+      const schema: JSONSchema7 = {
+        type: 'number',
+        enum: [1, 2, 3],
+      };
+
+      const result = getTransformedSchema(schema);
+
+      expect(result.outputFormat).toBe('enum');
+      expect(result.jsonSchema).toMatchInlineSnapshot(`
+        {
+          "$schema": undefined,
+          "additionalProperties": false,
+          "properties": {
+            "result": {
+              "enum": [
+                1,
+                2,
+                3,
+              ],
+              "type": "number",
+            },
+          },
+          "required": [
+            "result",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should default to string type when enum has no type', () => {
+      const schema: JSONSchema7 = {
+        enum: ['a', 'b', 'c'],
+      };
+
+      const result = getTransformedSchema(schema);
+
+      expect(result.outputFormat).toBe('enum');
+      expect(result.jsonSchema).toMatchInlineSnapshot(`
+        {
+          "$schema": undefined,
+          "additionalProperties": false,
+          "properties": {
+            "result": {
+              "enum": [
+                "a",
+                "b",
+                "c",
+              ],
+              "type": "string",
+            },
+          },
+          "required": [
+            "result",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+  });
 });
 
-describe('asJsonSchema - Zod v4 transform compatibility', () => {
-  describe('should handle schemas with transforms', () => {
-    it('should convert schema with .transform() to JSON Schema without error', () => {
-      // This simulates what OpenAISchemaCompatLayer does:
-      // It converts .optional() to .nullable().transform(v => v === null ? undefined : v)
-      const schemaWithTransform = z.object({
-        name: z.string(),
-        // This is what OpenAISchemaCompatLayer produces for .optional() fields
-        age: z
-          .number()
-          .nullable()
-          .transform(v => (v === null ? undefined : v)),
-      });
+describe('getResponseFormat', () => {
+  describe('with schema', () => {
+    it('should return json type with JSONSchema7 for object', () => {
+      const schema: JSONSchema7 = {
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      };
 
-      // This should NOT throw "Transforms cannot be represented in JSON Schema"
-      // Currently it DOES throw, which is the bug we're fixing
-      expect(() => {
-        asJsonSchema(schemaWithTransform);
-      }).not.toThrow();
+      const result = getResponseFormat(schema);
 
-      const result = asJsonSchema(schemaWithTransform);
-      expect(result).toBeDefined();
-      expect(result?.type).toBe('object');
+      expect.assertions(2);
+      expect(result.type).toBe('json');
+      if (result.type === 'json') {
+        expect(result.schema).toMatchInlineSnapshot(`
+          {
+            "properties": {
+              "name": {
+                "type": "string",
+              },
+            },
+            "type": "object",
+          }
+        `);
+      }
     });
 
-    it('should convert schema with default transform to JSON Schema without error', () => {
-      // This simulates what OpenAISchemaCompatLayer does for .default() fields:
-      // It converts .default(value) to .nullable().transform(v => v === null ? defaultValue : v)
-      const schemaWithDefaultTransform = z.object({
-        name: z.string(),
-        score: z
-          .number()
-          .nullable()
-          .transform(v => (v === null ? 100 : v)),
-      });
+    it('should return json type with wrapped array schema', () => {
+      const schema: JSONSchema7 = {
+        type: 'array',
+        items: { type: 'string' },
+      };
 
-      expect(() => {
-        asJsonSchema(schemaWithDefaultTransform);
-      }).not.toThrow();
+      const result = getResponseFormat(schema);
 
-      const result = asJsonSchema(schemaWithDefaultTransform);
-      expect(result).toBeDefined();
+      expect.assertions(2);
+      expect(result.type).toBe('json');
+      if (result.type === 'json') {
+        expect(result.schema).toMatchInlineSnapshot(`
+          {
+            "$schema": undefined,
+            "additionalProperties": false,
+            "properties": {
+              "elements": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+            },
+            "required": [
+              "elements",
+            ],
+            "type": "object",
+          }
+        `);
+      }
     });
 
-    it('should convert complex nested schema with transforms to JSON Schema', () => {
-      // Mimics the user's EpidemiologySchema pattern
-      const schemaWithNestedTransforms = z.object({
-        prevalence: z.object({
-          global: z
-            .object({
-              rate: z
-                .string()
-                .nullable()
-                .transform(v => (v === null ? '' : v)),
-              context: z
-                .string()
-                .nullable()
-                .transform(v => (v === null ? '' : v)),
-            })
-            .nullable(),
-          regional: z
-            .array(
-              z.object({
-                region: z
-                  .string()
-                  .nullable()
-                  .transform(v => (v === null ? '' : v)),
-                rate: z
-                  .string()
-                  .nullable()
-                  .transform(v => (v === null ? '' : v)),
-              }),
-            )
-            .nullable()
-            .transform(v => (v === null ? [] : v)),
-        }),
-        totalPatients: z.object({
-          estimated: z
-            .string()
-            .nullable()
-            .transform(v => (v === null ? '' : v)),
-          year: z.number().nullable(),
-        }),
-      });
+    it('should return json type with wrapped enum schema', () => {
+      const schema: JSONSchema7 = {
+        enum: ['a', 'b'],
+      };
 
-      // This currently fails with "Transforms cannot be represented in JSON Schema"
-      expect(() => {
-        asJsonSchema(schemaWithNestedTransforms);
-      }).not.toThrow();
-
-      const result = asJsonSchema(schemaWithNestedTransforms);
-      expect(result).toBeDefined();
-      expect(result?.type).toBe('object');
+      const result = getResponseFormat(schema);
+      expect.assertions(2);
+      expect(result.type).toBe('json');
+      if (result.type === 'json') {
+        expect(result.schema).toMatchInlineSnapshot(`
+          {
+            "$schema": undefined,
+            "additionalProperties": false,
+            "properties": {
+              "result": {
+                "enum": [
+                  "a",
+                  "b",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "result",
+            ],
+            "type": "object",
+          }
+        `);
+      }
     });
   });
 
-  describe('schemas without transforms should still work', () => {
-    it('should convert simple schema to JSON Schema', () => {
-      const simpleSchema = z.object({
-        name: z.string(),
-        age: z.number(),
-      });
+  describe('without schema', () => {
+    it('should return text type when schema is undefined', () => {
+      const result = getResponseFormat(undefined);
 
-      expect(() => {
-        asJsonSchema(simpleSchema);
-      }).not.toThrow();
-
-      const result = asJsonSchema(simpleSchema);
-      expect(result).toBeDefined();
-      expect(result?.type).toBe('object');
+      expect(result).toEqual({ type: 'text' });
     });
 
-    it('should convert schema with nullable (no transform) to JSON Schema', () => {
-      const nullableSchema = z.object({
-        name: z.string(),
-        deletedAt: z.string().nullable(),
-      });
+    it('should return text type when called with no arguments', () => {
+      const result = getResponseFormat();
 
-      expect(() => {
-        asJsonSchema(nullableSchema);
-      }).not.toThrow();
-
-      const result = asJsonSchema(nullableSchema);
-      expect(result).toBeDefined();
+      expect(result).toEqual({ type: 'text' });
     });
   });
+});
 
-  describe('validation should work after JSON Schema conversion', () => {
-    it('should parse correctly with transform after getting JSON Schema', () => {
-      const schemaWithTransform = z.object({
-        name: z.string(),
-        age: z
-          .number()
-          .nullable()
-          .transform(v => (v === null ? undefined : v)),
-      });
+describe('toJSONSchema', () => {
+  it('should convert StandardSchema to JSONSchema7', () => {
+    // Create a mock StandardSchema
+    const mockJsonSchema: JSONSchema7 = {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+      },
+    };
 
-      // First, should be able to get JSON Schema without error
-      expect(() => {
-        asJsonSchema(schemaWithTransform);
-      }).not.toThrow();
-
-      // Then, the schema should still parse and transform correctly
-      const result = schemaWithTransform.parse({ name: 'John', age: null });
-      expect(result).toEqual({ name: 'John', age: undefined });
+    const mockStandardSchema = z.object({
+      name: z.string().optional(),
     });
+
+    const result = toJSONSchema(mockStandardSchema);
+
+    expect(result).toEqual(mockJsonSchema);
   });
 });

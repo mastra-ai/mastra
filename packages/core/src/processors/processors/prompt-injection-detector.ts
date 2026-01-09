@@ -250,9 +250,13 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         });
       }
 
-      const result = response.object satisfies PromptInjectionResult;
+      const result = response.object as PromptInjectionResult | undefined;
 
-      return result;
+      return result ?? {
+        categories: null,
+        reason: null,
+        rewritten_content: null,
+      };
     } catch (error) {
       console.warn('[PromptInjectionDetector] Detection agent failed, allowing content:', error);
       // Fail open - return empty result if detection agent fails (no injection detected)

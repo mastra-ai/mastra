@@ -16,7 +16,8 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
+import type { z } from 'zod';
 
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';

@@ -16,7 +16,7 @@ import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
+interface CreatePrepareStreamWorkflowOptions<OUTPUT> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
@@ -41,7 +41,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   toolCallId?: string;
 }
 
-export function createPrepareStreamWorkflow<OUTPUT = undefined>({
+export function createPrepareStreamWorkflow<OUTPUT>({
   capabilities,
   options,
   threadFromArgs,

@@ -51,7 +51,7 @@ export type StreamInternal = {
   stepTools?: ToolSet;
 };
 
-export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
+export type PrepareStepResult<TOOLS extends ToolSet> = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
@@ -65,7 +65,7 @@ export type PrepareStepFunction = (
   args: ProcessInputStepArgs,
 ) => Promise<ProcessInputStepResult | undefined | void> | ProcessInputStepResult | undefined | void;
 
-export type LoopConfig<OUTPUT = undefined> = {
+export type LoopConfig<OUTPUT> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -76,7 +76,7 @@ export type LoopConfig<OUTPUT = undefined> = {
   prepareStep?: PrepareStepFunction;
 };
 
-export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
+export type LoopOptions<TOOLS extends ToolSet, OUTPUT> = {
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
@@ -123,7 +123,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   maxProcessorRetries?: number;
 };
 
-export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {
+export type LoopRun<Tools extends ToolSet, OUTPUT> = LoopOptions<Tools, OUTPUT> & {
   messageId: string;
   runId: string;
   startTimestamp: number;
@@ -136,7 +136,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   processorStates?: Map<string, ProcessorState<OUTPUT>>;
 };
 
-export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = {
+export type OuterLLMRun<Tools extends ToolSet, OUTPUT> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   outputWriter: OutputWriter;

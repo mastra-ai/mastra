@@ -17,7 +17,7 @@ describe('StructuredOutputProcessor', () => {
     count: z.number().optional(),
   });
 
-  let processor: StructuredOutputProcessor<typeof testSchema>;
+  let processor: StructuredOutputProcessor<z.infer<typeof testSchema>>;
   let mockModel: MockLanguageModelV2;
 
   // Helper to create a mock controller that captures enqueued chunks
@@ -79,6 +79,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       expect(result).toBe(textChunk);
@@ -120,6 +121,7 @@ describe('StructuredOutputProcessor', () => {
           streamParts: [],
           state: { controller },
           abort,
+          retryCount: 0,
         }),
       ).rejects.toThrow();
     });
@@ -135,7 +137,7 @@ describe('StructuredOutputProcessor', () => {
       const { controller, enqueuedChunks } = createMockController();
       const abort = createMockAbort();
 
-      const finishChunk: ChunkType = {
+      const finishChunk: ChunkType<z.infer<typeof testSchema>> = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'finish' as const,
@@ -165,6 +167,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       expect(enqueuedChunks).toHaveLength(1);
@@ -190,7 +193,7 @@ describe('StructuredOutputProcessor', () => {
       const { controller } = createMockController();
       const abort = createMockAbort();
 
-      const finishChunk: ChunkType = {
+      const finishChunk: ChunkType<z.infer<typeof testSchema>> = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'finish' as const,
@@ -220,6 +223,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       expect(mockLogger.warn).toHaveBeenCalled();
@@ -230,7 +234,7 @@ describe('StructuredOutputProcessor', () => {
       const { controller } = createMockController();
       const abort = createMockAbort();
 
-      const finishChunk: ChunkType = {
+      const finishChunk: ChunkType<z.infer<typeof testSchema>> = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'finish' as const,
@@ -261,6 +265,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       await processor.processOutputStream({
@@ -268,6 +273,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       // Should only call stream once (guarded by isStructuringAgentStreamStarted)
@@ -280,7 +286,7 @@ describe('StructuredOutputProcessor', () => {
       const { controller } = createMockController();
       const abort = createMockAbort();
 
-      const streamParts: ChunkType[] = [
+      const streamParts: ChunkType<z.infer<typeof testSchema>>[] = [
         // Text chunks
         {
           runId: 'test-run',
@@ -320,7 +326,7 @@ describe('StructuredOutputProcessor', () => {
         },
       ];
 
-      const finishChunk: ChunkType = {
+      const finishChunk: ChunkType<z.infer<typeof testSchema>> = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'finish' as const,
@@ -351,6 +357,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts,
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       // Check that the prompt was built correctly with all the different sections
@@ -413,7 +420,7 @@ describe('StructuredOutputProcessor', () => {
         },
       ];
 
-      const finishChunk: ChunkType = {
+      const finishChunk: ChunkType<z.infer<typeof testSchema>> = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'finish' as const,
@@ -443,6 +450,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts,
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       // Check that the prompt includes reasoning
@@ -560,7 +568,6 @@ describe('Structured Output with Tool Execution', () => {
 
     // Stream the response
     const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
-      format: 'aisdk',
       maxSteps: 5,
       structuredOutput: {
         schema: responseSchema,
@@ -609,9 +616,9 @@ describe('Structured Output with Tool Execution', () => {
 
     // Verify the final object matches the schema
     expect(finalObject).toBeDefined();
-    expect(finalObject.toolUsed).toBe('calculator');
-    expect(finalObject.result).toBe('8');
-    expect(typeof finalObject.confidence).toBe('number');
+    expect(finalObject!.toolUsed).toBe('calculator');
+    expect(finalObject!.result).toBe('8');
+    expect(typeof finalObject!.confidence).toBe('number');
 
     // Verify the tool was actually executed
     expect(fullStreamChunks.find(c => c.type === 'tool-result')).toBeDefined();
@@ -682,9 +689,9 @@ describe('Structured Output with Tool Execution', () => {
 
     // Verify the structured output was generated correctly
     expect(finalObject).toBeDefined();
-    expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
-    expect(finalObject.toolsCalled).toHaveLength(2);
-    expect(finalObject.location).toBe('Toronto');
+    expect(finalObject!.activities.length).toBeGreaterThanOrEqual(1);
+    expect(finalObject!.toolsCalled).toHaveLength(2);
+    expect(finalObject!.location).toBe('Toronto');
   }, 60000);
 
   it('should NOT use structured output processor when model is not provided', async () => {
@@ -709,9 +716,9 @@ describe('Structured Output with Tool Execution', () => {
 
     // Verify the result has the expected structure
     expect(result.object).toBeDefined();
-    expect(result.object.answer).toBeDefined();
-    expect(typeof result.object.confidence).toBe('number');
-    expect(typeof result.object.answer).toBe('string');
+    expect(result.object!.answer).toBeDefined();
+    expect(typeof result.object!.confidence).toBe('number');
+    expect(typeof result.object!.answer).toBe('string');
   }, 15000);
 
   it('should add structuredOutput object to response message metadata', async () => {
@@ -739,8 +746,8 @@ describe('Structured Output with Tool Execution', () => {
 
     // Verify the structured output is available on the result
     expect(result.object).toBeDefined();
-    expect(result.object.answer).toBeDefined();
-    expect(typeof result.object.confidence).toBe('number');
+    expect(result.object!.answer).toBeDefined();
+    expect(typeof result.object!.confidence).toBe('number');
 
     // Check that the structured output is in response message metadata (untyped v2 format)
     const responseMessages = stream.messageList.get.response.db();

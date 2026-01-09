@@ -2,7 +2,7 @@ import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sd
 import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v3';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import {
@@ -16,7 +16,9 @@ import {
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
-  const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {
+  const generateText = async <OUTPUT>(
+    args: Omit<LoopOptions<ToolSet, OUTPUT>, 'runId' | 'methodType'>,
+  ): ReturnType<typeof generateText5> => {
     const output = await loopFn({
       runId,
       methodType: 'generate',

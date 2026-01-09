@@ -9,7 +9,7 @@ import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
-interface PrepareToolsStepOptions<OUTPUT = undefined> {
+interface PrepareToolsStepOptions<OUTPUT> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
@@ -21,7 +21,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   memory?: MastraMemory;
 }
 
-export function createPrepareToolsStep<OUTPUT = undefined>({
+export function createPrepareToolsStep<OUTPUT>({
   capabilities,
   options,
   threadFromArgs,

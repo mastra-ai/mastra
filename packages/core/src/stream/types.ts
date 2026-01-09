@@ -20,6 +20,7 @@ import type { ScorerResult } from '../loop';
 import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { InferSchema, StandardSchema } from '../schema/type';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 
 export enum ChunkFrom {
@@ -191,7 +192,7 @@ interface ToolCallInputStreamingEndPayload {
   providerMetadata?: ProviderMetadata;
 }
 
-interface FinishPayload<Tools extends ToolSet = ToolSet> {
+interface FinishPayload<Tools extends ToolSet> {
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
@@ -240,7 +241,7 @@ export interface StepStartPayload {
   [key: string]: unknown;
 }
 
-export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
+export interface StepFinishPayload<Tools extends ToolSet, OUTPUT = unknown> {
   id?: string;
   providerMetadata?: ProviderMetadata;
   totalUsage?: LanguageModelUsage;
@@ -258,7 +259,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
     usage: LanguageModelUsage;
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
-    object?: OUTPUT;
+    object?: OUTPUT extends undefined ? unknown : InferSchema<OUTPUT>;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -499,14 +500,12 @@ interface NetworkStepFinishPayload {
   runId: string;
 }
 
-interface NetworkFinishPayload<OUTPUT = undefined> {
+interface NetworkFinishPayload {
   task: string;
   primitiveId: string;
   primitiveType: string;
   prompt: string;
   result: string;
-  /** Structured output object when structuredOutput option is provided */
-  object?: OUTPUT;
   isComplete?: boolean;
   completionReason: string;
   iteration: number;
@@ -554,7 +553,7 @@ export type DataChunkType = {
   id?: string;
 };
 
-export type NetworkChunkType<OUTPUT = undefined> =
+export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
   | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
@@ -571,16 +570,14 @@ export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-execution-approval'; payload: ToolExecutionApprovalPayload })
   | (BaseChunkType & { type: 'tool-execution-suspended'; payload: ToolExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
-  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
+  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
   | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })
   | (BaseChunkType & { type: 'network-validation-end'; payload: NetworkValidationEndPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent })
-  | (BaseChunkType & { type: 'network-object'; payload: { object: Partial<OUTPUT> } })
-  | (BaseChunkType & { type: 'network-object-result'; payload: { object: OUTPUT } });
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
-export type AgentChunkType<OUTPUT = undefined> =
+export type AgentChunkType<OUTPUT = unknown> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -599,7 +596,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
   | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
   | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
-  | (BaseChunkType & { type: 'finish'; payload: FinishPayload })
+  | (BaseChunkType & { type: 'finish'; payload: FinishPayload<ToolSet> })
   | (BaseChunkType & { type: 'error'; payload: ErrorPayload })
   | (BaseChunkType & { type: 'raw'; payload: RawPayload })
   | (BaseChunkType & { type: 'start'; payload: StartPayload })
@@ -709,21 +706,21 @@ export type WorkflowStreamEvent =
     });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
-export type TypedChunkType<OUTPUT = undefined> =
+export type TypedChunkType<OUTPUT> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
-  | NetworkChunkType<OUTPUT>
+  | NetworkChunkType
   | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
-export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type ChunkType<OUTPUT = unknown> = TypedChunkType<OUTPUT>;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
-  request: LLMStepResult['request'];
-  response?: LLMStepResult['response'];
-  rawResponse: LLMStepResult['response'] | Record<string, never>;
-  warnings?: LLMStepResult['warnings'];
+  request: LLMStepResult<unknown>['request'];
+  response?: LLMStepResult<unknown>['response'];
+  rawResponse: LLMStepResult<unknown>['response'] | Record<string, never>;
+  warnings?: LLMStepResult<unknown>['warnings'];
 }
 
 export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
@@ -767,30 +764,35 @@ export type partialModel = {
   version?: string;
 };
 
-export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
+export type MastraOnStepFinishCallback<OUTPUT> = (
   event: LLMStepResult<OUTPUT> & { model?: partialModel; runId?: string },
 ) => Promise<void> | void;
 
-export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
+export type MastraOnFinishCallbackArgs<OUTPUT> = LLMStepResult<OUTPUT> & {
   error?: Error | string | { message: string; stack: string };
-  object?: OUTPUT;
+  object: OUTPUT;
   steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
 };
 
-export type MastraOnFinishCallback<OUTPUT = undefined> = (
-  event: MastraOnFinishCallbackArgs<OUTPUT>,
-) => Promise<void> | void;
+export type MastraOnFinishCallback<OUTPUT> = (event: MastraOnFinishCallbackArgs<OUTPUT>) => Promise<void> | void;
 
-export type MastraModelOutputOptions<OUTPUT = undefined> = {
+export type MastraModelStructuredOutputOptions<OUTPUT> = Pick<
+  StructuredOutputOptions<OUTPUT>,
+  'model' | 'errorStrategy' | 'fallbackValue'
+> & {
+  schema: StandardSchema<OUTPUT>;
+};
+
+export type MastraModelOutputOptions<OUTPUT> = {
   runId: string;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   includeRawChunks?: boolean;
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: MastraModelStructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
@@ -818,12 +820,12 @@ export interface StepTripwireData {
  * Extended StepResult that includes tripwire data.
  * This extends the AI SDK's StepResult with our custom tripwire field.
  */
-export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools> & {
+export type MastraStepResult<Tools extends ToolSet> = StepResult<Tools> & {
   /** Tripwire data if this step was rejected by a processor */
   tripwire?: StepTripwireData;
 };
 
-export type LLMStepResult<OUTPUT = undefined> = {
+export type LLMStepResult<OUTPUT> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
@@ -844,10 +846,10 @@ export type LLMStepResult<OUTPUT = undefined> = {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
     uiMessages?: UIMessage<
-      OUTPUT extends unknown
-        ? undefined
+      OUTPUT extends undefined
+        ? unknown
         : {
-            structuredOutput?: OUTPUT;
+            structuredOutput?: InferSchema<OUTPUT>;
           } & Record<string, unknown>
     >[];
     id?: string;

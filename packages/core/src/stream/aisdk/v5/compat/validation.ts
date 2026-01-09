@@ -5,10 +5,12 @@ export type ValidationResult<T> =
   | {
       success: true;
       value: T;
+      error?: never;
     }
   | {
       success: false;
       error: Error;
+      value?: never;
     };
 
 /**

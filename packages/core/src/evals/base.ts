@@ -576,7 +576,7 @@ class MastraScorer<
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
       const schema = z.object({ score: z.number() });
-      let result;
+      let result: { object?: { score: number } };
       if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
@@ -590,7 +590,7 @@ class MastraScorer<
           tracingContext,
         });
       }
-      return { result: result.object.score, prompt };
+      return { result: result.object!.score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {

@@ -8,7 +8,7 @@ import {
 } from '@internal/ai-sdk-v5/test';
 import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
 import { describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v3';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, defaultSettings, mockDate, testUsage, testUsage2 } from './utils';

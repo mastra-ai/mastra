@@ -114,7 +114,10 @@ export const createConfig = async () =>
 
     // JS and JSX files
     {
-      files: ['**/*.js?(x)'],
+      files: ['**/*.js?(x)', '**/*.ts?(x)'],
+      plugins: {
+        'unused-imports': (await import('eslint-plugin-unused-imports')).default,
+      },
       rules: {
         'no-undef': ERROR,
 
@@ -122,7 +125,9 @@ export const createConfig = async () =>
         // if it weren't for https://github.com/import-js/eslint-plugin-import/issues/2132
         // we could enable this :(
         // 'import/no-unresolved': ERROR,
-        'no-unused-vars': [
+        'no-unused-vars': 'off',
+        'unused-imports/no-unused-imports': 'error',
+        'unused-imports/no-unused-vars': [
           ERROR,
           {
             args: 'after-used',
@@ -148,10 +153,13 @@ export const createConfig = async () =>
             },
           },
           plugins: {
+            'unused-imports': (await import('eslint-plugin-unused-imports')).default,
             '@typescript-eslint': (await import('typescript-eslint')).plugin,
           },
           rules: {
-            '@typescript-eslint/no-unused-vars': [
+            '@typescript-eslint/no-unused-vars': 'off',
+            'unused-imports/no-unused-imports': 'error',
+            'unused-imports/no-unused-vars': [
               ERROR,
               {
                 args: 'after-used',

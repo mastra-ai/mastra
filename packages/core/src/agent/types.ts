@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -28,6 +28,7 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
+import type { PossibleSchemaTypes } from '../schema/type';
 import type { OutputSchema } from '../stream';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
@@ -53,13 +54,13 @@ export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type FallbackFields<OUTPUT = undefined> =
+type FallbackFields<OUTPUT> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptions<OUTPUT = undefined> = {
+export type StructuredOutputOptions<OUTPUT, SCHEMA = NonNullable<PossibleSchemaTypes<OUTPUT>>> = {
   /** Zod schema to validate the output against */
-  schema: NonNullable<OutputSchema<OUTPUT>>;
+  schema: NonNullable<SCHEMA>;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
@@ -94,7 +95,7 @@ export type StructuredOutputOptions<OUTPUT = undefined> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type SerializableStructuredOutputOptions<OUTPUT = undefined> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
+export type SerializableStructuredOutputOptions<OUTPUT> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
   model?: ModelRouterModelId | OpenAICompatibleConfig;
 };
 

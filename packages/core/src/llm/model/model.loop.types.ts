@@ -8,12 +8,13 @@ import type {
   UIMessage,
 } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
 import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { inferOutput } from './shared.types';
 
 export type OriginalStreamTextOptions<
@@ -33,7 +34,7 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT> = {
   methodType: ModelMethodType;
   messages?: UIMessage[] | ModelMessage[];
   outputProcessors?: OutputProcessorOrWorkflow[];

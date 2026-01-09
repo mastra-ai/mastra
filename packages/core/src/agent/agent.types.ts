@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
+import type { ModelMessage, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
@@ -8,6 +8,7 @@ import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types
 import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { StandardSchema } from '../schema/type';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
@@ -44,7 +45,7 @@ export interface NetworkRoutingConfig {
 /**
  * Full configuration options for agent.network() execution.
  */
-export type NetworkOptions<OUTPUT = undefined> = {
+export type NetworkOptions = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
@@ -107,40 +108,14 @@ export type NetworkOptions<OUTPUT = undefined> = {
     result: string;
     isComplete: boolean;
   }) => void | Promise<void>;
-
-  /**
-   * Structured output configuration for the network's final result.
-   * When provided, the network will generate a structured response matching the schema.
-   *
-   * @example
-   * ```typescript
-   * import { z } from 'zod';
-   *
-   * const resultSchema = z.object({
-   *   summary: z.string(),
-   *   recommendations: z.array(z.string()),
-   *   confidence: z.number(),
-   * });
-   *
-   * const stream = await agent.network(task, {
-   *   structuredOutput: {
-   *     schema: resultSchema,
-   *   },
-   * });
-   *
-   * // Get typed result
-   * const result = await stream.object;
-   * ```
-   */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends undefined ? never : OUTPUT>;
 };
 
 /**
  * @deprecated Use NetworkOptions instead
  */
-export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
+export type MultiPrimitiveExecutionOptions = NetworkOptions;
 
-export type AgentExecutionOptions<OUTPUT = undefined> = {
+export type AgentExecutionOptions<OUTPUT = unknown> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -171,28 +146,28 @@ export type AgentExecutionOptions<OUTPUT = undefined> = {
   maxSteps?: number;
 
   /** Conditions for stopping execution (e.g., step count, token limit) */
-  stopWhen?: LoopOptions['stopWhen'];
+  stopWhen?: LoopOptions<ToolSet, OUTPUT>['stopWhen'];
 
   /** Provider-specific options passed to the language model */
   providerOptions?: ProviderOptions;
 
   /** Callback fired after each execution step. */
-  onStepFinish?: LoopConfig['onStepFinish'];
+  onStepFinish?: LoopConfig<OUTPUT>['onStepFinish'];
   /** Callback fired when execution completes. */
-  onFinish?: LoopConfig['onFinish'];
+  onFinish?: LoopConfig<OUTPUT>['onFinish'];
 
   /** Callback fired for each streaming chunk received */
   onChunk?: LoopConfig<OUTPUT>['onChunk'];
   /** Callback fired when an error occurs during streaming */
-  onError?: LoopConfig['onError'];
+  onError?: LoopConfig<OUTPUT>['onError'];
   /** Callback fired when streaming is aborted */
-  onAbort?: LoopConfig['onAbort'];
+  onAbort?: LoopConfig<OUTPUT>['onAbort'];
   /** Tools that are active for this execution */
-  activeTools?: LoopOptions['activeTools'];
+  activeTools?: LoopOptions<ToolSet, OUTPUT>['activeTools'];
   /**
    * Signal to abort the streaming operation
    */
-  abortSignal?: LoopConfig['abortSignal'];
+  abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
@@ -213,7 +188,7 @@ export type AgentExecutionOptions<OUTPUT = undefined> = {
   toolChoice?: ToolChoice<any>;
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
-  modelSettings?: LoopOptions['modelSettings'];
+  modelSettings?: LoopOptions<ToolSet, OUTPUT>['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
@@ -243,7 +218,8 @@ export type AgentExecutionOptions<OUTPUT = undefined> = {
   includeRawChunks?: boolean;
 };
 
-export type InnerAgentExecutionOptions<OUTPUT = undefined> = AgentExecutionOptions<OUTPUT> & {
+export type InnerAgentExecutionOptions<OUTPUT> = Omit<AgentExecutionOptions<OUTPUT>, 'structuredOutput'> & {
+  structuredOutput?: StructuredOutputOptions<OUTPUT, StandardSchema<OUTPUT>>;
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;

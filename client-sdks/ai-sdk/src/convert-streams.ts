@@ -104,7 +104,7 @@ export function toAISdkV5Stream(
   stream:
     | MastraAgentNetworkStream
     | MastraWorkflowStream<any, any, any, any>
-    | MastraModelOutput
+    | MastraModelOutput<unknown>
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>,
   options: {
     from: ToAISDKFrom;
@@ -138,8 +138,8 @@ export function toAISdkV5Stream(
     >;
   }
 
-  const agentReadable: ReadableStream<ChunkType<any>> =
-    'fullStream' in stream ? (stream as MastraModelOutput<any>).fullStream : (stream as ReadableStream<ChunkType<any>>);
+  const agentReadable: ReadableStream<ChunkType> =
+    'fullStream' in stream ? (stream as MastraModelOutput<unknown>).fullStream : (stream as ReadableStream<ChunkType>);
   return agentReadable.pipeThrough(
     AgentStreamToAISDKTransformer<any>({
       lastMessageId: options?.lastMessageId,

@@ -1,13 +1,13 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
-import type { ZodSchema } from 'zod';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
+import type { PossibleSchemaTypes } from '../../schema/type';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType, OutputSchema } from '../../stream';
+import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
 import type { Processor } from '../index';
 
@@ -31,7 +31,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
-  public schema: NonNullable<OutputSchema<OUTPUT>>;
+  public schema: NonNullable<PossibleSchemaTypes<OUTPUT>>;
   private structuringAgent: Agent;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
@@ -74,15 +74,15 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
   }
 
   async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
+    part: ChunkType<OUTPUT>;
+    streamParts: ChunkType<OUTPUT>[];
     state: Record<string, unknown> & {
       controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
     };
     abort: (reason?: string, options?: unknown) => never;
     tracingContext?: TracingContext;
     retryCount: number;
-  }): Promise<ChunkType | null | undefined> {
+  }): Promise<ChunkType<OUTPUT> | null | undefined> {
     const { part, state, streamParts, abort, tracingContext } = args;
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
 
@@ -101,7 +101,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
   }
 
   private async processAndEmitStructuredOutput(
-    streamParts: ChunkType[],
+    streamParts: ChunkType<OUTPUT>[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
     tracingContext?: TracingContext,
@@ -117,7 +117,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
         structuredOutput: {
           schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,
-        },
+        } as StructuredOutputOptions<OUTPUT>,
         providerOptions: this.providerOptions,
         tracingContext,
       });
@@ -165,7 +165,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
           metadata: {
             from: 'structured-output',
           },
-        } as const;
+        };
         controller.enqueue(newChunk);
       }
     } catch (error) {
@@ -181,7 +181,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
    * Build a structured markdown prompt from stream parts
    * Collects chunks by type and formats them in a consistent structure
    */
-  private buildStructuringPrompt(streamParts: ChunkType[]): string {
+  private buildStructuringPrompt(streamParts: ChunkType<OUTPUT>[]): string {
     const textChunks: string[] = [];
     const reasoningChunks: string[] = [];
     const toolCalls: ToolCallChunk[] = [];

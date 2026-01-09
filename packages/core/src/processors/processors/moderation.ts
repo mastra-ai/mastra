@@ -7,6 +7,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
+import { toJSONSchema } from '../../stream/base/schema';
 import type { Processor } from '../index';
 
 /**
@@ -294,14 +295,14 @@ export class ModerationProcessor implements Processor<'moderation'> {
         });
       } else {
         response = await this.moderationAgent.generateLegacy(prompt, {
-          output: schema,
+          output: toJSONSchema(schema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }
 
-      const result = response.object satisfies ModerationResult;
+      const result = response.object as ModerationResult;
 
       return result;
     } catch (error) {

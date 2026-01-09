@@ -78,7 +78,7 @@ export type NetworkDataPart = {
 export type AgentDataPart = {
   type: 'data-tool-agent';
   id: string;
-  data: LLMStepResult;
+  data: LLMStepResult<unknown>;
 };
 
 // used so it's not serialized to JSON
