@@ -6,12 +6,14 @@ export interface AgentSettingsStateProps {
   defaultSettings?: AgentSettings;
 }
 
-const defaultSettings: AgentSettings = {
+export const defaultSettings: AgentSettings = {
   modelSettings: {
     maxRetries: 2,
     maxSteps: 5,
     temperature: 0.5,
-    topP: 1,
+    // NOTE: topP is intentionally NOT set by default.
+    // Anthropic models don't allow both to be specified simultaneously.
+    // See: https://github.com/mastra-ai/mastra/issues/11760
     chatWithGenerateLegacy: false,
     chatWithGenerate: false,
   },

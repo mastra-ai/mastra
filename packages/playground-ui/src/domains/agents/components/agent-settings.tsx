@@ -2,7 +2,7 @@ import { Slider } from '@/components/ui/slider';
 
 import { Label } from '@/components/ui/label';
 
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Info } from 'lucide-react';
 
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -19,6 +19,34 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cleanProviderId } from './agent-metadata/utils';
+
+/**
+ * Check if the model is a newer Claude model (4.5+) that doesn't allow
+ * both temperature and top_p to be specified simultaneously.
+ * See: https://github.com/mastra-ai/mastra/issues/11760
+ */
+function isAnthropicModelWithSamplingRestriction(provider?: string, modelId?: string): boolean {
+  if (!provider) return false;
+  const cleanProvider = cleanProviderId(provider).toLowerCase();
+  if (cleanProvider !== 'anthropic') return false;
+
+  // Claude 4.5+ models have the restriction
+  // Model IDs like: claude-sonnet-4-5, claude-haiku-4-5, claude-4-5-sonnet, etc.
+  if (!modelId) return true; // Default to restricted for anthropic if no modelId
+  const lowerModelId = modelId.toLowerCase();
+
+  // Check for version 4.5+ patterns specifically
+  // Must match version 4.5 or higher (4-5, 4.5, 5-0, 5.0, etc.)
+  // But NOT match 3-5 or 3.5 (Claude 3.5 Sonnet, etc.)
+  // Patterns: claude-*-4-5, claude-haiku-4-5, claude-sonnet-4-5, claude-opus-4-5
+  // Also future versions: 5-0, 5-5, 6-0, etc.
+  const is45OrNewer =
+    /[^0-9]4[.-]5/.test(lowerModelId) || // Matches 4-5 or 4.5 but not 34-5
+    /[^0-9][5-9][.-]\d/.test(lowerModelId); // Matches 5-0, 6-0, etc. for future versions
+
+  return is45OrNewer;
+}
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -78,6 +106,9 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent.modelVersion;
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
+
+  // Check if this model has the temperature/topP mutual exclusion restriction
+  const hasSamplingRestriction = isAnthropicModelWithSamplingRestriction(agent.provider, agent.modelId);
 
   let radioValue;
 
@@ -158,6 +189,13 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           />
         </Entry>
 
+        {hasSamplingRestriction && (
+          <div className="flex items-center gap-2 text-xs text-icon3 bg-surface3 rounded px-3 py-2">
+            <Info className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Claude 4.5+ models only accept Temperature OR Top P, not both.</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 @xs:grid-cols-2 gap-8">
           <Entry label="Temperature">
             <div className="flex flex-row justify-between items-center gap-2">
@@ -166,12 +204,18 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 max={1}
                 min={-0.1}
                 step={0.1}
-                onValueChange={value =>
+                onValueChange={value => {
+                  const newTemp = value[0] < 0 ? undefined : value[0];
                   setSettings({
                     ...settings,
-                    modelSettings: { ...settings?.modelSettings, temperature: value[0] < 0 ? undefined : value[0] },
-                  })
-                }
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      temperature: newTemp,
+                      // For Anthropic 4.5+ models, clear topP when temperature is set
+                      ...(hasSamplingRestriction && newTemp !== undefined ? { topP: undefined } : {}),
+                    },
+                  });
+                }}
               />
               <Txt as="p" variant="ui-sm" className="text-icon3">
                 {settings?.modelSettings?.temperature ?? 'n/a'}
@@ -182,12 +226,18 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           <Entry label="Top P">
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider
-                onValueChange={value =>
+                onValueChange={value => {
+                  const newTopP = value[0] < 0 ? undefined : value[0];
                   setSettings({
                     ...settings,
-                    modelSettings: { ...settings?.modelSettings, topP: value[0] < 0 ? undefined : value[0] },
-                  })
-                }
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      topP: newTopP,
+                      // For Anthropic 4.5+ models, clear temperature when topP is set
+                      ...(hasSamplingRestriction && newTopP !== undefined ? { temperature: undefined } : {}),
+                    },
+                  });
+                }}
                 value={[settings?.modelSettings?.topP ?? -0.1]}
                 max={1}
                 min={-0.1}
