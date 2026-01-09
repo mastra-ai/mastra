@@ -885,3 +885,43 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     expect(layer.shouldApply()).toBe(false);
   });
 });
+
+describe('Issue 11766 - optional and default with JSON Schema conversion', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o-mini',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should produce valid JSON Schema with type key for all properties after OpenAI compat transformation', async () => {
+    const { zodToJsonSchema } = await import('../zod-to-json');
+
+    // Original schema from issue #11766
+    // Using .optional() and .default() with structuredOutput was throwing:
+    // "Invalid schema for response_format 'response': In context=('properties', 'phone'), schema must have a 'type' key."
+    const originalSchema = z.object({
+      name: z.string(),
+      age: z.number().default(0),
+      city: z.string(),
+      phone: z.string().optional(),
+    });
+
+    // Process through OpenAI compat layer (adds transforms)
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(originalSchema);
+
+    // Convert to JSON Schema
+    const jsonSchema = zodToJsonSchema(processed);
+
+    // Verify all properties have a type key (this was failing before the fix)
+    expect(jsonSchema.type).toBe('object');
+    expect(jsonSchema.properties).toBeDefined();
+
+    // Check that each property has a type - not an empty object {}
+    for (const [key, prop] of Object.entries(jsonSchema.properties || {})) {
+      const p = prop as any;
+      const hasType = p.type !== undefined || p.anyOf !== undefined || p.oneOf !== undefined;
+      expect(hasType, `Property ${key} should have a type key`).toBe(true);
+    }
+  });
+});

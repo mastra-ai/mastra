@@ -101,6 +101,20 @@ export function zodToJsonSchema(
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
         const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
+
+        // Handle pipe/transform types - use the input schema for JSON Schema
+        // This fixes issue #11766 where .transform() causes empty {} output
+        // When OpenAI compat layer converts .optional() to .nullable().transform(),
+        // we need to preserve the type information from the input schema
+        if (def?.type === 'pipe' && def.in) {
+          // Recursively convert the input schema to JSON Schema
+          const inputJsonSchema = (z as any)[fn](def.in, { unrepresentable: 'any' });
+          // Copy properties from input schema to current schema
+          // (excluding $schema which is added at the root level)
+          const { $schema, ...inputSchemaProps } = inputJsonSchema;
+          Object.assign(ctx.jsonSchema, inputSchemaProps);
+        }
+
         // Check for date type using both possible property names
         if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
           ctx.jsonSchema.type = 'string';

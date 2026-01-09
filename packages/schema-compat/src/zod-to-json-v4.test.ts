@@ -196,3 +196,84 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
     });
   });
 });
+
+describe('Issue 11766 - optional and default with transforms in Zod v4', () => {
+  it('should produce valid JSON Schema for schema with optional and default fields', () => {
+    // Exact schema from issue #11766
+    // When using .optional() or .default(), structuredOutput should work correctly
+    const schema = zV4.object({
+      name: zV4.string(),
+      age: zV4.number().default(0),
+      city: zV4.string(),
+      phone: zV4.string().optional(),
+    });
+
+    const result = zodToJsonSchema(schema as any);
+
+    // Verify structure
+    expect(result.type).toBe('object');
+    expect(result.properties).toBeDefined();
+
+    // Check that all properties have a type key (not empty objects)
+    for (const [key, prop] of Object.entries(result.properties || {})) {
+      const p = prop as any;
+      const hasType = p.type !== undefined || p.anyOf !== undefined || p.oneOf !== undefined;
+      expect(hasType, `Property ${key} should have a type key. Got: ${JSON.stringify(p)}`).toBe(true);
+    }
+  });
+
+  it('should preserve type information when schema has transforms (OpenAI compat layer)', async () => {
+    // Test the full flow with OpenAI compat layer which adds transforms
+    const { applyCompatLayer } = await import('./utils');
+    const { OpenAISchemaCompatLayer } = await import('./provider-compats/openai');
+
+    const modelInfo = {
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+      supportsStructuredOutputs: false,
+    };
+
+    // Original schema from issue #11766
+    const originalSchema = zV4.object({
+      name: zV4.string(),
+      age: zV4.number().default(0),
+      city: zV4.string(),
+      phone: zV4.string().optional(),
+    });
+
+    // Process through OpenAI compat layer (which adds transforms)
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = applyCompatLayer({
+      schema: originalSchema as any,
+      compatLayers: [layer],
+      mode: 'jsonSchema',
+    });
+
+    // Verify all properties have type keys - this was failing before the fix
+    expect((jsonSchema as any).type).toBe('object');
+    for (const [key, prop] of Object.entries((jsonSchema as any).properties || {})) {
+      const p = prop as any;
+      const hasType = p.type !== undefined || p.anyOf !== undefined || p.oneOf !== undefined;
+      expect(hasType, `Property ${key} should have a type key. Got: ${JSON.stringify(p)}`).toBe(true);
+    }
+
+    // Verify nullable fields use anyOf pattern for OpenAI compatibility
+    expect((jsonSchema as any).properties.phone.anyOf).toBeDefined();
+    expect((jsonSchema as any).properties.age.anyOf).toBeDefined();
+  });
+
+  it('should handle pipe/transform schemas by using input type for JSON Schema', () => {
+    // Schema with explicit transform (simulating what OpenAI compat layer does)
+    const schemaWithTransform = zV4
+      .string()
+      .nullable()
+      .transform((val: string | null) => (val === null ? undefined : val));
+
+    const result = zodToJsonSchema(schemaWithTransform as any);
+
+    // Should have type information from the input schema (nullable string)
+    expect(result.anyOf || result.type).toBeDefined();
+    // Should not be an empty object
+    expect(Object.keys(result).length).toBeGreaterThan(1); // More than just $schema
+  });
+});
