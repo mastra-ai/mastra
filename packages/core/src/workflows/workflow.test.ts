@@ -5,7 +5,7 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { z as zv4 } from 'zod-v4';
+import { z as zv4 } from 'zod';
 import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
@@ -9749,7 +9749,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Schema Validation Zod-v4', () => {
+  describe('Schema Validation zod', () => {
     it('should throw error if trigger data is invalid', async () => {
       const triggerSchema = zv4.object({
         required: zv4.string(),

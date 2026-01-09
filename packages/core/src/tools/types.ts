@@ -28,40 +28,33 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
  * MCP-specific context properties available during tool execution in MCP environments.
  */
 // Agent tool execution context - properties specific when tools are executed by agents
-export interface AgentToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
   toolCallId: string;
   messages: any[];
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<any>;
 
   // Optional - memory identifiers
   threadId?: string;
   resourceId?: string;
 
   // Optional - only present if tool was previously suspended
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
+  resumeData?: InferZodLikeSchema<TResume>;
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
-export interface WorkflowToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   // Always present when called from workflow context
   runId: string;
   workflowId: string;
   state: any;
   setState: (state: any) => void;
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
-
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<any>;
   // Optional - only present if workflow step was previously suspended
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
+  resumeData?: TResume;
 }
 
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
@@ -186,10 +179,7 @@ export type InternalCoreTool = {
 );
 
 // Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
   requestContext?: RequestContext;
@@ -203,32 +193,29 @@ export interface ToolExecutionContext<
   // ============ Context-specific nested properties ============
 
   // Agent-specific properties
-  agent?: AgentToolExecutionContext<TSuspendSchema, TResumeSchema>;
+  agent?: AgentToolExecutionContext<TSuspend, TResume>;
 
   // Workflow-specific properties
-  workflow?: WorkflowToolExecutionContext<TSuspendSchema, TResumeSchema>;
+  workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
 }
 
 export interface ToolAction<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSuspendSchema,
-    TResumeSchema
-  >,
+  TSchemaIn,
+  TSchemaOut,
+  TSuspend,
+  TResume,
+  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
 > {
   id: TId;
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  suspendSchema?: TSuspendSchema;
-  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspend;
+  resumeSchema?: TResume;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
@@ -237,8 +224,8 @@ export interface ToolAction<
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (
-    inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-    context?: TContext,
+    inputData: TSchemaIn,
+    context: TContext,
   ) => Promise<
     (TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> & { error?: never } : any) | ValidationError
   >;

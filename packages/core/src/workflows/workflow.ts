@@ -28,7 +28,6 @@ import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
-import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
@@ -68,8 +67,8 @@ import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
-export type AgentStepOptions<TOutput extends OutputSchema = undefined> = Omit<
-  AgentExecutionOptions<TOutput> & AgentStreamOptions,
+export type AgentStepOptions<TOUTPUT> = Omit<
+  AgentExecutionOptions<TOUTPUT> & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
   | 'requestContext'
@@ -117,86 +116,67 @@ export function mapVariable(config: any): any {
  * @param params.execute Function that performs the step's operations
  * @returns A Step object that can be added to the workflow
  */
-export function createStep<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
+export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>(
   params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 // Overload for agent WITH structured output schema
-export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
-  agent: Agent<TStepId, any>,
-  agentOptions: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: TStepOutput };
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
-): Step<
-  TStepId,
-  any,
-  z.ZodObject<{ prompt: z.ZodString }>,
-  TStepOutput,
-  z.ZodType<any>,
-  z.ZodType<any>,
-  DefaultEngineType
->;
+// export function createStep<TStepId extends string, TStepOutput>(
+//   agent: Agent<TStepId, any>,
+//   agentOptions: AgentStepOptions<TStepOutput> & {
+//     structuredOutput: { schema: TStepOutput };
+//     retries?: number;
+//     scorers?: DynamicArgument<MastraScorers>;
+//   },
+// ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
 
-// Overload for agent WITHOUT structured output (default { text: string })
-export function createStep<
-  TStepId extends string,
-  TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
-  TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
-  agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
+// // Overload for agent WITHOUT structured output (default { text: string })
+// export function createStep<
+//   TStepId extends string,
+//   TStepInput extends { prompt: string },
+//   TStepOutput extends { text: string },
+//   TResumeSchema,
+//   TSuspendSchema,
+// >(
+//   agent: Agent<TStepId, any>,
+//   agentOptions?: AgentStepOptions<z.infer<TStepOutput>> & {
+//     retries?: number;
+//     scorers?: DynamicArgument<MastraScorers>;
+//   },
+// ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
-export function createStep<
-  TSchemaIn extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
->(
-  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
+// export function createStep<
+//   TSchemaIn,
+//   TSuspendSchema,
+//   TResumeSchema,
+//   TSchemaOut,
+//   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+// >(
+//   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+//   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+// ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
 
-// Processor overload - wraps a Processor as a workflow step
-export function createStep<TProcessorId extends string>(
-  processor: Processor<TProcessorId>,
-): Step<
-  `processor:${TProcessorId}`,
-  any,
-  typeof ProcessorStepSchema,
-  typeof ProcessorStepOutputSchema,
-  any,
-  any,
-  DefaultEngineType
->;
+// // Processor overload - wraps a Processor as a workflow step
+// export function createStep<TProcessorId extends string>(
+//   processor: Processor<TProcessorId>,
+// ): Step<
+//   `processor:${TProcessorId}`,
+//   any,
+//   typeof ProcessorStepSchema,
+//   typeof ProcessorStepOutputSchema,
+//   any,
+//   any,
+//   DefaultEngineType
+// >;
 
-export function createStep<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
+export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>(
   params:
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>
     | Processor,
   agentOrToolOptions?:
-    | (AgentStepOptions & {
+    | (AgentStepOptions<TStepOutput> & {
         retries?: number;
         scorers?: DynamicArgument<MastraScorers>;
       })
@@ -207,7 +187,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
     const options = (agentOrToolOptions ?? {}) as
-      | (AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+      | (AgentStepOptions<z.infer<TStepOutput>> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
       | undefined;
     // Determine output schema based on structuredOutput option
     const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
@@ -1078,22 +1058,14 @@ export function cloneWorkflow<
 }
 
 export class Workflow<
-  TEngineType = any,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
-    string,
-    any,
-    any,
-    any,
-    any,
-    any,
-    TEngineType
-  >[],
-  TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TPrevSchema extends z.ZodType<any> = TInput,
->
+    TEngineType,
+    TSteps extends Step<string, any, any, any, any, any, TEngineType>[],
+    TWorkflowId extends string,
+    TState,
+    TInput,
+    TOutput,
+    TPrevSchema = TInput,
+  >
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType>
 {
@@ -1510,13 +1482,9 @@ export class Workflow<
       TState,
       TInput,
       TOutput,
-      z.ZodObject<
-        {
-          [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema'];
-        },
-        any,
-        z.ZodTypeAny
-      >
+      z.ZodObject<{
+        [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema'];
+      }>
     >;
   }
 
@@ -1569,13 +1537,9 @@ export class Workflow<
       TState,
       TInput,
       TOutput,
-      z.ZodObject<
-        {
-          [K in keyof StepsRecord<ExtractedSteps[]>]: z.ZodOptional<StepsRecord<ExtractedSteps[]>[K]['outputSchema']>;
-        },
-        any,
-        z.ZodTypeAny
-      >
+      z.ZodObject<{
+        [K in keyof StepsRecord<ExtractedSteps[]>]: z.ZodOptional<StepsRecord<ExtractedSteps[]>[K]['outputSchema']>;
+      }>
     >;
   }
 

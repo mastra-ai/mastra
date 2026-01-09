@@ -1,6 +1,5 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
-import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
@@ -8,6 +7,7 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
+import type { OutputSchema } from '../stream';
 import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -47,13 +47,13 @@ export type TimeTravelExecutionParams = {
 
 export type StepMetadata = Record<string, any>;
 
-export type StepSuccess<P, R, S, T> = {
+export type StepSuccess<Payload, Resume, Suspend, Output> = {
   status: 'success';
-  output: T;
-  payload: P;
-  resumePayload?: R;
-  suspendPayload?: S;
-  suspendOutput?: T;
+  output: Output;
+  payload: Payload;
+  resumePayload?: Resume;
+  suspendPayload?: Suspend;
+  suspendOutput?: Output;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -178,8 +178,8 @@ export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
 };
 
-export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends z.ZodTypeAny> = {
-  fn: ExecuteFunction<any, z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
+export type DynamicMapping<TPrevSchema, TSchemaOut> = {
+  fn: ExecuteFunction<any, TPrevSchema, TSchemaOut, any, any, any>;
   schema: TSchemaOut;
 };
 
@@ -538,31 +538,17 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
-export type StepParams<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
-> = {
+export type StepParams<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
   id: TStepId;
   description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  stateSchema?: TState;
+  inputSchema: OutputSchema<TStepInput>;
+  outputSchema: OutputSchema<TStepOutput>;
+  resumeSchema?: OutputSchema<TResume>;
+  suspendSchema?: OutputSchema<TSuspend>;
+  stateSchema?: OutputSchema<TState>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
-  execute: ExecuteFunction<
-    z.infer<TState>,
-    z.infer<TStepInput>,
-    z.infer<TStepOutput>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    DefaultEngineType
-  >;
+  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 };
 
 export type ToolStep<
