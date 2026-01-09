@@ -182,7 +182,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        // Return null config when memory is not configured (Issue #11765)
+        // Return null config when memory is not configured
         // This allows the playground UI to gracefully handle agents without memory
         return { config: null };
       }
@@ -387,7 +387,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       validateBody({ threadId });
       if (!memory) {
-        // Return null working memory when memory is not configured (Issue #11765)
+        // Return null working memory when memory is not configured
         // This allows the playground UI to gracefully handle agents without memory
         return {
           workingMemory: null,
