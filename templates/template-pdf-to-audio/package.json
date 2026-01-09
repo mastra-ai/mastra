@@ -24,7 +24,7 @@
     "@mastra/memory": "beta",
     "@mastra/observability": "beta",
     "@mastra/voice-openai": "beta",
-    "ai": "^4.3.19",
+    "ai": "^6.0.21",
     "pdf2json": "^3.1.3",
     "zod": "^3.25.76"
   },
