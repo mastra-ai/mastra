@@ -2284,6 +2284,37 @@ export class Mastra<
     this.#storage = augmentWithInit(storage);
   }
 
+  /**
+   * Replace the pubsub implementation at runtime.
+   *
+   * This is useful for switching to a different pubsub implementation,
+   * such as when setting up IPC communication with a worker process.
+   *
+   * If the event engine is already running (events are subscribed),
+   * this will automatically migrate all subscriptions to the new pubsub.
+   *
+   * @param pubsub - The new PubSub implementation to use
+   *
+   * @example
+   * ```typescript
+   * import { IPCPubSub } from '@mastra/core/events';
+   *
+   * // Switch to IPC-based pubsub for worker communication
+   * const ipcPubSub = new IPCPubSub();
+   * mastra.setPubSub(ipcPubSub);
+   * ```
+   */
+  public async setPubSub(pubsub: PubSub): Promise<void> {
+    // Stop event engine on old pubsub (unsubscribe all listeners)
+    await this.stopEventEngine();
+
+    // Replace the pubsub
+    this.#pubsub = pubsub;
+
+    // Re-subscribe all listeners to the new pubsub
+    await this.startEventEngine();
+  }
+
   public setLogger({ logger }: { logger: TLogger }) {
     this.#logger = logger;
 
