@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.5",
-    "uuid": "^11.1.0",
+    "uuid": "^13.0.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   },

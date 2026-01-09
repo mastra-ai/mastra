@@ -89,8 +89,8 @@ export function toAISdkV5Stream<
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
   options: { from: 'workflow'; includeTextStreamParts?: boolean },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
-export function toAISdkV5Stream(
-  stream: MastraAgentNetworkStream,
+export function toAISdkV5Stream<OUTPUT extends OutputSchema = undefined>(
+  stream: MastraAgentNetworkStream<OUTPUT>,
   options: { from: 'network' },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream<TOutput extends OutputSchema>(

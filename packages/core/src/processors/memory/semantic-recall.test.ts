@@ -5,6 +5,7 @@ import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 
+import { globalEmbeddingCache } from './embedding-cache';
 import { SemanticRecall } from './semantic-recall';
 
 // Helper function to create test messages in MastraDBMessage format
@@ -33,6 +34,9 @@ describe('SemanticRecall', () => {
   let requestContext: RequestContext;
 
   beforeEach(() => {
+    // Clear global embedding cache between tests
+    globalEmbeddingCache.clear();
+
     // Mock storage
     mockStorage = {
       listMessages: vi.fn(),

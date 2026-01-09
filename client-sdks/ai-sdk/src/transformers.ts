@@ -872,6 +872,12 @@ export function transformNetwork(
         },
       } as const;
     }
+    case 'network-object':
+    case 'network-object-result': {
+      // Structured output chunks - currently not exposed in AI SDK format
+      // These are used by MastraAgentNetworkStream's .object and .objectStream getters
+      return null;
+    }
     default: {
       // Check for custom data chunks first (before processing as events)
       if (isAgentExecutionDataChunkType(payload)) {

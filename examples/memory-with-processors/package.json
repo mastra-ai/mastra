@@ -14,7 +14,7 @@
     "@mastra/memory": "latest",
     "ai": "^4.3.19",
     "chalk": "^5.4.1",
-    "dotenv": "^16.3.1",
+    "dotenv": "^17.2.3",
     "js-tiktoken": "^1.0.13",
     "tiktoken": "^1.0.13",
     "tsx": "^4.6.2",

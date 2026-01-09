@@ -29,8 +29,10 @@
 import { z } from 'zod';
 
 import type { MastraDBMessage, Agent } from '../../agent';
+import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraScorer } from '../../evals/base';
 import { ChunkFrom } from '../../stream';
+import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 import type { NetworkChunkType } from '../../stream/types';
 
 // ============================================================================
@@ -592,6 +594,86 @@ export async function generateFinalResult(
 
   const result = await stream.getFullOutput();
   return result.object?.finalResult;
+}
+
+/**
+ * Result type for structured final result generation
+ */
+export interface StructuredFinalResult<OUTPUT extends OutputSchema = undefined> {
+  /** Text result (for backward compatibility) */
+  text?: string;
+  /** Structured object result when user schema is provided */
+  object?: InferSchemaOutput<OUTPUT>;
+}
+
+/**
+ * Generates a structured final result using the user-provided schema.
+ * This is called when the network has structuredOutput option configured.
+ *
+ * @internal Used by the network loop when structuredOutput is provided
+ */
+export async function generateStructuredFinalResult<OUTPUT extends OutputSchema = undefined>(
+  agent: Agent,
+  context: CompletionContext,
+  structuredOutputOptions: StructuredOutputOptions<OUTPUT>,
+  streamContext?: {
+    writer?: { write: (chunk: NetworkChunkType) => Promise<void> };
+    stepId?: string;
+    runId?: string;
+  },
+): Promise<StructuredFinalResult<OUTPUT>> {
+  const prompt = `
+    The task has been completed successfully.
+    Original task: ${context.originalTask}
+
+    The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} produced this result:
+    ${JSON.stringify(context.primitiveResult)}
+
+    Based on the task and result above, generate a structured response according to the provided schema.
+    Use the conversation history and primitive results to craft the response.
+  `;
+
+  // Cast structuredOutputOptions to the expected type - OUTPUT already extends OutputSchema
+  // so the conditional OUTPUT extends OutputSchema ? OUTPUT : never evaluates to OUTPUT
+  const stream = await agent.stream(prompt, {
+    maxSteps: 1,
+    structuredOutput: structuredOutputOptions as StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>,
+  });
+
+  const { writer, stepId, runId: streamRunId } = streamContext ?? {};
+  const canStream = writer && stepId && streamRunId;
+
+  // Stream partial objects via network-object chunks
+  for await (const partialObject of stream.objectStream) {
+    if (canStream && partialObject) {
+      // Cast via unknown because the generic OUTPUT is opaque at this point
+      await writer.write({
+        type: 'network-object',
+        payload: { object: partialObject },
+        from: ChunkFrom.NETWORK,
+        runId: streamRunId,
+      } as unknown as NetworkChunkType);
+    }
+  }
+
+  const result = await stream.getFullOutput();
+  const finalObject = result.object as InferSchemaOutput<OUTPUT> | undefined;
+
+  // Emit final object-result chunk
+  if (canStream && finalObject) {
+    // Cast via unknown because the generic OUTPUT is opaque at this point
+    await writer.write({
+      type: 'network-object-result',
+      payload: { object: finalObject },
+      from: ChunkFrom.NETWORK,
+      runId: streamRunId,
+    } as unknown as NetworkChunkType);
+  }
+
+  return {
+    text: finalObject ? JSON.stringify(finalObject) : undefined,
+    object: finalObject,
+  };
 }
 
 // Re-export for users who want to create custom scorers

@@ -743,7 +743,12 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             "id": "test-id-from-model",
             "messages": [
               {
-                "content": "Hello, world!",
+                "content": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
                 "role": "assistant",
               },
             ],

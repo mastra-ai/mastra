@@ -1164,6 +1164,757 @@ exports[`Loop Tests > AISDK v5 > result.files > should contain files 1`] = `
 ]
 `;
 
+exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty text deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversation history in the llm input 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "response-id",
+      "modelId": "response-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:05.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchronous tool results 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "output": "value-result",
+    "providerExecuted": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-result",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "file": DefaultGeneratedFileWithType {
+      "base64Data": "Hello World",
+      "mediaType": "text/plain",
+      "type": "file",
+      "uint8ArrayData": undefined,
+    },
+    "type": "file",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "file": DefaultGeneratedFileWithType {
+      "base64Data": "QkFVRw==",
+      "mediaType": "image/jpeg",
+      "type": "file",
+      "uint8ArrayData": undefined,
+    },
+    "type": "file",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "type": "reasoning-start",
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "text": "I will open the conversation",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "text": " with witty banter.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "1",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "text": "",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "type": "reasoning-end",
+  },
+  {
+    "id": "2",
+    "providerMetadata": {
+      "testProvider": {
+        "redactedData": "redacted-reasoning-data",
+      },
+    },
+    "type": "reasoning-start",
+  },
+  {
+    "id": "2",
+    "providerMetadata": undefined,
+    "type": "reasoning-end",
+  },
+  {
+    "id": "3",
+    "providerMetadata": undefined,
+    "type": "reasoning-start",
+  },
+  {
+    "id": "3",
+    "providerMetadata": undefined,
+    "text": " Once the user has relaxed,",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "3",
+    "providerMetadata": undefined,
+    "text": " I will pry for valuable information.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "3",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "type": "reasoning-end",
+  },
+  {
+    "id": "4",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "type": "reasoning-start",
+  },
+  {
+    "id": "4",
+    "providerMetadata": undefined,
+    "text": " I need to think about",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "4",
+    "providerMetadata": undefined,
+    "text": " this problem carefully.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "4",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "type": "reasoning-end",
+  },
+  {
+    "id": "5",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "type": "reasoning-start",
+  },
+  {
+    "id": "5",
+    "providerMetadata": undefined,
+    "text": " The best solution",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "5",
+    "providerMetadata": undefined,
+    "text": " requires careful",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "5",
+    "providerMetadata": undefined,
+    "text": " consideration of all factors.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "5",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "type": "reasoning-end",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hi",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": " there!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "123",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example",
+    "type": "source",
+    "url": "https://example.com",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "id": "456",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value2",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example 2",
+    "type": "source",
+    "url": "https://example.com/2",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "response-id",
+      "modelId": "response-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:05.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "dynamic": false,
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolName": "test-tool",
+    "type": "tool-input-start",
+  },
+  {
+    "delta": "{"",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "value",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "":"",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "Spark",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "le",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": " Day",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": ""}",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-end",
+  },
+  {
+    "input": {
+      "value": "Sparkle Day",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "toolName": "test-tool",
+    "type": "tool-call",
+  },
+  {
+    "finishReason": "tool-calls",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "cachedInputTokens": 3,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": 10,
+      "totalTokens": 23,
+    },
+  },
+  {
+    "finishReason": "tool-calls",
+    "totalUsage": {
+      "cachedInputTokens": 3,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": 10,
+      "totalTokens": 23,
+    },
+    "type": "finish",
+  },
+]
+`;
+
 exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] = `
 [
   {
@@ -1284,6 +2035,79 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
 ]
 `;
 
+exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback response metadata when response metadata is not provided 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-2000",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:02.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
 exports[`Loop Tests > AISDK v5 > result.pipeUIMessageStreamToResponse > should mask error messages by default 1`] = `
 [
   "data: {"type":"start"}
@@ -1382,6 +2206,48 @@ exports[`Loop Tests > AISDK v5 > result.reasoning > should contain reasoning fro
 
 exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning text from model response 1`] = `"I will open the conversation with witty banter. Once the user has relaxed, I will pry for valuable information. I need to think about this problem carefully. The best solution requires careful consideration of all factors."`;
 
+exports[`Loop Tests > AISDK v5 > result.response > should resolve with response information 1`] = `
+{
+  "headers": {
+    "call": "2",
+  },
+  "id": "id-0",
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Hello",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+  "modelId": "mock-model-id",
+  "modelMetadata": {
+    "modelId": "mock-model-id",
+    "modelProvider": "mock-provider",
+    "modelVersion": "v2",
+  },
+  "timestamp": 1970-01-01T00:00:00.000Z,
+  "uiMessages": [
+    {
+      "id": "msg-0",
+      "metadata": {
+        "createdAt": 2024-01-01T00:00:00.001Z,
+      },
+      "parts": [
+        {
+          "text": "Hello",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+}
+`;
+
 exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 [
   {
@@ -1407,6 +2273,169 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
     "title": "Example 2",
     "type": "source",
     "url": "https://example.com/2",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the model response to the step result 1`] = `
+[
+  {
+    "content": [
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "Hello World",
+          "mediaType": "text/plain",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+      {
+        "text": "Hello!",
+        "type": "text",
+      },
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "QkFVRw==",
+          "mediaType": "image/jpeg",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "Hello World",
+          "mediaType": "text/plain",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "QkFVRw==",
+          "mediaType": "image/jpeg",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+    ],
+    "dynamicToolCalls": [],
+    "dynamicToolResults": [],
+    "files": [
+      {
+        "from": "AGENT",
+        "payload": {
+          "base64": "Hello World",
+          "data": "Hello World",
+          "mimeType": "text/plain",
+        },
+        "runId": "test-run-id",
+        "type": "file",
+      },
+      {
+        "from": "AGENT",
+        "payload": {
+          "base64": "QkFVRw==",
+          "data": "QkFVRw==",
+          "mimeType": "image/jpeg",
+        },
+        "runId": "test-run-id",
+        "type": "file",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "reasoning": [],
+    "reasoningText": "",
+    "request": {},
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "messages": [
+        {
+          "content": [
+            {
+              "data": "data:text/plain;base64,Hello World",
+              "filename": undefined,
+              "mediaType": "text/plain",
+              "type": "file",
+            },
+            {
+              "text": "Hello!",
+              "type": "text",
+            },
+            {
+              "data": "data:image/jpeg;base64,QkFVRw==",
+              "filename": undefined,
+              "mediaType": "image/jpeg",
+              "type": "file",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+      "uiMessages": [
+        {
+          "id": "msg-0",
+          "metadata": {
+            "createdAt": 2024-01-01T00:00:00.001Z,
+          },
+          "parts": [
+            {
+              "mediaType": "text/plain",
+              "type": "file",
+              "url": "data:text/plain;base64,Hello World",
+            },
+            {
+              "text": "Hello!",
+              "type": "text",
+            },
+            {
+              "mediaType": "image/jpeg",
+              "type": "file",
+              "url": "data:image/jpeg;base64,QkFVRw==",
+            },
+            {
+              "mediaType": "text/plain",
+              "type": "file",
+              "url": "data:text/plain;base64,Hello World",
+            },
+            {
+              "mediaType": "image/jpeg",
+              "type": "file",
+              "url": "data:image/jpeg;base64,QkFVRw==",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+    },
+    "sources": [],
+    "staticToolCalls": [],
+    "staticToolResults": [],
+    "stepType": "initial",
+    "text": "Hello!",
+    "toolCalls": [],
+    "toolResults": [],
+    "tripwire": undefined,
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "warnings": [],
   },
 ]
 `;
@@ -1686,6 +2715,757 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.files > should contain files
 ]
 `;
 
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter out empty text deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain conversation history in the llm input 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "response-id",
+      "modelId": "response-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:05.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send delayed asynchronous tool results 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "output": "value-result",
+    "providerExecuted": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-result",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send files 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "file": DefaultGeneratedFileWithType {
+      "base64Data": "Hello World",
+      "mediaType": "text/plain",
+      "type": "file",
+      "uint8ArrayData": undefined,
+    },
+    "type": "file",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "file": DefaultGeneratedFileWithType {
+      "base64Data": "QkFVRw==",
+      "mediaType": "image/jpeg",
+      "type": "file",
+      "uint8ArrayData": undefined,
+    },
+    "type": "file",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send reasoning deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "type": "reasoning-start",
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "text": "I will open the conversation",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "text": " with witty banter.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "1",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "text": "",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "1",
+    "providerMetadata": undefined,
+    "type": "reasoning-end",
+  },
+  {
+    "id": "2",
+    "providerMetadata": {
+      "testProvider": {
+        "redactedData": "redacted-reasoning-data",
+      },
+    },
+    "type": "reasoning-start",
+  },
+  {
+    "id": "2",
+    "providerMetadata": undefined,
+    "type": "reasoning-end",
+  },
+  {
+    "id": "3",
+    "providerMetadata": undefined,
+    "type": "reasoning-start",
+  },
+  {
+    "id": "3",
+    "providerMetadata": undefined,
+    "text": " Once the user has relaxed,",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "3",
+    "providerMetadata": undefined,
+    "text": " I will pry for valuable information.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "3",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "type": "reasoning-end",
+  },
+  {
+    "id": "4",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "type": "reasoning-start",
+  },
+  {
+    "id": "4",
+    "providerMetadata": undefined,
+    "text": " I need to think about",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "4",
+    "providerMetadata": undefined,
+    "text": " this problem carefully.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "4",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "type": "reasoning-end",
+  },
+  {
+    "id": "5",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "type": "reasoning-start",
+  },
+  {
+    "id": "5",
+    "providerMetadata": undefined,
+    "text": " The best solution",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "5",
+    "providerMetadata": undefined,
+    "text": " requires careful",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "5",
+    "providerMetadata": undefined,
+    "text": " consideration of all factors.",
+    "type": "reasoning-delta",
+  },
+  {
+    "id": "5",
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "type": "reasoning-end",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hi",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": " there!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sources 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "123",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example",
+    "type": "source",
+    "url": "https://example.com",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "id": "456",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value2",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example 2",
+    "type": "source",
+    "url": "https://example.com/2",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send text deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "response-id",
+      "modelId": "response-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:05.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tool call deltas 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "dynamic": false,
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolName": "test-tool",
+    "type": "tool-input-start",
+  },
+  {
+    "delta": "{"",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "value",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "":"",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "Spark",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": "le",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": " Day",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "delta": ""}",
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-delta",
+  },
+  {
+    "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "providerMetadata": undefined,
+    "type": "tool-input-end",
+  },
+  {
+    "input": {
+      "value": "Sparkle Day",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
+    "toolName": "test-tool",
+    "type": "tool-call",
+  },
+  {
+    "finishReason": "tool-calls",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "cachedInputTokens": 3,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "tool-calls",
+    "totalUsage": {
+      "cachedInputTokens": 3,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
 exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tool calls 1`] = `
 [
   {
@@ -1806,6 +3586,79 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
 ]
 `;
 
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fallback response metadata when response metadata is not provided 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-start",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "Hello",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": ", ",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "text": "world!",
+    "type": "text-delta",
+  },
+  {
+    "id": "text-1",
+    "providerMetadata": undefined,
+    "type": "text-end",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-2000",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "modelProvider": "mock-provider",
+      "modelVersion": "v3",
+      "timestamp": 1970-01-01T00:00:02.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
 exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoning > should contain reasoning from model response 1`] = `
 [
   {
@@ -1858,6 +3711,48 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoning > should contain r
 
 exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoningText > should contain reasoning text from model response 1`] = `"I will open the conversation with witty banter. Once the user has relaxed, I will pry for valuable information. I need to think about this problem carefully. The best solution requires careful consideration of all factors."`;
 
+exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve with response information 1`] = `
+{
+  "headers": {
+    "call": "2",
+  },
+  "id": "id-0",
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Hello",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+  "modelId": "mock-model-id",
+  "modelMetadata": {
+    "modelId": "mock-model-id",
+    "modelProvider": "mock-provider",
+    "modelVersion": "v3",
+  },
+  "timestamp": 1970-01-01T00:00:00.000Z,
+  "uiMessages": [
+    {
+      "id": "msg-0",
+      "metadata": {
+        "createdAt": 2024-01-01T00:00:00.001Z,
+      },
+      "parts": [
+        {
+          "text": "Hello",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+}
+`;
+
 exports[`Loop Tests > AISDK v6 (V3 models) > result.sources > should contain sources 1`] = `
 [
   {
@@ -1883,6 +3778,169 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.sources > should contain sou
     "title": "Example 2",
     "type": "source",
     "url": "https://example.com/2",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files from the model response to the step result 1`] = `
+[
+  {
+    "content": [
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "Hello World",
+          "mediaType": "text/plain",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+      {
+        "text": "Hello!",
+        "type": "text",
+      },
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "QkFVRw==",
+          "mediaType": "image/jpeg",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "Hello World",
+          "mediaType": "text/plain",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+      {
+        "file": DefaultGeneratedFileWithType {
+          "base64Data": "QkFVRw==",
+          "mediaType": "image/jpeg",
+          "type": "file",
+          "uint8ArrayData": undefined,
+        },
+        "type": "file",
+      },
+    ],
+    "dynamicToolCalls": [],
+    "dynamicToolResults": [],
+    "files": [
+      {
+        "from": "AGENT",
+        "payload": {
+          "base64": "Hello World",
+          "data": "Hello World",
+          "mimeType": "text/plain",
+        },
+        "runId": "test-run-id",
+        "type": "file",
+      },
+      {
+        "from": "AGENT",
+        "payload": {
+          "base64": "QkFVRw==",
+          "data": "QkFVRw==",
+          "mimeType": "image/jpeg",
+        },
+        "runId": "test-run-id",
+        "type": "file",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "reasoning": [],
+    "reasoningText": "",
+    "request": {},
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "messages": [
+        {
+          "content": [
+            {
+              "data": "data:text/plain;base64,Hello World",
+              "filename": undefined,
+              "mediaType": "text/plain",
+              "type": "file",
+            },
+            {
+              "text": "Hello!",
+              "type": "text",
+            },
+            {
+              "data": "data:image/jpeg;base64,QkFVRw==",
+              "filename": undefined,
+              "mediaType": "image/jpeg",
+              "type": "file",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "modelProvider": "mock-provider",
+      "modelVersion": "v3",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+      "uiMessages": [
+        {
+          "id": "msg-0",
+          "metadata": {
+            "createdAt": 2024-01-01T00:00:00.001Z,
+          },
+          "parts": [
+            {
+              "mediaType": "text/plain",
+              "type": "file",
+              "url": "data:text/plain;base64,Hello World",
+            },
+            {
+              "text": "Hello!",
+              "type": "text",
+            },
+            {
+              "mediaType": "image/jpeg",
+              "type": "file",
+              "url": "data:image/jpeg;base64,QkFVRw==",
+            },
+            {
+              "mediaType": "text/plain",
+              "type": "file",
+              "url": "data:text/plain;base64,Hello World",
+            },
+            {
+              "mediaType": "image/jpeg",
+              "type": "file",
+              "url": "data:image/jpeg;base64,QkFVRw==",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+    },
+    "sources": [],
+    "staticToolCalls": [],
+    "staticToolResults": [],
+    "stepType": "initial",
+    "text": "Hello!",
+    "toolCalls": [],
+    "toolResults": [],
+    "tripwire": undefined,
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "warnings": [],
   },
 ]
 `;

@@ -910,7 +910,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
           }),
           expect.objectContaining({
             role: 'assistant',
-            content: expect.any(String),
+            content: [expect.objectContaining({ type: 'text' })],
           }),
         ]);
       } else {
@@ -977,7 +977,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
             type: 'function_call_output',
             output: expect.stringContaining(`It is currently 70 degrees and feels like 65 degrees.`),
           }),
-          expect.objectContaining({ role: 'assistant' }),
+          expect.objectContaining({ type: 'item_reference' }),
           expect.objectContaining({ role: 'user' }),
         ]);
       }

@@ -1544,6 +1544,62 @@ tool-execution-end
 network-execution-event-step-finish
 ```
 
+## Structured output
+
+When you need typed, validated results from a network, use the `structuredOutput` option. After the network completes its task, it generates a structured response matching your schema.
+
+```typescript
+import { z } from "zod";
+
+const resultSchema = z.object({
+  summary: z.string().describe("A brief summary of the findings"),
+  recommendations: z.array(z.string()).describe("List of recommendations"),
+  confidence: z.number().min(0).max(1).describe("Confidence score"),
+});
+
+const stream = await routingAgent.network("Research AI trends", {
+  structuredOutput: {
+    schema: resultSchema,
+  },
+});
+
+// Consume the stream
+for await (const chunk of stream) {
+  if (chunk.type === "network-object") {
+    // Partial object during generation
+    console.log("Partial:", chunk.payload.object);
+  }
+  if (chunk.type === "network-object-result") {
+    // Final structured object
+    console.log("Final:", chunk.payload.object);
+  }
+}
+
+// Get the typed result
+const result = await stream.object;
+console.log(result?.summary);
+console.log(result?.recommendations);
+console.log(result?.confidence);
+```
+
+### Streaming partial objects
+
+For real-time updates during structured output generation, use `objectStream`:
+
+```typescript
+const stream = await routingAgent.network("Analyze market data", {
+  structuredOutput: { schema: resultSchema },
+});
+
+// Stream partial objects as they're generated
+for await (const partial of stream.objectStream) {
+  console.log("Building result:", partial);
+}
+
+// Get the final typed result
+const final = await stream.object;
+```
+
 ## Related
 
 - [Agent Memory](./agent-memory)
@@ -7622,12 +7678,38 @@ Phoenix is an open-source observability platform that can be self-hosted or used
 4. **Environment Variables**: Set your configuration
 
 ```bash title=".env"
+# Required
 PHOENIX_ENDPOINT=http://localhost:6006/v1/traces  # Or your Phoenix Cloud URL
-PHOENIX_API_KEY=your-api-key  # Optional for local instances
-PHOENIX_PROJECT_NAME=mastra-service  # Optional, defaults to 'mastra-service'
+
+# Optional
+PHOENIX_API_KEY=your-api-key  # For authenticated Phoenix instances
+PHOENIX_PROJECT_NAME=mastra-service  # Defaults to 'mastra-service'
 ```
 
-#### Basic Setup
+#### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: "mastra-service",
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
+```
+
+#### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -7680,12 +7762,38 @@ Arize AX is an enterprise observability platform with advanced features for prod
 4. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
+# Required
 ARIZE_SPACE_ID=your-space-id
 ARIZE_API_KEY=your-api-key
-ARIZE_PROJECT_NAME=mastra-service  # Optional
+
+# Optional
+ARIZE_PROJECT_NAME=mastra-service
 ```
 
-#### Basic Setup
+#### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: "mastra-service",
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
+```
+
+#### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -7856,10 +7964,35 @@ npm install @mastra/braintrust@beta
 
 ```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
-BRAINTRUST_PROJECT_NAME=my-project  # Optional, defaults to 'mastra-tracing'
+
+# Optional
+BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # Custom endpoint if needed
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { BraintrustExporter } from "@mastra/braintrust";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: "my-service",
+        exporters: [new BraintrustExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -7874,7 +8007,7 @@ export const mastra = new Mastra({
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
-            projectName: process.env.BRAINTRUST_PROJECT_NAME,
+            projectName: "my-project",
           }),
         ],
       },
@@ -8280,7 +8413,30 @@ LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langfuse: {
+        serviceName: "my-service",
+        exporters: [new LangfuseExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -8477,12 +8633,38 @@ npm install @mastra/langsmith@beta
 3. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
+# Required
 LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
-LANGCHAIN_PROJECT=my-project  # Optional: default project for traces
-LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
+
+# Optional
+LANGCHAIN_PROJECT=my-project  # Default project for traces
+LANGSMITH_BASE_URL=https://api.smith.langchain.com  # For self-hosted
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangSmithExporter } from "@mastra/langsmith";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langsmith: {
+        serviceName: "my-service",
+        exporters: [new LangSmithExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -8588,6 +8770,18 @@ npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-grpc @
 npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-http
 ```
 
+## Environment Variables
+
+All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
+
+| Provider  | Environment Variables                                                                      |
+| --------- | ------------------------------------------------------------------------------------------ |
+| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)        |
+| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)        |
+
 ## Provider Configurations
 
 
@@ -8612,6 +8806,38 @@ new OtelExporter({
 ### Dash0
 
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
+
+#### Zero-Config Setup
+
+Set environment variables and use the exporter with an empty config:
+
+```bash title=".env"
+# Required
+DASH0_API_KEY=your-api-key
+DASH0_ENDPOINT=ingress.us-west-2.aws.dash0.com:4317
+
+# Optional
+DASH0_DATASET=production
+```
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelExporter } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      otel: {
+        serviceName: "my-service",
+        exporters: [new OtelExporter({ provider: { dash0: {} } })],
+      },
+    },
+  }),
+});
+```
+
+#### Explicit Configuration
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -8654,6 +8880,23 @@ Get your Dash0 endpoint from your dashboard. It should be in the format `ingress
 
 [SigNoz](https://signoz.io/) is an open-source APM alternative with built-in Tracing support.
 
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+SIGNOZ_API_KEY=your-api-key
+
+# Optional
+SIGNOZ_REGION=us  # 'us' | 'eu' | 'in'
+SIGNOZ_ENDPOINT=https://my-signoz.example.com  # For self-hosted
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { signoz: {} } })
+```
+
+#### Explicit Configuration
+
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
@@ -8670,6 +8913,22 @@ new OtelExporter({
 
 [New Relic](https://newrelic.com/) provides comprehensive observability with AI monitoring capabilities.
 
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+NEW_RELIC_LICENSE_KEY=your-license-key
+
+# Optional
+NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # For EU region
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { newrelic: {} } })
+```
+
+#### Explicit Configuration
+
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
@@ -8685,6 +8944,23 @@ new OtelExporter({
 
 [Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
 
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+TRACELOOP_API_KEY=your-api-key
+
+# Optional
+TRACELOOP_DESTINATION_ID=my-destination
+TRACELOOP_ENDPOINT=https://custom.traceloop.com
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { traceloop: {} } })
+```
+
+#### Explicit Configuration
+
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
@@ -8699,6 +8975,23 @@ new OtelExporter({
 ### Laminar
 
 [Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
+
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=your-api-key
+
+# Optional
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { laminar: {} } })
+```
+
+#### Explicit Configuration
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
@@ -8934,11 +9227,37 @@ npm install @mastra/posthog@beta
 3. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
+# Required
 POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
-POSTHOG_HOST=https://us.i.posthog.com  # Optional: EU region or self-hosted URL
+
+# Optional
+POSTHOG_HOST=https://us.i.posthog.com  # or eu.i.posthog.com for EU region
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { PosthogExporter } from "@mastra/posthog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: "my-service",
+        exporters: [new PosthogExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -18624,6 +18943,14 @@ The `onFinish` callback receives:
 - `error` - Error details (on failure)
 - `steps` - Individual step results
 - `tripwire` - Tripwire info (if status is `'tripwire'`)
+- `runId` - The unique identifier for this workflow run
+- `workflowId` - The workflow's identifier
+- `resourceId` - Optional resource identifier (if provided when creating the run)
+- `getInitData()` - Function that returns the initial input data
+- `mastra` - The Mastra instance (if workflow is registered with Mastra)
+- `requestContext` - Request-scoped context data
+- `logger` - The workflow's logger instance
+- `state` - The workflow's current state object
 
 ### onError
 
@@ -18655,6 +18982,14 @@ The `onError` callback receives:
 - `error` - Error details
 - `steps` - Individual step results
 - `tripwire` - Tripwire info (if status is `'tripwire'`)
+- `runId` - The unique identifier for this workflow run
+- `workflowId` - The workflow's identifier
+- `resourceId` - Optional resource identifier (if provided when creating the run)
+- `getInitData()` - Function that returns the initial input data
+- `mastra` - The Mastra instance (if workflow is registered with Mastra)
+- `requestContext` - Request-scoped context data
+- `logger` - The workflow's logger instance
+- `state` - The workflow's current state object
 
 ### Using both callbacks
 
@@ -60710,6 +61045,48 @@ await agent.network(`
     },
     MODEL_SETTINGS_OBJECT,
     {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      isOptional: true,
+      description:
+        "Configuration for generating a typed structured output from the network result.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "schema",
+              type: "ZodSchema | JSONSchema7",
+              isOptional: false,
+              description:
+                "The schema to validate the output against. Can be a Zod schema or JSON Schema.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "model",
+              type: "MastraModelConfig",
+              isOptional: true,
+              description:
+                "Model to use for generating the structured output. Defaults to the agent's model.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "instructions",
+              type: "string",
+              isOptional: true,
+              description:
+                "Custom instructions for generating the structured output.",
+            },
+          ],
+        },
+      ],
+    },
+    {
       name: "runId",
       type: "string",
       isOptional: true,
@@ -60758,8 +61135,76 @@ await agent.network(`
       type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
       description: "A promise that resolves to token usage statistics",
     },
+    {
+      name: "object",
+      type: "Promise<InferSchemaOutput<OUTPUT> | undefined>",
+      description:
+        "A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
+    },
+    {
+      name: "objectStream",
+      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      description:
+        "A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
+    },
   ]}
 />
+
+## Structured Output
+
+When you need typed, validated results from your network, use the `structuredOutput` option. The network will generate a response matching your schema after task completion.
+
+```typescript
+import { z } from "zod";
+
+const resultSchema = z.object({
+  summary: z.string().describe("A brief summary of the findings"),
+  recommendations: z.array(z.string()).describe("List of recommendations"),
+  confidence: z.number().min(0).max(1).describe("Confidence score"),
+});
+
+const stream = await agent.network("Research AI trends and summarize", {
+  structuredOutput: {
+    schema: resultSchema,
+  },
+});
+
+// Consume the stream
+for await (const chunk of stream) {
+  // Handle streaming events
+}
+
+// Get the typed result
+const result = await stream.object;
+// result is typed as { summary: string; recommendations: string[]; confidence: number }
+console.log(result?.summary);
+console.log(result?.recommendations);
+```
+
+### Streaming Partial Objects
+
+You can also stream partial objects as they're being generated:
+
+```typescript
+const stream = await agent.network("Analyze data", {
+  structuredOutput: { schema: resultSchema },
+});
+
+// Stream partial objects
+for await (const partial of stream.objectStream) {
+  console.log("Partial result:", partial);
+}
+
+// Get final result
+const final = await stream.object;
+```
+
+### Chunk Types
+
+When using structured output, additional chunk types are emitted:
+
+- `network-object`: Emitted with partial objects during streaming
+- `network-object-result`: Emitted with the final structured object
 
 
 ---
@@ -75692,27 +76137,27 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
       name: "endpoint",
       type: "string",
       description:
-        "Collector endpoint for trace exports (e.g., 'http://localhost:6006/v1/traces' for Phoenix). Required for Phoenix. Optional for Arize AX (defaults to https://otlp.arize.com/v1/traces).",
+        "Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.",
       required: false,
     },
     {
       name: "apiKey",
       type: "string",
       description:
-        "API key for authentication. Required for Phoenix Cloud and Arize AX. Optional for self-hosted Phoenix.",
+        "API key for authentication. Falls back to ARIZE_API_KEY or PHOENIX_API_KEY env var.",
       required: false,
     },
     {
       name: "spaceId",
       type: "string",
       description:
-        "Arize AX space identifier. Required when sending traces to Arize AX.",
+        "Arize AX space identifier. Falls back to ARIZE_SPACE_ID env var. Required for Arize AX.",
       required: false,
     },
     {
       name: "projectName",
       type: "string",
-      description: "Project name added as OpenInference resource attribute",
+      description: "Project name. Falls back to ARIZE_PROJECT_NAME or PHOENIX_PROJECT_NAME env var.",
       required: false,
     },
     {
@@ -75776,6 +76221,16 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+// For Phoenix: Set PHOENIX_ENDPOINT, PHOENIX_API_KEY, PHOENIX_PROJECT_NAME
+// For Arize AX: Set ARIZE_SPACE_ID, ARIZE_API_KEY, ARIZE_PROJECT_NAME
+const exporter = new ArizeExporter();
+```
 
 ### Phoenix Configuration
 
@@ -75877,13 +76332,13 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "apiKey",
       type: "string",
-      description: "Braintrust API key",
+      description: "Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Custom Braintrust endpoint",
+      description: "Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.",
       required: false,
     },
     {
@@ -75934,6 +76389,17 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { BraintrustExporter } from "@mastra/braintrust";
+
+// Reads from BRAINTRUST_API_KEY, BRAINTRUST_ENDPOINT
+const exporter = new BraintrustExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { BraintrustExporter } from "@mastra/braintrust";
@@ -76587,19 +77053,19 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "publicKey",
       type: "string",
-      description: "Langfuse API key",
+      description: "Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.",
       required: false,
     },
     {
       name: "secretKey",
       type: "string",
-      description: "Langfuse secret key",
+      description: "Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.",
       required: false,
     },
     {
       name: "baseUrl",
       type: "string",
-      description: "Langfuse host URL",
+      description: "Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.",
       required: false,
     },
     {
@@ -76650,6 +77116,17 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { LangfuseExporter } from "@mastra/langfuse";
+
+// Reads from LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
+const exporter = new LangfuseExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { LangfuseExporter } from "@mastra/langfuse";
@@ -76922,8 +77399,8 @@ interface OtelExporterConfig {
 
 ```typescript
 interface Dash0Config {
-  apiKey: string;
-  endpoint: string;
+  apiKey?: string;
+  endpoint?: string;
   dataset?: string;
 }
 ```
@@ -76933,20 +77410,20 @@ interface Dash0Config {
     {
       name: "apiKey",
       type: "string",
-      description: "Dash0 API key",
-      required: true,
+      description: "Dash0 API key. Falls back to DASH0_API_KEY env var.",
+      required: false,
     },
     {
       name: "endpoint",
       type: "string",
       description:
-        "Dash0 ingress endpoint (e.g., ingress.us-west-2.aws.dash0.com:4317)",
-      required: true,
+        "Dash0 ingress endpoint. Falls back to DASH0_ENDPOINT env var.",
+      required: false,
     },
     {
       name: "dataset",
       type: "string",
-      description: "Optional dataset name for data organization",
+      description: "Dataset name. Falls back to DASH0_DATASET env var.",
       required: false,
     },
   ]}
@@ -76956,7 +77433,7 @@ interface Dash0Config {
 
 ```typescript
 interface SignozConfig {
-  apiKey: string;
+  apiKey?: string;
   region?: "us" | "eu" | "in";
   endpoint?: string;
 }
@@ -76967,19 +77444,19 @@ interface SignozConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "SigNoz ingestion key",
-      required: true,
+      description: "SigNoz ingestion key. Falls back to SIGNOZ_API_KEY env var.",
+      required: false,
     },
     {
       name: "region",
       type: "'us' | 'eu' | 'in'",
-      description: "SigNoz cloud region (default: 'us')",
+      description: "SigNoz cloud region. Falls back to SIGNOZ_REGION env var. (default: 'us')",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Custom endpoint for self-hosted SigNoz",
+      description: "Custom endpoint. Falls back to SIGNOZ_ENDPOINT env var.",
       required: false,
     },
   ]}
@@ -76989,7 +77466,7 @@ interface SignozConfig {
 
 ```typescript
 interface NewRelicConfig {
-  apiKey: string;
+  apiKey?: string;
   endpoint?: string;
 }
 ```
@@ -76999,14 +77476,14 @@ interface NewRelicConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "New Relic license key",
-      required: true,
+      description: "New Relic license key. Falls back to NEW_RELIC_LICENSE_KEY env var.",
+      required: false,
     },
     {
       name: "endpoint",
       type: "string",
       description:
-        "Custom endpoint (default: https://otlp.nr-data.net:443/v1/traces)",
+        "Custom endpoint. Falls back to NEW_RELIC_ENDPOINT env var. (default: https://otlp.nr-data.net:443/v1/traces)",
       required: false,
     },
   ]}
@@ -77016,7 +77493,7 @@ interface NewRelicConfig {
 
 ```typescript
 interface TraceloopConfig {
-  apiKey: string;
+  apiKey?: string;
   destinationId?: string;
   endpoint?: string;
 }
@@ -77027,20 +77504,20 @@ interface TraceloopConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "Traceloop API key",
-      required: true,
+      description: "Traceloop API key. Falls back to TRACELOOP_API_KEY env var.",
+      required: false,
     },
     {
       name: "destinationId",
       type: "string",
-      description: "Optional destination identifier",
+      description: "Destination identifier. Falls back to TRACELOOP_DESTINATION_ID env var.",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
       description:
-        "Custom endpoint (default: https://api.traceloop.com/v1/traces)",
+        "Custom endpoint. Falls back to TRACELOOP_ENDPOINT env var. (default: https://api.traceloop.com/v1/traces)",
       required: false,
     },
   ]}
@@ -77050,7 +77527,7 @@ interface TraceloopConfig {
 
 ```typescript
 interface LaminarConfig {
-  apiKey: string;
+  apiKey?: string;
   teamId?: string;
   endpoint?: string;
 }
@@ -77061,19 +77538,19 @@ interface LaminarConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "Laminar project API key",
-      required: true,
+      description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
+      required: false,
     },
     {
       name: "teamId",
       type: "string",
-      description: "Optional team identifier (for backwards compatibility)",
+      description: "Team identifier. Falls back to LAMINAR_TEAM_ID env var.",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Custom endpoint (default: https://api.lmnr.ai/v1/traces)",
+      description: "Custom endpoint. Falls back to LAMINAR_ENDPOINT env var. (default: https://api.lmnr.ai/v1/traces)",
       required: false,
     },
   ]}
@@ -77132,7 +77609,22 @@ Flushes pending traces and shuts down the exporter.
 
 ## Usage Examples
 
-### Basic Usage
+### Zero-Config (using environment variables)
+
+```typescript
+import { OtelExporter } from "@mastra/otel-exporter";
+
+// Set SIGNOZ_API_KEY, SIGNOZ_REGION environment variables
+const exporter = new OtelExporter({ provider: { signoz: {} } });
+
+// Or for other providers:
+// Set DASH0_API_KEY, DASH0_ENDPOINT for Dash0
+// Set NEW_RELIC_LICENSE_KEY for New Relic
+// Set TRACELOOP_API_KEY for Traceloop
+// Set LMNR_PROJECT_API_KEY for Laminar
+```
+
+### Explicit Configuration
 
 ```typescript
 import { OtelExporter } from "@mastra/otel-exporter";
@@ -77237,7 +77729,7 @@ new PosthogExporter(config: PosthogExporterConfig)
 
 ```typescript
 interface PosthogExporterConfig extends BaseExporterConfig {
-  apiKey: string;
+  apiKey?: string;
   host?: string;
   flushAt?: number;
   flushInterval?: number;
@@ -77256,13 +77748,13 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "apiKey",
       type: "string",
-      description: "PostHog project API key",
-      required: true,
+      description: "PostHog project API key. Falls back to POSTHOG_API_KEY env var.",
+      required: false,
     },
     {
       name: "host",
       type: "string",
-      description: "PostHog host URL (default: 'https://us.i.posthog.com')",
+      description: "PostHog host URL. Falls back to POSTHOG_HOST env var. (default: 'https://us.i.posthog.com')",
       required: false,
     },
     {
@@ -77323,6 +77815,17 @@ async shutdown(): Promise<void>
 Flushes pending batched events and shuts down the PostHog client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { PosthogExporter } from "@mastra/posthog";
+
+// Reads from POSTHOG_API_KEY, POSTHOG_HOST
+const exporter = new PosthogExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { PosthogExporter } from "@mastra/posthog";
@@ -110812,6 +111315,158 @@ export const workflow = createWorkflow({
       description:
         "Callback invoked only when workflow fails (failed or tripwire status). Receives error details and step results. Errors thrown in this callback are caught and logged, not propagated.",
       isOptional: true,
+    },
+  ]}
+/>
+
+### WorkflowFinishCallbackResult
+
+The result object passed to `onFinish` callbacks.
+
+<PropertiesTable
+  content={[
+    {
+      name: "status",
+      type: "WorkflowRunStatus",
+      description: "The workflow status: 'success', 'failed', 'suspended', or 'tripwire'",
+    },
+    {
+      name: "result",
+      type: "any",
+      description: "The workflow output (when status is 'success')",
+      isOptional: true,
+    },
+    {
+      name: "error",
+      type: "SerializedError",
+      description: "Error details (when status is 'failed')",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, StepResult>",
+      description: "Individual step results with their status and output",
+    },
+    {
+      name: "tripwire",
+      type: "StepTripwireInfo",
+      description: "Tripwire information (when status is 'tripwire')",
+      isOptional: true,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique identifier for this workflow run",
+    },
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow's identifier",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource identifier (if provided when creating the run)",
+      isOptional: true,
+    },
+    {
+      name: "getInitData",
+      type: "() => any",
+      description: "Function that returns the initial input data passed to the workflow",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "The Mastra instance (if workflow is registered with Mastra)",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context data",
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "The workflow's logger instance",
+    },
+    {
+      name: "state",
+      type: "Record<string, any>",
+      description: "The workflow's current state object",
+    },
+  ]}
+/>
+
+### WorkflowErrorCallbackInfo
+
+The error info object passed to `onError` callbacks.
+
+<PropertiesTable
+  content={[
+    {
+      name: "status",
+      type: "'failed' | 'tripwire'",
+      description: "The workflow status (either 'failed' or 'tripwire')",
+    },
+    {
+      name: "error",
+      type: "SerializedError",
+      description: "Error details",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, StepResult>",
+      description: "Individual step results with their status and output",
+    },
+    {
+      name: "tripwire",
+      type: "StepTripwireInfo",
+      description: "Tripwire information (when status is 'tripwire')",
+      isOptional: true,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique identifier for this workflow run",
+    },
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow's identifier",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource identifier (if provided when creating the run)",
+      isOptional: true,
+    },
+    {
+      name: "getInitData",
+      type: "() => any",
+      description: "Function that returns the initial input data passed to the workflow",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "The Mastra instance (if workflow is registered with Mastra)",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context data",
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "The workflow's logger instance",
+    },
+    {
+      name: "state",
+      type: "Record<string, any>",
+      description: "The workflow's current state object",
     },
   ]}
 />

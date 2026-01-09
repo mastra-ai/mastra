@@ -10,7 +10,7 @@
     "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "*",
     "@mastra/mcp": "*",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.2.3",
     "vite": "^7.3.0",
     "zod": "^3.25.76"
   },

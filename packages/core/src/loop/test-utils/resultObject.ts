@@ -299,31 +299,7 @@ export function resultObjectTests({
 
       await result.consumeStream();
 
-      expect(await result.response).toMatchObject({
-        headers: { call: '2' },
-        id: 'id-0',
-        messages: [
-          {
-            content: [{ text: 'Hello', type: 'text' }],
-            role: 'assistant',
-          },
-        ],
-        modelId: 'mock-model-id',
-        modelMetadata: {
-          modelId: 'mock-model-id',
-          modelProvider: 'mock-provider',
-          modelVersion,
-        },
-        timestamp: new Date(0),
-        uiMessages: [
-          {
-            id: 'msg-0',
-            metadata: { createdAt: expect.any(Date) },
-            parts: [{ text: 'Hello', type: 'text' }],
-            role: 'assistant',
-          },
-        ],
-      });
+      expect(await result.response).toMatchSnapshot();
     });
   });
 
@@ -653,27 +629,7 @@ export function resultObjectTests({
 
       const steps = await result.aisdk.v5.steps;
 
-      expect(steps).toMatchObject([
-        {
-          finishReason: 'stop',
-          text: 'Hello!',
-          response: {
-            modelId: 'mock-model-id',
-            modelProvider: 'mock-provider',
-            modelVersion,
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-          },
-          usage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-        },
-      ]);
+      expect(steps).toMatchSnapshot();
     });
   });
 
