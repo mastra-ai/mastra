@@ -2476,7 +2476,8 @@ export class Run<
         if (!validatedInputData.success) {
           const errors = getZodErrors(validatedInputData.error);
           throw new Error(
-            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+            'Invalid initial state: \n' +
+              errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
           );
         }
 
