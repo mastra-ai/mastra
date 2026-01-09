@@ -218,6 +218,17 @@ export async function createHonoServer(
   await honoServerAdapter.registerRoutes();
 
   if (options?.isDev || server?.build?.swaggerUI) {
+    // Warn if Swagger UI is enabled but OpenAPI docs are not in production
+    if (!options?.isDev && server?.build?.swaggerUI && !server?.build?.openAPIDocs) {
+      const logger = mastra.getLogger();
+      logger.warn(
+        'Swagger UI is enabled but OpenAPI documentation is disabled. ' +
+          'The Swagger UI will not function properly without the OpenAPI endpoint. ' +
+          'Please enable openAPIDocs in your server.build configuration:\n' +
+          '  server: { build: { swaggerUI: true, openAPIDocs: true } }',
+      );
+    }
+
     app.get(
       '/swagger-ui',
       describeRoute({
