@@ -91,20 +91,26 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
   const { variant } = config;
 
   // Generate unique identifiers based on variant
-  const storageId = variant ? `client-sdk-e2e-storage-${variant}` : 'client-sdk-e2e-storage';
-  const serviceName = variant ? `client-sdk-e2e-${variant}` : 'client-sdk-e2e';
+  const storageId = variant ? `client-js-e2e-storage-${variant}` : 'client-js-e2e-storage';
+  const serviceName = variant ? `client-js-e2e-${variant}` : 'client-js-e2e';
 
   return async function setup(project: TestProject) {
     // Import dependencies dynamically to avoid issues with peer dependencies
-    const [{ Mastra }, { Agent }, { LibSQLStore }, { MastraServer }, { registerApiRoute }, { Observability, DefaultExporter }] =
-      await Promise.all([
-        import('@mastra/core/mastra'),
-        import('@mastra/core/agent'),
-        import('@mastra/libsql'),
-        import('@mastra/hono'),
-        import('@mastra/core/server'),
-        import('@mastra/observability'),
-      ]);
+    const [
+      { Mastra },
+      { Agent },
+      { LibSQLStore },
+      { MastraServer },
+      { registerApiRoute },
+      { Observability, DefaultExporter },
+    ] = await Promise.all([
+      import('@mastra/core/mastra'),
+      import('@mastra/core/agent'),
+      import('@mastra/libsql'),
+      import('@mastra/hono'),
+      import('@mastra/core/server'),
+      import('@mastra/observability'),
+    ]);
 
     const port = await getPort();
     const baseUrl = `http://localhost:${port}`;

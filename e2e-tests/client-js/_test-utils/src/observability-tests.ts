@@ -18,7 +18,7 @@ export interface ObservabilityTestConfig {
 }
 
 /**
- * Creates observability e2e tests that verify the client-sdk -> server -> storage flow.
+ * Creates observability e2e tests that verify the client-js -> server -> storage flow.
  * These tests verify that query parameters (especially complex types like date ranges)
  * are properly handled regardless of which zod version is used.
  *
@@ -31,8 +31,8 @@ export interface ObservabilityTestConfig {
 export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
   const { testNameSuffix, agentName = 'testAgent' } = config;
   const suiteName = testNameSuffix
-    ? `Observability Client SDK E2E Tests (${testNameSuffix})`
-    : 'Observability Client SDK E2E Tests';
+    ? `Observability Client JS E2E Tests (${testNameSuffix})`
+    : 'Observability Client JS E2E Tests';
 
   let client: MastraClient;
   let baseUrl: string;

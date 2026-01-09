@@ -22,10 +22,5 @@
     "@mastra/client-js": "workspace:*",
     "vitest": "catalog:",
     "typescript": "catalog:"
-  },
-  "pnpm": {
-    "overrides": {
-      "zod": "^4.3.5"
-    }
   }
 }

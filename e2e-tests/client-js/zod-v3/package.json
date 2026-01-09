@@ -14,7 +14,8 @@
     "@mastra/observability": "workspace:*",
     "@hono/node-server": "^1.14.3",
     "hono": "^4.6.0",
-    "get-port": "^7.1.0"
+    "get-port": "^7.1.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@internal/client-js-test-utils": "workspace:*",
