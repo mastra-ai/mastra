@@ -14,6 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, type BundlerPlatform } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
+import { detectPinoTransports } from './plugins/pino';
 import * as stackTraceParser from 'stacktrace-parser';
 
 type ErrorId =
@@ -287,7 +288,7 @@ export async function analyzeBundle(
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
   },
   logger: IMastraLogger,
 ) {
@@ -316,6 +317,7 @@ If you think your configuration is valid, please open an issue.`);
   let externalsPreset = false;
 
   const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
   if (bundlerOptions?.externals === true) {
     externalsPreset = true;
   }
@@ -323,6 +325,9 @@ If you think your configuration is valid, please open an issue.`);
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
   const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
+
+  // Collect pino transports detected across all entries
+  const detectedPinoTransports = new Set<string>();
 
   logger.info('Analyzing dependencies...');
 
@@ -336,6 +341,11 @@ If you think your configuration is valid, please open an issue.`);
       projectRoot,
       shouldCheckTransitiveDependencies: isDev || externalsPreset,
     });
+
+    // Detect pino transports in the bundled output
+    for (const transport of detectPinoTransports(analyzeResult.output.code)) {
+      detectedPinoTransports.add(transport);
+    }
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
     await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
@@ -433,14 +443,19 @@ If you think your configuration is valid, please open an issue.`);
   );
 
   /**
-   * Build the final set of external dependencies from three sources:
+   * Build the final set of external dependencies from four sources:
    * 1. result.externalDependencies - externals discovered during bundle validation
    * 2. allUsedExternals - packages detected via static analysis that matched the externals config
-   * 3. userExternals - all user-specified externals, even if not detected during static analysis
-   *    (important for runtime-loaded packages like pino transports - see #10893)
+   * 3. detectedPinoTransports - pino transports detected by the plugin during bundling
+   * 4. userDynamicPackages - user-specified packages loaded dynamically at runtime
    */
   return {
     ...result,
-    externalDependencies: new Set([...result.externalDependencies, ...Array.from(allUsedExternals), ...userExternals]),
+    externalDependencies: new Set([
+      ...result.externalDependencies,
+      ...Array.from(allUsedExternals),
+      ...Array.from(detectedPinoTransports),
+      ...userDynamicPackages,
+    ]),
   };
 }

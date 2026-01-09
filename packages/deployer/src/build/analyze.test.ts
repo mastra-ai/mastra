@@ -29,14 +29,12 @@ describe('analyzeBundle', () => {
   });
 
   /**
-   * Tests for GitHub issue #10893: https://github.com/mastra-ai/mastra/issues/10893
-   *
-   * Packages in the `externals` config should always be included in externalDependencies,
-   * even if they aren't detected during static analysis. This is important for packages
-   * that are dynamically imported at runtime (e.g., pino.transport({ target: "pkg-name" })).
+   * Tests for pino transport auto-detection and dynamicPackages config.
+   * Packages that are loaded dynamically at runtime (e.g., pino.transport({ target: "pkg-name" }))
+   * should be automatically detected or manually specified via dynamicPackages.
    */
-  describe('externals config handling', () => {
-    it('should include dynamically-imported externals in externalDependencies', async () => {
+  describe('dynamicPackages config handling', () => {
+    it('should auto-detect pino transport targets in externalDependencies', async () => {
       // pino-opentelemetry-transport is loaded via string target, not static import
       const entryContent = `
         import pino from 'pino';
@@ -60,17 +58,18 @@ describe('analyzeBundle', () => {
           projectRoot: testDir,
           platform: 'node',
           bundlerOptions: {
-            externals: ['pino-opentelemetry-transport'],
+            externals: [],
             enableSourcemap: false,
           },
         },
         noopLogger,
       );
 
+      // pino-opentelemetry-transport should be auto-detected from the code
       expect(result.externalDependencies.has('pino-opentelemetry-transport')).toBe(true);
     });
 
-    it('should include all externals even when none are statically imported', async () => {
+    it('should include dynamicPackages even when none are statically imported', async () => {
       const entryContent = `export const config = { foo: "bar" };`;
 
       const mastraEntry = join(testDir, 'mastra.ts');
@@ -84,7 +83,8 @@ describe('analyzeBundle', () => {
           projectRoot: testDir,
           platform: 'node',
           bundlerOptions: {
-            externals: ['package-a', 'package-b', 'package-c'],
+            externals: [],
+            dynamicPackages: ['package-a', 'package-b', 'package-c'],
             enableSourcemap: false,
           },
         },
@@ -96,11 +96,12 @@ describe('analyzeBundle', () => {
       expect(result.externalDependencies.has('package-c')).toBe(true);
     });
 
-    it('should include both detected and undetected externals', async () => {
-      // lodash is statically imported, undetected-package is not
+    it('should include both auto-detected and manually specified dynamicPackages', async () => {
+      // pino transport is auto-detected, custom-plugin is manually specified
       const entryContent = `
-        import lodash from 'lodash';
-        export const map = lodash.map;
+        import pino from 'pino';
+        const transport = pino.transport({ target: "pino-pretty" });
+        export const logger = pino(transport);
       `;
 
       const mastraEntry = join(testDir, 'mastra.ts');
@@ -114,15 +115,51 @@ describe('analyzeBundle', () => {
           projectRoot: testDir,
           platform: 'node',
           bundlerOptions: {
-            externals: ['lodash', 'undetected-package'],
+            externals: [],
+            dynamicPackages: ['custom-plugin'],
             enableSourcemap: false,
           },
         },
         noopLogger,
       );
 
-      expect(result.externalDependencies.has('lodash')).toBe(true);
-      expect(result.externalDependencies.has('undetected-package')).toBe(true);
+      // pino-pretty should be auto-detected and custom-plugin manually specified
+      expect(result.externalDependencies.has('pino-pretty')).toBe(true);
+      expect(result.externalDependencies.has('custom-plugin')).toBe(true);
+    });
+
+    it('should detect multiple pino transport targets', async () => {
+      const entryContent = `
+        import pino from 'pino';
+        const transport = pino.transport({
+          targets: [
+            { target: "pino-pretty", level: "info" },
+            { target: "pino-opentelemetry-transport", level: "debug" }
+          ]
+        });
+        export const logger = pino(transport);
+      `;
+
+      const mastraEntry = join(testDir, 'mastra.ts');
+      await writeFile(mastraEntry, `export const mastra = {};`);
+
+      const result = await analyzeBundle(
+        [entryContent],
+        mastraEntry,
+        {
+          outputDir: join(testDir, '.mastra', '.build'),
+          projectRoot: testDir,
+          platform: 'node',
+          bundlerOptions: {
+            externals: [],
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.has('pino-pretty')).toBe(true);
+      expect(result.externalDependencies.has('pino-opentelemetry-transport')).toBe(true);
     });
   });
 });
