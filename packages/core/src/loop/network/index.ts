@@ -216,7 +216,9 @@ export async function prepareMemoryStep({
   }
 
   // Add title generation to promises if needed (non-blocking)
-  if (thread?.title?.startsWith('New Thread') && memory) {
+  // Use titleGenerated metadata flag to track if title has been generated
+  // This supports pre-created threads (via client SDK) with any title
+  if (thread && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 
     const {
@@ -225,7 +227,9 @@ export async function prepareMemoryStep({
       instructions: titleInstructions,
     } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
 
-    if (shouldGenerate && userMessage) {
+    const titleAlreadyGenerated = thread.metadata?.titleGenerated === true;
+
+    if (shouldGenerate && !titleAlreadyGenerated && userMessage) {
       promises.push(
         routingAgent
           .genTitle(
@@ -242,7 +246,7 @@ export async function prepareMemoryStep({
                 resourceId: thread.resourceId,
                 memoryConfig,
                 title,
-                metadata: thread.metadata,
+                metadata: { ...thread.metadata, titleGenerated: true },
               });
             }
           }),
