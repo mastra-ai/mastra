@@ -261,6 +261,55 @@ These properties resolve to final values after the stream completes:
         },
       ],
     },
+    {
+      name: "response",
+      type: "Promise<Response>",
+      description:
+        "Response metadata and messages from the model provider.",
+      properties: [
+        {
+          type: "Response",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "Response ID from the model provider",
+            },
+            {
+              name: "timestamp",
+              type: "Date",
+              isOptional: true,
+              description: "Response timestamp",
+            },
+            {
+              name: "modelId",
+              type: "string",
+              isOptional: true,
+              description: "Model identifier used for this response",
+            },
+            {
+              name: "headers",
+              type: "Record<string, string>",
+              isOptional: true,
+              description: "Response headers from the model provider",
+            },
+            {
+              name: "messages",
+              type: "ResponseMessage[]",
+              isOptional: true,
+              description: "Response messages in model format",
+            },
+            {
+              name: "uiMessages",
+              type: "UIMessage[]",
+              isOptional: true,
+              description: "Response messages in UI format, includes any metadata added by output processors",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -327,6 +376,11 @@ These properties resolve to final values after the stream completes:
               type: "string",
               isOptional: true,
               description: "Why generation finished",
+            },
+            {
+              name: "response",
+              type: "Response",
+              description: "Response metadata and messages from the model provider",
             },
           ],
         },
@@ -443,6 +497,11 @@ for await (const chunk of stream.fullStream) {
       break;
     case "finish":
       console.log(`Done! Reason: ${chunk.payload.stepResult.reason}`);
+      // Access response messages with any metadata added by output processors
+      const uiMessages = chunk.payload.response?.uiMessages;
+      if (uiMessages) {
+        console.log("Response messages:", uiMessages);
+      }
       break;
   }
 }
