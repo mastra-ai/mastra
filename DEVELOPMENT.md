@@ -94,7 +94,90 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm build
   pnpm build:docs-mcp         # MCP documentation server
   ```
 
-## Testing
+## Testing Local Changes
+
+Testing local changes to Mastra follows a simple three-step pattern:
+
+1. Make your changes to the relevant package(s)
+2. Build the packages from the monorepo root
+3. Run the local CLI dev server from an example directory
+
+### Step 1: Make Your Changes
+
+Edit the source files in the relevant package. For example:
+
+```bash
+# Editing core agent functionality
+vim packages/core/src/agent/agent.ts
+
+# Editing memory system
+vim packages/memory/src/index.ts
+
+# Editing CLI/playground
+vim packages/cli/src/commands/dev.ts
+```
+
+### Step 2: Build the Packages
+
+From the monorepo root, build the packages you modified:
+
+```bash
+# Build everything (safest option)
+pnpm build
+
+# Or build specific packages for faster iteration
+pnpm build:core        # @mastra/core
+pnpm build:cli         # CLI and playground
+pnpm build:memory      # @mastra/memory
+pnpm build:rag         # @mastra/rag
+pnpm build:combined-stores  # All storage adapters
+```
+
+If you're unsure which packages depend on your changes, run `pnpm build` to rebuild everything.
+
+### Step 3: Run the Local CLI from an Example Directory
+
+Navigate to an example that exercises your changes and run the locally-built CLI:
+
+```bash
+cd examples/weather-agent
+node ../../packages/cli/dist/index.js dev
+```
+
+This starts the Mastra playground using your local packages. The playground provides an interactive UI to test agents, tools, and workflows.
+
+### Choosing an Example Directory
+
+Pick an example that uses the features you modified:
+
+| What you changed | Suggested examples |
+| :--- | :--- |
+| Agent system | `examples/weather-agent`, `examples/quick-start` |
+| Memory | `examples/memory-with-pg`, `examples/memory-with-libsql`, `examples/dane` |
+| RAG/embeddings | `examples/basics/rag/*` |
+| Workflows | `examples/workflow-with-suspend-resume`, `examples/workflow-with-memory` |
+| Tools | `examples/stock-price-tool`, `examples/weather-agent` |
+| CLI/Playground | Any example directory |
+
+You may need to create an agent/tool/workflow in the example project to illustrate the bug you are trying to solve, but the changes in the example should not be committed.
+
+### Quick Iteration Loop
+
+Once you have the workflow set up, iteration is fast:
+
+```bash
+# 1. Make a change
+vim packages/core/src/agent/agent.ts
+
+# 2. Rebuild (from monorepo root)
+pnpm build:core && pnpm build:cli
+
+# 3. Test (from example directory)
+cd examples/weather-agent
+node ../../packages/cli/dist/index.js dev
+```
+
+## Automated Testing
 
 Mastra uses Vitest for testing. You can run all tests or only specific packages.
 
