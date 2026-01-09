@@ -736,13 +736,6 @@ importers:
       '@hono/node-server':
         specifier: ^1.14.3
         version: 1.19.6(hono@4.11.3)
-      get-port:
-        specifier: ^7.1.0
-        version: 7.1.0
-      hono:
-        specifier: ^4.6.0
-        version: 4.11.3
-    devDependencies:
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
@@ -758,39 +751,22 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../../observability/mastra
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.13.17)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-
-  e2e-tests/client-js/zod-v3:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.19.6(hono@4.11.3)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../packages/core
-      '@mastra/hono':
-        specifier: workspace:*
-        version: link:../../../server-adapters/hono
-      '@mastra/libsql':
-        specifier: workspace:*
-        version: link:../../../stores/libsql
-      '@mastra/observability':
-        specifier: workspace:*
-        version: link:../../../observability/mastra
-      '@mastra/server':
-        specifier: workspace:*
-        version: link:../../../packages/server
       get-port:
         specifier: ^7.1.0
         version: 7.1.0
       hono:
         specifier: ^4.6.0
         version: 4.11.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.13.17)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  e2e-tests/client-js/zod-v3:
+    dependencies:
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -798,9 +774,6 @@ importers:
       '@internal/client-js-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
-      '@mastra/client-js':
-        specifier: workspace:*
-        version: link:../../../client-sdks/client-js
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -810,30 +783,6 @@ importers:
 
   e2e-tests/client-js/zod-v4:
     dependencies:
-      '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.19.6(hono@4.11.3)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../../packages/core
-      '@mastra/hono':
-        specifier: workspace:*
-        version: link:../../../server-adapters/hono
-      '@mastra/libsql':
-        specifier: workspace:*
-        version: link:../../../stores/libsql
-      '@mastra/observability':
-        specifier: workspace:*
-        version: link:../../../observability/mastra
-      '@mastra/server':
-        specifier: workspace:*
-        version: link:../../../packages/server
-      get-port:
-        specifier: ^7.1.0
-        version: 7.1.0
-      hono:
-        specifier: ^4.6.0
-        version: 4.11.3
       zod:
         specifier: ^4.3.5
         version: 4.3.5
@@ -841,9 +790,6 @@ importers:
       '@internal/client-js-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
-      '@mastra/client-js':
-        specifier: workspace:*
-        version: link:../../../client-sdks/client-js
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
