@@ -1623,8 +1623,11 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
             });
 
             const object = await result.object;
-            resumeDataFromTask = JSON.parse(object.resumeData);
-            runIdFromTask = firstSuspendedTool.runId;
+            const resumeDataFromLLM = JSON.parse(object.resumeData);
+            if (Object.keys(resumeDataFromLLM).length > 0) {
+              resumeDataFromTask = resumeDataFromLLM;
+              runIdFromTask = firstSuspendedTool.runId;
+            }
           } catch (error) {
             mastra?.getLogger()?.error(`Error generating resume data for network agent ${routingAgent.id}`, error);
           }
