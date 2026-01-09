@@ -27,7 +27,7 @@
     "codemod"
   ],
   "dependencies": {
-    "@clack/prompts": "1.0.0-alpha.6",
+    "@clack/prompts": "1.0.0-alpha.9",
     "commander": "^14.0.2",
     "debug": "^4.4.3",
     "jscodeshift": "^17.3.0"
