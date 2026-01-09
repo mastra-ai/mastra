@@ -189,12 +189,14 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           />
         </Entry>
 
-        {hasSamplingRestriction && (
-          <div className="flex items-center gap-2 text-xs text-icon3 bg-surface3 rounded px-3 py-2">
-            <Info className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Claude 4.5+ models only accept Temperature OR Top P, not both.</span>
-          </div>
-        )}
+        {hasSamplingRestriction &&
+          settings?.modelSettings?.temperature !== undefined &&
+          settings?.modelSettings?.topP !== undefined && (
+            <div className="flex items-center gap-2 text-xs text-icon3 bg-surface3 rounded px-3 py-2">
+              <Info className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Claude 4.5+ models only accept Temperature OR Top P, not both.</span>
+            </div>
+          )}
 
         <div className="grid grid-cols-1 @xs:grid-cols-2 gap-8">
           <Entry label="Temperature">
@@ -204,18 +206,12 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 max={1}
                 min={-0.1}
                 step={0.1}
-                onValueChange={value => {
-                  const newTemp = value[0] < 0 ? undefined : value[0];
+                onValueChange={value =>
                   setSettings({
                     ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      temperature: newTemp,
-                      // For Anthropic 4.5+ models, clear topP when temperature is set
-                      ...(hasSamplingRestriction && newTemp !== undefined ? { topP: undefined } : {}),
-                    },
-                  });
-                }}
+                    modelSettings: { ...settings?.modelSettings, temperature: value[0] < 0 ? undefined : value[0] },
+                  })
+                }
               />
               <Txt as="p" variant="ui-sm" className="text-icon3">
                 {settings?.modelSettings?.temperature ?? 'n/a'}
@@ -226,18 +222,12 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           <Entry label="Top P">
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider
-                onValueChange={value => {
-                  const newTopP = value[0] < 0 ? undefined : value[0];
+                onValueChange={value =>
                   setSettings({
                     ...settings,
-                    modelSettings: {
-                      ...settings?.modelSettings,
-                      topP: newTopP,
-                      // For Anthropic 4.5+ models, clear temperature when topP is set
-                      ...(hasSamplingRestriction && newTopP !== undefined ? { temperature: undefined } : {}),
-                    },
-                  });
-                }}
+                    modelSettings: { ...settings?.modelSettings, topP: value[0] < 0 ? undefined : value[0] },
+                  })
+                }
                 value={[settings?.modelSettings?.topP ?? -0.1]}
                 max={1}
                 min={-0.1}
