@@ -10,4 +10,3 @@ export const lodashTitleCase = (str: string): string => {
     .replace(/^./, str => str.toUpperCase())
     .trim();
 };
-

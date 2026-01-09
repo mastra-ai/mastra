@@ -15,9 +15,7 @@ type WorkflowNestedGraphContextType = {
   closeNestedGraph: () => void;
 };
 
-const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphContextType>(
-  {} as WorkflowNestedGraphContextType,
-);
+const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphContextType>({} as WorkflowNestedGraphContextType);
 
 export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
   const { showNestedGraph: showNestedGraphInPanel, closeStepDetail } = useWorkflowStepDetail();
