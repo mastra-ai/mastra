@@ -1597,7 +1597,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
             const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
             Your job is to construct the resumeData for the tool call using the messages available to you and the schema passed.
-            You will generate an object that matches this schema: ${JSON.stringify(firstSuspendedTool.resumeSchema)}.
+            You will generate an object that matches this schema: ${firstSuspendedTool.resumeSchema}.
             The resumeData generated should be a JSON value that is constructed from the messages, using the schema as guide. The JSON value is stringified.
 
             {
