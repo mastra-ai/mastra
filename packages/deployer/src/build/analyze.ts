@@ -432,8 +432,18 @@ If you think your configuration is valid, please open an issue.`);
     logger,
   );
 
+  /**
+   * Include user-specified externals in the result even if they weren't detected during static analysis.
+   * This is important for packages that are dynamically imported at runtime (e.g., pino.transport({ target: "package-name" }))
+   * which cannot be detected by static analysis but need to be in the output package.json.
+   * See: https://github.com/mastra-ai/mastra/issues/10893
+   */
   return {
     ...result,
-    externalDependencies: new Set([...result.externalDependencies, ...Array.from(allUsedExternals)]),
+    externalDependencies: new Set([
+      ...result.externalDependencies,
+      ...Array.from(allUsedExternals),
+      ...userExternals.filter((ext): ext is string => typeof ext === 'string'),
+    ]),
   };
 }
