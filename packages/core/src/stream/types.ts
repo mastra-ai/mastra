@@ -12,7 +12,6 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
-import type z from 'zod';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -396,6 +395,21 @@ interface AgentExecutionStartPayload {
   runId: string;
 }
 
+interface AgentExecutionApprovalPayload extends ToolCallApprovalPayload {
+  agentId: string;
+  usage: LanguageModelUsage;
+  runId: string;
+  selectionReason: string;
+}
+
+interface AgentExecutionSuspendedPayload extends ToolCallSuspendedPayload {
+  agentId: string;
+  suspendPayload: any;
+  usage: LanguageModelUsage;
+  runId: string;
+  selectionReason: string;
+}
+
 interface AgentExecutionEndPayload {
   task: string;
   agentId: string;
@@ -435,6 +449,15 @@ interface WorkflowExecutionEndPayload {
   runId: string;
 }
 
+interface WorkflowExecutionSuspendPayload extends ToolCallSuspendedPayload {
+  name: string;
+  workflowId: string;
+  suspendPayload: any;
+  usage: LanguageModelUsage;
+  runId: string;
+  selectionReason: string;
+}
+
 interface ToolExecutionStartPayload {
   args: Record<string, unknown> & {
     toolName?: string;
@@ -445,6 +468,16 @@ interface ToolExecutionStartPayload {
     // Other inputData fields spread here
     [key: string]: unknown;
   };
+  runId: string;
+}
+
+interface ToolExecutionApprovalPayload extends ToolCallApprovalPayload {
+  selectionReason: string;
+  runId: string;
+}
+
+interface ToolExecutionSuspendedPayload extends ToolCallSuspendedPayload {
+  selectionReason: string;
   runId: string;
 }
 
@@ -505,7 +538,7 @@ interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 }
 
 interface ToolCallSuspendedPayload {
@@ -513,7 +546,7 @@ interface ToolCallSuspendedPayload {
   toolName: string;
   suspendPayload: any;
   args: Record<string, any>;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 }
 
 export type DataChunkType = {
@@ -528,11 +561,16 @@ export type NetworkChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
+  | (BaseChunkType & { type: 'agent-execution-approval'; payload: AgentExecutionApprovalPayload })
+  | (BaseChunkType & { type: 'agent-execution-suspended'; payload: AgentExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
   | (BaseChunkType & { type: 'workflow-execution-start'; payload: WorkflowExecutionStartPayload })
   | (BaseChunkType & { type: 'workflow-execution-end'; payload: WorkflowExecutionEndPayload })
+  | (BaseChunkType & { type: 'workflow-execution-suspended'; payload: WorkflowExecutionSuspendPayload })
   | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
+  | (BaseChunkType & { type: 'tool-execution-approval'; payload: ToolExecutionApprovalPayload })
+  | (BaseChunkType & { type: 'tool-execution-suspended'; payload: ToolExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
   | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })

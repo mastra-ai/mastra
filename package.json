@@ -71,6 +71,7 @@
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
     "test:observability": "node scripts/test-observability.cjs",
+    "test:e2e:client-js": "pnpm --filter \"client-js-e2e-tests-*\" test",
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",
@@ -103,6 +104,12 @@
     "jsondiffpatch": ">=0.7.3",
     "ssri": ">=6.0.2",
     "jws": "^4.0.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "client-js-e2e-tests-zod-v3>zod": "^3.24.0",
+      "client-js-e2e-tests-zod-v4>zod": "^4.3.5"
+    }
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.2",

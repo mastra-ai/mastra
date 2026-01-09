@@ -8193,6 +8193,122 @@ CloudExporter uses intelligent batching to optimize network usage. Traces are bu
 
 
 ---
+title: "Datadog Exporter | Tracing | Observability"
+description: "Send traces to Datadog for LLM observability and analytics"
+---
+
+# Datadog Exporter
+[EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/datadog
+
+[Datadog](https://datadoghq.com/) is a comprehensive monitoring platform with dedicated LLM Observability features. The Datadog exporter sends your traces to Datadog's LLM Observability product, providing insights into model performance, token usage, and conversation flows.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/datadog@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Datadog Account**: Sign up at [datadoghq.com](https://datadoghq.com/) with LLM Observability enabled
+2. **API Key**: Get your API key from Datadog Organization Settings → API Keys
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+DD_API_KEY=your-datadog-api-key
+DD_LLMOBS_ML_APP=my-llm-app
+DD_SITE=datadoghq.com  # Optional: defaults to datadoghq.com
+DD_ENV=production      # Optional: environment name
+```
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { DatadogExporter } from "@mastra/datadog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: "my-service",
+        exporters: [
+          new DatadogExporter({
+            mlApp: process.env.DD_LLMOBS_ML_APP!,
+            apiKey: process.env.DD_API_KEY!,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Configuration Options
+
+### Complete Configuration
+
+```typescript
+new DatadogExporter({
+  // Required settings
+  mlApp: process.env.DD_LLMOBS_ML_APP!, // Groups traces under this ML app name
+  apiKey: process.env.DD_API_KEY!, // Required for agentless mode (default)
+
+  // Optional settings
+  site: "datadoghq.com", // Datadog site (datadoghq.eu, us3.datadoghq.com, etc.)
+  service: "my-service", // Service name (defaults to mlApp)
+  env: "production", // Environment name
+  agentless: true, // true = direct HTTPS, false = local Datadog Agent
+
+  // Advanced settings
+  integrationsEnabled: false, // Enable dd-trace auto-instrumentation
+
+  // Diagnostic logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### With Local Datadog Agent
+
+If you have a Datadog Agent running locally, you can route traces through it instead of direct HTTPS:
+
+```typescript
+new DatadogExporter({
+  mlApp: process.env.DD_LLMOBS_ML_APP!,
+  agentless: false, // Use local Datadog Agent
+  env: "production",
+});
+```
+
+Note: When using agent mode, the API key is read from the local agent's configuration.
+
+## Span Type Mapping
+
+Mastra span types are automatically mapped to Datadog LLMObs span kinds:
+
+| Mastra SpanType      | Datadog Kind |
+| -------------------- | ------------ |
+| `AGENT_RUN`          | `agent`      |
+| `MODEL_GENERATION`   | `workflow`   |
+| `MODEL_STEP`         | `llm`        |
+| `TOOL_CALL`          | `tool`       |
+| `MCP_TOOL_CALL`      | `tool`       |
+| `WORKFLOW_RUN`       | `workflow`   |
+| Other workflow types | `task`       |
+| `GENERIC`            | `task`       |
+
+Other/future Mastra span types will default to 'task' when mapped unless specified.
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Datadog LLM Observability Documentation](https://docs.datadoghq.com/llm_observability/)
+
+
+---
 title: "Default Exporter | Tracing | Observability"
 description: "Store traces locally for development and debugging"
 packages:
@@ -24299,6 +24415,92 @@ When you include custom functions:
 3. All functions are served together on the same `/api/inngest` endpoint
 
 This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
+
+## Using with other frameworks
+
+The default `serve` function uses Hono internally. If you're using a different web framework like Express, Fastify, or Koa, use the `createServe` factory function with the appropriate Inngest adapter.
+
+### Express
+
+```ts title="src/server.ts"
+import express from "express";
+import { createServe } from "@mastra/inngest";
+import { serve as expressAdapter } from "inngest/express";
+import { mastra, inngest } from "./mastra";
+
+const app = express();
+
+// Body parsing middleware required for Inngest
+app.use(express.json());
+
+const handler = createServe(expressAdapter)({ mastra, inngest });
+app.use("/api/inngest", handler);
+
+app.listen(3000);
+```
+
+### Fastify
+
+```ts title="src/server.ts"
+import Fastify from "fastify";
+import { createServe } from "@mastra/inngest";
+import { serve as fastifyAdapter } from "inngest/fastify";
+import { mastra, inngest } from "./mastra";
+
+const fastify = Fastify();
+
+// JSON parsing is handled by Fastify's default content-type parser
+const handler = createServe(fastifyAdapter)({ mastra, inngest });
+
+fastify.route({
+  method: ["GET", "POST", "PUT"],
+  url: "/api/inngest",
+  handler,
+});
+
+fastify.listen({ port: 3000 });
+```
+
+### Koa
+
+```ts title="src/server.ts"
+import Koa from "koa";
+import Router from "@koa/router";
+import bodyParser from "koa-bodyparser";
+import { createServe } from "@mastra/inngest";
+import { serve as koaAdapter } from "inngest/koa";
+import { mastra, inngest } from "./mastra";
+
+const app = new Koa();
+const router = new Router();
+
+// Body parsing middleware required for Inngest
+app.use(bodyParser());
+
+const handler = createServe(koaAdapter)({ mastra, inngest });
+router.all("/api/inngest", handler);
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+```
+
+### Next.js
+
+```ts title="app/api/inngest/route.ts"
+import { createServe } from "@mastra/inngest";
+import { serve as nextAdapter } from "inngest/next";
+import { mastra, inngest } from "@/mastra";
+
+const handler = createServe(nextAdapter)({ mastra, inngest });
+
+export { handler as GET, handler as POST, handler as PUT };
+```
+
+### Available adapters
+
+The `createServe` function works with any Inngest adapter. See the [Inngest serve documentation](https://www.inngest.com/docs/reference/serve) for a complete list of available adapters including AWS Lambda, Cloudflare Workers, and more.
 
 ## Flow control
 
@@ -76799,6 +77001,159 @@ const exporterWithLogger = new ConsoleExporter({
 
 - [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
 - [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions
+
+
+---
+title: "Reference: DatadogExporter | Observability"
+description: Datadog LLM Observability exporter for Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# DatadogExporter
+[EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/datadog
+
+Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
+
+## Constructor
+
+```typescript
+new DatadogExporter(config: DatadogExporterConfig)
+```
+
+## DatadogExporterConfig
+
+```typescript
+interface DatadogExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  mlApp?: string;
+  site?: string;
+  service?: string;
+  env?: string;
+  agentless?: boolean;
+  integrationsEnabled?: boolean;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "mlApp",
+      type: "string",
+      description: "ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.",
+      required: false,
+    },
+    {
+      name: "site",
+      type: "string",
+      description: "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
+      required: false,
+    },
+    {
+      name: "service",
+      type: "string",
+      description: "Service name for the application. Defaults to mlApp value.",
+      required: false,
+    },
+    {
+      name: "env",
+      type: "string",
+      description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
+      required: false,
+    },
+    {
+      name: "agentless",
+      type: "boolean",
+      description: "Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.",
+      required: false,
+    },
+    {
+      name: "integrationsEnabled",
+      type: "boolean",
+      description: "Enable dd-trace automatic integrations. Default: false.",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to Datadog LLM Observability.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending data and shuts down the exporter. Cancels any pending cleanup timers and disables LLM Observability.
+
+## Usage
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  apiKey: process.env.DD_API_KEY,
+  site: "datadoghq.com",
+  env: "production",
+});
+```
+
+### With Local Datadog Agent
+
+```typescript
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  agentless: false, // Use local Datadog Agent
+  env: "production",
+});
+```
+
+## Span Mapping
+
+Mastra span types are mapped to Datadog LLMObs span kinds:
+
+| Mastra SpanType | Datadog Kind |
+|-----------------|--------------|
+| `AGENT_RUN` | `agent` |
+| `MODEL_GENERATION` | `workflow` |
+| `MODEL_STEP` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_RUN` | `workflow` |
+| All other types | `task` |
+
+All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
+
+## Environment Variables
+
+The exporter reads configuration from these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `DD_API_KEY` | Datadog API key |
+| `DD_LLMOBS_ML_APP` | ML application name |
+| `DD_SITE` | Datadog site |
+| `DD_ENV` | Environment name |
+| `DD_LLMOBS_AGENTLESS_ENABLED` | Set to 'false' or '0' to use local agent |
 
 
 ---

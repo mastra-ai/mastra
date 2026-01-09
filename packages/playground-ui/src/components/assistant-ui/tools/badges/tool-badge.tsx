@@ -15,6 +15,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   metadata?: MastraUIMessage['metadata'];
   toolOutput: Array<{ toolId: string }>;
   suspendPayload?: any;
+  toolCalled?: boolean;
 }
 
 export const ToolBadge = ({
@@ -26,6 +27,8 @@ export const ToolBadge = ({
   toolCallId,
   toolApprovalMetadata,
   suspendPayload,
+  isNetwork,
+  toolCalled: toolCalledProp,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
@@ -53,7 +56,7 @@ export const ToolBadge = ({
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
 
-  const toolCalled = result || toolOutput.length > 0;
+  const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
 
   return (
     <BadgeWrapper
@@ -104,6 +107,8 @@ export const ToolBadge = ({
           toolCalled={toolCalled}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
+          toolName={toolName}
+          isNetwork={isNetwork}
         />
       </div>
     </BadgeWrapper>

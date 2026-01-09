@@ -144,11 +144,17 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability } from '@mastra/observability';
+   * import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
-   *     default: { enabled: true }
+   *     configs: {
+   *       default: {
+   *         serviceName: 'mastra',
+   *         exporters: [new DefaultExporter(), new CloudExporter()],
+   *         spanOutputProcessors: [new SensitiveDataFilter()],
+   *       },
+   *     },
    *   })
    * })
    * ```
@@ -401,7 +407,9 @@ export class Mastra<
    *     connectionString: process.env.DATABASE_URL
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
-   *   observability: { default: { enabled: true }},
+   *   observability: new Observability({
+   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *   }),
    * });
    * ```
    */
@@ -471,8 +479,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();

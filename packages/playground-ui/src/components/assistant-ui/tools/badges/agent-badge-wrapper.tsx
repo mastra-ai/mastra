@@ -9,6 +9,8 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   agentId: string;
   result: { childMessages: AgentMessage[]; subAgentResourceId?: string; subAgentThreadId?: string };
   metadata?: MastraUIMessage['metadata'];
+  suspendPayload?: any;
+  toolCalled?: boolean;
 }
 
 export const AgentBadgeWrapper = ({
@@ -17,6 +19,10 @@ export const AgentBadgeWrapper = ({
   metadata,
   toolCallId,
   toolApprovalMetadata,
+  toolName,
+  isNetwork,
+  suspendPayload,
+  toolCalled,
 }: AgentBadgeWrapperProps) => {
   const { data, isLoading } = useAgentMessages({
     threadId: result?.subAgentThreadId,
@@ -38,6 +44,10 @@ export const AgentBadgeWrapper = ({
       metadata={metadata}
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
+      toolName={toolName}
+      isNetwork={isNetwork}
+      suspendPayload={suspendPayload}
+      toolCalled={toolCalled}
     />
   );
 };
