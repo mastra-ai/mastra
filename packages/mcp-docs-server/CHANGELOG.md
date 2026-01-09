@@ -1,5 +1,26 @@
 # @mastra/mcp-docs-server
 
+## 1.0.0-beta.21
+
+### Minor Changes
+
+- feat(mcp-docs-server): add embedded docs MCP tools ([#11532](https://github.com/mastra-ai/mastra/pull/11532))
+
+  Adds 5 new MCP tools to read embedded documentation from installed @mastra/\* packages:
+  - listInstalledMastraPackages: Discover packages with embedded docs
+  - readMastraSourceMap: Read export mappings from SOURCE_MAP.json
+  - findMastraExport: Get type definitions and implementation for specific exports
+  - readMastraEmbeddedDocs: Read topic documentation
+  - searchMastraEmbeddedDocs: Search across all embedded docs
+
+  These tools enable AI coding agents to understand Mastra packages by reading documentation directly from node_modules.
+
+### Patch Changes
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ce22710`](https://github.com/mastra-ai/mastra/commit/ce22710754f7e4b81431358c7c05ccf288706de0), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+  - @mastra/mcp@1.0.0-beta.9
+
 ## 1.0.0-beta.20
 
 ### Patch Changes
