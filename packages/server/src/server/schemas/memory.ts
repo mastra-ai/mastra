@@ -284,13 +284,16 @@ export const memoryStatusResponseSchema = z.object({
 /**
  * Response for GET /api/memory/config
  * MemoryConfig is complex with many optional fields - using passthrough
+ * config can be null when memory is not configured
  */
 export const memoryConfigResponseSchema = z.object({
-  config: z.object({
-    lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-    semanticRecall: z.union([z.boolean(), z.any()]).optional(),
-    workingMemory: z.any().optional(),
-  }),
+  config: z
+    .object({
+      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      semanticRecall: z.union([z.boolean(), z.any()]).optional(),
+      workingMemory: z.any().optional(),
+    })
+    .nullable(),
 });
 
 /**

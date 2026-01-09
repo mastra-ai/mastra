@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
+  GET_MEMORY_CONFIG_ROUTE,
+  GET_WORKING_MEMORY_ROUTE,
   LIST_THREADS_ROUTE,
   GET_THREAD_BY_ID_ROUTE,
   SAVE_MESSAGES_ROUTE,
@@ -114,6 +116,80 @@ describe('Memory Handlers', () => {
           agentId: 'non-existent',
         }),
       ).rejects.toThrow(HTTPException);
+    });
+  });
+
+  /**
+   * Issue #11765: Memory endpoints should gracefully handle agents without memory
+   * https://github.com/mastra-ai/mastra/issues/11765
+   *
+   * When the playground UI loads an agent without memory configured, it still mounts
+   * the WorkingMemoryProvider which calls these endpoints. Currently they throw
+   * HTTPException(400, 'Memory is not initialized') which causes console errors.
+   *
+   * These tests document the expected behavior: return null/empty responses instead
+   * of throwing errors when memory is not configured.
+   */
+  describe('getMemoryConfigHandler - Issue #11765', () => {
+    it('should return null config when agent has no memory configured (not throw)', async () => {
+      // Setup: Agent WITHOUT memory configured
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+        // NOTE: No memory property set
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      // BUG: Currently throws HTTPException(400, 'Memory is not initialized')
+      // EXPECTED: Should return { config: null } instead
+      const result = await GET_MEMORY_CONFIG_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+      });
+
+      // This is the expected behavior - graceful null response
+      expect(result).toEqual({ config: null });
+    });
+  });
+
+  describe('getWorkingMemoryHandler - Issue #11765', () => {
+    it('should return null working memory when agent has no memory configured (not throw)', async () => {
+      // Setup: Agent WITHOUT memory configured
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+        // NOTE: No memory property set
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      // BUG: Currently throws HTTPException(400, 'Memory is not initialized')
+      // EXPECTED: Should return null working memory instead
+      const result = await GET_WORKING_MEMORY_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
+
+      // This is the expected behavior - graceful null response
+      expect(result).toEqual({
+        workingMemory: null,
+        source: 'thread',
+        workingMemoryTemplate: null,
+        threadExists: false,
+      });
     });
   });
 
