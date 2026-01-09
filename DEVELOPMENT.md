@@ -150,14 +150,14 @@ This starts the Mastra playground using your local packages. The playground prov
 
 Pick an example that uses the features you modified:
 
-| What you changed | Suggested examples |
-| :--- | :--- |
-| Agent system | `examples/weather-agent`, `examples/quick-start` |
-| Memory | `examples/memory-with-pg`, `examples/memory-with-libsql`, `examples/dane` |
-| RAG/embeddings | `examples/basics/rag/*` |
-| Workflows | `examples/workflow-with-suspend-resume`, `examples/workflow-with-memory` |
-| Tools | `examples/stock-price-tool`, `examples/weather-agent` |
-| CLI/Playground | Any example directory |
+| What you changed | Suggested examples                                                        |
+| :--------------- | :------------------------------------------------------------------------ |
+| Agent system     | `examples/weather-agent`, `examples/quick-start`                          |
+| Memory           | `examples/memory-with-pg`, `examples/memory-with-libsql`, `examples/dane` |
+| RAG/embeddings   | `examples/basics/rag/*`                                                   |
+| Workflows        | `examples/workflow-with-suspend-resume`, `examples/workflow-with-memory`  |
+| Tools            | `examples/stock-price-tool`, `examples/weather-agent`                     |
+| CLI/Playground   | Any example directory                                                     |
 
 You may need to create an agent/tool/workflow in the example project to illustrate the bug you are trying to solve, but the changes in the example should not be committed.
 
