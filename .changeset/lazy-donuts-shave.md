@@ -2,11 +2,17 @@
 '@mastra/deployer': patch
 ---
 
-fix: include user-specified externals in output package.json
+feat: add dynamicPackages bundler config for runtime-loaded packages and auto detect pino
 
-Packages listed in the bundler `externals` config are now always added to the
-output package.json dependencies. Previously, externals were only included if
-detected during static analysis, which missed dynamically-imported packages
-(e.g., `pino.transport({ target: "pino-opentelemetry-transport" })`).
+Adds a new `dynamicPackages` bundler config option for packages that are loaded
+dynamically at runtime and cannot be detected by static analysis (e.g.,
+`pino.transport({ target: "pino-opentelemetry-transport" })`).
+
+Additionally, pino transport targets are now automatically detected from the
+bundled code, so most pino users won't need any configuration.
+
+This keeps `externals` for its intended purpose (packages to not bundle) and
+provides a clear mechanism for dynamic packages that need to be in the output
+package.json.
 
 Fixes #10893
