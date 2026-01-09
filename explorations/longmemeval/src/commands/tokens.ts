@@ -190,27 +190,41 @@ export class TokensCommand {
     let compressionRatio: number | undefined;
 
     const preparedDir = options.preparedDataDir || this.preparedDataDir;
-    const omJsonPath = join(preparedDir, options.dataset, 'observational-memory', question.question_id, 'om.json');
+    // Check both observational-memory and observational-memory-shortcut directories
+    let omJsonPath = join(preparedDir, options.dataset, 'observational-memory', question.question_id, 'om.json');
+    if (!existsSync(omJsonPath)) {
+      omJsonPath = join(
+        preparedDir,
+        options.dataset,
+        'observational-memory-shortcut',
+        question.question_id,
+        'om.json',
+      );
+    }
 
     if (existsSync(omJsonPath)) {
       try {
         const omData = JSON.parse(await readFile(omJsonPath, 'utf-8'));
         // The structure is: observationalMemory[0] = [resourceKey, [records...]]
-        // where records[0].activeObservations contains the observations
-        let activeObservations: string | undefined;
+        // Sum activeObservations across ALL records (each reflection creates a new record)
+        let totalObservationTokens = 0;
 
         if (Array.isArray(omData.observationalMemory) && omData.observationalMemory[0]) {
           const [, records] = omData.observationalMemory[0];
-          if (Array.isArray(records) && records[0]?.activeObservations) {
-            activeObservations = records[0].activeObservations;
+          if (Array.isArray(records)) {
+            for (const record of records) {
+              if (record?.activeObservations) {
+                totalObservationTokens += this.tokenCounter.countString(record.activeObservations);
+              }
+            }
           }
         } else if (omData.record?.activeObservations) {
           // Fallback for old structure
-          activeObservations = omData.record.activeObservations;
+          totalObservationTokens = this.tokenCounter.countString(omData.record.activeObservations);
         }
 
-        if (activeObservations) {
-          preparedObservationTokens = this.tokenCounter.countString(activeObservations);
+        if (totalObservationTokens > 0) {
+          preparedObservationTokens = totalObservationTokens;
           if (totalTokens > 0) {
             compressionRatio = totalTokens / preparedObservationTokens;
           }

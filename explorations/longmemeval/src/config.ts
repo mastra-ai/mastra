@@ -114,6 +114,18 @@ export function getMemoryOptions(memoryConfig: string): MemoryConfigOptions {
         },
       };
 
+    case 'observational-memory-shortcut':
+      // Shortcut: process all sessions without observation, then finalize at the end
+      // This dramatically reduces LLM API costs (1 Observer call + 1-2 Reflector calls per question)
+      return {
+        type: 'observational-memory-shortcut',
+        options: {
+          lastMessages: 5,
+          semanticRecall: false,
+          workingMemory: { enabled: false },
+        },
+      };
+
     default:
       throw new Error(`Unknown memory config: ${memoryConfig}`);
   }

@@ -1780,6 +1780,121 @@ ${formattedMessages}
   }
 
   /**
+   * Finalize observations for a thread/resource.
+   *
+   * This method forces observation and optional reflection regardless of thresholds.
+   * Useful for "shortcut" preparation where you accumulate all messages first,
+   * then run a single observation + reflection pass at the end.
+   *
+   * @param threadId - The thread ID
+   * @param resourceId - Optional resource ID (required for resource scope)
+   * @param options - Optional configuration
+   * @param options.reflect - Whether to also run reflection after observation (default: true)
+   * @param options.reflectionThreshold - Only reflect if observations exceed this token count
+   *
+   * @example
+   * ```ts
+   * // Process all sessions with Infinity thresholds, then finalize
+   * await om.finalize(threadId, resourceId, {
+   *   reflect: true,
+   *   reflectionThreshold: 40000, // Only reflect if > 40k tokens
+   * });
+   * ```
+   */
+  async finalize(
+    threadId: string,
+    resourceId?: string,
+    options?: {
+      reflect?: boolean;
+      reflectionThreshold?: number;
+    },
+  ): Promise<{ observed: boolean; reflected: boolean; observationTokens: number }> {
+    const { reflect = true, reflectionThreshold } = options ?? {};
+    const ids = this.getStorageIds(threadId, resourceId);
+
+    // Get or create the record
+    // For resource scope, threadId is null but we pass the original threadId for record creation
+    const record = await this.getOrCreateRecord(ids.threadId ?? threadId, ids.resourceId);
+
+    // Load ALL unobserved messages (no threshold check)
+    // For resource scope, pass null threadId to load from all threads
+    const unobservedMessages = await this.loadUnobservedMessages(
+      ids.threadId ?? threadId,
+      ids.resourceId,
+      record.lastObservedAt,
+    );
+
+    let observed = false;
+    let reflected = false;
+    let observationTokens = record.observationTokenCount;
+
+    // Run observation if there are unobserved messages
+    if (unobservedMessages.length > 0) {
+      console.info(`[OM Finalize] Running observation on ${unobservedMessages.length} messages`);
+
+      if (this.scope === 'resource') {
+        // Resource scope: group by thread and observe each
+        await this.doResourceScopedObservation(record, threadId, ids.resourceId, unobservedMessages);
+      } else {
+        // Thread scope: observe all messages together
+        await this.doSynchronousObservation(record, threadId, unobservedMessages);
+      }
+
+      observed = true;
+
+      // Reload record to get updated token count
+      const updatedRecord = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+      observationTokens = updatedRecord?.observationTokenCount ?? 0;
+
+      console.info(`[OM Finalize] Observation complete: ${observationTokens} tokens`);
+    } else {
+      console.info(`[OM Finalize] No unobserved messages, skipping observation`);
+    }
+
+    // Run reflection if requested and threshold is met
+    if (reflect && observationTokens > 0) {
+      const threshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+
+      if (observationTokens >= threshold) {
+        console.info(`[OM Finalize] Running reflection (${observationTokens} >= ${threshold} tokens)`);
+
+        // Get fresh record for reflection
+        const recordForReflection = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+        if (recordForReflection?.activeObservations) {
+          await this.storage.setReflectingFlag(recordForReflection.id, true);
+
+          try {
+            const patternsToReflect = this.reflectorRecognizePatterns ? recordForReflection.patterns : undefined;
+            const reflectResult = await this.callReflector(
+              recordForReflection.activeObservations,
+              undefined,
+              patternsToReflect,
+            );
+            const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+
+            await this.storage.createReflectionGeneration({
+              currentRecord: recordForReflection,
+              reflection: reflectResult.observations,
+              tokenCount: reflectionTokenCount,
+              patterns: reflectResult.patterns,
+            });
+
+            reflected = true;
+            observationTokens = reflectionTokenCount;
+            console.info(`[OM Finalize] Reflection complete: ${reflectionTokenCount} tokens`);
+          } finally {
+            await this.storage.setReflectingFlag(recordForReflection.id, false);
+          }
+        }
+      } else {
+        console.info(`[OM Finalize] Skipping reflection (${observationTokens} < ${threshold} tokens)`);
+      }
+    }
+
+    return { observed, reflected, observationTokens };
+  }
+
+  /**
    * Get current observations for a thread/resource
    */
   async getObservations(threadId: string, resourceId?: string): Promise<string | undefined> {

@@ -513,7 +513,8 @@ Active evaluations:`;
     const benchmarkVectorStore = new BenchmarkVectorStore('read');
 
     const memoryOptions = getMemoryOptions(options.memoryConfig);
-    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
+    const usesObservationalMemory =
+      options.memoryConfig === 'observational-memory' || options.memoryConfig === 'observational-memory-shortcut';
 
     // Only load BenchmarkStore for non-OM configs (OM uses PersistableInMemoryMemory)
     let benchmarkStore: BenchmarkStore | undefined;

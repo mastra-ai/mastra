@@ -108,7 +108,8 @@ export class PrepareCommand {
       options.memoryConfig === 'working-memory-tailored' ||
       options.memoryConfig === 'combined' ||
       options.memoryConfig === 'combined-tailored' ||
-      options.memoryConfig === 'observational-memory';
+      options.memoryConfig === 'observational-memory' ||
+      options.memoryConfig === 'observational-memory-shortcut';
 
     if (needsRealModel && !process.env.OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is required for working memory or observational memory preparation');
@@ -452,7 +453,9 @@ export class PrepareCommand {
       options.memoryConfig === 'working-memory-tailored' ||
       options.memoryConfig === 'combined' ||
       options.memoryConfig === 'combined-tailored';
-    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
+    const usesObservationalMemory =
+      options.memoryConfig === 'observational-memory' || options.memoryConfig === 'observational-memory-shortcut';
+    const usesShortcutOM = options.memoryConfig === 'observational-memory-shortcut';
     const usesTailoredTemplate =
       options.memoryConfig === 'working-memory-tailored' || options.memoryConfig === 'combined-tailored';
 
@@ -504,21 +507,24 @@ export class PrepareCommand {
       omStorage = new PersistableInMemoryMemory();
 
       // For OM: use REAL model for Observer/Reflector subagents (they need real LLMs to extract observations)
+      // For shortcut mode: use Infinity thresholds to skip observation during processing
+      // (finalize() will be called at the end to do a single observation pass)
+      const isShortcut = usesShortcutOM;
       observationalMemory = new ObservationalMemory({
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         observeFutureOnly: false,
         storage: omStorage,
         observer: {
           model: model, // Real model for Observer
-          // Using defaults (observationThreshold: 10000)
-          observationThreshold: 30000,
+          // Shortcut: use Infinity to skip observation during processing
+          observationThreshold: isShortcut ? Infinity : 30000,
           recognizePatterns: false,
         },
         reflector: {
           model: model, // Real model for Reflector
-          reflectionThreshold: 20000,
+          // Shortcut: use Infinity to skip reflection during processing
+          reflectionThreshold: isShortcut ? Infinity : 20000,
           recognizePatterns: false,
-          // Using defaults (reflectionThreshold: 30000)
         },
         scope: observationalMemoryConfig.scope,
         // Debug callback to log all observation events to a file
@@ -873,6 +879,25 @@ export class PrepareCommand {
           status: `session ${currentSessionIndex} (${processedSessions}/${sessionsToProcess.length} total)`,
         });
       }
+    }
+
+    // For shortcut mode: call finalize() to do a single observation + reflection pass
+    if (usesShortcutOM && observationalMemory) {
+      if (slotIndex !== undefined && activeQuestions) {
+        activeQuestions.set(slotIndex, {
+          questionId: question.question_id,
+          status: 'Finalizing observations...',
+        });
+      }
+
+      // finalize() forces observation on all unobserved messages and triggers reflection
+      // Use the last session's ID as the thread context
+      const lastSessionId =
+        sessionsWithDates[sessionsWithDates.length - 1]?.sessionId || `session_${question.question_id}`;
+      await observationalMemory.finalize(lastSessionId, resourceId, {
+        reflect: true,
+        reflectionThreshold: 20000, // Reflect if observations exceed 20k tokens
+      });
     }
 
     // Update status to saving
