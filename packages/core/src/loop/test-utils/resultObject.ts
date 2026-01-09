@@ -51,7 +51,7 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
       expect(await result.warnings).toStrictEqual([{ type: 'other', message: 'test-warning' }]);
     });
@@ -111,7 +111,7 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
       expect(await result.finishReason).toStrictEqual('stop');
     });
@@ -143,7 +143,7 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
       expect(await result.providerMetadata).toStrictEqual({
         testProvider: { testKey: 'testValue' },
@@ -164,9 +164,9 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      const messages = (await result.aisdk.v5.response).messages;
+      const messages = (await result.response).messages;
 
       expect(messages).toMatchInlineSnapshot(`
             [
@@ -314,7 +314,7 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
       expect(await result.text).toMatchSnapshot();
     });
@@ -331,9 +331,9 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.reasoningText).toMatchSnapshot();
+      expect(await result.reasoningText).toMatchSnapshot();
     });
   });
 
@@ -347,9 +347,9 @@ export function resultObjectTests({
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.reasoning).toMatchSnapshot();
+      expect(await result.reasoning).toMatchSnapshot();
     });
   });
 
@@ -363,9 +363,9 @@ export function resultObjectTests({
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.sources).toMatchSnapshot();
+      expect(await result.sources).toMatchSnapshot();
     });
   });
 
@@ -379,9 +379,9 @@ export function resultObjectTests({
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.files).toMatchSnapshot();
+      expect(await result.files).toMatchSnapshot();
     });
   });
 
@@ -395,9 +395,9 @@ export function resultObjectTests({
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      const steps = await result.aisdk.v5.steps;
+      const steps = await result.steps;
       // console.log('test-steps', JSON.stringify(steps, null, 2));
 
       expect(steps).toMatchInlineSnapshot(`
@@ -543,9 +543,9 @@ export function resultObjectTests({
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.steps).toMatchInlineSnapshot(`
+      expect(await result.steps).toMatchInlineSnapshot(`
         [
           DefaultStepResult {
             "content": [
@@ -625,9 +625,9 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      const steps = await result.aisdk.v5.steps;
+      const steps = await result.steps;
 
       expect(steps).toMatchSnapshot();
     });
@@ -662,22 +662,26 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.toolCalls).toMatchInlineSnapshot(`
-            [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerMetadata": undefined,
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
+      expect(await result.toolCalls).toMatchInlineSnapshot(`
+        [
+          {
+            "from": "AGENT",
+            "payload": {
+              "args": {
+                "value": "value",
               },
-            ]
-          `);
+              "providerExecuted": undefined,
+              "providerMetadata": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call",
+          },
+        ]
+      `);
     });
   });
 
@@ -711,22 +715,27 @@ export function resultObjectTests({
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.toolResults).toMatchInlineSnapshot(`
-            [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "output": "value-result",
-                "providerExecuted": undefined,
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-result",
+      expect(await result.toolResults).toMatchInlineSnapshot(`
+        [
+          {
+            "from": "AGENT",
+            "payload": {
+              "args": {
+                "value": "value",
               },
-            ]
-          `);
+              "providerExecuted": undefined,
+              "providerMetadata": undefined,
+              "result": "value-result",
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-result",
+          },
+        ]
+      `);
     });
   });
 }
