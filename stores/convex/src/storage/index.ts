@@ -16,7 +16,30 @@ export type { ConvexDomainConfig } from './db';
  *
  * Accepts either:
  * - A pre-configured ConvexAdminClient: `{ id, client }`
- * - Deployment config: `{ id, deploymentUrl, adminAuthToken, storageFunction? }`
+ * - Deployment config with auth options:
+ *   - `adminAuthToken`: Full admin access (for deployment/CI only)
+ *   - `authToken`: User/service JWT for runtime operations (recommended for production)
+ *
+ * Security recommendation:
+ * - Use `adminAuthToken` only during deployment for schema migrations
+ * - Use `authToken` at runtime for safer, scoped access
+ *
+ * @example
+ * ```typescript
+ * // Production runtime (recommended)
+ * const store = new ConvexStore({
+ *   id: 'convex',
+ *   deploymentUrl: process.env.CONVEX_URL!,
+ *   authToken: process.env.CONVEX_SERVICE_TOKEN!, // Service-level JWT
+ * });
+ *
+ * // CI/CD deployment only
+ * const store = new ConvexStore({
+ *   id: 'convex',
+ *   deploymentUrl: process.env.CONVEX_URL!,
+ *   adminAuthToken: process.env.CONVEX_ADMIN_KEY!, // Full admin access
+ * });
+ * ```
  */
 export type ConvexStoreConfig = {
   id: string;
@@ -53,7 +76,7 @@ export type ConvexStoreConfig = {
        *
        * const client = new ConvexAdminClient({
        *   deploymentUrl: 'https://your-deployment.convex.cloud',
-       *   adminAuthToken: 'your-token',
+       *   authToken: 'your-jwt-token',
        *   storageFunction: 'custom/storage:handle',
        * });
        *
