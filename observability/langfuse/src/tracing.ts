@@ -174,7 +174,13 @@ export class LangfuseExporter extends TrackingExporter<
     const langfuseSpan = traceData.getSpan({ spanId: span.id });
     // use update for both update & end, so that we can use the
     // end time we set when ending the span.
-    langfuseSpan?.update(this.buildSpanPayload(span, false, traceData));
+    langfuseSpan.update(this.buildSpanPayload(span, false, traceData));
+
+    // Submit scores from span.scores to Langfuse
+    // Scores are queued after span creation, so they'll be batched together.
+    if (span.scores?.length) {
+      this.submitScoresFromSpan(span);
+    }
 
     if (span.isRootSpan) {
       const langfuseRoot = traceData.getRoot();
@@ -327,41 +333,34 @@ export class LangfuseExporter extends TrackingExporter<
     return payload;
   }
 
-  async addScoreToTrace({
-    traceId,
-    spanId,
-    score,
-    reason,
-    scorerName,
-    metadata,
-  }: {
-    traceId: string;
-    spanId?: string;
-    score: number;
-    reason?: string;
-    scorerName: string;
-    metadata?: Record<string, any>;
-  }): Promise<void> {
-    if (!this.#client) return;
+  /**
+   * Submit scores from span.scores to Langfuse.
+   * Called during SPAN_UPDATED events when scores are attached to spans.
+   */
+  private submitScoresFromSpan(span: AnyExportedSpan): void {
+    if (!this.client || !span.scores?.length) return;
 
-    try {
-      await this.#client.score({
-        id: `${traceId}-${scorerName}`,
-        traceId,
-        observationId: spanId,
-        name: scorerName,
-        value: score,
-        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
-        metadata: { ...(reason ? { reason } : {}) },
-        dataType: 'NUMERIC',
-      });
-    } catch (error) {
-      this.logger.error('Langfuse exporter: Error adding score to trace', {
-        error,
-        traceId,
-        spanId,
-        scorerName,
-      });
+    for (const score of span.scores) {
+      try {
+        this.client.score({
+          id: `${span.traceId}-${span.id}-${score.scorerId}`,
+          traceId: span.traceId,
+          observationId: span.id,
+          name: score.scorerName,
+          value: score.score,
+          ...(span.metadata?.sessionId ? { sessionId: span.metadata.sessionId } : {}),
+          comment: score.reason,
+          metadata: score.metadata,
+          dataType: 'NUMERIC',
+        });
+      } catch (error) {
+        this.logger.error('Langfuse exporter: Error submitting score from span', {
+          error,
+          traceId: span.traceId,
+          spanId: span.id,
+          scorerName: score.scorerName,
+        });
+      }
     }
   }
 

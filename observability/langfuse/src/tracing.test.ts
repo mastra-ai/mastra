@@ -87,6 +87,8 @@ describe('LangfuseExporter', () => {
       kind: 'mockLangfuseClient',
       trace: vi.fn().mockReturnValue(mockTrace),
       shutdownAsync: vi.fn().mockResolvedValue(undefined),
+      flushAsync: vi.fn().mockResolvedValue(undefined),
+      score: vi.fn(),
     };
 
     // Get the mocked Langfuse constructor and configure it
@@ -1397,134 +1399,174 @@ describe('LangfuseExporter', () => {
     });
   });
 
-  describe('Score Management', () => {
-    let mockScore: any;
-
+  describe('Score Submission from span.scores', () => {
     beforeEach(() => {
-      mockScore = {
-        id: 'test-score-id',
-        traceId: 'test-trace-id',
-        observationId: 'test-span-id',
-        name: 'test-scorer',
-        value: 0.85,
-        sessionId: 'test-session',
-        metadata: { reason: 'Test score' },
-        dataType: 'NUMERIC',
-      };
-      mockLangfuseClient.score = vi.fn().mockResolvedValue(mockScore);
+      mockLangfuseClient.score = vi.fn();
     });
 
-    it('should add score to trace with all parameters', async () => {
-      const scoreData = {
+    it('should submit scores from span.scores on span update', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
         traceId: 'trace-123',
-        spanId: 'span-456',
-        score: 0.95,
-        reason: 'High quality response',
-        scorerName: 'quality-scorer',
-        metadata: {
-          sessionId: 'session-789',
-          userId: 'user-123',
-          customField: 'custom-value',
-        },
-      };
-
-      await exporter.addScoreToTrace(scoreData);
-
-      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
-        id: 'trace-123-quality-scorer',
-        traceId: 'trace-123',
-        observationId: 'span-456',
-        name: 'quality-scorer',
-        value: 0.95,
-        sessionId: 'session-789',
-        metadata: { reason: 'High quality response' },
-        dataType: 'NUMERIC',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
       });
-    });
 
-    it('should add score to trace with only required parameters', async () => {
-      const scoreData = {
-        traceId: 'trace-123',
-        score: 0.75,
-        scorerName: 'trace-scorer',
-      };
-
-      await exporter.addScoreToTrace(scoreData);
-
-      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
-        id: 'trace-123-trace-scorer',
-        traceId: 'trace-123',
-        name: 'trace-scorer',
-        value: 0.75,
-        metadata: {},
-        dataType: 'NUMERIC',
+      // Create the trace first
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
       });
-    });
 
-    it('should not call Langfuse client when client is null', async () => {
-      // Save and clear env vars to ensure exporter is truly disabled
-      const originalPublicKey = process.env.LANGFUSE_PUBLIC_KEY;
-      const originalSecretKey = process.env.LANGFUSE_SECRET_KEY;
-      delete process.env.LANGFUSE_PUBLIC_KEY;
-      delete process.env.LANGFUSE_SECRET_KEY;
-
-      try {
-        // Create exporter with missing keys to disable client
-        const disabledExporter = new LangfuseExporter({
-          baseUrl: 'https://test-langfuse.com',
-        });
-
-        const scoreData = {
-          traceId: 'trace-123',
-          spanId: 'span-456',
-          score: 0.8,
-          reason: 'Test score',
-          scorerName: 'test-scorer',
-          metadata: {
-            sessionId: 'session-789',
+      // Update span with scores attached
+      const spanWithScores = {
+        ...rootSpan,
+        scores: [
+          {
+            scorerId: 'quality-scorer',
+            scorerName: 'Quality Scorer',
+            score: 0.95,
+            reason: 'High quality response',
+            timestamp: 1234567890,
+            metadata: { analyzeStepResult: { quality: 'high' } },
           },
-        };
-
-        await disabledExporter.addScoreToTrace(scoreData);
-
-        // Should not call Langfuse client
-        expect(mockLangfuseClient.score).not.toHaveBeenCalled();
-      } finally {
-        // Restore env vars safely (avoid setting to string "undefined")
-        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
-        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
-      }
-    });
-
-    it('should handle Langfuse client errors gracefully', async () => {
-      const mockError = new Error('Langfuse API error');
-      mockLangfuseClient.score.mockRejectedValue(mockError);
-
-      const mockLoggerError = vi.spyOn(exporter['logger'], 'error').mockImplementation(() => {});
-
-      const scoreData = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        score: 0.8,
-        reason: 'Test score',
-        scorerName: 'test-scorer',
-        metadata: {
-          sessionId: 'session-789',
-        },
+        ],
       };
 
-      // Should not throw
-      await expect(exporter.addScoreToTrace(scoreData)).resolves.not.toThrow();
-
-      // Should log error
-      expect(mockLoggerError).toHaveBeenCalledWith('Langfuse exporter: Error adding score to trace', {
-        error: mockError,
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        scorerName: 'test-scorer',
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithScores,
       });
 
-      mockLoggerError.mockRestore();
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-root-span-quality-scorer',
+        traceId: 'trace-123',
+        observationId: 'root-span',
+        name: 'Quality Scorer',
+        value: 0.95,
+        comment: 'High quality response',
+        dataType: 'NUMERIC',
+        metadata: { analyzeStepResult: { quality: 'high' } },
+      });
+    });
+
+    it('should submit multiple scores from span.scores', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      const spanWithScores = {
+        ...rootSpan,
+        scores: [
+          {
+            scorerId: 'relevance-scorer',
+            scorerName: 'Relevance',
+            score: 0.9,
+            reason: 'Relevant',
+            timestamp: 1000,
+            metadata: { key: 'value1' },
+          },
+          {
+            scorerId: 'safety-scorer',
+            scorerName: 'Safety',
+            score: 1.0,
+            timestamp: 2000,
+          },
+        ],
+      };
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithScores,
+      });
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledTimes(2);
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-root-span-relevance-scorer',
+        traceId: 'trace-123',
+        observationId: 'root-span',
+        name: 'Relevance',
+        value: 0.9,
+        comment: 'Relevant',
+        dataType: 'NUMERIC',
+        metadata: { key: 'value1' },
+      });
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-root-span-safety-scorer',
+        traceId: 'trace-123',
+        observationId: 'root-span',
+        name: 'Safety',
+        value: 1.0,
+        comment: undefined,
+        dataType: 'NUMERIC',
+        metadata: undefined,
+      });
+    });
+
+    it('should not submit scores when span has no scores', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: rootSpan,
+      });
+
+      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
+    });
+
+    it('should not submit scores when client is disabled', async () => {
+      const disabledExporter = new LangfuseExporter({
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      const spanWithScores = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+      (spanWithScores as any).scores = [
+        {
+          scorerId: 'test-scorer',
+          scorerName: 'Test',
+          score: 0.8,
+          timestamp: 1000,
+        },
+      ];
+
+      // When client is disabled, nothing should happen
+      await disabledExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: spanWithScores,
+      });
+
+      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
     });
   });
 
