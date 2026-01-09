@@ -267,6 +267,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
+                    createSpan: true,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
@@ -746,7 +747,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
                   providerMetadata: baseFinishStep.providerMetadata,
-                  text: baseFinishStep.text,
+                  text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),

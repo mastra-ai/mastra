@@ -1,8 +1,6 @@
-'use client';
-
 import { forwardRef } from 'react';
 
-import { Button, ButtonProps } from '@/components/ui/button';
+import { Button, ButtonProps } from '@/ds/components/Button/Button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { cn } from '@/lib/utils';
@@ -18,14 +16,7 @@ export const TooltipIconButton = forwardRef<HTMLButtonElement, TooltipIconButton
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              {...rest}
-              className={cn('size-6 p-1', className)}
-              ref={ref}
-              aria-label={tooltip}
-            >
+            <Button {...rest} className={cn('size-6 p-1', className)} ref={ref} aria-label={tooltip}>
               {children}
             </Button>
           </TooltipTrigger>

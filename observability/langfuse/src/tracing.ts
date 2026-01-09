@@ -102,24 +102,40 @@ export class LangfuseExporter extends BaseExporter {
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
 
-  constructor(config: LangfuseExporterConfig) {
+  constructor(config: LangfuseExporterConfig = {}) {
     super(config);
 
     this.realtime = config.realtime ?? false;
 
-    if (!config.publicKey || !config.secretKey) {
+    // Read credentials from config or environment variables
+    const publicKey = config.publicKey ?? process.env.LANGFUSE_PUBLIC_KEY;
+    const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
+    const baseUrl = config.baseUrl ?? process.env.LANGFUSE_BASE_URL;
+
+    if (!publicKey || !secretKey) {
+      const publicKeySource = config.publicKey
+        ? 'from config'
+        : process.env.LANGFUSE_PUBLIC_KEY
+          ? 'from env'
+          : 'missing';
+      const secretKeySource = config.secretKey
+        ? 'from config'
+        : process.env.LANGFUSE_SECRET_KEY
+          ? 'from env'
+          : 'missing';
       this.setDisabled(
-        `Missing required credentials (publicKey: ${!!config.publicKey}, secretKey: ${!!config.secretKey})`,
+        `Missing required credentials (publicKey: ${publicKeySource}, secretKey: ${secretKeySource}). ` +
+          `Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables or pass them in config.`,
       );
-      // Create a no-op client to prevent runtime errors
+      // Set client to null - safety is ensured by the isDisabled flag set above
       this.client = null as any;
       return;
     }
 
     this.client = new Langfuse({
-      publicKey: config.publicKey,
-      secretKey: config.secretKey,
-      baseUrl: config.baseUrl,
+      publicKey,
+      secretKey,
+      baseUrl,
       ...config.options,
     });
   }

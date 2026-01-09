@@ -16,7 +16,7 @@ import { MastraUIMessage } from '@mastra/react';
 import { LoadingBadge } from './loading-badge';
 import { useWorkflow } from '@/hooks';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { SyntaxHighlighter } from '@/components/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
@@ -52,7 +52,7 @@ export const WorkflowBadge = ({
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
-      <SyntaxHighlighter data={suspendPayload} data-testid="tool-suspend-payload" />
+      <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
 
   if (isWorkflowLoading || !workflow) return <LoadingBadge />;

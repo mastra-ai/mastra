@@ -42,17 +42,33 @@ export const mastra = new Mastra({
 });
 ```
 
-### Automatic Configuration
+### Recommended Configuration
 
-When using the default observability configuration, CloudExporter is automatically included if the access token is set:
+Include CloudExporter in your observability configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes CloudExporter if token exists
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
   }),
 });
 ```

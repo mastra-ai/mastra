@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '@/lib/utils';
 import { type SidebarState } from './main-sidebar-context';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
