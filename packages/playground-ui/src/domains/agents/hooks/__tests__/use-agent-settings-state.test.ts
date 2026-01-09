@@ -22,15 +22,11 @@ Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 /**
  * Test file for use-agent-settings-state.ts
  *
- * Issue #11760: Anthropic models fail when both temperature and topP are sent.
+ * Issue #11760: Anthropic Claude 4.5+ models fail when both temperature and topP are sent.
  * Anthropic's API returns: "`temperature` and `top_p` cannot both be specified for this model."
  *
- * The root cause is the default settings in use-agent-settings-state.ts which set:
- * - temperature: 0.5
- * - topP: 1
- *
- * This causes every agent call from the playground to include both values,
- * breaking Anthropic model compatibility.
+ * Default settings include both temperature and topP for models that support both (OpenAI, Google, Claude 3.5).
+ * For Claude 4.5+ models, the AgentSettings component auto-clears topP when the model is detected.
  */
 describe('use-agent-settings-state defaults', () => {
   beforeEach(() => {
@@ -38,29 +34,16 @@ describe('use-agent-settings-state defaults', () => {
     vi.clearAllMocks();
   });
 
-  it('should NOT have both temperature and topP set by default (Anthropic compatibility)', async () => {
-    // Import the module to get the default settings
-    // We're testing the module's exported default behavior
+  it('should have both temperature and topP set by default (for models that support both)', async () => {
     const { defaultSettings } = await import('../use-agent-settings-state');
 
     const modelSettings = defaultSettings.modelSettings;
 
-    // Both temperature and topP should NOT both be defined
-    // as this breaks Anthropic models which don't allow both to be specified
-    const hasBothDefined = modelSettings.temperature !== undefined && modelSettings.topP !== undefined;
-
-    expect(hasBothDefined).toBe(false);
-  });
-
-  it('should allow temperature OR topP to be set individually', async () => {
-    const { defaultSettings } = await import('../use-agent-settings-state');
-
-    const modelSettings = defaultSettings.modelSettings;
-
-    // At most one of temperature or topP should be defined by default
-    const definedCount = [modelSettings.temperature, modelSettings.topP].filter(v => v !== undefined).length;
-
-    expect(definedCount).toBeLessThanOrEqual(1);
+    // Defaults should include both values for models that support them
+    // (OpenAI, Google, Claude 3.5, etc.)
+    // Claude 4.5+ models will have topP auto-cleared at the component level
+    expect(modelSettings.temperature).toBe(0.5);
+    expect(modelSettings.topP).toBe(1);
   });
 });
 

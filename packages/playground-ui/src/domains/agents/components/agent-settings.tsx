@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 
 import { Label } from '@/components/ui/label';
@@ -94,6 +95,24 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
 
+  // Check if this model has the temperature/topP mutual exclusion restriction
+  const hasSamplingRestriction = isAnthropicModelWithSamplingRestriction(agent?.provider, agent?.modelId);
+
+  // For models with sampling restriction, auto-clear topP if both values are set
+  // This handles users who have both values from localStorage or defaults
+  useEffect(() => {
+    if (
+      hasSamplingRestriction &&
+      settings?.modelSettings?.temperature !== undefined &&
+      settings?.modelSettings?.topP !== undefined
+    ) {
+      setSettings({
+        ...settings,
+        modelSettings: { ...settings.modelSettings, topP: undefined },
+      });
+    }
+  }, [hasSamplingRestriction, agent?.provider, agent?.modelId]);
+
   if (isLoading || isMemoryLoading) {
     return <Skeleton className="h-full" />;
   }
@@ -106,9 +125,6 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent.modelVersion;
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
-
-  // Check if this model has the temperature/topP mutual exclusion restriction
-  const hasSamplingRestriction = isAnthropicModelWithSamplingRestriction(agent.provider, agent.modelId);
 
   let radioValue;
 
