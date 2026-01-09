@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
@@ -62,14 +62,8 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const envFiles = await this.getEnvFiles();
-
-    let sourcemapEnabled = false;
-    try {
-      const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
-      sourcemapEnabled = !!bundlerOptions?.sourcemap;
-    } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
-    }
+    const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
+    const sourcemapEnabled = !!bundlerOptions?.sourcemap;
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
