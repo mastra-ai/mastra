@@ -1,5 +1,24 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.22
+
+### Patch Changes
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Fix text parts incorrectly merging across tool calls ([#11783](https://github.com/mastra-ai/mastra/pull/11783))
+
+  Previously, when an agent produced text before and after a tool call (e.g., "Let me search for that" → tool call → "Here's what I found"), the text parts would be merged into a single part, losing the separation. This fix introduces a `textId` property to track separate text streams, ensuring each text stream maintains its own text part in the UI message.
+
+  Fixes #11577
+
+- Updated dependencies [[`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526)]:
+  - @mastra/client-js@1.0.0-beta.22
+
 ## 0.1.0-beta.21
 
 ### Patch Changes

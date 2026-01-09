@@ -1,5 +1,18 @@
 # @mastra/client-js
 
+## 1.0.0-beta.22
+
+### Patch Changes
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Updated dependencies [[`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526)]:
+  - @mastra/core@1.0.0-beta.22
+
 ## 1.0.0-beta.21
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mastra/mongodb
 
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- Fix MongoDB scores storage sort logic to use numeric sort values (-1) instead of string values ('desc') for consistency with other MongoDB domains (agents, memory, observability, workflows). ([#11729](https://github.com/mastra-ai/mastra/pull/11729))
+
+- Fix MongoDB connection string parameter naming inconsistency. MongoDBVector now uses uri parameter (correct MongoDB terminology). MongoDBStore now accepts both uri (recommended) and url (deprecated, for backward compatibility). Added clear error messages when connection string is missing. ([#11728](https://github.com/mastra-ai/mastra/pull/11728))
+
+- Updated dependencies [[`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526)]:
+  - @mastra/core@1.0.0-beta.22
+
 ## 1.0.0-beta.11
 
 ### Patch Changes

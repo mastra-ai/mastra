@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.22
+
+### Patch Changes
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Updated dependencies [[`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`e09a788`](https://github.com/mastra-ai/mastra/commit/e09a788e01698a711c7f705ce8d64ef8a20c3582)]:
+  - @mastra/client-js@1.0.0-beta.22
+  - @mastra/react@0.1.0-beta.22
+  - @mastra/core@1.0.0-beta.22
+
 ## 7.0.0-beta.21
 
 ### Patch Changes
