@@ -598,9 +598,9 @@ When answering questions, carefully review the conversation history to identify 
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
-      // model: modelProvider,
+      model: modelProvider,
       // model: 'anthropic/claude-haiku-4-5',
-      model: 'cerebras/zai-glm-4.7',
+      // model: 'cerebras/zai-glm-4.7',
       // model: 'cerebras/gpt-oss-120b',
       instructions: [
         { role: 'system', content: agentInstructions },
@@ -781,7 +781,10 @@ When answering questions, carefully review the conversation history to identify 
         answer: improvedAnswer,
       });
 
-      const improvedResult = await withRateLimitRetry(() => metric.measure(improvedInput, improvedHypothesis!), spinner);
+      const improvedResult = await withRateLimitRetry(
+        () => metric.measure(improvedInput, improvedHypothesis!),
+        spinner,
+      );
       improvedIsCorrect = improvedResult.score === 1;
 
       // Retry improved version: always retry at least once, up to 5 times if requiresRetry is set
