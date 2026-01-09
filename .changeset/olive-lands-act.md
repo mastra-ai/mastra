@@ -2,8 +2,8 @@
 '@mastra/server': patch
 ---
 
-Fix 'Memory is not initialized' error in studio/playground for agents without memory
+Fix 'Memory is not initialized' error in playground for agents with sub-agents but no memory
 
-When using agents with sub-agents but no memory configured, the playground UI would log numerous HTTPException errors because the WorkingMemoryProvider always mounts and calls memory endpoints.
+When using agents with sub-agents (e.g., agent networks) but no memory configured, the playground UI would log HTTPException errors when fetching messages for sub-agents without memory.
 
-Changed GET /api/memory/config and GET /api/memory/threads/:threadId/working-memory to return null responses instead of throwing 400 errors when memory is not configured, matching how GET /api/memory/status already handles this gracefully.
+Changed GET /api/memory/threads/:threadId/messages to return empty messages `{ messages: [], uiMessages: [] }` instead of throwing 400 error when memory is not configured for the requested agent.

@@ -182,9 +182,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        // Return null config when memory is not configured
-        // This allows the playground UI to gracefully handle agents without memory
-        return { config: null };
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
       // Get the merged configuration (defaults + custom)
@@ -365,7 +363,9 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         }
       }
 
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
+      // Return empty messages when memory is not configured (Issue #11765)
+      // This allows the playground UI to gracefully handle agents without memory
+      return { messages: [], uiMessages: [] };
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }
@@ -387,14 +387,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       validateBody({ threadId });
       if (!memory) {
-        // Return null working memory when memory is not configured
-        // This allows the playground UI to gracefully handle agents without memory
-        return {
-          workingMemory: null,
-          source: 'thread' as const,
-          workingMemoryTemplate: null,
-          threadExists: false,
-        };
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
       const thread = await memory.getThreadById({ threadId: threadId! });
       const threadExists = !!thread;
