@@ -129,6 +129,17 @@ export class InMemoryMemory extends MemoryStorage {
     // Apply date filtering
     threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
 
+    // Apply metadata filtering
+    if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+      threadMessages = threadMessages.filter((msg: any) => {
+        if (!msg.metadataJson) return false;
+        for (const [key, value] of Object.entries(filter.metadata!)) {
+          if (msg.metadataJson[key] !== value) return false;
+        }
+        return true;
+      });
+    }
+
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
       const isDateField = field === 'createdAt' || field === 'updatedAt';
@@ -281,7 +292,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   protected parseStoredMessage(message: StorageMessageType): MastraDBMessage {
-    const { resourceId, content, role, thread_id, ...rest } = message;
+    const { resourceId, content, role, thread_id, metadataJson, ...rest } = message;
 
     // Parse content using safelyParseJSON utility
     let parsedContent = safelyParseJSON(content);
@@ -292,6 +303,15 @@ export class InMemoryMemory extends MemoryStorage {
         format: 2,
         content: parsedContent,
         parts: [{ type: 'text', text: parsedContent }],
+      };
+    }
+
+    // If metadataJson is available, use it as the authoritative source for metadata
+    // This enables efficient JSON filtering while maintaining backwards compatibility
+    if (metadataJson && typeof parsedContent === 'object') {
+      parsedContent = {
+        ...parsedContent,
+        metadata: metadataJson,
       };
     }
 
@@ -335,6 +355,10 @@ export class InMemoryMemory extends MemoryStorage {
 
     for (const message of messages) {
       const key = message.id;
+      // Extract metadata for the metadataJson field (for JSON filtering)
+      const contentMetadata =
+        typeof message.content === 'object' && message.content?.metadata ? message.content.metadata : null;
+
       // Convert MastraDBMessage to StorageMessageType
       const storageMessage: StorageMessageType = {
         id: message.id,
@@ -344,6 +368,7 @@ export class InMemoryMemory extends MemoryStorage {
         type: message.type || 'text',
         createdAt: message.createdAt,
         resourceId: message.resourceId || null,
+        metadataJson: contentMetadata,
       };
       this.db.messages.set(key, storageMessage);
     }
@@ -383,6 +408,13 @@ export class InMemoryMemory extends MemoryStorage {
           }
         }
         storageMsg.content = JSON.stringify(newContent);
+
+        // Also update metadataJson to keep it in sync
+        if (typeof newContent === 'object' && newContent.metadata) {
+          storageMsg.metadataJson = newContent.metadata;
+        } else {
+          storageMsg.metadataJson = null;
+        }
       }
       // Handle threadId change
       if (threadIdChanged) {
@@ -627,7 +659,7 @@ export class InMemoryMemory extends MemoryStorage {
       const newMessageId = crypto.randomUUID();
       const parsedContent = safelyParseJSON(sourceMsg.content);
 
-      // Create storage message
+      // Create storage message (copy metadataJson from source)
       const newStorageMessage: StorageMessageType = {
         id: newMessageId,
         thread_id: newThreadId,
@@ -636,6 +668,7 @@ export class InMemoryMemory extends MemoryStorage {
         type: sourceMsg.type,
         createdAt: sourceMsg.createdAt,
         resourceId: resourceId || sourceMsg.resourceId,
+        metadataJson: sourceMsg.metadataJson,
       };
 
       this.db.messages.set(newMessageId, newStorageMessage);

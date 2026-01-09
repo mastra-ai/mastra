@@ -141,6 +141,13 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     type: { type: 'text', nullable: false },
     createdAt: { type: 'timestamp', nullable: false },
     resourceId: { type: 'text', nullable: true },
+    /**
+     * Stores the message content metadata as JSONB for efficient filtering.
+     * This is a denormalized copy of content.metadata that enables JSON queries.
+     * When reading, metadataJson takes precedence over content.metadata.
+     * Both are written on save for backwards compatibility.
+     */
+    metadataJson: { type: 'jsonb', nullable: true },
   },
   [TABLE_SPANS]: SPAN_SCHEMA,
   [TABLE_TRACES]: {

@@ -96,6 +96,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     // This function now primarily ensures correct typing and Date conversion.
     return {
       ...data,
+      content: data.content,
       // Ensure dates are Date objects if needed (ElectroDB might return strings)
       createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
@@ -408,6 +409,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         filter?.dateRange,
       );
 
+      // Apply metadata filter
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => {
+          const metadata = msg.content?.metadata;
+          if (!metadata) return false;
+          for (const [key, value] of Object.entries(filter.metadata!)) {
+            if (metadata[key] !== value) return false;
+          }
+          return true;
+        });
+      }
+
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
@@ -532,6 +545,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     // Ensure 'entity' is added and complex fields are handled
     const messagesToSave = messages.map(msg => {
       const now = new Date().toISOString();
+
       return {
         entity: 'message', // Add entity type
         id: msg.id,

@@ -200,6 +200,26 @@ export class MemoryConvex extends MemoryStorage {
     // Apply date range filter
     rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
 
+    // Apply metadata filter (post-fetch since Convex doesn't have native JSON querying)
+    if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+      rows = rows.filter(row => {
+        let content = row.content;
+        if (typeof content === 'string') {
+          try {
+            content = JSON.parse(content);
+          } catch {
+            return false;
+          }
+        }
+        const metadata = (content as any)?.metadata;
+        if (!metadata) return false;
+        for (const [key, value] of Object.entries(filter.metadata!)) {
+          if (metadata[key] !== value) return false;
+        }
+        return true;
+      });
+    }
+
     rows.sort((a, b) => {
       const aValue =
         field === 'createdAt' || field === 'updatedAt'
