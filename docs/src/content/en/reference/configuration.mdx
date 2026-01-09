@@ -583,9 +583,18 @@ export const mastra = new Mastra({
 
 ### server.cors
 
-**Type:** `CorsOptions | false`
+**Type:** `CorsOptions | false`  
 
 CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false` to disable CORS entirely.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `origin` | `string \| string[]` | `'*'` | Origins for CORS requests |
+| `allowMethods` | `string[]` | `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']` | HTTP methods |
+| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'x-mastra-client-type']` | Request headers |
+| `exposeHeaders` | `string[]` | `['Content-Length', 'X-Requested-With']` | Browser headers |
+| `credentials` | `boolean` | `false` | Credentials (cookies, authorization headers) |
+| `maxAge` | `number` | `3600` | Preflight request cache duration in seconds |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -695,9 +704,9 @@ export const mastra = new Mastra({
 ### server.port
 
 **Type:** `number`  
-**Default:** `4111`
+**Default:** `4111` (or `PORT` environment variable if set)
 
-Port the Mastra development server binds to.
+Port the Mastra development server binds to. If the `PORT` environment variable is set, it takes precedence over the default.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -734,7 +743,8 @@ export const mastra = new Mastra({
 
 ### server.timeout
 
-**Type:** `number`
+**Type:** `number`  
+**Default:** `180000` (3 minutes)
 
 Request timeout in milliseconds. Requests that exceed this duration will be terminated.
 
