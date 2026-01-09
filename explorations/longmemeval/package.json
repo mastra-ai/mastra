@@ -21,7 +21,7 @@
     "bench:s:combined-tailored": "tsx src/cli.ts run -d longmemeval_s -m gpt-4o -c combined-tailored --concurrency 30",
     "prepare:s:working-tailored": "tsx src/cli.ts prepare -d longmemeval_s -c working-memory-tailored --concurrency 20",
     "bench:s:working-tailored": "tsx src/cli.ts run -d longmemeval_s -m gpt-4o -c working-memory-tailored --concurrency 30",
-    "prepare:s:om": "tsx src/cli.ts prepare -d longmemeval_s -c observational-memory --concurrency 10",
+    "prepare:s:om": "tsx src/cli.ts prepare -d longmemeval_s -c observational-memory --concurrency 5",
     "bench:s:om": "tsx src/cli.ts run -d longmemeval_s -m gpt-4o -c observational-memory --concurrency 10",
     "deterministic-ids": "tsx src/cli.ts deterministic-ids",
     "prepare:s:om:quick": "tsx src/cli.ts prepare -d longmemeval_s -c observational-memory --concurrency 6 --subset 10",
@@ -30,7 +30,8 @@
     "results:all": "tsx src/cli.ts results --all",
     "results:s": "tsx src/cli.ts results -d longmemeval_s",
     "sync-improved-om-qa": "tsx src/cli.ts sync -d longmemeval_s -c observational-memory",
-    "obscure-thread-ids": "tsx src/cli.ts obscure-thread-ids -d longmemeval_s -c observational-memory"
+    "obscure-thread-ids": "tsx src/cli.ts obscure-thread-ids -d longmemeval_s -c observational-memory",
+    "list-partial": "tsx src/cli.ts list-partial"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
