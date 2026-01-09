@@ -15,7 +15,7 @@ type WorkflowNestedGraphContextType = {
   closeNestedGraph: () => void;
 };
 
-export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphContextType>(
+const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphContextType>(
   {} as WorkflowNestedGraphContextType,
 );
 

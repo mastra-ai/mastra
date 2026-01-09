@@ -12,7 +12,7 @@ interface MarkdownRendererProps {
   children: string;
 }
 
-export function MarkdownRenderer({ children }: MarkdownRendererProps) {
+function MarkdownRenderer({ children }: MarkdownRendererProps) {
   const processedText = children.replace(/\\n/g, '\n');
 
   return (
