@@ -33,7 +33,7 @@
   "dependencies": {
     "@types/mongodb": "^4.0.7",
     "cloudflare": "^4.5.0",
-    "mongodb": "^6.17.0",
+    "mongodb": "^7.0.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

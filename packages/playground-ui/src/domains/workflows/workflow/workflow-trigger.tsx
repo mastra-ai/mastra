@@ -203,7 +203,7 @@ export function WorkflowTrigger({
   const zodSchemaToUse = zodStateSchema
     ? z.object({
         inputData: zodInputSchema,
-        initialState: zodStateSchema,
+        initialState: zodStateSchema.optional(),
       })
     : zodInputSchema;
 
