@@ -7,8 +7,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
-  GET_MEMORY_CONFIG_ROUTE,
-  GET_WORKING_MEMORY_ROUTE,
   LIST_THREADS_ROUTE,
   GET_THREAD_BY_ID_ROUTE,
   SAVE_MESSAGES_ROUTE,
