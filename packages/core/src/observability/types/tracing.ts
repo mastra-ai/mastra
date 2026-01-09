@@ -376,7 +376,9 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
  * Score data attached to a span
  */
 export interface SpanScore {
-  /** Name/ID of the scorer that generated this score */
+  /** ID of the scorer that generated this score */
+  scorerId: string;
+  /** Display name of the scorer (defaults to scorerId if not provided) */
   scorerName: string;
   /** Numeric score value */
   score: number;
@@ -392,7 +394,10 @@ export interface SpanScore {
  * Arguments for adding a score to a span
  */
 export interface AddScoreArgs {
-  scorerName: string;
+  /** ID of the scorer */
+  scorerId: string;
+  /** Display name of the scorer (defaults to scorerId if not provided) */
+  scorerName?: string;
   score: number;
   reason?: string;
   /** Scorer-specific metadata (from runResult, not span metadata) */

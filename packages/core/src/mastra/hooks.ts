@@ -67,22 +67,31 @@ export function createOnScorerHook(mastra: Mastra) {
       };
       await validateAndSaveScore(storage, payload);
 
-      // Add score to span - it will automatically flow through the pipeline when span ends
-      if (currentSpan && currentSpan.isValid) {
-        currentSpan.addScore({
-          scorerName: scorerToUse.scorer.id,
-          score: runResult.score as number,
-          reason: runResult.reason as string,
-          metadata: {
-            // Include all scorer step results and prompts for transparency
-            preprocessStepResult: runResult.preprocessStepResult,
-            preprocessPrompt: runResult.preprocessPrompt,
-            analyzeStepResult: runResult.analyzeStepResult,
-            analyzePrompt: runResult.analyzePrompt,
-            generateScorePrompt: runResult.generateScorePrompt,
-            generateReasonPrompt: runResult.generateReasonPrompt,
-          },
-        });
+      // Add score to span and trigger update event so it gets exported
+      if (currentSpan && currentSpan.isValid && typeof currentSpan.addScore === 'function') {
+        try {
+          currentSpan.addScore({
+            scorerId: scorerToUse.scorer.id,
+            scorerName: scorerToUse.scorer.name,
+            score: runResult.score as number,
+            reason: runResult.reason as string,
+            metadata: {
+              preprocessStepResult: runResult.preprocessStepResult,
+              preprocessPrompt: runResult.preprocessPrompt,
+              analyzeStepResult: runResult.analyzeStepResult,
+              analyzePrompt: runResult.analyzePrompt,
+              generateScorePrompt: runResult.generateScorePrompt,
+              generateReasonPrompt: runResult.generateReasonPrompt,
+            },
+          });
+
+          // Trigger a span update event so the score gets exported
+          if (typeof currentSpan.update === 'function') {
+            currentSpan.update({});
+          }
+        } catch (addScoreError) {
+          mastra.getLogger()?.warn(`Failed to add score to span: ${addScoreError}`);
+        }
       }
     } catch (error) {
       const mastraError = new MastraError(

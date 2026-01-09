@@ -1,6 +1,6 @@
 import { SideDialog } from '@/ds/components/SideDialog';
 import { SpanRecord } from '@mastra/core/storage';
-import { AlertTriangleIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { AlertTriangleIcon, BracesIcon, FileInputIcon, FileOutputIcon, CircleGaugeIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
 
 interface SpanDetailsProps {
@@ -48,6 +48,11 @@ export function SpanDetails({ span }: SpanDetailsProps) {
         title="Attributes"
         icon={<BracesIcon />}
         codeStr={JSON.stringify(span.attributes || null, null, 2)}
+      />
+      <SideDialog.CodeSection
+        title="Scores"
+        icon={<CircleGaugeIcon />}
+        codeStr={JSON.stringify(span.scores || null, null, 2)}
       />
     </>
   );

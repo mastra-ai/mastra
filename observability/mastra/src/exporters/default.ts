@@ -425,6 +425,9 @@ export class DefaultExporter extends BaseExporter {
       error: span.errorInfo ?? null,
       isEvent: span.isEvent,
 
+      // Evaluation scores
+      scores: span.scores ?? null,
+
       // Timestamps
       startedAt: span.startTime,
       endedAt: span.endTime ?? null,
@@ -442,6 +445,7 @@ export class DefaultExporter extends BaseExporter {
       input: span.input,
       output: span.output,
       error: span.errorInfo ?? null,
+      scores: span.scores ?? null,
     };
   }
 
