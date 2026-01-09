@@ -224,7 +224,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
       } catch (e) {
         // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
       }
     }
 
@@ -267,7 +267,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
           conditions.push(`resourceId = {var_resourceId:String}`);
           values.var_resourceId = resourceId;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 

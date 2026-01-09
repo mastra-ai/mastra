@@ -383,7 +383,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
               try {
                 snapshot = JSON.parse(snapshot) as WorkflowRunState;
               } catch (e) {
-                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                this.logger.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
                 return false;
               }
             }
