@@ -1,5 +1,5 @@
 ---
-'@mastra/deployer': minor
+'@mastra/deployer': major
 ---
 
 Serve the Mastra Studio from `studio` folder (previously `playground`).
