@@ -72,6 +72,7 @@ import type {
   AgentInstructions,
   DynamicAgentInstructions,
   AgentMethodType,
+  StructuredOutputOptions,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -1881,10 +1882,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       for (const [agentName, agent] of Object.entries(agents)) {
         const agentInputSchema = z.object({
           prompt: z.string().describe('The prompt to send to the agent'),
-          threadId: z.string().optional().describe('Thread ID for conversation continuity for memory messages'),
-          resourceId: z.string().optional().describe('Resource/user identifier for memory messages'),
-          instructions: z.string().optional().describe('Custom instructions to override agent defaults'),
-          maxSteps: z.number().min(3).optional().describe('Maximum number of execution steps for the sub-agent'),
+          // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
+          threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
+          resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
+          instructions: z.string().nullish().describe('Custom instructions to override agent defaults'),
+          maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
           // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
           // to return a proper llm response
         });
@@ -3043,7 +3045,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * }
    * ```
    */
-  async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
+  async network<OUTPUT extends OutputSchema = undefined>(
+    messages: MessageListInput,
+    options?: MultiPrimitiveExecutionOptions<OUTPUT>,
+  ) {
     const requestContextToUse = options?.requestContext || new RequestContext();
 
     // Merge default network options with call-specific options
@@ -3071,7 +3076,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         : mergedOptions?.memory?.thread?.id);
     const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
 
-    return await networkLoop({
+    return await networkLoop<OUTPUT>({
       networkName: this.name,
       requestContext: requestContextToUse,
       runId,
@@ -3088,6 +3093,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       validation: mergedOptions?.completion,
       routing: mergedOptions?.routing,
       onIterationComplete: mergedOptions?.onIterationComplete,
+      structuredOutput: (options?.structuredOutput ?? defaultNetworkOptions?.structuredOutput) as
+        | StructuredOutputOptions<OUTPUT>
+        | undefined,
     });
   }
 

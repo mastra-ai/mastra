@@ -870,20 +870,20 @@ export type ProviderModelsMap = {
     'sonar-reasoning-pro',
   ];
   readonly huggingface: readonly [
-    'MiniMaxAI/MiniMax-M2',
+    'MiniMaxAI/MiniMax-M2.1',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Embedding-4B',
     'Qwen/Qwen3-Embedding-8B',
     'Qwen/Qwen3-Next-80B-A3B-Instruct',
     'Qwen/Qwen3-Next-80B-A3B-Thinking',
+    'XiaomiMiMo/MiMo-V2-Flash',
     'deepseek-ai/DeepSeek-R1-0528',
-    'deepseek-ai/Deepseek-V3-0324',
+    'deepseek-ai/DeepSeek-V3.2',
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
-    'zai-org/GLM-4.5',
-    'zai-org/GLM-4.5-Air',
-    'zai-org/GLM-4.6',
+    'moonshotai/Kimi-K2-Thinking',
+    'zai-org/GLM-4.7',
   ];
   readonly opencode: readonly [
     'alpha-gd4',
