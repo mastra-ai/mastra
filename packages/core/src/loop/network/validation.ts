@@ -421,6 +421,8 @@ export async function runDefaultCompletionCheck(
 
     If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.
 
+    Also, if the ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.
+
     IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.
     
     If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.
