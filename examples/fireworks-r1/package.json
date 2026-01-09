@@ -24,10 +24,10 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
-    "dotenv": "^17.0.0",
+    "@types/node": "22.19.3",
+    "dotenv": "^17.2.3",
     "mastra": "latest",
-    "tsx": "^4.19.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "pnpm": {

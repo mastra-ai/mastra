@@ -22,7 +22,7 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       vitest:
-        specifier: ^4.0.8
+        specifier: ^4.0.16
         version: 4.0.16
 
 packages:
