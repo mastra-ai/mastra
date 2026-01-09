@@ -2,7 +2,7 @@ import { DynamicForm } from '@/components/dynamic-form';
 import { Button } from '@/ds/components/Button/Button';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
@@ -32,6 +32,15 @@ export const WorkflowInputData = ({
   children,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<'json' | 'form'>('form');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div>
