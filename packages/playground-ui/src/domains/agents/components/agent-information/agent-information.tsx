@@ -15,8 +15,8 @@ export interface AgentInformationProps {
 }
 
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
-  const { data: memory } = useMemory(agentId);
-  const hasMemory = Boolean(memory?.result);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const hasMemory = !isMemoryLoading && Boolean(memory?.result);
 
   return (
     <AgentInformationLayout agentId={agentId}>

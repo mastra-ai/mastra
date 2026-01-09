@@ -858,30 +858,50 @@ export function getAgentMemoryTests({
       // Legacy API uses 'messages', new API uses 'input'
       const secondResponseRequestMessages: CoreMessage[] = requestBody.messages || requestBody.input;
 
+      // Check if this is the v6 OpenAI Response API format (uses item_reference objects)
+      // In v6, previous turn messages are referenced by ID rather than included inline
+      const isV6ResponseApiFormat = secondResponseRequestMessages.some((m: any) => m.type === 'item_reference');
+
       // Verify no tool messages or tool results are in the request
-      const toolOrToolResultMessages = secondResponseRequestMessages.filter(
-        m => m.role === 'tool' || (m.role === 'assistant' && (m as any)?.tool_calls?.length > 0),
-      );
-      expect(toolOrToolResultMessages.length).toBe(0);
+      // Skip for v6 format since messages are referenced by ID
+      if (!isV6ResponseApiFormat) {
+        const toolOrToolResultMessages = secondResponseRequestMessages.filter(
+          (m: any) => m.role === 'tool' || (m.role === 'assistant' && (m as any)?.tool_calls?.length > 0),
+        );
+        expect(toolOrToolResultMessages.length).toBe(0);
+      }
 
       // Should have at minimum: system (instructions) + user + assistant + user
       // Optionally: system (semantic recall) if embeddings completed in time
+      // For v6, some messages may be item_references
       expect(secondResponseRequestMessages.length).toBeGreaterThanOrEqual(4);
 
       // Verify message structure
-      const systemMessages = secondResponseRequestMessages.filter(m => m.role === 'system');
-      const userMessages = secondResponseRequestMessages.filter(m => m.role === 'user');
-      const assistantMessages = secondResponseRequestMessages.filter(m => m.role === 'assistant');
+      const systemMessages = secondResponseRequestMessages.filter((m: any) => m.role === 'system');
+      const userMessages = secondResponseRequestMessages.filter((m: any) => m.role === 'user');
+      const assistantMessages = secondResponseRequestMessages.filter((m: any) => m.role === 'assistant');
+      const itemReferences = secondResponseRequestMessages.filter((m: any) => m.type === 'item_reference');
 
       // Should have 1-2 system messages (instructions + optional semantic recall)
       expect(systemMessages.length).toBeGreaterThanOrEqual(1);
       expect(systemMessages.length).toBeLessThanOrEqual(2);
 
-      // Should have 2 user messages (first question + second question)
-      expect(userMessages.length).toBe(2);
+      // For v6 Response API format, user/assistant messages from previous turns may be item_references
+      // item_reference objects only have {type, id} - no role metadata available
+      if (isV6ResponseApiFormat) {
+        // Must have at least 1 direct user message (the current question being asked)
+        expect(userMessages.length).toBeGreaterThanOrEqual(1);
+        // Total user + assistant + item_references should be at least 3:
+        // (first user question + assistant response + second user question)
+        // Some of these may be inline messages, others may be item_references
+        expect(userMessages.length + assistantMessages.length + itemReferences.length).toBeGreaterThanOrEqual(3);
+      } else {
+        // Should have 2 user messages (first question + second question)
+        expect(userMessages.length).toBe(2);
 
-      // Should have 1 assistant message (response to first question, with tool calls filtered out)
-      expect(assistantMessages.length).toBe(1);
+        // Should have 1 assistant message (response to first question, with tool calls filtered out)
+        expect(assistantMessages.length).toBe(1);
+      }
     }, 30_000);
 
     it('should include working memory in LLM request when input processors run', async () => {

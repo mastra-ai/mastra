@@ -16,6 +16,8 @@ export class DevBundler extends Bundler {
   constructor(customEnvFile?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -67,7 +69,7 @@ export class DevBundler extends Bundler {
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
-      'node',
+      this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
