@@ -37,7 +37,7 @@ interface PdfPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
+const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl bg-surface2">
@@ -73,7 +73,7 @@ interface ImagePreviewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
+const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl bg-surface2">
@@ -113,7 +113,7 @@ interface TxtPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const TxtPreviewDialog = ({ data, open, onOpenChange }: TxtPreviewDialogProps) => {
+const TxtPreviewDialog = ({ data, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl bg-surface2 h-[80vh] overflow-y-auto">

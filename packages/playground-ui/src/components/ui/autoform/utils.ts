@@ -1,15 +1,3 @@
-import { buildZodFieldConfig } from '@autoform/react';
-import { FieldTypes } from './AutoForm';
-import { FieldConfig } from '@autoform/core';
-
-// @ts-ignore
-export const fieldConfig: FieldConfig = buildZodFieldConfig<
-  FieldTypes,
-  {
-    // Add types for `customData` here.
-  }
->();
-
 export function removeEmptyValues<T extends Record<string, any>>(values: T): Partial<T> {
   const result: Partial<T> = {};
   for (const key in values) {

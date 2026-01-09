@@ -100,7 +100,7 @@ function getBaseSchema<ChildType extends z.ZodAny | z.ZodTypeAny = z.ZodAny>(sch
   return schema as ChildType;
 }
 
-export function parseSchema(schema: z.ZodObject): ParsedSchema {
+function parseSchema(schema: z.ZodObject): ParsedSchema {
   const shape = schema.shape;
 
   const fields: ParsedField[] = Object.entries(shape).map(([key, field]) => parseField(key, field as z.ZodTypeAny));

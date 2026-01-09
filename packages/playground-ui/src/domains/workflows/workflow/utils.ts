@@ -28,7 +28,7 @@ export type Condition =
       conj?: never;
     };
 
-export const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
+const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
 
 const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
   // If not a mapping node, return original ID

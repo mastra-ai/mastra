@@ -1,6 +1,6 @@
 import { AttachmentPrimitive, AttachmentState, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { CircleXIcon, PaperclipIcon } from 'lucide-react';
+import { CircleXIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
@@ -121,15 +121,5 @@ export const ComposerAttachments = () => {
     <div className="flex w-full flex-row items-center gap-4 pb-2">
       <ComposerPrimitive.Attachments components={{ Attachment: AttachmentThumbnail }} />
     </div>
-  );
-};
-
-export const ComposerAddAttachment = () => {
-  return (
-    <ComposerPrimitive.AddAttachment asChild>
-      <TooltipIconButton className="my-2.5 size-8 p-2 transition-opacity ease-in" tooltip="Add Attachment">
-        <PaperclipIcon />
-      </TooltipIconButton>
-    </ComposerPrimitive.AddAttachment>
   );
 };

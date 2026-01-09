@@ -28,7 +28,7 @@ const ShadcnUIComponents: AutoFormUIComponents = {
   ArrayElementWrapper,
 };
 
-export const ShadcnAutoFormFieldComponents = {
+const ShadcnAutoFormFieldComponents = {
   string: StringField,
   number: NumberField,
   boolean: BooleanField,
@@ -36,7 +36,7 @@ export const ShadcnAutoFormFieldComponents = {
   select: SelectField,
   record: RecordField,
 };
-export type FieldTypes = keyof typeof ShadcnAutoFormFieldComponents;
+type FieldTypes = keyof typeof ShadcnAutoFormFieldComponents;
 
 export function AutoForm<T extends Record<string, any>>({
   uiComponents,
