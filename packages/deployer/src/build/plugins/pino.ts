@@ -1,102 +1,38 @@
-import path from 'node:path';
-import type { OutputChunk, Plugin } from 'rollup';
+/**
+ * Detects pino transport targets in code.
+ * Matches patterns like:
+ * - pino.transport({ target: "package-name" })
+ * - pino.transport({ targets: [{ target: "package-name" }] })
+ *
+ * @param code - The source code to analyze
+ * @returns Set of detected transport package names
+ */
+export function detectPinoTransports(code: string): Set<string> {
+  const transports = new Set<string>();
 
-export function pino() {
-  let emittedChunks = new Map();
+  // Match pino.transport({ target: "..." }) - single target
+  const singleTargetRegex = /pino\.transport\s*\(\s*\{[^}]*target\s*:\s*["'`]([^"'`]+)["'`]/g;
+  let match;
+  while ((match = singleTargetRegex.exec(code)) !== null) {
+    if (match[1]) {
+      transports.add(match[1]);
+    }
+  }
 
-  const workerFiles = [
-    {
-      id: 'thread-stream-worker',
-      file: 'pino-thread-stream-worker',
-    },
-    {
-      id: 'pino-worker',
-      file: 'pino-worker',
-    },
-    {
-      id: 'pino/file',
-      file: 'pino-file',
-    },
-    {
-      id: 'pino-pretty',
-      file: 'pino-pretty',
-    },
-  ];
-
-  const fileReferences = new Map();
-  return {
-    name: 'rollup-plugin-pino',
-
-    async resolveId(id, importee) {
-      if (workerFiles.some(file => file.id === id)) {
-        return {
-          id,
-          external: true,
-          moduleSideEffects: false,
-        };
-      }
-
-      if (id === 'pino') {
-        // resolve pino first
-        const resolvedPino = await this.resolve(id, importee);
-
-        if (resolvedPino) {
-          await Promise.all(
-            workerFiles.map(async file => {
-              const resolvedEntry = await this.resolve(file.id, resolvedPino.id);
-
-              if (!resolvedEntry) {
-                return null;
-              }
-
-              const reference = this.emitFile({
-                type: 'chunk',
-                id: resolvedEntry.id,
-                name: `${file.file}`,
-                importer: resolvedPino.id,
-              });
-
-              fileReferences.set(file.id, reference);
-            }),
-          );
+  // Match targets array: targets: [{ target: "..." }, { target: "..." }]
+  const targetsArrayRegex = /targets\s*:\s*\[([^\]]+)\]/g;
+  while ((match = targetsArrayRegex.exec(code)) !== null) {
+    const arrayContent = match[1];
+    if (arrayContent) {
+      const targetInArrayRegex = /target\s*:\s*["'`]([^"'`]+)["'`]/g;
+      let innerMatch;
+      while ((innerMatch = targetInArrayRegex.exec(arrayContent)) !== null) {
+        if (innerMatch[1]) {
+          transports.add(innerMatch[1]);
         }
       }
-    },
-    renderChunk(code, chunk) {
-      if (chunk.type === 'chunk' && (chunk as OutputChunk).isEntry && fileReferences.size && chunk.name === 'index') {
-        const importRegex = /^(?:import(?:["'\s]*[\w*${}\n\r\t, ]+from\s*)?["'\s].+[;"'\s]*)$/gm;
+    }
+  }
 
-        const codeToInject = `globalThis.__bundlerPathsOverrides = {
-            ${Array.from(fileReferences.entries())
-              .map(([key, file]) => {
-                return '"' + key + '": import.meta.ROLLUP_FILE_URL_' + file;
-              })
-              .join(',\n')}
-            };`;
-
-        // Find all import matches
-        const matches = Array.from(code.matchAll(importRegex));
-
-        if (matches.length > 0) {
-          // Get the last import's position
-          const lastImport = matches[matches.length - 1]!;
-          const lastImportEnd = lastImport.index + lastImport[0].length;
-
-          // Insert the code after the last import with a newline
-          const newCode = code.slice(0, lastImportEnd) + '\n\n' + codeToInject + '\n\n' + code.slice(lastImportEnd);
-
-          return {
-            code: newCode,
-            map: null,
-          };
-        }
-
-        // If no imports found, inject at the start of the file
-        return {
-          code: `${codeToInject}\n\n${code}`,
-          map: null,
-        };
-      }
-    },
-  } satisfies Plugin;
+  return transports;
 }
