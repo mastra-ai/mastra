@@ -5234,6 +5234,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@koa/router':
+        specifier: ^13.0.0
+        version: 13.1.1
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -5243,6 +5246,15 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.5
+      '@types/koa':
+        specifier: ^3.0.0
+        version: 3.0.1
+      '@types/koa-bodyparser':
+        specifier: ^4.3.13
+        version: 4.3.13
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -5261,6 +5273,12 @@ importers:
       execa:
         specifier: ^9.6.0
         version: 9.6.1
+      express:
+        specifier: ^5.1.0
+        version: 5.1.0
+      fastify:
+        specifier: ^5.6.2
+        version: 5.6.2
       get-port:
         specifier: 7.1.0
         version: 7.1.0
@@ -5270,6 +5288,12 @@ importers:
       inngest-cli:
         specifier: ^1.12.1
         version: 1.12.1(encoding@0.1.13)
+      koa:
+        specifier: ^3.1.0
+        version: 3.1.1
+      koa-bodyparser:
+        specifier: ^4.4.1
+        version: 4.4.1
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(@microsoft/api-extractor@7.55.2(@types/node@22.13.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -8312,6 +8336,11 @@ packages:
     peerDependencies:
       tslib: '2'
 
+  '@koa/router@13.1.1':
+    resolution: {integrity: sha512-JQEuMANYRVHs7lm7KY9PCIjkgJk73h4m4J+g2mkw2Vo1ugPZ17UJVqEH8F+HeAdjKz5do1OaLe7ArDz+z308gw==}
+    engines: {node: '>= 18'}
+    deprecated: Please upgrade to v15 or higher. All reported bugs in this version are fixed in newer releases, dependencies have been updated, and security has been improved.
+
   '@kwsites/file-exists@1.1.1':
     resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
 
@@ -11257,6 +11286,9 @@ packages:
 
   '@types/koa@2.15.0':
     resolution: {integrity: sha512-7QFsywoE5URbuVnG3loe03QXuGajrnotr3gQkXcEBShORai23MePfFYdhz90FEtBBpkyIYQbVD+evKtloCgX3g==}
+
+  '@types/koa@3.0.1':
+    resolution: {integrity: sha512-VkB6WJUQSe0zBpR+Q7/YIUESGp5wPHcaXr0xueU5W0EOUWtlSbblsl+Kl31lyRQ63nIILh0e/7gXjQ09JXJIHw==}
 
   '@types/long@4.0.2':
     resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
@@ -21995,6 +22027,15 @@ snapshots:
       '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
       tslib: 2.8.1
 
+  '@koa/router@13.1.1':
+    dependencies:
+      debug: 4.4.3
+      http-errors: 2.0.0
+      koa-compose: 4.1.0
+      path-to-regexp: 6.3.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@kwsites/file-exists@1.1.1':
     dependencies:
       debug: 4.4.3
@@ -25310,9 +25351,20 @@ snapshots:
 
   '@types/koa-compose@3.2.8':
     dependencies:
-      '@types/koa': 2.15.0
+      '@types/koa': 3.0.1
 
   '@types/koa@2.15.0':
+    dependencies:
+      '@types/accepts': 1.3.7
+      '@types/content-disposition': 0.5.9
+      '@types/cookies': 0.9.1
+      '@types/http-assert': 1.5.6
+      '@types/http-errors': 2.0.5
+      '@types/keygrip': 1.0.6
+      '@types/koa-compose': 3.2.8
+      '@types/node': 22.13.17
+
+  '@types/koa@3.0.1':
     dependencies:
       '@types/accepts': 1.3.7
       '@types/content-disposition': 0.5.9
