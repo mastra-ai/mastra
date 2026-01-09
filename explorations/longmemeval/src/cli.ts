@@ -458,6 +458,7 @@ program
   .option('-s, --subset <n>', 'Only delete N questions (after offset)', parseInt)
   .option('-q, --question-id <id>', 'Delete a specific question by ID')
   .option('-p, --prepared-data <dir>', 'Prepared data directory', './prepared-data')
+  .option('--partial', 'Only delete partially prepared questions (have progress.json but no meta.json)')
   .option('--dry-run', 'Show what would be deleted without actually deleting')
   .action(async options => {
     try {
@@ -470,6 +471,7 @@ program
         subset: options.subset,
         questionId: options.questionId,
         dryRun: options.dryRun,
+        partial: options.partial,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);

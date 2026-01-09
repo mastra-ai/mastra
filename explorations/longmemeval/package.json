@@ -31,7 +31,8 @@
     "results:s": "tsx src/cli.ts results -d longmemeval_s",
     "sync-improved-om-qa": "tsx src/cli.ts sync -d longmemeval_s -c observational-memory",
     "obscure-thread-ids": "tsx src/cli.ts obscure-thread-ids -d longmemeval_s -c observational-memory",
-    "list-partial": "tsx src/cli.ts list-partial"
+    "list-partial": "tsx src/cli.ts list-partial",
+    "clean-partial": "tsx src/cli.ts clean -d longmemeval_s -c observational-memory --partial"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",

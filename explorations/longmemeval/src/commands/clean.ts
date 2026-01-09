@@ -15,6 +15,7 @@ export interface CleanOptions {
   subset?: number;
   questionId?: string;
   dryRun?: boolean;
+  partial?: boolean; // Only clean partially prepared questions
 }
 
 export class CleanCommand {
@@ -55,7 +56,24 @@ export class CleanCommand {
     // Determine which to delete
     let toDelete: string[] = [];
 
-    if (options.questionId) {
+    if (options.partial) {
+      // Only delete partially prepared questions (have progress.json but no meta.json, or failed)
+      for (const questionId of sortedDirs) {
+        const questionDir = join(preparedDir, questionId);
+        const progressPath = join(questionDir, 'progress.json');
+        const metaPath = join(questionDir, 'meta.json');
+
+        // Skip if fully prepared (has meta.json)
+        if (existsSync(metaPath)) {
+          continue;
+        }
+
+        // Include if has progress.json (partial or failed)
+        if (existsSync(progressPath)) {
+          toDelete.push(questionId);
+        }
+      }
+    } else if (options.questionId) {
       // Delete specific question
       if (sortedDirs.includes(options.questionId)) {
         toDelete = [options.questionId];
