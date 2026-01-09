@@ -44,8 +44,8 @@ export class CloudDeployer extends Deployer {
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
 
-      const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-      await copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
         overwrite: true,
       });
     }
@@ -169,7 +169,7 @@ if (mastra?.getStorage()) {
 
 ${getAuthEntrypoint()}
 
-await createNodeServer(mastra, { playground: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
+await createNodeServer(mastra, { studio: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
 
 ${successEntrypoint()}
 
