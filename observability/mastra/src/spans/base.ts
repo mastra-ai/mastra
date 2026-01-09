@@ -218,7 +218,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return; // Don't add scores to invalid/ended spans
     }
     this.scores.push({
-      scorerName: args.scorerName,
+      scorerId: args.scorerId,
+      scorerName: args.scorerName || args.scorerId, // Default to scorerId if not provided
       score: args.score,
       reason: args.reason,
       metadata: args.metadata,

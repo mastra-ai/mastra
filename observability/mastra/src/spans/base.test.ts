@@ -554,14 +554,16 @@ describe('Span', () => {
       expect(span.scores).toHaveLength(0);
 
       span.addScore({
-        scorerName: 'relevance-scorer',
+        scorerId: 'relevance-scorer',
+        scorerName: 'Relevance Scorer',
         score: 0.85,
         reason: 'Relevant response',
         metadata: { analyzeStepResult: { relevance: 'high' } },
       });
 
       expect(span.scores).toHaveLength(1);
-      expect(span.scores[0].scorerName).toBe('relevance-scorer');
+      expect(span.scores[0].scorerId).toBe('relevance-scorer');
+      expect(span.scores[0].scorerName).toBe('Relevance Scorer');
       expect(span.scores[0].score).toBe(0.85);
       expect(span.scores[0].reason).toBe('Relevant response');
       expect(span.scores[0].metadata).toEqual({ analyzeStepResult: { relevance: 'high' } });
@@ -584,12 +586,14 @@ describe('Span', () => {
         attributes: { model: 'gpt-4' },
       });
 
-      span.addScore({ scorerName: 'relevance-scorer', score: 0.9, reason: 'Relevant' });
-      span.addScore({ scorerName: 'safety-scorer', score: 1.0, reason: 'Safe' });
+      span.addScore({ scorerId: 'relevance-scorer', score: 0.9, reason: 'Relevant' });
+      span.addScore({ scorerId: 'safety-scorer', score: 1.0, reason: 'Safe' });
 
       expect(span.scores).toHaveLength(2);
-      expect(span.scores[0].scorerName).toBe('relevance-scorer');
-      expect(span.scores[1].scorerName).toBe('safety-scorer');
+      expect(span.scores[0].scorerId).toBe('relevance-scorer');
+      expect(span.scores[0].scorerName).toBe('relevance-scorer'); // defaults to scorerId
+      expect(span.scores[1].scorerId).toBe('safety-scorer');
+      expect(span.scores[1].scorerName).toBe('safety-scorer'); // defaults to scorerId
 
       span.end();
     });
@@ -609,7 +613,7 @@ describe('Span', () => {
       });
 
       span.addScore({
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         score: 0.85,
         reason: 'Test reason',
         metadata: { preprocessPrompt: 'test prompt' },
@@ -664,7 +668,7 @@ describe('Span', () => {
 
       expect(span.isValid).toBe(false);
 
-      span.addScore({ scorerName: 'test-scorer', score: 0.85, reason: 'Should not be added' });
+      span.addScore({ scorerId: 'test-scorer', score: 0.85, reason: 'Should not be added' });
 
       expect(span.scores).toHaveLength(0);
 
@@ -685,7 +689,7 @@ describe('Span', () => {
         attributes: { model: 'gpt-4' },
       });
 
-      span.addScore({ scorerName: 'quality-scorer', score: 0.92, reason: 'Good' });
+      span.addScore({ scorerId: 'quality-scorer', score: 0.92, reason: 'Good' });
 
       span.end();
 
