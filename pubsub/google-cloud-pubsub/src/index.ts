@@ -34,7 +34,7 @@ export class GoogleCloudPubSub extends PubSub {
   async init(topicName: string) {
     try {
       await this.pubsub.createTopic(topicName);
-    } catch (error) {
+    } catch {
       // no-op
     }
     try {
@@ -44,7 +44,7 @@ export class GoogleCloudPubSub extends PubSub {
       });
       this.activeSubscriptions[topicName] = sub;
       return sub;
-    } catch (error) {
+    } catch {
       // no-op
     }
 
