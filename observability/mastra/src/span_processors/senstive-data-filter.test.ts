@@ -446,6 +446,80 @@ describe('Tracing', () => {
       });
     });
 
+    describe('score filtering', () => {
+      it('should filter sensitive keys in score metadata', () => {
+        const processor = new SensitiveDataFilter();
+
+        const mockSpan = {
+          id: 'test-span-1',
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          attributes: {},
+          scores: [
+            {
+              scorerName: 'test-scorer',
+              score: 0.85,
+              reason: 'Good response',
+              metadata: {
+                analyzeStepResult: { token: 'secret-token-123', safeField: 'visible' },
+                apiKey: 'sk-test-key',
+              },
+              timestamp: Date.now(),
+            },
+          ],
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+
+        expect(filtered.scores).toHaveLength(1);
+        // Sensitive keys should be redacted
+        expect(filtered.scores?.[0].metadata?.analyzeStepResult?.token).toBe('[REDACTED]');
+        expect(filtered.scores?.[0].metadata?.apiKey).toBe('[REDACTED]');
+        // Non-sensitive fields should remain
+        expect(filtered.scores?.[0].metadata?.analyzeStepResult?.safeField).toBe('visible');
+      });
+
+      it('should handle scores flowing through the pipeline', () => {
+        const tracing = new DefaultObservabilityInstance({
+          serviceName: 'test-tracing',
+          name: 'test-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [testExporter],
+          spanOutputProcessors: [new SensitiveDataFilter()],
+        });
+
+        const span = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: {},
+        });
+
+        span.addScore({
+          scorerName: 'test-scorer',
+          score: 0.9,
+          reason: 'Good response',
+          metadata: { token: 'bearer-xyz', safeData: 'visible' },
+        });
+
+        span.end();
+
+        const endEvent = testExporter.events.find(e => e.type === 'span_ended');
+        expect(endEvent).toBeDefined();
+        expect(endEvent?.exportedSpan.scores).toHaveLength(1);
+        // Sensitive keys in metadata should be filtered
+        expect(endEvent?.exportedSpan.scores?.[0].metadata?.token).toBe('[REDACTED]');
+        // Non-sensitive fields should remain
+        expect(endEvent?.exportedSpan.scores?.[0].metadata?.safeData).toBe('visible');
+      });
+    });
+
     describe('as part of the default config', () => {
       it('should automatically filter sensitive data in default tracing', () => {
         const tracing = new DefaultObservabilityInstance({
