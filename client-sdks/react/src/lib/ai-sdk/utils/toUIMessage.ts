@@ -219,11 +219,13 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       const textId = chunk.payload.id;
 
       let textPartIndex = textId
-        ? parts.findLastIndex((part) => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
+        ? parts.findLastIndex(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
         : -1;
 
       if (textPartIndex === -1) {
-        textPartIndex = parts.findLastIndex((part) => part.type === 'text' && (part as MastraExtendedTextPart).state === 'streaming');
+        textPartIndex = parts.findLastIndex(
+          part => part.type === 'text' && (part as MastraExtendedTextPart).state === 'streaming',
+        );
       }
 
       if (textPartIndex === -1) {

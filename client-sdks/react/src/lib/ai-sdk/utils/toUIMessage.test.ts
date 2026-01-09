@@ -2463,7 +2463,12 @@ describe('toUIMessage', () => {
         metadata: baseMetadata,
       });
       conversation = toUIMessage({
-        chunk: { type: 'text-delta', payload: { id: 'text-1', text: 'First text' }, runId: 'run-123', from: ChunkFrom.AGENT },
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: 'First text' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
         conversation,
         metadata: baseMetadata,
       });
@@ -2497,7 +2502,12 @@ describe('toUIMessage', () => {
         metadata: baseMetadata,
       });
       conversation = toUIMessage({
-        chunk: { type: 'text-delta', payload: { id: 'text-2', text: 'Second text' }, runId: 'run-123', from: ChunkFrom.AGENT },
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-2', text: 'Second text' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
         conversation,
         metadata: baseMetadata,
       });
@@ -2531,7 +2541,12 @@ describe('toUIMessage', () => {
         metadata: baseMetadata,
       });
       conversation = toUIMessage({
-        chunk: { type: 'text-delta', payload: { id: 'text-3', text: 'Third text' }, runId: 'run-123', from: ChunkFrom.AGENT },
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-3', text: 'Third text' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
         conversation,
         metadata: baseMetadata,
       });
