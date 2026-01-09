@@ -17,6 +17,7 @@ import { CleanCommand } from './commands/clean';
 import { ObscureThreadIdsCommand } from './commands/obscure-thread-ids';
 import { SessionsCommand } from './commands/sessions';
 import { DeterministicIdsCommand } from './commands/deterministic-ids';
+import { ListPartialCommand } from './commands/list-partial';
 
 const program = new Command();
 
@@ -830,6 +831,23 @@ program
       const command = new DeterministicIdsCommand({
         preparedDataDir: options.preparedDataDir,
         questionId: options.questionId,
+      });
+      await command.run();
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// List partial command - find partially prepared questions
+program
+  .command('list-partial')
+  .description('List partially prepared or failed questions')
+  .option('--prepared-data-dir <dir>', 'Directory containing prepared data')
+  .action(async options => {
+    try {
+      const command = new ListPartialCommand({
+        preparedDataDir: options.preparedDataDir,
       });
       await command.run();
     } catch (error) {
