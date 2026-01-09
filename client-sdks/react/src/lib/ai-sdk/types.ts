@@ -28,6 +28,7 @@ export type MastraUIMessageMetadata = {
           toolCallId: string;
           toolName: string;
           args: Record<string, any>;
+          runId?: string;
         };
       };
       suspendedTools?: {
@@ -41,11 +42,28 @@ export type MastraUIMessageMetadata = {
     }
   | {
       mode: 'network';
-      from?: 'AGENT' | 'WORKFLOW';
+      from?: 'AGENT' | 'WORKFLOW' | 'TOOL';
       selectionReason?: string;
       agentInput?: string | object | Array<object>;
+      hasMoreMessages?: boolean;
       completionResult?: {
         passed: boolean;
+      };
+      requireApprovalMetadata?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+          runId?: string;
+        };
+      };
+      suspendedTools?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+          suspendPayload: any;
+        };
       };
     }
 );

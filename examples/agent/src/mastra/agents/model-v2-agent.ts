@@ -139,14 +139,16 @@ export const networkAgent = new Agent({
   agents: {
     weatherAgent,
   },
-  // workflows: {
-  //   myWorkflow,
-  // },
+  workflows: {
+    myWorkflow,
+    findUserWorkflow,
+  },
   // tools: {
   //   weatherInfo,
   // },
   memory,
   defaultNetworkOptions: {
+    autoResumeSuspendedTools: true,
     completion: {
       scorers: [
         createScorer({
