@@ -21,7 +21,10 @@ export function hasPaths(tsConfigPath: string): boolean {
   try {
     const content = fs.readFileSync(tsConfigPath, 'utf8');
     const config = JSON.parse(stripJsonComments(content));
-    return !!(config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0);
+    return !!(
+      (config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0) ||
+      config.extends
+    );
   } catch {
     return false;
   }
