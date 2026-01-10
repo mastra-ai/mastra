@@ -146,6 +146,12 @@ node ../../packages/cli/dist/index.js dev
 
 This starts the Mastra playground using your local packages. The playground provides an interactive UI to test agents, tools, and workflows.
 
+> **Note:** You can also run the CLI from any existing Mastra project by using an absolute path to the CLI. For example:
+> ```bash
+> node /Users/myUser/projects/mastra/packages/cli/dist/index.js dev
+> ```
+> This approach is useful when you have a complex reproduction case in an existing project and want to test against your local changes to Mastra packages.
+
 ### Choosing an Example Directory
 
 Pick an example that uses the features you modified:
