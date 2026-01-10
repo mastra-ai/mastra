@@ -73,6 +73,13 @@ const ShowcaseCard = ({
 export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
     {
+      title: "Drawin",
+      description:
+        "Text in. Infographics out. Paste into slides.",
+      image: "drawin-app.png",
+      link: "https://www.drawin.app/",
+    },
+    {
       title: "Olive",
       description:
         "Generate powerful tools and dashboards connected to your data sources in minutes",
@@ -111,7 +118,13 @@ export const ShowcaseGrid = () => {
       image: "demeter.png",
       link: "https://www.joindemeter.com/",
     },
-
+    {
+      title: "Relater",
+      description:
+        "Relater AI: n8n for non-technical creators – turn simple prompts into powerful scheduled web research feeds that run automatically on your timeline.",
+      image: "relater.png",
+      link: "https://www.relater.ai/",
+    },
     {
       title: "NotebookLM-Mastra",
       description:
