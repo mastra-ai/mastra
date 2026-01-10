@@ -135,7 +135,7 @@ export type ServerConfig = {
   };
   /**
    * Body size limit for the server
-   * @default 4.5mb
+   * @default 4_718_592 bytes (4.5 MB)
    */
   bodySizeLimit?: number;
 

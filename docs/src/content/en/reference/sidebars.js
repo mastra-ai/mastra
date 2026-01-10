@@ -13,6 +13,11 @@ const sidebars = {
       label: "Overview",
     },
     {
+      type: "doc",
+      id: "configuration",
+      label: "Configuration",
+    },
+    {
       type: "category",
       label: "Agents",
       collapsed: true,
