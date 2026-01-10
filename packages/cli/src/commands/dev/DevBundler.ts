@@ -49,8 +49,8 @@ export class DevBundler extends Bundler {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-    await fsExtra.copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+    const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
       overwrite: true,
     });
   }

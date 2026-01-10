@@ -223,20 +223,18 @@ describe('CloudDeployer Integration Tests', () => {
       vi.mocked(copy).mockClear();
     });
 
-    it('should copy playground assets when studio is true', async () => {
+    it('should copy studio assets when studio is true', async () => {
       const studioDeployer = new CloudDeployer({ studio: true });
 
       await studioDeployer.prepare(outputDir);
 
       expect(copy).toHaveBeenCalledTimes(1);
-      expect(copy).toHaveBeenCalledWith(
-        expect.stringContaining('dist/playground'),
-        expect.stringContaining('playground'),
-        { overwrite: true },
-      );
+      expect(copy).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
+        overwrite: true,
+      });
     });
 
-    it('should not copy playground assets when studio is false', async () => {
+    it('should not copy studio assets when studio is false', async () => {
       const studioDeployer = new CloudDeployer({ studio: false });
 
       await studioDeployer.prepare(outputDir);
@@ -244,7 +242,7 @@ describe('CloudDeployer Integration Tests', () => {
       expect(copy).not.toHaveBeenCalled();
     });
 
-    it('should not copy playground assets when studio is not provided', async () => {
+    it('should not copy studio assets when studio is not provided', async () => {
       const studioDeployer = new CloudDeployer();
 
       await studioDeployer.prepare(outputDir);
@@ -252,12 +250,12 @@ describe('CloudDeployer Integration Tests', () => {
       expect(copy).not.toHaveBeenCalled();
     });
 
-    it('should copy playground to correct output path', async () => {
+    it('should copy studio to correct output path', async () => {
       const studioDeployer = new CloudDeployer({ studio: true });
 
       await studioDeployer.prepare(outputDir);
 
-      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'playground'), {
+      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'studio'), {
         overwrite: true,
       });
     });
