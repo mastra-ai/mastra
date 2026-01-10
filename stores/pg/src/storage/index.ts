@@ -17,6 +17,7 @@ import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
+import { StoredScorersPG } from './domains/stored-scorers';
 import { WorkflowsPG } from './domains/workflows';
 
 /** Default maximum number of connections in the pool */
@@ -26,7 +27,7 @@ const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
 export { exportSchemas } from './db';
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, StoredScorersPG, WorkflowsPG };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
@@ -92,6 +93,7 @@ export class PostgresStore extends MastraStorage {
         memory: new MemoryPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
+        storedScorers: new StoredScorersPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(

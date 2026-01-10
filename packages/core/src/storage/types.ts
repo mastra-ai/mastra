@@ -312,6 +312,162 @@ export type StorageListAgentsOutput = PaginationInfo & {
   agents: StorageAgentType[];
 };
 
+// Stored Scorer Storage Types
+
+/**
+ * Step configuration for a stored scorer.
+ * Only prompt-based steps can be stored (functions cannot be serialized).
+ */
+export interface StorageScorerStepConfig {
+  /** Step name in the scorer pipeline */
+  name: 'preprocess' | 'analyze' | 'generateScore' | 'generateReason';
+  /** Description of what this step does */
+  description: string;
+  /** Output schema in JSON Schema format (for preprocess/analyze steps) */
+  outputSchema?: Record<string, unknown>;
+  /** Prompt template with placeholders like {{run.output}}, {{results.analyzeStepResult}} */
+  promptTemplate: string;
+  /** Optional step-specific judge override */
+  judge?: {
+    /** Model reference string (e.g., 'openai:gpt-4o') */
+    model: string;
+    /** Optional instructions override for this step */
+    instructions?: string;
+  };
+}
+
+/**
+ * Stored scorer configuration type.
+ * Represents a scorer definition that can be stored in the database
+ * and instantiated at runtime.
+ */
+export interface StorageScorerType {
+  id: string;
+  name: string;
+  description: string;
+  /** Type specification - 'agent' shortcut or custom input/output schemas */
+  type?:
+    | 'agent'
+    | {
+        inputSchema?: Record<string, unknown>;
+        outputSchema?: Record<string, unknown>;
+      };
+  /** Default judge configuration for LLM-based scoring */
+  judge?: {
+    /** Model reference string (e.g., 'openai:gpt-4o' or gateway reference) */
+    model: string;
+    /** System instructions for the judge model */
+    instructions: string;
+  };
+  /** Step configurations (only prompt-based steps can be stored) */
+  steps: StorageScorerStepConfig[];
+  /** Optional default sampling configuration */
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type StorageCreateScorerInput = Omit<StorageScorerType, 'createdAt' | 'updatedAt'>;
+
+export type StorageUpdateScorerInput = {
+  id: string;
+  name?: string;
+  description?: string;
+  type?: StorageScorerType['type'];
+  judge?: StorageScorerType['judge'];
+  steps?: StorageScorerStepConfig[];
+  sampling?: StorageScorerType['sampling'];
+  metadata?: Record<string, unknown>;
+};
+
+export type StorageListScorersInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+};
+
+export type StorageListScorersOutput = PaginationInfo & {
+  scorers: StorageScorerType[];
+};
+
+// Agent-Scorer Assignment Types
+
+/**
+ * Represents a dynamic assignment of a stored scorer to an agent.
+ * This is separate from the agent's code-defined scorers and allows
+ * UI-based scorer management without modifying agent code.
+ */
+export interface StorageAgentScorerAssignment {
+  /** Assignment ID */
+  id: string;
+  /** The agent this scorer is assigned to */
+  agentId: string;
+  /** Reference to stored scorer ID */
+  scorerId: string;
+  /** Optional sampling override for this assignment */
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+  /** Whether this assignment is enabled */
+  enabled: boolean;
+  /** Priority for ordering (lower = higher priority) */
+  priority?: number;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type StorageCreateAgentScorerAssignmentInput = Omit<
+  StorageAgentScorerAssignment,
+  'id' | 'createdAt' | 'updatedAt'
+>;
+
+export type StorageUpdateAgentScorerAssignmentInput = {
+  id: string;
+  enabled?: boolean;
+  sampling?: StorageAgentScorerAssignment['sampling'];
+  priority?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type StorageListAgentScorerAssignmentsInput = {
+  /** Agent ID to filter assignments */
+  agentId: string;
+  /** Only return enabled assignments */
+  enabledOnly?: boolean;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+};
+
+export type StorageListAgentScorerAssignmentsOutput = PaginationInfo & {
+  assignments: StorageAgentScorerAssignment[];
+};
+
 // Basic Index Management Types
 export interface CreateIndexOptions {
   name: string;
