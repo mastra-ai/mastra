@@ -1,0 +1,329 @@
+---
+title: "Reference: registerApiRoute() | Server"
+description: "API reference for registerApiRoute() function used to define custom HTTP routes for the Mastra server."
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# registerApiRoute()
+
+The `registerApiRoute()` function creates custom HTTP routes that integrate with the Mastra server. Routes can include OpenAPI metadata to appear in the Swagger UI documentation.
+
+## Import
+
+```typescript
+import { registerApiRoute } from "@mastra/core/server";
+```
+
+## Signature
+
+```typescript
+function registerApiRoute<P extends string>(
+  path: P,
+  options: RegisterApiRouteOptions<P>
+): ApiRoute
+```
+
+## Parameters
+
+### path
+
+The URL path for the route. Supports path parameters using `:param` syntax.
+
+```typescript
+registerApiRoute("/items/:itemId", { ... })
+```
+
+**Note:** Paths cannot start with `/api/` as this prefix is reserved for built-in Mastra routes.
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "method",
+      type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+      description: "HTTP method for the route",
+      isOptional: false,
+    },
+    {
+      name: "handler",
+      type: "Handler",
+      description: "Route handler function receiving Hono Context. Use either `handler` or `createHandler`, not both.",
+      isOptional: true,
+    },
+    {
+      name: "createHandler",
+      type: "(c: Context) => Promise<Handler>",
+      description: "Async factory function to create the handler. Use either `handler` or `createHandler`, not both.",
+      isOptional: true,
+    },
+    {
+      name: "middleware",
+      type: "MiddlewareHandler | MiddlewareHandler[]",
+      description: "Route-specific middleware functions",
+      isOptional: true,
+    },
+    {
+      name: "openapi",
+      type: "DescribeRouteOptions",
+      description: "OpenAPI metadata for Swagger UI documentation",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## OpenAPI Options
+
+The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property are not included in Swagger UI.
+
+<PropertiesTable
+  content={[
+    {
+      name: "summary",
+      type: "string",
+      description: "Short summary of the operation",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Detailed description of the operation",
+      isOptional: true,
+    },
+    {
+      name: "tags",
+      type: "string[]",
+      description: "Tags for grouping in Swagger UI. Defaults to ['custom'] if not specified.",
+      isOptional: true,
+    },
+    {
+      name: "deprecated",
+      type: "boolean",
+      description: "Mark the operation as deprecated",
+      isOptional: true,
+    },
+    {
+      name: "parameters",
+      type: "ParameterObject[]",
+      description: "Path, query, and header parameters",
+      isOptional: true,
+    },
+    {
+      name: "requestBody",
+      type: "RequestBodyObject",
+      description: "Request body specification",
+      isOptional: true,
+    },
+    {
+      name: "responses",
+      type: "ResponsesObject",
+      description: "Response specifications by status code",
+      isOptional: true,
+    },
+    {
+      name: "security",
+      type: "SecurityRequirementObject[]",
+      description: "Security requirements for the operation",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Return Value
+
+Returns an `ApiRoute` object to be passed to `server.apiRoutes` in the Mastra configuration.
+
+## Handler Context
+
+The handler receives a Hono `Context` object with access to:
+
+```typescript
+handler: async (c) => {
+  // Get the Mastra instance
+  const mastra = c.get("mastra");
+
+  // Get request context
+  const requestContext = c.get("requestContext");
+
+  // Access path parameters
+  const itemId = c.req.param("itemId");
+
+  // Access query parameters
+  const filter = c.req.query("filter");
+
+  // Access request body
+  const body = await c.req.json();
+
+  // Return JSON response
+  return c.json({ data: "value" });
+}
+```
+
+## Examples
+
+### Basic GET Route
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/health-check", {
+        method: "GET",
+        handler: async (c) => {
+          return c.json({ status: "ok" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Route with Path Parameters
+
+```typescript
+registerApiRoute("/users/:userId/posts/:postId", {
+  method: "GET",
+  handler: async (c) => {
+    const userId = c.req.param("userId");
+    const postId = c.req.param("postId");
+
+    return c.json({ userId, postId });
+  },
+});
+```
+
+### POST Route with Body
+
+```typescript
+registerApiRoute("/items", {
+  method: "POST",
+  handler: async (c) => {
+    const body = await c.req.json();
+    const mastra = c.get("mastra");
+
+    // Process the request...
+
+    return c.json({ id: "new-id", ...body }, 201);
+  },
+});
+```
+
+### Route with Middleware
+
+```typescript
+registerApiRoute("/protected", {
+  method: "GET",
+  middleware: [
+    async (c, next) => {
+      const token = c.req.header("Authorization");
+      if (!token) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    return c.json({ data: "protected content" });
+  },
+});
+```
+
+### Route with OpenAPI Documentation
+
+```typescript
+import { z } from "zod";
+
+const ItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: z.number(),
+});
+
+registerApiRoute("/items/:itemId", {
+  method: "GET",
+  openapi: {
+    summary: "Get item by ID",
+    description: "Retrieves a single item by its unique identifier",
+    tags: ["Items"],
+    parameters: [
+      {
+        name: "itemId",
+        in: "path",
+        required: true,
+        description: "The item ID",
+        schema: { type: "string" },
+      },
+    ],
+    responses: {
+      200: {
+        description: "Item found",
+        content: {
+          "application/json": {
+            schema: ItemSchema, // Zod schemas are auto-converted
+          },
+        },
+      },
+      404: {
+        description: "Item not found",
+      },
+    },
+  },
+  handler: async (c) => {
+    const itemId = c.req.param("itemId");
+    return c.json({ id: itemId, name: "Example", price: 9.99 });
+  },
+});
+```
+
+### Using createHandler
+
+For routes that need async initialization:
+
+```typescript
+registerApiRoute("/dynamic", {
+  method: "GET",
+  createHandler: async (c) => {
+    // Perform async setup
+    const config = await loadConfig();
+
+    return async (c) => {
+      return c.json({ config });
+    };
+  },
+});
+```
+
+## Error Handling
+
+Throw errors with status codes using Hono's `HTTPException`:
+
+```typescript
+import { HTTPException } from "hono/http-exception";
+
+registerApiRoute("/items/:itemId", {
+  method: "GET",
+  handler: async (c) => {
+    const itemId = c.req.param("itemId");
+    const item = await findItem(itemId);
+
+    if (!item) {
+      throw new HTTPException(404, { message: "Item not found" });
+    }
+
+    return c.json(item);
+  },
+});
+```
+
+## Related
+
+- [Custom API Routes Guide](/docs/v1/server/custom-api-routes) - Usage guide with examples
+- [Server Middleware](/docs/v1/server/middleware) - Global middleware configuration
+- [createRoute()](/reference/v1/server/create-route) - Type-safe route creation for server adapters
+- [Server Routes](/reference/v1/server/routes) - Built-in Mastra server routes
