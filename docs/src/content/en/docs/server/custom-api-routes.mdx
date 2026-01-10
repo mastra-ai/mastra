@@ -40,6 +40,8 @@ curl http://localhost:4111/my-custom-route
 
 Each route's handler receives the Hono `Context`. Within the handler you can access the `Mastra` instance to fetch or call agents and workflows.
 
+## Middleware
+
 To add route-specific middleware pass a `middleware` array when calling `registerApiRoute()`.
 
 ```typescript title="src/mastra/index.ts"
@@ -65,3 +67,140 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+## OpenAPI Documentation
+
+Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside built-in Mastra routes. Pass an `openapi` option with standard OpenAPI operation fields.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { z } from "zod";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/items/:itemId", {
+        method: "GET",
+        openapi: {
+          summary: "Get item by ID",
+          description: "Retrieves a single item by its unique identifier",
+          tags: ["Items"],
+          parameters: [
+            {
+              name: "itemId",
+              in: "path",
+              required: true,
+              description: "The item ID",
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Item found",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      name: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            404: {
+              description: "Item not found",
+            },
+          },
+        },
+        handler: async (c) => {
+          const itemId = c.req.param("itemId");
+          return c.json({ id: itemId, name: "Example Item" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Using Zod Schemas
+
+You can use Zod schemas in the `openapi` configuration and they will be automatically converted to JSON Schema:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { z } from "zod";
+
+const ItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: z.number(),
+});
+
+const CreateItemSchema = z.object({
+  name: z.string().min(1),
+  price: z.number().positive(),
+});
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/items", {
+        method: "POST",
+        openapi: {
+          summary: "Create a new item",
+          tags: ["Items"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: CreateItemSchema,
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Item created",
+              content: {
+                "application/json": {
+                  schema: ItemSchema,
+                },
+              },
+            },
+          },
+        },
+        handler: async (c) => {
+          const body = await c.req.json();
+          return c.json({ id: "new-id", ...body }, 201);
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Viewing in Swagger UI
+
+When running in development mode (`mastra dev`) or with `swaggerUI: true` in build options, your custom routes appear in the Swagger UI at `/swagger-ui`.
+
+```typescript
+export const mastra = new Mastra({
+  server: {
+    build: {
+      swaggerUI: true, // Enable in production builds
+    },
+    apiRoutes: [
+      // Your routes...
+    ],
+  },
+});
+```
+
+## Related
+
+- [registerApiRoute() Reference](/reference/v1/server/register-api-route) - Full API reference
+- [Server Middleware](/docs/v1/server/middleware) - Global middleware configuration
+- [Mastra Server](/docs/v1/server/mastra-server) - Server configuration options
