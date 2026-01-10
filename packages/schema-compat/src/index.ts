@@ -29,7 +29,13 @@ export { SchemaCompatLayer as SchemaCompatLayerV4 } from './schema-compatibility
 export { SchemaCompatLayer } from './schema-compatibility';
 
 // Utility functions
-export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
+export {
+  convertZodSchemaToAISDKSchema,
+  applyCompatLayer,
+  convertSchemaToZod,
+  isZodType,
+  isPlainJSONSchema,
+} from './utils';
 
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
