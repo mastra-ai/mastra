@@ -23,7 +23,7 @@ export function hasPaths(tsConfigPath: string): boolean {
     const config = JSON.parse(stripJsonComments(content));
     return !!(
       (config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0) ||
-      config.extends
+      (typeof config.extends === 'string' && config.extends.length > 0)
     );
   } catch {
     return false;

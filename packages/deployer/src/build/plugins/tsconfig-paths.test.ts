@@ -186,7 +186,8 @@ describe('tsconfig-paths plugin', () => {
           {
             name: 'mock-resolver',
             resolveId(id) {
-              if (id.endsWith('lib/utils.ts')) {
+              const normalized = id.replaceAll('\\', '/');
+              if (normalized.endsWith('/lib/utils') || normalized.endsWith('/lib/utils.ts')) {
                 return { id: libFile, external: false };
               }
               return null;
@@ -201,7 +202,8 @@ describe('tsconfig-paths plugin', () => {
       });
 
       const result = await bundle.generate({ format: 'esm' });
-      expect(result.output[0].code).toContain('value');
+      expect(result.output[0].code).not.toContain(`'@lib/utils'`);
+      expect(result.output[0].code).toContain(42);
     });
   });
 });
