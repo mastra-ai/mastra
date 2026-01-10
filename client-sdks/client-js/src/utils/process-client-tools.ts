@@ -1,13 +1,16 @@
 import type { ToolsInput } from '@mastra/core/agent';
-import { isVercelTool } from '@mastra/core/tools/is-vercel-tool';
 import { zodToJsonSchema } from './zod-to-json-schema';
 
 /**
  * Processes client tools to serialize Zod schemas to JSON Schema format.
  *
- * This function handles both Vercel tools (AI SDK tools) and Mastra tools,
- * converting their Zod schemas to plain JSON Schemas that can be sent over the network.
- * If a schema is already a plain JSON Schema object, it's passed through unchanged.
+ * This function handles both Vercel AI SDK tools and Mastra tools:
+ * - Vercel AI SDK tools use the 'parameters' field (AI SDK v4)
+ * - Mastra tools use 'inputSchema' and 'outputSchema' fields
+ *
+ * For each tool, this function converts any Zod schemas to plain JSON Schemas
+ * that can be serialized and sent to LLM providers. If a schema is already a
+ * plain JSON Schema object, it's passed through unchanged.
  *
  * @param clientTools - The client tools to process
  * @returns Processed tools with serialized schemas
@@ -17,26 +20,16 @@ export function processClientTools(clientTools: ToolsInput | undefined): ToolsIn
     return undefined;
   }
 
-  if (typeof console !== 'undefined' && console.debug) {
-    console.debug('[processClientTools] Processing client tools', {
-      toolCount: Object.keys(clientTools).length,
-      toolNames: Object.keys(clientTools),
-    });
-  }
-
   return Object.fromEntries(
     Object.entries(clientTools).map(([key, value]) => {
-      if (isVercelTool(value)) {
-        const processedParameters = value.parameters ? zodToJsonSchema(value.parameters) : undefined;
+      // Determine tool type by checking which schema field is present
+      // Vercel AI SDK tools use 'parameters', Mastra tools use 'inputSchema'
+      const hasParameters = 'parameters' in value;
+      const hasInputSchema = 'inputSchema' in value;
 
-        if (typeof console !== 'undefined' && console.debug) {
-          console.debug('[processClientTools] Processed Vercel tool', {
-            toolName: key,
-            hadParameters: !!value.parameters,
-            parametersType: value.parameters ? typeof value.parameters : 'undefined',
-            processedParametersType: processedParameters ? typeof processedParameters : 'undefined',
-          });
-        }
+      if (hasParameters && !hasInputSchema) {
+        // This is a Vercel AI SDK tool with 'parameters' field
+        const processedParameters = value.parameters ? zodToJsonSchema(value.parameters) : undefined;
 
         return [
           key,
@@ -46,20 +39,9 @@ export function processClientTools(clientTools: ToolsInput | undefined): ToolsIn
           },
         ];
       } else {
+        // This is a Mastra tool with 'inputSchema' and/or 'outputSchema' fields
         const processedInputSchema = value.inputSchema ? zodToJsonSchema(value.inputSchema) : undefined;
         const processedOutputSchema = value.outputSchema ? zodToJsonSchema(value.outputSchema) : undefined;
-
-        if (typeof console !== 'undefined' && console.debug) {
-          console.debug('[processClientTools] Processed Mastra tool', {
-            toolName: key,
-            hadInputSchema: !!value.inputSchema,
-            hadOutputSchema: !!value.outputSchema,
-            inputSchemaType: value.inputSchema ? typeof value.inputSchema : 'undefined',
-            outputSchemaType: value.outputSchema ? typeof value.outputSchema : 'undefined',
-            processedInputSchemaType: processedInputSchema ? typeof processedInputSchema : 'undefined',
-            processedOutputSchemaType: processedOutputSchema ? typeof processedOutputSchema : 'undefined',
-          });
-        }
 
         return [
           key,
