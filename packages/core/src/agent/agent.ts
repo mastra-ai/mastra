@@ -15,6 +15,7 @@ import type {
   MastraScorer,
   ScoringSamplingConfig,
 } from '../evals';
+import { resolveStoredScorer } from '../evals';
 import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -625,29 +626,121 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   async listScorers({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): Promise<MastraScorers> {
-    if (typeof this.#scorers !== 'function') {
-      return this.#scorers;
+    // Get code-defined scorers
+    let codeScorers: MastraScorers = {};
+
+    if (typeof this.#scorers === 'function') {
+      const result = this.#scorers({ requestContext, mastra: this.#mastra });
+      codeScorers = await resolveMaybePromise(result, scorers => {
+        if (!scorers) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_SCORERS_FUNCTION_EMPTY_RETURN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Function-based scorers returned empty value`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+        return scorers;
+      });
+    } else {
+      codeScorers = this.#scorers;
     }
 
-    const result = this.#scorers({ requestContext, mastra: this.#mastra });
-    return resolveMaybePromise(result, scorers => {
-      if (!scorers) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_SCORERS_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Function-based scorers returned empty value`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
+    // Get dynamically assigned scorers from storage
+    const dynamicScorers = await this.#getDynamicScorers();
+
+    // Merge scorers: code-defined take precedence over dynamic
+    // Dynamic scorers are added with keys that don't conflict with code-defined
+    return { ...dynamicScorers, ...codeScorers };
+  }
+
+  /**
+   * Fetches dynamically assigned scorers from storage and resolves them to MastraScorer instances.
+   * @internal
+   */
+  async #getDynamicScorers(): Promise<MastraScorers> {
+    // If no mastra instance or no storage, return empty
+    if (!this.#mastra) {
+      return {};
+    }
+
+    try {
+      const storage = this.#mastra.getStorage();
+      if (!storage) {
+        return {};
       }
 
-      return scorers;
-    });
+      const storedScorersStore = await storage.getStore('storedScorers');
+      if (!storedScorersStore) {
+        return {};
+      }
+
+      // Get enabled assignments for this agent
+      const { assignments } = await storedScorersStore.listAgentScorerAssignments({
+        agentId: this.id,
+        enabledOnly: true,
+        perPage: false, // Get all enabled assignments
+      });
+
+      if (assignments.length === 0) {
+        return {};
+      }
+
+      // Fetch the scorer definitions for each assignment
+      const dynamicScorers: MastraScorers = {};
+
+      for (const assignment of assignments) {
+        try {
+          const storedScorer = await storedScorersStore.getScorerById({ id: assignment.scorerId });
+          if (!storedScorer) {
+            this.logger.warn(
+              `[Agent:${this.name}] - Dynamic scorer "${assignment.scorerId}" not found, skipping assignment`,
+            );
+            continue;
+          }
+
+          // Resolve the stored config to a runnable scorer
+          const scorer = resolveStoredScorer(storedScorer);
+
+          // Register mastra instance with the scorer
+          if (this.#mastra) {
+            scorer.__registerMastra(this.#mastra);
+          }
+
+          // Determine sampling config: assignment override > scorer default
+          // Convert storage sampling format to ScoringSamplingConfig format
+          const storageSampling = assignment.sampling ?? storedScorer.sampling;
+          let sampling: ScoringSamplingConfig | undefined;
+
+          if (storageSampling) {
+            if (storageSampling.type === 'ratio' && storageSampling.rate !== undefined) {
+              sampling = { type: 'ratio', rate: storageSampling.rate };
+            }
+            // 'count' type is not supported by ScoringSamplingConfig, so we skip it
+          }
+
+          dynamicScorers[storedScorer.id] = {
+            scorer,
+            sampling,
+          };
+        } catch (error) {
+          this.logger.warn(
+            `[Agent:${this.name}] - Failed to resolve dynamic scorer "${assignment.scorerId}": ${error}`,
+          );
+        }
+      }
+
+      return dynamicScorers;
+    } catch (error) {
+      this.logger.warn(`[Agent:${this.name}] - Failed to fetch dynamic scorers: ${error}`);
+      return {};
+    }
   }
 
   /**

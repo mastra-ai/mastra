@@ -1,6 +1,7 @@
 export * from './base';
 export * from './agents';
 export * from './scores';
+export * from './stored-scorers';
 export * from './observability';
 export * from './operations';
 export * from './workflows';

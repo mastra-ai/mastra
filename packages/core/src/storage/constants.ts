@@ -10,6 +10,10 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+/** Table for stored scorer definitions (not score results) */
+export const TABLE_STORED_SCORERS = 'mastra_stored_scorers';
+/** Table for dynamic agent-scorer assignments */
+export const TABLE_AGENT_SCORER_ASSIGNMENTS = 'mastra_agent_scorer_assignments';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +23,9 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_STORED_SCORERS
+  | typeof TABLE_AGENT_SCORER_ASSIGNMENTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -105,6 +111,39 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+/**
+ * Schema for stored scorer definitions.
+ * These are scorer configurations that can be created via API and instantiated at runtime.
+ */
+export const STORED_SCORERS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: false },
+  type: { type: 'jsonb', nullable: true }, // 'agent' string or { inputSchema, outputSchema } object
+  judge: { type: 'jsonb', nullable: true }, // { model: string, instructions: string }
+  steps: { type: 'jsonb', nullable: false }, // Array of step configurations
+  sampling: { type: 'jsonb', nullable: true }, // { type: 'ratio'|'count', rate?, count? }
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Schema for dynamic agent-scorer assignments.
+ * Links agents to stored scorers for UI-based scorer management.
+ */
+export const AGENT_SCORER_ASSIGNMENTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  agentId: { type: 'text', nullable: false },
+  scorerId: { type: 'text', nullable: false }, // References TABLE_STORED_SCORERS
+  sampling: { type: 'jsonb', nullable: true }, // Override sampling config for this assignment
+  enabled: { type: 'boolean', nullable: false },
+  priority: { type: 'integer', nullable: true }, // Lower = higher priority
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +206,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_STORED_SCORERS]: STORED_SCORERS_SCHEMA,
+  [TABLE_AGENT_SCORER_ASSIGNMENTS]: AGENT_SCORER_ASSIGNMENTS_SCHEMA,
 };
