@@ -29,8 +29,8 @@ importers:
         specifier: link:../../packages/loggers
         version: link:../../packages/loggers
       dotenv:
-        specifier: ^16.3.1
-        version: 16.6.1
+        specifier: ^17.2.3
+        version: 17.2.3
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -219,8 +219,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  dotenv@16.6.1:
-    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   esbuild@0.25.8:
@@ -360,7 +360,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.8':
     optional: true
 
-  dotenv@16.6.1: {}
+  dotenv@17.2.3: {}
 
   esbuild@0.25.8:
     optionalDependencies:

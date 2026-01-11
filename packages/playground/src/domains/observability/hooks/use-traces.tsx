@@ -13,7 +13,7 @@ const fetchTracesFn = async ({
   page: number;
   perPage: number;
 }) => {
-  const res = await client.getTraces({
+  const res = await client.listTraces({
     pagination: {
       page,
       perPage,

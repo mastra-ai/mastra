@@ -61,20 +61,22 @@ export default function Observability() {
     error: TracesError,
     isError: isTracesError,
   } = useTraces({
-    filters:
-      selectedEntityOption?.type === 'all'
-        ? undefined
-        : {
-            entityId: selectedEntityOption?.value,
-            entityType: selectedEntityOption?.type,
-          },
-    dateRange:
-      selectedDateFrom && selectedDateTo
-        ? {
-            end: selectedDateTo,
-            start: selectedDateFrom,
-          }
-        : undefined,
+    filters: {
+      ...(selectedEntityOption?.type !== 'all' && {
+        entityId: selectedEntityOption?.value,
+        entityType: selectedEntityOption?.type,
+      }),
+      ...(selectedDateFrom && {
+        startedAt: {
+          start: selectedDateFrom,
+        },
+      }),
+      ...(selectedDateTo && {
+        endedAt: {
+          end: selectedDateTo,
+        },
+      }),
+    },
   });
 
   useEffect(() => {
