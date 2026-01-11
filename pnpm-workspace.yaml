@@ -10,6 +10,7 @@ packages:
   - client-sdks/*
   - integrations/*
   - examples/dane
+  - examples/memory-with-redis
   - auth/*
   - observability/*
   - explorations/longmemeval
