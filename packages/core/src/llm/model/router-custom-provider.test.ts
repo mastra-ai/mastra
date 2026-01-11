@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
+import type { ProviderOptions } from './provider-options.js';
 
 // Mock the @ai-sdk/openai-compatible-v5 module BEFORE importing it
 vi.mock('@ai-sdk/openai-compatible-v5', async () => {
@@ -208,6 +209,116 @@ describe('ModelRouter - Custom Provider Support', () => {
       await expect(async () => {
         await agent.generate('test');
       }).rejects.toThrow(/Could not find config for provider unknown-provider/);
+    });
+  });
+
+  describe('Provider Options Support', () => {
+    function createTrackingMock(mockText: string, trackingFn: any) {
+      vi.mocked(createOpenAICompatible).mockReturnValue({
+        chatModel: vi.fn((_modelId: string) => {
+          const mockModel = createMockModel({ mockText });
+
+          const originalDoGenerate = mockModel.doGenerate;
+          mockModel.doGenerate = vi.fn(async (options) => {
+            trackingFn(options);
+            return await originalDoGenerate(options);
+          });
+
+          return mockModel;
+        }),
+      } as any);
+    }
+
+    it('should pass providerOptions with custom provider URL', async () => {
+      const mockGenerateOptions = vi.fn();
+      createTrackingMock('Hello from mock with provider options!', mockGenerateOptions);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: {
+          providerId: 'my-custom-provider',
+          modelId: 'my-model',
+          url: 'http://localhost:8080/v1',
+          apiKey: 'test-key',
+        },
+      });
+
+      const testProviderOptions: ProviderOptions = {
+        openai: {
+          user: 'test-user-id',
+          logitBias: { '50256': -100 },
+        },
+        anthropic: {
+          sendReasoning: true,
+        },
+      };
+
+      await agent.generate('test message', {
+        providerOptions: testProviderOptions,
+        maxSteps: 1,
+      });
+
+      // Verify that providerOptions were passed to the underlying model
+      expect(mockGenerateOptions).toHaveBeenCalled();
+      const callArgs = mockGenerateOptions.mock.calls[0][0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs.providerOptions).toEqual(testProviderOptions);
+    });
+
+    it('should handle missing providerOptions gracefully with custom provider', async () => {
+      const mockGenerateOptions = vi.fn();
+      createTrackingMock('Hello without provider options!', mockGenerateOptions);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: {
+          id: 'custom-provider/custom-model',
+          url: 'http://localhost:8080/v1',
+          apiKey: 'test-key',
+        },
+      });
+
+      await agent.generate('test message', {
+        maxSteps: 1,
+      });
+
+      // Verify that the call succeeded and providerOptions is undefined
+      expect(mockGenerateOptions).toHaveBeenCalled();
+      const callArgs = mockGenerateOptions.mock.calls[0][0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs.providerOptions).toBeUndefined();
+    });
+
+    it('should handle empty providerOptions with custom provider', async () => {
+      const mockGenerateOptions = vi.fn();
+      createTrackingMock('Hello with empty provider options!', mockGenerateOptions);
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: {
+          providerId: 'custom-ai-service',
+          modelId: 'custom-model-v2',
+          url: 'http://custom-ai.local:9999/v1',
+          apiKey: 'custom-key',
+        },
+      });
+
+      await agent.generate('test message', {
+        providerOptions: {},
+        maxSteps: 1,
+      });
+
+      // Verify that empty providerOptions object is passed through
+      expect(mockGenerateOptions).toHaveBeenCalled();
+      const callArgs = mockGenerateOptions.mock.calls[0][0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs.providerOptions).toEqual({});
     });
   });
 });

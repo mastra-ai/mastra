@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/index.js';
+import type { ProviderOptions } from '../model/provider-options.js';
 
 // Test configuration for different providers
 const testConfigs = [
@@ -231,6 +232,112 @@ describe('ModelRouter Integration Tests', () => {
             }),
         ).not.toThrow();
       });
+    });
+  });
+
+  describe('Provider Options Integration', () => {
+    it('should accept providerOptions in Agent generate call (OpenAI)', async () => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY not set - required for OpenAI provider options integration test');
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant. Be very concise.',
+        model: 'openai/gpt-4o-mini',
+      });
+
+      const providerOptions: ProviderOptions = {
+        openai: {
+          user: 'test-user-id',
+          logitBias: { '50256': -100 }, // Reduce likelihood of certain tokens
+        },
+      };
+
+      const response = await agent.generate('Say exactly "Hello World" and nothing else.', {
+        providerOptions,
+        maxTokens: 50,
+      });
+
+      expect(response).toBeDefined();
+      expect(response.text).toBeDefined();
+      expect(typeof response.text).toBe('string');
+      expect(response.text.length).toBeGreaterThan(0);
+    });
+
+    it('should accept providerOptions in Agent generate call (Anthropic)', async () => {
+      if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error('ANTHROPIC_API_KEY not set - required for Anthropic provider options integration test');
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant. Be concise.',
+        model: 'anthropic/claude-3-5-haiku-20241022',
+      });
+
+      const providerOptions: ProviderOptions = {
+        anthropic: {
+          sendReasoning: false, // Disable reasoning mode for faster response
+        },
+      };
+
+      const response = await agent.generate('What is 2+2?', {
+        providerOptions,
+        maxTokens: 50,
+      });
+
+      expect(response).toBeDefined();
+      expect(response.text).toBeDefined();
+      expect(typeof response.text).toBe('string');
+      expect(response.text).toContain('4');
+    });
+
+    it('should handle empty providerOptions', async () => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY not set - required for empty provider options integration test');
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o-mini',
+      });
+
+      // Test with empty providerOptions object
+      const response = await agent.generate('Say "test"', {
+        providerOptions: {},
+        maxTokens: 20,
+      });
+
+      expect(response).toBeDefined();
+      expect(response.text).toBeDefined();
+      expect(typeof response.text).toBe('string');
+    });
+
+    it('should work without providerOptions parameter', async () => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY not set - required for missing provider options integration test');
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'openai/gpt-4o-mini',
+      });
+
+      // Test without providerOptions parameter at all
+      const response = await agent.generate('Say "test"', {
+        maxTokens: 20,
+      });
+
+      expect(response).toBeDefined();
+      expect(response.text).toBeDefined();
+      expect(typeof response.text).toBe('string');
     });
   });
 });

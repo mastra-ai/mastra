@@ -6,6 +6,7 @@ import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { parseModelRouterId } from './gateway-resolver.js';
 import type { GatewayLanguageModel, MastraModelGateway } from './gateways/base.js';
+import type { ProviderOptions } from './provider-options.js';
 import { findGatewayForModel } from './gateways/index.js';
 
 import { ModelsDevGateway } from './gateways/models-dev.js';
@@ -133,6 +134,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     const model = await this.resolveLanguageModel({
       apiKey,
       headers: this.config.headers,
+      providerOptions: options.providerOptions,
       ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
@@ -176,6 +178,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     const model = await this.resolveLanguageModel({
       apiKey,
       headers: this.config.headers,
+      providerOptions: options.providerOptions,
       ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
@@ -194,11 +197,13 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     providerId,
     apiKey,
     headers,
+    providerOptions,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    providerOptions?: ProviderOptions;
   }): Promise<GatewayLanguageModel> {
     const key = createHash('sha256')
       .update(
@@ -225,7 +230,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return modelInstance;
     }
 
-    const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey, headers });
+    const modelInstance = await this.gateway.resolveLanguageModel({ modelId, providerId, apiKey, headers, providerOptions });
     ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
     return modelInstance;
   }

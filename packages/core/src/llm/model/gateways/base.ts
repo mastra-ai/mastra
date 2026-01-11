@@ -5,6 +5,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { ProviderOptions } from '../provider-options.js';
 
 export interface ProviderConfig {
   url?: string;
@@ -67,5 +68,6 @@ export abstract class MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    providerOptions?: ProviderOptions;
   }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
 }

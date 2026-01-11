@@ -6,6 +6,7 @@ import { Mastra } from '../../../mastra';
 import { ModelRouterLanguageModel } from '../router';
 import { MastraModelGateway } from './base';
 import type { ProviderConfig } from './base';
+import type { ProviderOptions } from '../provider-options.js';
 
 // Mock custom gateway implementation for testing
 class TestCustomGateway extends MastraModelGateway {
@@ -41,11 +42,13 @@ class TestCustomGateway extends MastraModelGateway {
     providerId,
     apiKey,
     headers,
+    providerOptions,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    providerOptions?: ProviderOptions;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
@@ -92,11 +95,13 @@ class AnotherCustomGateway extends MastraModelGateway {
     providerId,
     apiKey,
     headers,
+    providerOptions,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    providerOptions?: ProviderOptions;
   }): Promise<LanguageModelV2> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
     return createOpenAICompatible({
@@ -380,6 +385,78 @@ describe('Custom Gateway Integration', () => {
       expect(model).toBeDefined();
       expect(model.provider).toBe('my-provider');
       expect(model.modelId).toBe('model-1');
+    });
+  });
+
+  describe('Provider Options Support', () => {
+    class SpyCustomGateway extends TestCustomGateway {
+      public lastResolveCall: {
+        modelId: string;
+        providerId: string;
+        apiKey: string;
+        headers?: Record<string, string>;
+        providerOptions?: ProviderOptions;
+      } | null = null;
+
+      async resolveLanguageModel(params: {
+        modelId: string;
+        providerId: string;
+        apiKey: string;
+        headers?: Record<string, string>;
+        providerOptions?: ProviderOptions;
+      }): Promise<LanguageModelV2> {
+        this.lastResolveCall = params;
+        return super.resolveLanguageModel(params);
+      }
+    }
+
+    it('should pass providerOptions to gateway resolveLanguageModel method', async () => {
+      const spyGateway = new SpyCustomGateway();
+      const model = new ModelRouterLanguageModel('custom/my-provider/model-1', [spyGateway]);
+
+      const testProviderOptions: ProviderOptions = {
+        openai: {
+          logitBias: { '50256': -100 },
+          user: 'test-user',
+        },
+        anthropic: {
+          sendReasoning: true,
+        },
+      };
+
+      try {
+        await model.doGenerate({
+          inputFormat: 'prompt',
+          mode: { type: 'regular' },
+          prompt: [{ role: 'user', content: 'test' }],
+          providerOptions: testProviderOptions,
+        });
+      } catch (error) {
+        // Expected to fail, but we're only testing parameter passing
+      }
+
+      expect(spyGateway.lastResolveCall).toBeDefined();
+      expect(spyGateway.lastResolveCall?.providerOptions).toEqual(testProviderOptions);
+    });
+
+    it('should handle undefined providerOptions gracefully', async () => {
+      const spyGateway = new SpyCustomGateway();
+      const model = new ModelRouterLanguageModel('custom/my-provider/model-1', [spyGateway]);
+
+      try {
+        await model.doGenerate({
+          inputFormat: 'prompt',
+          mode: { type: 'regular' },
+          prompt: [{ role: 'user', content: 'test' }],
+          // No providerOptions provided
+        });
+      } catch (error) {
+        // Expected to fail, but we're only testing parameter passing
+      }
+
+      // The resolveLanguageModel should be called and providerOptions should be undefined
+      expect(spyGateway.lastResolveCall).toBeDefined();
+      expect(spyGateway.lastResolveCall?.providerOptions).toBeUndefined();
     });
   });
 });
