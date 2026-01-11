@@ -1,0 +1,11 @@
+services:
+  redis:
+    image: redis:8-alpine
+    ports:
+      - '6380:6379'
+    command: redis-server --requirepass redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

@@ -1,0 +1,27 @@
+{
+  "name": "memory-with-redis",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Example app demonstrating Mastra memory with Redis storage",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "prestart": "docker compose up -d",
+    "start": "npx bun src/index.ts",
+    "poststart": "docker compose down"
+  },
+  "keywords": [],
+  "author": "Mauro Erta <mauro@vlkstudio.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/redis": "workspace:*"
+  },
+  "devDependencies": {
+    "dotenv": "^17.0.0",
+    "tsx": "^4.19.3"
+  },
+  "packageManager": "pnpm@10.18.2"
+}
