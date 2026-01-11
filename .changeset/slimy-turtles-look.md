@@ -75,3 +75,19 @@ Added support for all `ClickHouseClientConfigOptions` like `request_timeout`, `c
 **@mastra/cloudflare, @mastra/cloudflare-d1, @mastra/lance, @mastra/libsql, @mastra/mongodb, @mastra/pg, @mastra/upstash**
 
 Improved logging by replacing `console.warn` with structured logger in workflow storage domains.
+
+**@mastra/deployer-cloud**
+
+Updated to use the new vector store configuration APIs.
+
+**@mastra/memory**
+
+Updated integration tests to use the new `url` parameter for LibSQLVector.
+
+**@mastra/codemod**
+
+Updated test fixtures for the new vector store configuration patterns.
+
+**@mastra/dynamodb**
+
+Updated documentation with migration notes for Pinecone configuration changes.
