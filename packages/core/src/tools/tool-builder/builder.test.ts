@@ -821,7 +821,14 @@ describe('Tool Input Validation', () => {
       name: z.string().min(3, 'Name must be at least 3 characters'),
       age: z.number().min(0, 'Age must be positive').max(150, 'Age must be less than 150'),
       email: z.string().email('Invalid email format').optional(),
-      tags: z.array(z.string()).min(1, 'At least one tag required').optional(),
+      tags: z
+        .array(z.string())
+        .min(1, 'At least one tag required')
+        .optional()
+        .refine(async tags => {
+          // Simulate async validation (e.g., checking against a database)
+          return tags !== undefined;
+        }),
     }),
     execute: async inputData => {
       return {

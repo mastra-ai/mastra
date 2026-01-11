@@ -34,18 +34,18 @@ function truncateForLogging(data: unknown, maxLength: number = 200): string {
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolSuspendData<T = any>(
+export async function validateToolSuspendData<T = any>(
   schema: ZodLikeSchema | undefined,
   suspendData: unknown,
   toolId?: string,
-): { data: T | unknown; error?: ValidationError<T> } {
+): Promise<{ data: T | unknown; error?: ValidationError<T> }> {
   // If no schema, return suspend data as-is
-  if (!schema || !('safeParse' in schema)) {
+  if (!schema || !('safeParseAsync' in schema)) {
     return { data: suspendData };
   }
 
   // Validate the input directly - no unwrapping needed in v1.0
-  const validation = schema.safeParse(suspendData);
+  const validation = await schema.safeParseAsync(suspendData);
 
   if (validation.success) {
     return { data: validation.data };
@@ -156,13 +156,13 @@ function convertUndefinedToNull(input: unknown): unknown {
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolInput<T = any>(
+export async function validateToolInput<T = any>(
   schema: ZodLikeSchema | undefined,
   input: unknown,
   toolId?: string,
-): { data: T | unknown; error?: ValidationError<T> } {
+): Promise<{ data: T | unknown; error?: ValidationError<T> }> {
   // If no schema, return input as-is
-  if (!schema || !('safeParse' in schema)) {
+  if (!schema || !('safeParseAsync' in schema)) {
     return { data: input };
   }
 
@@ -178,7 +178,7 @@ export function validateToolInput<T = any>(
   normalizedInput = convertUndefinedToNull(normalizedInput);
 
   // Validate the normalized input
-  const validation = schema.safeParse(normalizedInput);
+  const validation = await schema.safeParseAsync(normalizedInput);
 
   if (validation.success) {
     return { data: validation.data };
@@ -206,19 +206,19 @@ export function validateToolInput<T = any>(
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolOutput<T = any>(
+export async function validateToolOutput<T = any>(
   schema: ZodLikeSchema | undefined,
   output: unknown,
   toolId?: string,
   suspendCalled?: boolean,
-): { data: T | unknown; error?: ValidationError<T> } {
+): Promise<{ data: T | unknown; error?: ValidationError<T> }> {
   // If no schema, return output as-is
-  if (!schema || !('safeParse' in schema) || suspendCalled) {
+  if (!schema || !('safeParseAsync' in schema) || suspendCalled) {
     return { data: output };
   }
 
   // Validate the output
-  const validation = schema.safeParse(output);
+  const validation = await schema.safeParseAsync(output);
 
   if (validation.success) {
     return { data: validation.data };
