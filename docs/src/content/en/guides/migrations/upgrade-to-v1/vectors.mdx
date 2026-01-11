@@ -80,3 +80,13 @@ The `environment` parameter has been removed. Use `controllerHostUrl` instead if
 -   environment: process.env.PINECONE_ENVIRONMENT,
   });
 ```
+
+If you need a custom controller host:
+
+```ts
+const vectorStore = new PineconeVector({
+  id: 'my-vector',
+  apiKey: process.env.PINECONE_API_KEY,
+  controllerHostUrl: 'https://api.pinecone.io',
+});
+```

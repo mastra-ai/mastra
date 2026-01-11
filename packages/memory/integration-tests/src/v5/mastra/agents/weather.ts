@@ -24,7 +24,7 @@ export const memory = new Memory({
   }),
   vector: new LibSQLVector({
     id: 'weather-memory-vector',
-    url: 'file:mastra.db', // relative path from bundled .mastra/output dir
+    url: `file:${dbPath}`,
   }),
   embedder: openai.embedding('text-embedding-3-small'),
 });

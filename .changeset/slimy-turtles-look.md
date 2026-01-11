@@ -5,7 +5,9 @@
 '@mastra/clickhouse': patch
 '@mastra/cloudflare': patch
 '@mastra/cloudflare-d1': patch
+'@mastra/lance': patch
 '@mastra/mongodb': patch
+'@mastra/pg': patch
 '@mastra/upstash': patch
 '@mastra/deployer-cloud': patch
 '@mastra/memory': patch
@@ -70,6 +72,6 @@ new PineconeVector({ id: 'my-vector', apiKey: '...', controllerHostUrl: '...' })
 
 Added support for all `ClickHouseClientConfigOptions` like `request_timeout`, `compression`, `keep_alive`, and `database`. Existing configurations continue to work unchanged.
 
-**@mastra/cloudflare, @mastra/cloudflare-d1, @mastra/mongodb, @mastra/upstash**
+**@mastra/cloudflare, @mastra/cloudflare-d1, @mastra/lance, @mastra/libsql, @mastra/mongodb, @mastra/pg, @mastra/upstash**
 
 Improved logging by replacing `console.warn` with structured logger in workflow storage domains.

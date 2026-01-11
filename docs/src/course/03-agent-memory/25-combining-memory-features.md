@@ -77,4 +77,4 @@ This comprehensive memory configuration combines all three memory features we've
 2. **Semantic recall** with the `semanticRecall` option
 3. **Working memory** with the `workingMemory` option
 
-Each feature serves a different purpose in enhancing your agent's memory capabilities, and together they create a powerful memory system that can maintain context across conversations and provide personalized responses.
+Each feature serves a different purpose in enhancing your agent's memory capabilities, and together they create a memory system that maintains context across conversations and provides personalized responses.

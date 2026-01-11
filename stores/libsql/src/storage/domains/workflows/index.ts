@@ -18,26 +18,6 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { createExecuteWriteOperationWithRetry } from '../../db/utils';
 
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAt as string),
-    updatedAt: new Date(row.updatedAt as string),
-  };
-}
-
 export class WorkflowsLibSQL extends WorkflowsStorage {
   #db: LibSQLDB;
   #client: Client;
@@ -62,6 +42,25 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     this.setupPragmaSettings().catch(err =>
       this.logger.warn('LibSQL Workflows: Failed to setup PRAGMA settings.', err),
     );
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
+    };
   }
 
   async init(): Promise<void> {
@@ -305,7 +304,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result.rows[0]);
+      return this.parseWorkflowRun(result.rows[0]);
     } catch (error) {
       throw new MastraError(
         {
@@ -378,7 +377,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           conditions.push('resourceId = ?');
           args.push(resourceId);
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -403,7 +402,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 
-      const runs = (result.rows || []).map(row => parseWorkflowRun(row));
+      const runs = (result.rows || []).map(row => this.parseWorkflowRun(row));
 
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
