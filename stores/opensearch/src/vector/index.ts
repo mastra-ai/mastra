@@ -14,8 +14,34 @@ import type {
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
+import type { ClientOptions } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';
 import type { OpenSearchVectorFilter } from './filter';
+
+/**
+ * Configuration for OpenSearchVector.
+ *
+ * Extends the OpenSearch ClientOptions with a required id.
+ * All OpenSearch client options are supported (node, auth, ssl, compression, etc.).
+ *
+ * @example
+ * ```typescript
+ * // Simple URL config
+ * const vector = new OpenSearchVector({
+ *   id: 'my-vector',
+ *   node: 'http://localhost:9200',
+ * });
+ *
+ * // With authentication
+ * const vector = new OpenSearchVector({
+ *   id: 'my-vector',
+ *   node: 'https://my-opensearch-cluster.com',
+ *   auth: { username: 'admin', password: 'secret' },
+ *   ssl: { rejectUnauthorized: false },
+ * });
+ * ```
+ */
+export type OpenSearchVectorConfig = ClientOptions & { id: string };
 
 const METRIC_MAPPING = {
   cosine: 'cosinesimil',
@@ -37,11 +63,12 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   /**
    * Creates a new OpenSearchVector client.
    *
-   * @param {string} url - The url of the OpenSearch node.
+   * @param config - OpenSearch client configuration options plus a required id.
+   * @see OpenSearchVectorConfig for all available options.
    */
-  constructor({ url, id }: { url: string } & { id: string }) {
+  constructor({ id, ...clientOptions }: OpenSearchVectorConfig) {
     super({ id });
-    this.client = new OpenSearchClient({ node: url });
+    this.client = new OpenSearchClient(clientOptions);
   }
 
   /**

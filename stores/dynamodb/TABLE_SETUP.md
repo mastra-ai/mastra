@@ -146,9 +146,8 @@ const storage = new DynamoDBStore({
 });
 
 const vector = new PineconeVector({
+  id: 'dynamodb-pinecone',
   apiKey: process.env.PINECONE_API_KEY,
-  environment: process.env.PINECONE_ENVIRONMENT,
-  index: process.env.PINECONE_INDEX,
 });
 
 const memory = new Memory({

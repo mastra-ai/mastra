@@ -26,7 +26,11 @@ interface LibSQLQueryVectorParams extends QueryVectorParams<LibSQLVectorFilter> 
 }
 
 export interface LibSQLVectorConfig {
-  connectionUrl: string;
+  /**
+   * The URL of the LibSQL database.
+   * Examples: 'file:./dev.db', 'file::memory:', 'libsql://your-db.turso.io'
+   */
+  url: string;
   authToken?: string;
   syncUrl?: string;
   syncInterval?: number;
@@ -49,7 +53,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   private readonly initialBackoffMs: number;
 
   constructor({
-    connectionUrl,
+    url,
     authToken,
     syncUrl,
     syncInterval,
@@ -60,15 +64,15 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     super({ id });
 
     this.turso = createClient({
-      url: connectionUrl,
-      syncUrl: syncUrl,
+      url,
+      syncUrl,
       authToken,
       syncInterval,
     });
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
 
-    if (connectionUrl.includes(`file:`) || connectionUrl.includes(`:memory:`)) {
+    if (url.includes(`file:`) || url.includes(`:memory:`)) {
       this.turso
         .execute('PRAGMA journal_mode=WAL;')
         .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))

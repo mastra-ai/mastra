@@ -175,8 +175,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: 'agent-vector',
       apiKey: process.env.PINECONE_API_KEY,
-      environment: process.env.PINECONE_ENVIRONMENT,
-      indexName: 'agent-embeddings',
     }),
     options: {
       semanticRecall: {

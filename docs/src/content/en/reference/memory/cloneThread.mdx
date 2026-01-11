@@ -209,7 +209,7 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const memory = new Memory({
   storage: new LibSQLStore({ url: "file:./memory.db" }),
-  vector: new LibSQLVector({ connectionUrl: "file:./vector.db" }),
+  vector: new LibSQLVector({ url: "file:./vector.db" }),
   embedder: embeddingModel,
   options: {
     semanticRecall: true,

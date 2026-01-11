@@ -25,7 +25,7 @@ const libsqlStorage = new LibSQLStore({
 });
 
 const libsqlVector = new LibSQLVector({
-  connectionUrl: "file:../../mastra.db",
+  url: "file:../../mastra.db",
 });
 
 const postgresStorage = new PostgresStore({

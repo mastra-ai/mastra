@@ -34,7 +34,7 @@ ${getFinancialModelingAgentPrompt(true)}
     }),
     vector: new LibSQLVector({
       id: 'financial-modeling-agent-vector',
-      connectionUrl: 'file:../../mastra.db',
+      url: 'file:../../mastra.db',
     }),
     embedder: fastembed,
     options: {
