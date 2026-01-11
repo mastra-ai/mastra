@@ -53,21 +53,6 @@ const sidebars = {
         { type: "doc", id: "agents/getModel", label: ".getModel()" },
         { type: "doc", id: "agents/getVoice", label: ".getVoice()" },
         { type: "doc", id: "agents/generate", label: ".generate()" },
-        {
-          type: "doc",
-          id: "agents/getDefaultOptions",
-          label: ".getDefaultOptions()",
-        },
-        {
-          type: "doc",
-          id: "agents/getDefaultGenerateOptions",
-          label: ".getDefaultGenerateOptionsLegacy()",
-        },
-        {
-          type: "doc",
-          id: "agents/getDefaultStreamOptions",
-          label: ".getDefaultStreamOptionsLegacy()",
-        },
       ],
     },
     {
