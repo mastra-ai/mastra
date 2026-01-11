@@ -1,0 +1,310 @@
+---
+title: "Reference: Redis Storage | Storage"
+description: Documentation for the Redis storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/redis"
+---
+
+# Redis Storage
+
+The Redis storage implementation provides a high-performance storage solution using direct Redis connections via [node-redis](https://github.com/redis/node-redis) (the official Redis client for Node.js). It supports standalone Redis, and through custom client configuration, Redis Sentinel and Cluster deployments.
+
+## Installation
+
+```bash
+npm install @mastra/redis@beta
+```
+
+## Usage
+
+### Using Connection String
+
+```typescript
+import { RedisStore } from "@mastra/redis";
+
+const storage = new RedisStore({
+  id: 'redis-storage',
+  connectionString: 'redis://localhost:6379',
+});
+
+await storage.init();
+```
+
+### Using Host/Port Configuration
+
+```typescript
+import { RedisStore } from "@mastra/redis";
+
+const storage = new RedisStore({
+  id: 'redis-storage',
+  host: 'localhost',
+  port: 6379,
+  password: 'your-password',
+  db: 0,
+});
+
+await storage.init();
+```
+
+### Using Pre-configured Client
+
+For advanced configurations like Sentinel or Cluster, you can pass a pre-configured redis client:
+
+```typescript
+import { RedisStore } from "@mastra/redis";
+import { createClient } from "redis";
+
+const client = createClient({
+  url: 'redis://localhost:6379',
+  socket: {
+    reconnectStrategy: (retries) => Math.min(retries * 50, 2000),
+  },
+});
+
+// Connect the client before passing to RedisStore
+await client.connect();
+
+const storage = new RedisStore({
+  id: 'redis-storage',
+  client,
+});
+```
+
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the storage instance",
+      isOptional: false,
+    },
+    {
+      name: "connectionString",
+      type: "string",
+      description: "Redis connection URL (e.g., `redis://localhost:6379` or `redis://:password@localhost:6379`)",
+      isOptional: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "Redis host address",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description: "Redis port number",
+      isOptional: true,
+      defaultValue: "6379",
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "Redis password for authentication",
+      isOptional: true,
+    },
+    {
+      name: "db",
+      type: "number",
+      description: "Redis database number",
+      isOptional: true,
+      defaultValue: "0",
+    },
+    {
+      name: "client",
+      type: "RedisClient",
+      description: "Pre-configured redis client (from the `redis` package) for advanced setups",
+      isOptional: true,
+    },
+  ]}
+/>
+
+:::note
+You must provide either `connectionString`, `host`, or `client`. These options are mutually exclusive.
+:::
+
+## Additional Notes
+
+### Key Structure
+
+The Redis storage implementation uses the following key patterns:
+
+- Threads: `mastra_threads:id:{threadId}`
+- Messages: `mastra_messages:threadId:{threadId}:id:{messageId}`
+- Message index: `msg-idx:{messageId}` (for fast lookups)
+- Thread messages sorted set: `thread:{threadId}:messages`
+- Workflow snapshots: `mastra_workflow_snapshot:namespace:{ns}:workflow_name:{name}:run_id:{id}`
+- Scores: `mastra_scorers:id:{scoreId}`
+- Resources: `mastra_resources:{resourceId}`
+
+### Redis Sentinel
+
+For high-availability deployments using Redis Sentinel, create a custom client:
+
+```typescript
+import { RedisStore } from "@mastra/redis";
+import { createClient } from "redis";
+
+const client = createClient({
+  url: 'redis://sentinel-host:26379',
+  // Configure sentinel options as needed for your setup
+});
+
+await client.connect();
+
+const storage = new RedisStore({
+  id: 'redis-sentinel-storage',
+  client,
+});
+```
+
+### Redis Cluster
+
+For Redis Cluster deployments, use the cluster client:
+
+```typescript
+import { RedisStore } from "@mastra/redis";
+import { createCluster } from "redis";
+
+const cluster = createCluster({
+  rootNodes: [
+    { url: 'redis://node-1:6379' },
+    { url: 'redis://node-2:6379' },
+    { url: 'redis://node-3:6379' },
+  ],
+});
+
+await cluster.connect();
+
+// Note: Cluster support may require additional configuration
+```
+
+### Accessing the Underlying Client
+
+You can access the underlying redis client for custom operations:
+
+```typescript
+const storage = new RedisStore({
+  id: 'redis-storage',
+  connectionString: 'redis://localhost:6379',
+});
+
+await storage.init();
+
+const client = storage.getClient();
+
+// Custom Redis operations
+await client.set('custom-key', 'value');
+const value = await client.get('custom-key');
+```
+
+### Closing Connections
+
+When shutting down your application, close the Redis connection:
+
+```typescript
+await storage.close();
+```
+
+## Usage Example
+
+### Adding memory to an agent
+
+```typescript title="src/mastra/agents/redis-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { RedisStore } from "@mastra/redis";
+
+export const redisAgent = new Agent({
+  id: "redis-agent",
+  name: "Redis Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-4o",
+  memory: new Memory({
+    storage: new RedisStore({
+      id: 'redis-agent-storage',
+      connectionString: process.env.REDIS_URL!,
+    }),
+    options: {
+      lastMessages: 10,
+    },
+  }),
+});
+```
+
+### Using the agent
+
+```typescript title="src/test-redis-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("redisAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Using with Mastra instance
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { RedisStore } from "@mastra/redis";
+
+const storage = new RedisStore({
+  id: 'mastra-storage',
+  host: 'localhost',
+  port: 6379,
+});
+
+const mastra = new Mastra({
+  storage, // init() called automatically
+});
+```
+
+If using storage directly without Mastra, call `init()` explicitly:
+
+```typescript
+import { RedisStore } from "@mastra/redis";
+
+const storage = new RedisStore({
+  id: 'redis-storage',
+  host: 'localhost',
+  port: 6379,
+});
+
+await storage.init();
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
