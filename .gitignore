@@ -48,3 +48,4 @@ mastra-cli.json
 *storybook.log
 storybook-static
 test-output.log
+packages/deployer/*.tgz
