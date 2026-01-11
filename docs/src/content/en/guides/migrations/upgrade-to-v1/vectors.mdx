@@ -44,3 +44,39 @@ To migrate, replace all calls to `getVectors()` with `listVectors()`.
 - const vectors = await vectorStore.getVectors({ ... });
 + const vectors = await vectorStore.listVectors({ ... });
 ```
+
+### LibSQLVector: `connectionUrl` to `url`
+
+The `connectionUrl` parameter has been renamed to `url` to align with the `@libsql/client` API and match LibSQLStorage.
+
+```diff
+  const vectorStore = new LibSQLVector({
+    id: 'my-vector',
+-   connectionUrl: 'file:./db.sqlite',
++   url: 'file:./db.sqlite',
+  });
+```
+
+### OpenSearchVector: `url` to `node`
+
+The `url` parameter has been renamed to `node` to match the OpenSearch `ClientOptions` API. The constructor now accepts all OpenSearch client options including authentication, SSL, and compression.
+
+```diff
+  const vectorStore = new OpenSearchVector({
+    id: 'my-vector',
+-   url: 'http://localhost:9200',
++   node: 'http://localhost:9200',
+  });
+```
+
+### PineconeVector: `environment` removed
+
+The `environment` parameter has been removed. Use `controllerHostUrl` instead if you need to specify a custom controller host. The constructor now accepts all Pinecone configuration options.
+
+```diff
+  const vectorStore = new PineconeVector({
+    id: 'my-vector',
+    apiKey: process.env.PINECONE_API_KEY,
+-   environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
