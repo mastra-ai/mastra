@@ -10,9 +10,6 @@
 '@mastra/pg': patch
 '@mastra/upstash': patch
 '@mastra/deployer-cloud': patch
-'@mastra/memory': patch
-'@mastra/codemod': patch
-'@mastra/dynamodb': patch
 ---
 
 Aligned vector store configuration with underlying library APIs, giving you access to all library options directly.
@@ -78,16 +75,4 @@ Improved logging by replacing `console.warn` with structured logger in workflow 
 
 **@mastra/deployer-cloud**
 
-Updated to use the new vector store configuration APIs.
-
-**@mastra/memory**
-
-Updated integration tests to use the new `url` parameter for LibSQLVector.
-
-**@mastra/codemod**
-
-Updated test fixtures for the new vector store configuration patterns.
-
-**@mastra/dynamodb**
-
-Updated documentation with migration notes for Pinecone configuration changes.
+Updated internal LibSQLVector configuration for compatibility with the new API.
