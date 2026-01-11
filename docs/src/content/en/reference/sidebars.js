@@ -312,7 +312,6 @@ const sidebars = {
         { type: "doc", id: "storage/convex", label: "Convex Storage" },
         { type: "doc", id: "storage/dsql", label: "Aurora DSQL Storage" },
         { type: "doc", id: "storage/dynamodb", label: "DynamoDB Storage" },
-        { type: "doc", id: "storage/dsql", label: "Aurora DSQL Storage" },
         { type: "doc", id: "storage/lance", label: "LanceDB Storage" },
         { type: "doc", id: "storage/libsql", label: "LibSQL Storage" },
         { type: "doc", id: "storage/mongodb", label: "MongoDB Storage" },
