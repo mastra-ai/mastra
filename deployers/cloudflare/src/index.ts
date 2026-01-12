@@ -61,9 +61,11 @@ export class CloudflareDeployer extends Deployer {
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
-    const { env: userEnv, ...userConfig } = this.userConfig;
-    const env = await this.loadEnvVars();
-    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), userEnv);
+    const { vars: userVars, ...userConfig } = this.userConfig;
+    const loadedEnvVars = await this.loadEnvVars();
+
+    // Merge env vars from .env files with user-provided vars
+    const envsAsObject = Object.assign({}, Object.fromEntries(loadedEnvVars.entries()), userVars);
 
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
