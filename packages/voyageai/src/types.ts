@@ -10,6 +10,9 @@
  * VoyageAI text embedding models
  */
 export type VoyageTextModel =
+  | 'voyage-4-large'
+  | 'voyage-4'
+  | 'voyage-4-lite'
   | 'voyage-3-large'
   | 'voyage-3.5'
   | 'voyage-3.5-lite'
@@ -203,6 +206,27 @@ export interface VoyageModelInfo {
  * Model metadata for all VoyageAI text embedding models
  */
 export const TEXT_MODEL_INFO: Record<VoyageTextModel, Omit<VoyageModelInfo, 'id'>> = {
+  'voyage-4-large': {
+    maxInputTokens: 120000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: false,
+  },
+  'voyage-4': {
+    maxInputTokens: 320000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: false,
+  },
+  'voyage-4-lite': {
+    maxInputTokens: 1000000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: false,
+  },
   'voyage-3-large': {
     maxInputTokens: 32000,
     defaultDimension: 1024,

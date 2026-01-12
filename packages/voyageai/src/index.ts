@@ -179,7 +179,12 @@ export const voyageContextualizedEmbedding = createVoyageContextualizedEmbedding
  * ```
  */
 export const voyage: VoyageTextEmbeddingModelV3 & {
-  // Text models (V3)
+  // Text models (V3) - voyage-4 series
+  v4large: VoyageTextEmbeddingModelV3;
+  v4: VoyageTextEmbeddingModelV3;
+  v4lite: VoyageTextEmbeddingModelV3;
+
+  // Text models (V3) - voyage-3 series
   large: VoyageTextEmbeddingModelV3;
   v35: VoyageTextEmbeddingModelV3;
   v35lite: VoyageTextEmbeddingModelV3;
@@ -187,7 +192,12 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   finance: VoyageTextEmbeddingModelV3;
   law: VoyageTextEmbeddingModelV3;
 
-  // Text models (V2 for backward compatibility)
+  // Text models (V2 for backward compatibility) - voyage-4 series
+  v4largeV2: VoyageTextEmbeddingModelV2;
+  v4V2: VoyageTextEmbeddingModelV2;
+  v4liteV2: VoyageTextEmbeddingModelV2;
+
+  // Text models (V2 for backward compatibility) - voyage-3 series
   largeV2: VoyageTextEmbeddingModelV2;
   v35V2: VoyageTextEmbeddingModelV2;
   v35liteV2: VoyageTextEmbeddingModelV2;
@@ -218,7 +228,12 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   contextualizedEmbedding: typeof createVoyageContextualizedEmbedding;
   createReranker: typeof createVoyageReranker;
 } = Object.assign(createVoyageTextEmbedding('voyage-3.5'), {
-  // Text models (V3) - default
+  // Text models (V3) - voyage-4 series
+  v4large: createVoyageTextEmbedding('voyage-4-large'),
+  v4: createVoyageTextEmbedding('voyage-4'),
+  v4lite: createVoyageTextEmbedding('voyage-4-lite'),
+
+  // Text models (V3) - voyage-3 series
   large: createVoyageTextEmbedding('voyage-3-large'),
   v35: createVoyageTextEmbedding('voyage-3.5'),
   v35lite: createVoyageTextEmbedding('voyage-3.5-lite'),
@@ -226,7 +241,12 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   finance: createVoyageTextEmbedding('voyage-finance-2'),
   law: createVoyageTextEmbedding('voyage-law-2'),
 
-  // Text models (V2) - for AI SDK v5 compatibility
+  // Text models (V2) - voyage-4 series for AI SDK v5 compatibility
+  v4largeV2: createVoyageTextEmbeddingV2('voyage-4-large'),
+  v4V2: createVoyageTextEmbeddingV2('voyage-4'),
+  v4liteV2: createVoyageTextEmbeddingV2('voyage-4-lite'),
+
+  // Text models (V2) - voyage-3 series for AI SDK v5 compatibility
   largeV2: createVoyageTextEmbeddingV2('voyage-3-large'),
   v35V2: createVoyageTextEmbeddingV2('voyage-3.5'),
   v35liteV2: createVoyageTextEmbeddingV2('voyage-3.5-lite'),

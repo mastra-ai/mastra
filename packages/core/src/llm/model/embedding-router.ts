@@ -108,7 +108,29 @@ export const EMBEDDING_MODELS: EmbeddingModelInfo[] = [
     maxInputTokens: 3072,
     description: 'Google text-embedding-004 model',
   },
-  // VoyageAI
+  // VoyageAI - voyage-4 series
+  {
+    id: 'voyage-4-large',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 120000,
+    description: 'VoyageAI voyage-4-large - best quality, 120k batch tokens',
+  },
+  {
+    id: 'voyage-4',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 320000,
+    description: 'VoyageAI voyage-4 - balanced quality and speed, 320k batch tokens',
+  },
+  {
+    id: 'voyage-4-lite',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 1000000,
+    description: 'VoyageAI voyage-4-lite - optimized for throughput, 1M batch tokens',
+  },
+  // VoyageAI - voyage-3 series
   {
     id: 'voyage-3-large',
     provider: 'voyage',
@@ -162,6 +184,9 @@ export type EmbeddingModelId =
   | 'openai/text-embedding-ada-002'
   | 'google/gemini-embedding-001'
   | 'google/text-embedding-004'
+  | 'voyage/voyage-4-large'
+  | 'voyage/voyage-4'
+  | 'voyage/voyage-4-lite'
   | 'voyage/voyage-3-large'
   | 'voyage/voyage-3.5'
   | 'voyage/voyage-3.5-lite'

@@ -45,7 +45,12 @@ const queryResult = await model.doEmbed({ values: ['search query'] });
 ```typescript
 import { voyage } from '@mastra/voyageai';
 
-// Text models
+// Voyage-4 series (highest throughput)
+await voyage.v4large.doEmbed({ values: ['...'] });   // voyage-4-large (120k batch tokens)
+await voyage.v4.doEmbed({ values: ['...'] });        // voyage-4 (320k batch tokens)
+await voyage.v4lite.doEmbed({ values: ['...'] });    // voyage-4-lite (1M batch tokens)
+
+// Voyage-3 series
 await voyage.large.doEmbed({ values: ['...'] });     // voyage-3-large
 await voyage.v35.doEmbed({ values: ['...'] });       // voyage-3.5
 await voyage.v35lite.doEmbed({ values: ['...'] });   // voyage-3.5-lite
@@ -197,14 +202,17 @@ console.log(grouped.embeddingsByDocument); // [[[...], [...]], [[...]]]
 
 ### Text Embedding Models
 
-| Model | Use Case | Dimensions |
-|-------|----------|------------|
-| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 |
-| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 |
-| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 |
-| `voyage-code-3` | Code retrieval | 256/512/1024/2048 |
-| `voyage-finance-2` | Finance domain | 1024 |
-| `voyage-law-2` | Legal domain | 1024 |
+| Model | Use Case | Dimensions | Batch Tokens |
+|-------|----------|------------|--------------|
+| `voyage-4-large` | Best quality, highest batch capacity | 256/512/1024/2048 | 120k |
+| `voyage-4` | Balanced quality/speed, high throughput | 256/512/1024/2048 | 320k |
+| `voyage-4-lite` | Maximum throughput | 256/512/1024/2048 | 1M |
+| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 | 32k |
+| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 | 32k |
+| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 | 32k |
+| `voyage-code-3` | Code retrieval | 256/512/1024/2048 | 32k |
+| `voyage-finance-2` | Finance domain | 1024 | 32k |
+| `voyage-law-2` | Legal domain | 1024 | 32k |
 
 ### Multimodal Models
 
@@ -343,6 +351,9 @@ voyage.v35V2;     // voyage-3.5 with V2 interface
 
 ```typescript
 type VoyageTextModel =
+  | 'voyage-4-large'
+  | 'voyage-4'
+  | 'voyage-4-lite'
   | 'voyage-3-large'
   | 'voyage-3.5'
   | 'voyage-3.5-lite'

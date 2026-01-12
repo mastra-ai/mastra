@@ -107,7 +107,12 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
 
   describe('Pre-configured Models', () => {
     it('should have all pre-configured text models', async () => {
-      // Test that all pre-configured models exist and have correct properties
+      // Voyage-4 series
+      expect(voyage.v4large.modelId).toBe('voyage-4-large');
+      expect(voyage.v4.modelId).toBe('voyage-4');
+      expect(voyage.v4lite.modelId).toBe('voyage-4-lite');
+
+      // Voyage-3 series
       expect(voyage.large.modelId).toBe('voyage-3-large');
       expect(voyage.v35.modelId).toBe('voyage-3.5');
       expect(voyage.v35lite.modelId).toBe('voyage-3.5-lite');
@@ -117,6 +122,12 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
     });
 
     it('should have V2 versions of models', () => {
+      // Voyage-4 series V2
+      expect(voyage.v4largeV2.specificationVersion).toBe('v2');
+      expect(voyage.v4V2.specificationVersion).toBe('v2');
+      expect(voyage.v4liteV2.specificationVersion).toBe('v2');
+
+      // Voyage-3 series V2
       expect(voyage.largeV2.specificationVersion).toBe('v2');
       expect(voyage.v35V2.specificationVersion).toBe('v2');
       expect(voyage.codeV2.specificationVersion).toBe('v2');
