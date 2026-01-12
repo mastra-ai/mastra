@@ -23,7 +23,7 @@ import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
-import { addTtlToRecord } from '../../ttl';
+import { getTtlProps } from '../../ttl';
 import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
 import { deleteTableData } from '../utils';
 
@@ -166,19 +166,16 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const threadData: ThreadEntityData = addTtlToRecord(
-      {
-        entity: 'thread',
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title || `Thread ${thread.id}`,
-        createdAt: thread.createdAt?.toISOString() || now.toISOString(),
-        updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
-        metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
-      },
-      'thread',
-      this.ttlConfig,
-    );
+    const threadData: ThreadEntityData = {
+      entity: 'thread',
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: thread.title || `Thread ${thread.id}`,
+      createdAt: thread.createdAt?.toISOString() || now.toISOString(),
+      updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
+      metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
+      ...getTtlProps('thread', this.ttlConfig),
+    };
 
     try {
       await this.service.entities.thread.upsert(threadData).go();
@@ -543,24 +540,21 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     // Ensure 'entity' is added and complex fields are handled
     const messagesToSave: MessageEntityData[] = messages.map(msg => {
       const now = new Date().toISOString();
-      return addTtlToRecord(
-        {
-          entity: 'message' as const,
-          id: msg.id,
-          threadId: msg.threadId,
-          role: msg.role,
-          type: msg.type,
-          resourceId: msg.resourceId,
-          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-          toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
-          toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
-          toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
-          createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
-          updatedAt: now,
-        },
-        'message',
-        this.ttlConfig,
-      );
+      return {
+        entity: 'message' as const,
+        id: msg.id,
+        threadId: msg.threadId,
+        role: msg.role,
+        type: msg.type,
+        resourceId: msg.resourceId,
+        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+        toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
+        toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
+        toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
+        createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
+        updatedAt: now,
+        ...getTtlProps('message', this.ttlConfig),
+      };
     });
 
     try {
@@ -915,18 +909,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const resourceData: ResourceEntityData = addTtlToRecord(
-      {
-        entity: 'resource',
-        id: resource.id,
-        workingMemory: resource.workingMemory,
-        metadata: resource.metadata ? JSON.stringify(resource.metadata) : undefined,
-        createdAt: resource.createdAt?.toISOString() || now.toISOString(),
-        updatedAt: now.toISOString(),
-      },
-      'resource',
-      this.ttlConfig,
-    );
+    const resourceData: ResourceEntityData = {
+      entity: 'resource',
+      id: resource.id,
+      workingMemory: resource.workingMemory,
+      metadata: resource.metadata ? JSON.stringify(resource.metadata) : undefined,
+      createdAt: resource.createdAt?.toISOString() || now.toISOString(),
+      updatedAt: now.toISOString(),
+      ...getTtlProps('resource', this.ttlConfig),
+    };
 
     try {
       await this.service.entities.resource.upsert(resourceData).go();

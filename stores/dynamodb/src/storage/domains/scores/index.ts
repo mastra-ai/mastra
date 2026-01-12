@@ -14,7 +14,7 @@ import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
-import { addTtlToRecord } from '../../ttl';
+import { getTtlProps } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 export class ScoresStorageDynamoDB extends ScoresStorage {
@@ -143,7 +143,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
           ? JSON.stringify(validatedScore.additionalContext)
           : undefined;
 
-    let scoreData: Record<string, any> = Object.fromEntries(
+    const scoreData: Record<string, any> = Object.fromEntries(
       Object.entries({
         ...validatedScore,
         entity: 'score',
@@ -163,11 +163,9 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
         spanId: validatedScore.spanId || '',
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
+        ...getTtlProps('score', this.ttlConfig),
       }).filter(([_, value]) => value !== undefined && value !== null),
     );
-
-    // Add TTL if configured for scores
-    scoreData = addTtlToRecord(scoreData, 'score', this.ttlConfig);
 
     try {
       await this.service.entities.score.upsert(scoreData).go();

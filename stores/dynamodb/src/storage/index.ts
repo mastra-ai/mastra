@@ -15,7 +15,7 @@ export { MemoryStorageDynamoDB, ScoresStorageDynamoDB, WorkflowStorageDynamoDB }
 export type { DynamoDBDomainConfig } from './db';
 
 // Export TTL utilities
-export { calculateTtl, getTtlAttributeName, isTtlEnabled, addTtlToRecord } from './ttl';
+export { calculateTtl, getTtlAttributeName, isTtlEnabled, getTtlProps } from './ttl';
 
 /**
  * Entity names that support TTL configuration.

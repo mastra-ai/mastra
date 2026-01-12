@@ -16,7 +16,7 @@ import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
-import { addTtlToRecord } from '../../ttl';
+import { getTtlProps } from '../../ttl';
 import type { WorkflowSnapshotEntityData } from '../../../entities/utils';
 import { deleteTableData } from '../utils';
 
@@ -175,19 +175,16 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       const now = new Date();
-      const data: WorkflowSnapshotEntityData = addTtlToRecord(
-        {
-          entity: 'workflow_snapshot',
-          workflow_name: workflowName,
-          run_id: runId,
-          snapshot: JSON.stringify(snapshot),
-          createdAt: (createdAt ?? now).toISOString(),
-          updatedAt: (updatedAt ?? now).toISOString(),
-          resourceId,
-        },
-        'workflow_snapshot',
-        this.ttlConfig,
-      );
+      const data: WorkflowSnapshotEntityData = {
+        entity: 'workflow_snapshot',
+        workflow_name: workflowName,
+        run_id: runId,
+        snapshot: JSON.stringify(snapshot),
+        createdAt: (createdAt ?? now).toISOString(),
+        updatedAt: (updatedAt ?? now).toISOString(),
+        resourceId,
+        ...getTtlProps('workflow_snapshot', this.ttlConfig),
+      };
 
       // Use upsert instead of create to handle both create and update cases
       await this.service.entities.workflow_snapshot.upsert(data).go();

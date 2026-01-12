@@ -75,30 +75,21 @@ export function isTtlEnabled(entityName: DynamoDBTtlEntityName, ttlConfig?: Dyna
 }
 
 /**
- * Add TTL attribute to a record if TTL is enabled for the entity type.
+ * Get TTL properties to spread into a record.
+ * Returns an empty object if TTL is not enabled, otherwise returns { [attributeName]: ttlValue }.
  *
- * @param record - The record to add TTL to
  * @param entityName - The entity type (e.g., 'thread', 'message')
  * @param ttlConfig - The TTL configuration for all entities
  * @param customTtlSeconds - Optional override for the TTL duration
- * @returns The record with TTL attribute added (if enabled)
+ * @returns Object with TTL attribute to spread, or empty object
  */
-export function addTtlToRecord<T extends Record<string, any>>(
-  record: T,
+export function getTtlProps(
   entityName: DynamoDBTtlEntityName,
   ttlConfig?: DynamoDBTtlConfig,
   customTtlSeconds?: number,
-): T {
+): { ttl?: number; expiresAt?: number } {
   const ttlValue = calculateTtl(entityName, ttlConfig, customTtlSeconds);
-
-  if (ttlValue === undefined) {
-    return record;
-  }
-
+  if (ttlValue === undefined) return {};
   const attributeName = getTtlAttributeName(entityName, ttlConfig);
-
-  return {
-    ...record,
-    [attributeName]: ttlValue,
-  };
+  return { [attributeName]: ttlValue };
 }
