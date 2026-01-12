@@ -996,7 +996,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow-agent-options': workflow },
         agents: { 'test-agent-with-options': agent },
-        idGenerator: randomUUID,
+        idGenerator: () => randomUUID(),
       });
 
       // Create step with multiple agent options to verify they're all passed through
@@ -2837,7 +2837,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow-agent-options-v2': workflow },
         agents: { 'test-agent-with-options-v2': agent },
-        idGenerator: randomUUID,
+        idGenerator: () => randomUUID(),
       });
 
       // Create step with multiple agent options to verify they're all passed through
@@ -16903,9 +16903,9 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        logger: false,
-        storage: testStorage,
+        idGenerator: () => randomUUID(),
       });
+
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
