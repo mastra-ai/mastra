@@ -152,7 +152,7 @@ To migrate, call `getStore()` with the domain name, then call methods on the ret
 
 ### `getThreadsByResourceId` to `listThreads`
 
-The `getThreadsByResourceId()` method has been replaced with a more flexible `listThreads()` method that supports optional filtering by `resourceId` and/or `metadata`. This change provides more powerful filtering capabilities.
+The `getThreadsByResourceId()` method has been replaced with `listThreads()`, which supports optional filtering by `resourceId` and/or `metadata`.
 
 To migrate, use the memory store and the new `listThreads()` method with an optional filter object.
 
@@ -200,7 +200,7 @@ await memoryStore?.listThreads({
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@latest list-threads-by-resource-to-list-threads
+npx @mastra/codemod@latest list-threads-by-resource-to-list-threads .
 ```
 
 :::

@@ -321,7 +321,7 @@ export class BenchmarkStore extends MastraStorage {
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
-    const { page = 0, perPage = 100, filter } = args;
+    const { page = 0, perPage: perPageInput, filter } = args;
     let allThreads: StorageThreadType[] = Array.from(this.data.mastra_threads.values());
 
     // Apply resourceId filter if provided
@@ -337,15 +337,19 @@ export class BenchmarkStore extends MastraStorage {
       });
     }
 
-    const offset = page * perPage;
-    const threads = allThreads.slice(offset, offset + perPage);
+    // Handle perPage: false (fetch all results)
+    const fetchAll = perPageInput === false;
+    const normalizedPerPage = fetchAll ? allThreads.length : typeof perPageInput === 'number' ? perPageInput : 100;
+    const normalizedPage = fetchAll ? 0 : Math.max(0, page);
+    const offset = normalizedPage * normalizedPerPage;
+    const threads = allThreads.slice(offset, fetchAll ? undefined : offset + normalizedPerPage);
 
     return {
       threads,
       total: allThreads.length,
-      page,
-      perPage,
-      hasMore: offset + perPage < allThreads.length,
+      page: normalizedPage,
+      perPage: fetchAll ? false : normalizedPerPage,
+      hasMore: fetchAll ? false : offset + normalizedPerPage < allThreads.length,
     };
   }
 
