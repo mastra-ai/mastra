@@ -51,45 +51,26 @@ describe('SchemaExtractor', () => {
   });
 
   it('extracts structured data using a zod schema', async () => {
-    // Capture console.error to debug swallowed errors
-    let capturedError: any = null;
-    const originalError = console.error;
-    console.error = (...args: any[]) => {
-      capturedError = args;
-      originalError(...args);
-    };
+    const mockResponse = JSON.stringify({
+      productName: 'Test Product',
+      price: 99.99,
+      category: 'electronics',
+    });
+    const model = createMockModel(mockResponse);
 
-    try {
-      const mockResponse = JSON.stringify({
-        productName: 'Test Product',
-        price: 99.99,
-        category: 'electronics',
-      });
-      const model = createMockModel(mockResponse);
+    const extractor = new SchemaExtractor({
+      schema: productSchema,
+      llm: model as any,
+    });
+    const node = new TextNode({ text: 'This is a test product description.' });
+    const result = await extractor.extract([node]);
 
-      const extractor = new SchemaExtractor({
-        schema: productSchema,
-        llm: model as any,
-      });
-      const node = new TextNode({ text: 'This is a test product description.' });
-      const result = await extractor.extract([node]);
-
-      if (result.length > 0 && Object.keys(result[0]).length === 0 && capturedError) {
-        const errorMsg = capturedError
-          .map((e: any) => (e instanceof Error ? e.message + '\n' + e.stack : JSON.stringify(e)))
-          .join(' ');
-        throw new Error(`Schema extraction failed silently. Captured error: ${errorMsg}`);
-      }
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        productName: 'Test Product',
-        price: 99.99,
-        category: 'electronics',
-      });
-    } finally {
-      console.error = originalError;
-    }
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      productName: 'Test Product',
+      price: 99.99,
+      category: 'electronics',
+    });
   });
 
   it('nests result under metadataKey if provided', async () => {
