@@ -559,6 +559,16 @@
       "source": "/examples/v1",
       "destination": "/docs/v1/getting-started/start",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/observability/tracing/exporters/default",
+      "destination": "/docs/v1/observability/tracing/exporters/local",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/observability/tracing/exporters/default-exporter",
+      "destination": "/reference/v1/observability/tracing/exporters/local-exporter",
+      "permanent": true
     }
   ]
 }

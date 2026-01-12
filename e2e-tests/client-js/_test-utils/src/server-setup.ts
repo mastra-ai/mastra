@@ -80,7 +80,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       { LibSQLStore },
       { MastraServer },
       { registerApiRoute },
-      { Observability, DefaultExporter },
+      { Observability, LocalExporter },
     ] = await Promise.all([
       import('@mastra/core/mastra'),
       import('@mastra/core/agent'),
@@ -116,7 +116,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
           default: {
             serviceName,
             exporters: [
-              new DefaultExporter(), // Persists traces to storage
+              new LocalExporter(), // Persists traces to storage
             ],
           },
         },

@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from './default';
-import { CloudExporter, DefaultExporter, TestExporter } from './exporters';
+import { CloudExporter, LocalExporter, TestExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -628,7 +628,7 @@ describe('Observability Registry', () => {
       const exporters = defaultInstance?.getExporters();
       expect(exporters).toHaveLength(2);
       console.log(exporters);
-      expect(exporters?.[0]).toBeInstanceOf(DefaultExporter);
+      expect(exporters?.[0]).toBeInstanceOf(LocalExporter);
       expect(exporters?.[1]).toBeInstanceOf(CloudExporter);
 
       // Verify processors
