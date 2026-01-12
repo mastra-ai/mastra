@@ -503,7 +503,6 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
           setState,
         },
       };
-
       return params.execute(inputData, toolContext) as TStepOutput;
     },
     component: 'TOOL',

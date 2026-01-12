@@ -34,7 +34,12 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  Processor,
+  ProcessorWorkflow,
+} from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
@@ -417,7 +422,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         const processor = processorOrWorkflow;
         // @ts-ignore - TODO: fix types
         processor.processorIndex = index;
-        step = createStep(processor);
+        // TODO fix types
+        step = createStep(processor as Processor<string, unknown>);
       }
       workflow = workflow.then(step);
     }
