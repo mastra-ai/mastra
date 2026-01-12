@@ -47,7 +47,7 @@ import { DynamoDBStore } from "@mastra/dynamodb";
 
 // Initialize the DynamoDB storage
 const storage = new DynamoDBStore({
-  name: "dynamodb", // A name for this storage instance
+  id: "dynamodb", // Unique identifier for this storage instance
   config: {
     tableName: "mastra-single-table", // Name of your DynamoDB table
     region: "us-east-1", // Optional: AWS region, defaults to 'us-east-1'
@@ -81,7 +81,7 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
     import { DynamoDBStore } from "@mastra/dynamodb";
 
     const storage = new DynamoDBStore({
-      name: "dynamodb-local",
+      id: "dynamodb-local",
       config: {
         tableName: "mastra-single-table", // Ensure this table is created in your local DynamoDB
         region: "localhost", // Can be any string for local, 'localhost' is common
