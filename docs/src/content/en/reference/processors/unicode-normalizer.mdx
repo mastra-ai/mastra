@@ -86,7 +86,7 @@ const processor = new UnicodeNormalizer({
     },
     {
       name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => MastraMessageV2[]",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => MastraDBMessage[]",
       description: "Processes input messages to normalize Unicode text",
       isOptional: false,
     },

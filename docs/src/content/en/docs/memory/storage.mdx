@@ -140,11 +140,9 @@ export const testAgent = new Agent({
   id: "test-agent",
   memory: new Memory({
     options: {
-      threads: {
-        generateTitle: {
-          model: "openai/gpt-4o-mini",
-          instructions: "Generate a concise title based on the user's first message",
-        },
+      generateTitle: {
+        model: "openai/gpt-4o-mini",
+        instructions: "Generate a concise title based on the user's first message",
       },
     },
   }),

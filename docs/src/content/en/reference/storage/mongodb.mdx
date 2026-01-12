@@ -225,9 +225,7 @@ export const mongodbAgent = new Agent({
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     options: {
-      threads: {
-        generateTitle: true,
-      },
+      generateTitle: true,
     },
   }),
 });
