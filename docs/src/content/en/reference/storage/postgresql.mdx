@@ -114,6 +114,7 @@ import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 
