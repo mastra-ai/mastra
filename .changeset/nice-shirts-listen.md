@@ -19,22 +19,24 @@ Qdrant Cloud and deployments with `strict_mode_config = true` require explicit p
 
 **Example usage:**
 
+```typescript
 import { QdrantVector } from '@mastra/qdrant';
 
-const qdrant = new QdrantVector({ url: 'http://localhost:6333', id: 'my-store' });
+const qdrant = new QdrantVector({ url: `http://localhost:6333`, id: 'my-store' });
 
 // Create a keyword index for filtering by source
 await qdrant.createPayloadIndex({
-indexName: 'my-collection',
-fieldName: 'source',
-fieldSchema: 'keyword',
+  indexName: 'my-collection',
+  fieldName: 'source',
+  fieldSchema: 'keyword',
 });
 
 // Now filtering works in strict mode environments
 const results = await qdrant.query({
-indexName: 'my-collection',
-queryVector: embeddings,
-filter: { source: 'document-a' },
+  indexName: 'my-collection',
+  queryVector: embeddings,
+  filter: { source: 'document-a' },
 });
+```
 
 Closes #8923
