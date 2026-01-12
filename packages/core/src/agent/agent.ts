@@ -420,7 +420,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as Parameters<typeof createStep>[0]);
       }
-
       workflow = workflow.then(step);
     }
 
@@ -2122,6 +2121,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
+          // @ts-ignore
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2132,6 +2132,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
+              // @ts-ignore
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),

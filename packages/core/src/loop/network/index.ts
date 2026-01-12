@@ -96,7 +96,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema),
+        zodToJsonSchema(workflow.inputSchema as any),
       )}`;
     })
     .join('\n');
@@ -2136,6 +2136,7 @@ export async function networkLoop<OUTPUT = undefined>({
   });
 
   return new MastraAgentNetworkStream({
+    // @ts-ignore
     run,
     createStream: () => {
       if (resumeDataToUse) {

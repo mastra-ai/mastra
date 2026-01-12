@@ -310,7 +310,7 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
-  #internalMastraWorkflows: Record<string, Workflow> = {};
+  #internalMastraWorkflows: Record<string, Workflow<any, any, any, any, any, any, any>> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
 
@@ -1469,7 +1469,7 @@ export class Mastra<
     return workflow;
   }
 
-  __registerInternalWorkflow(workflow: Workflow) {
+  __registerInternalWorkflow(workflow: Workflow<any, any, any, any, any, any, any>) {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
@@ -1481,7 +1481,7 @@ export class Mastra<
     return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
   }
 
-  __getInternalWorkflow(id: string): Workflow {
+  __getInternalWorkflow(id: string): Workflow<any, any, any, any, any, any, any> {
     const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
     if (!workflow) {
       throw new MastraError({
