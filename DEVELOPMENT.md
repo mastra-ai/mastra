@@ -103,6 +103,7 @@ Testing local changes to Mastra follows a simple three-step pattern:
 3. Test your changes inside the `examples/agent` project
 
 ### Step 1: Make Your Changes
+
 Edit the necessary source files. Take note of the affected packages so that you can filter by them in the next step.
 
 ### Step 2: Build the Packages
@@ -126,6 +127,7 @@ pnpm build
 Using `pnpm turbo watch build` automatically rebuilds packages when you make changes, eliminating the need to manually rebuild after every modification. If you're unsure which packages depend on your changes, run `pnpm turbo watch build` without a filter to watch everything.
 
 ### Step 3: Test your changes
+
 Open a new terminal window and navigate to `examples/agent`. Install its dependencies:
 
 ```bash
