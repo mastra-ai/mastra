@@ -59,7 +59,7 @@ Once authorized, you can proceed with the requested email analysis and calendar 
     }),
     vector: new LibSQLVector({
       id: 'meeting-scheduler-agent-vector',
-      connectionUrl: 'file:../../mastra.db',
+      url: 'file:../../mastra.db',
     }),
     embedder: fastembed,
     options: {

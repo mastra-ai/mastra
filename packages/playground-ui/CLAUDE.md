@@ -182,3 +182,8 @@ export function App({ a, b }: AppProps) {
 - Prioritize design system tokens for consistency
 - Minimize side effects and state management
 - Use TanStack Query for all server state
+
+
+## E2E Testing (MUST DO)
+
+On every change to this package, you MUST use the `e2e-frontend-validation` skill
