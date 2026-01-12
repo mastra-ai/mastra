@@ -16,8 +16,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -684,81 +682,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
-
-      const perPage = normalizePerPage(perPageInput, 100);
-      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-      const { field, direction } = this.parseOrderBy(orderBy);
-      const collection = await this.getCollection(TABLE_THREADS);
-
-      const query = { resourceId };
-      const total = await collection.countDocuments(query);
-
-      if (perPage === 0) {
-        return {
-          threads: [],
-          total,
-          page,
-          perPage: perPageForResponse,
-          hasMore: offset < total,
-        };
-      }
-
-      // MongoDB sort: 1 = ASC, -1 = DESC
-      const sortOrder = direction === 'ASC' ? 1 : -1;
-
-      let cursor = collection
-        .find(query)
-        .sort({ [field]: sortOrder })
-        .skip(offset);
-      if (perPageInput !== false) {
-        cursor = cursor.limit(perPage);
-      }
-      const threads = await cursor.toArray();
-
-      return {
-        threads: threads.map((thread: any) => ({
-          id: thread.id,
-          title: thread.title,
-          resourceId: thread.resourceId,
-          createdAt: formatDateForMongoDB(thread.createdAt),
-          updatedAt: formatDateForMongoDB(thread.updatedAt),
-          metadata: thread.metadata || {},
-        })),
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId: args.resourceId },
         },
         error,
       );

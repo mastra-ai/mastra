@@ -6,8 +6,6 @@ import type {
   ThreadSortDirection,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageOrderBy,
@@ -60,15 +58,13 @@ export abstract class MemoryStorage extends StorageDomain {
     );
   }
 
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
-
   /**
    * List threads with optional filtering by resourceId and metadata.
-   * This is a more flexible alternative to listThreadsByResourceId.
    *
    * @param args - Filter, pagination, and ordering options
+   * @param args.filter - Optional filters for resourceId and/or metadata
+   * @param args.filter.resourceId - Optional resource ID to filter by
+   * @param args.filter.metadata - Optional metadata key-value pairs to filter by (AND logic)
    * @returns Paginated list of threads matching the filters
    */
   abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;

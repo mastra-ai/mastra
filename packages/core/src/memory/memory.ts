@@ -17,8 +17,6 @@ import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
   StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
@@ -327,23 +325,8 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
-   * Lists all threads that belong to the specified resource.
-   * @param args.resourceId - The unique identifier of the resource
-   * @param args.offset - The number of threads to skip (for pagination)
-   * @param args.limit - The maximum number of threads to return
-   * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
-   *                       and `direction` (`'ASC'` or `'DESC'`);
-   *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
-   * @returns Promise resolving to paginated thread results with metadata;
-   *          resolves to an empty array if the resource has no threads
-   */
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
-
-  /**
    * Lists threads with optional filtering by resourceId and metadata.
-   * This is a more flexible alternative to listThreadsByResourceId that supports:
+   * This method supports:
    * - Optional resourceId filtering (not required)
    * - Metadata filtering with AND logic (all key-value pairs must match)
    * - Same pagination and ordering options as listThreadsByResourceId

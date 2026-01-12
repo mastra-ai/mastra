@@ -368,6 +368,84 @@ describe('MastraClient', () => {
         expect(fetchCall).not.toContain('agentId=');
         expect(result).toEqual(mockThreads);
       });
+
+      it('should list all threads without resourceId filter', async () => {
+        const mockThreads = {
+          threads: [
+            { id: 'thread-1', title: 'Test 1' },
+            { id: 'thread-2', title: 'Test 2' },
+          ],
+          total: 2,
+          page: 0,
+          perPage: 100,
+          hasMore: false,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads();
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toBe('http://localhost:4111/api/memory/threads');
+        expect(fetchCall).not.toContain('resourceId=');
+        expect(result).toEqual(mockThreads);
+      });
+
+      it('should list threads with metadata filter', async () => {
+        const mockThreads = {
+          threads: [{ id: 'thread-1', title: 'Support Thread' }],
+          total: 1,
+          page: 0,
+          perPage: 100,
+          hasMore: false,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads({
+          metadata: { category: 'support', priority: 'high' },
+        });
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toContain('/api/memory/threads?');
+        expect(fetchCall).toContain('metadata=');
+        expect(fetchCall).toContain(encodeURIComponent(JSON.stringify({ category: 'support', priority: 'high' })));
+        expect(result).toEqual(mockThreads);
+      });
+
+      it('should list threads with both resourceId and metadata filter', async () => {
+        const mockThreads = {
+          threads: [{ id: 'thread-1', title: 'Test' }],
+          total: 1,
+          page: 0,
+          perPage: 100,
+          hasMore: false,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads({
+          resourceId: 'user-123',
+          metadata: { status: 'active' },
+        });
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toContain('resourceId=user-123');
+        expect(fetchCall).toContain('metadata=');
+        expect(result).toEqual(mockThreads);
+      });
     });
 
     describe('getMemoryThread', () => {

@@ -7,8 +7,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
@@ -708,93 +706,6 @@ export class MemoryLibSQL extends MemoryStorage {
         },
         error,
       );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const { field, direction } = this.parseOrderBy(orderBy);
-
-    try {
-      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
-      const queryParams: InValue[] = [resourceId];
-
-      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
-        id: row.id as string,
-        resourceId: row.resourceId as string,
-        title: row.title as string,
-        createdAt: new Date(row.createdAt as string), // Convert string to Date
-        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
-        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      });
-
-      const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count ${baseQuery}`,
-        args: queryParams,
-      });
-      const total = Number(countResult.rows?.[0]?.count ?? 0);
-
-      if (total === 0) {
-        return {
-          threads: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limitValue, offset],
-      });
-
-      const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
     }
   }
 

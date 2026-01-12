@@ -9,7 +9,7 @@ import { trackMultipleClassInstances, renameMethod } from '../lib/utils';
  * const threads = await storage.getThreadsByResourceId({ resourceId: 'res-123' });
  *
  * After:
- * const threads = await storage.listThreadsByResourceId({ resourceId: 'res-123' });
+ * const threads = await storage.listThreads({ filter: { resourceId: 'res-123'  }});
  */
 export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;

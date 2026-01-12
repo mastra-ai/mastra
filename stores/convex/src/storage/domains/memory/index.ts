@@ -16,8 +16,6 @@ import {
 import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageResourceType,
@@ -125,45 +123,6 @@ export class MemoryConvex extends MemoryStorage {
       messages.map(msg => msg.id),
     );
     await this.#db.deleteMany(TABLE_THREADS, [threadId]);
-  }
-
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
-    const rows = await this.#db.queryTable<
-      Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-    >(TABLE_THREADS, [{ field: 'resourceId', value: resourceId }]);
-
-    const threads = rows.map(row => ({
-      ...row,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    }));
-
-    threads.sort((a, b) => {
-      const aValue = a[field];
-      const bValue = b[field];
-      const aTime = aValue instanceof Date ? aValue.getTime() : new Date(aValue as any).getTime();
-      const bTime = bValue instanceof Date ? bValue.getTime() : new Date(bValue as any).getTime();
-      return direction === 'ASC' ? aTime - bTime : bTime - aTime;
-    });
-
-    const total = threads.length;
-    const paginated = perPageInput === false ? threads : threads.slice(offset, offset + perPage);
-
-    return {
-      threads: paginated,
-      total,
-      page,
-      perPage: perPageForResponse,
-      hasMore: perPageInput === false ? false : offset + perPage < total,
-    };
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {

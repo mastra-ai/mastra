@@ -7,8 +7,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type {
   MemoryStorage,
   StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
@@ -84,13 +82,6 @@ export class MockMemory extends MastraMemory {
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.saveMessages({ messages });
-  }
-
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.listThreadsByResourceId(args);
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {

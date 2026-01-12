@@ -174,10 +174,13 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(val => (typeof val === 'string' ? JSON.parse(val) : val), z.record(z.unknown()).optional()),
   orderBy: storageOrderBySchema,
 });
 

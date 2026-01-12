@@ -119,25 +119,6 @@ export type StorageListWorkflowRunsInput = {
   status?: WorkflowRunStatus;
 };
 
-export type StorageListThreadsByResourceIdInput = {
-  resourceId: string;
-  /**
-   * Number of items per page, or `false` to fetch all records without pagination limit.
-   * Defaults to 100 if not specified.
-   */
-  perPage?: number | false;
-  /**
-   * Zero-indexed page number for pagination.
-   * Defaults to 0 if not specified.
-   */
-  page?: number;
-  orderBy?: StorageOrderBy;
-};
-
-export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
-  threads: StorageThreadType[];
-};
-
 export type StorageListThreadsInput = {
   /**
    * Number of items per page, or `false` to fetch all records without pagination limit.

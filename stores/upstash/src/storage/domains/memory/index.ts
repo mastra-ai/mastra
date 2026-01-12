@@ -17,8 +17,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   ThreadOrderBy,
@@ -89,90 +87,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
         },
         error,
       );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
-    try {
-      let allThreads: StorageThreadType[] = [];
-      const pattern = `${TABLE_THREADS}:*`;
-      const keys = await this.#db.scanKeys(pattern);
-
-      const pipeline = this.client.pipeline();
-      keys.forEach(key => pipeline.get(key));
-      const results = await pipeline.exec();
-
-      for (let i = 0; i < results.length; i++) {
-        const thread = results[i] as StorageThreadType | null;
-        if (thread && thread.resourceId === resourceId) {
-          allThreads.push({
-            ...thread,
-            createdAt: ensureDate(thread.createdAt)!,
-            updatedAt: ensureDate(thread.updatedAt)!,
-            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          });
-        }
-      }
-
-      // Apply sorting with parameters
-      const sortedThreads = this.sortThreads(allThreads, field, direction);
-
-      const total = sortedThreads.length;
-      // When perPage is false (get all), ignore page offset
-      const end = perPageInput === false ? total : offset + perPage;
-      const paginatedThreads = sortedThreads.slice(offset, end);
-      const hasMore = perPageInput === false ? false : end < total;
-
-      return {
-        threads: paginatedThreads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-            page,
-            perPage,
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
     }
   }
 

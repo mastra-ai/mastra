@@ -18,8 +18,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -229,89 +227,6 @@ export class MemoryStorageD1 extends MemoryStorage {
       this.logger?.error(mastraError.toString());
       this.logger?.trackException(mastraError);
       return null;
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const fullTableName = this.#db.getTableName(TABLE_THREADS);
-
-    const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
-      ...(row as StorageThreadType),
-      createdAt: ensureDate(row.createdAt) as Date,
-      updatedAt: ensureDate(row.updatedAt) as Date,
-      metadata:
-        typeof row.metadata === 'string'
-          ? (JSON.parse(row.metadata || '{}') as Record<string, any>)
-          : row.metadata || {},
-    });
-
-    try {
-      const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
-      const countResult = (await this.#db.executeQuery(countQuery.build())) as {
-        count: number;
-      }[];
-      const total = Number(countResult?.[0]?.count ?? 0);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('resourceId = ?', resourceId)
-        .orderBy(field, direction)
-        .limit(limitValue)
-        .offset(offset);
-
-      const results = (await this.#db.executeQuery(selectQuery.build())) as Record<string, any>[];
-      const threads = results.map(mapRowToStorageThreadType);
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
-        },
-        error,
-      );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
     }
   }
 

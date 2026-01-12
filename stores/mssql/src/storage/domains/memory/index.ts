@@ -16,8 +16,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   CreateIndexOptions,
@@ -182,100 +180,6 @@ export class MemoryMSSQL extends MemoryStorage {
         },
         error,
       );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-
-    if (page < 0) {
-      throw new MastraError({
-        id: createStorageErrorId('MSSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
-      });
-    }
-
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const { field, direction } = this.parseOrderBy(orderBy);
-    try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
-
-      const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
-      const countRequest = this.pool.request();
-      countRequest.input('resourceId', resourceId);
-      const countResult = await countRequest.query(countQuery);
-      const total = parseInt(countResult.recordset[0]?.count ?? '0', 10);
-
-      if (total === 0) {
-        return {
-          threads: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
-      const dataRequest = this.pool.request();
-      dataRequest.input('resourceId', resourceId);
-      dataRequest.input('offset', offset);
-
-      if (limitValue > 2147483647) {
-        dataRequest.input('perPage', sql.BigInt, limitValue);
-      } else {
-        dataRequest.input('perPage', limitValue);
-      }
-      const rowsResult = await dataRequest.query(dataQuery);
-      const rows = rowsResult.recordset || [];
-      const threads = rows.map(thread => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: createStorageErrorId('MSSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-            page,
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException?.(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
     }
   }
 

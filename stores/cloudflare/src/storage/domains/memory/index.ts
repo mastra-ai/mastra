@@ -6,8 +6,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -87,76 +85,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       this.logger?.trackException(mastraError);
       this.logger?.error(mastraError.toString());
       return null;
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = normalizePerPage(perPageInput, 100);
-
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
-
-      // When perPage is false (get all), ignore page offset
-      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-      const { field, direction } = this.parseOrderBy(orderBy);
-
-      // List all keys in the threads table
-      const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
-      const keyObjs = await this.#db.listKV(TABLE_THREADS, { prefix: `${prefix}${TABLE_THREADS}` });
-
-      const threads: StorageThreadType[] = [];
-
-      for (const { name: key } of keyObjs) {
-        const data = await this.#db.getKV(TABLE_THREADS, key);
-        if (!data) continue;
-
-        // Filter by resourceId
-        if (data.resourceId !== resourceId) continue;
-
-        threads.push(data);
-      }
-
-      // Apply dynamic sorting
-      threads.sort((a, b) => {
-        const aTime = new Date(a[field] || 0).getTime();
-        const bTime = new Date(b[field] || 0).getTime();
-        return direction === 'ASC' ? aTime - bTime : bTime - aTime;
-      });
-
-      // Apply pagination
-      const end = perPageInput === false ? threads.length : offset + perPage;
-      const paginatedThreads = threads.slice(offset, end);
-
-      return {
-        page,
-        perPage: perPageForResponse,
-        total: threads.length,
-        hasMore: perPageInput === false ? false : offset + perPage < threads.length,
-        threads: paginatedThreads,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to get threads by resource ID with pagination',
-        },
-        error,
-      );
     }
   }
 

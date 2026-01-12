@@ -16,8 +16,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   CreateIndexOptions,
@@ -200,96 +198,6 @@ export class MemoryPG extends MemoryStorage {
         },
         error,
       );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-
-    if (page < 0) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
-      });
-    }
-
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    try {
-      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-      const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
-      const queryParams: any[] = [resourceId];
-
-      const countQuery = `SELECT COUNT(*) ${baseQuery}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      if (total === 0) {
-        return {
-          threads: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      const limitValue = perPageInput === false ? total : perPage;
-      // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        dataQuery,
-        [...queryParams, limitValue, offset],
-      );
-
-      const threads = (rows || []).map(thread => ({
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
-        createdAt: thread.createdAtZ || thread.createdAt,
-        updatedAt: thread.updatedAtZ || thread.updatedAt,
-      }));
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: createStorageErrorId('PG', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            resourceId,
-            page,
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
     }
   }
 

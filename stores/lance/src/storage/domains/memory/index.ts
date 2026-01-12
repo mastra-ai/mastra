@@ -17,8 +17,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -557,80 +555,6 @@ export class StoreMemoryLance extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LANCE', 'SAVE_MESSAGES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = normalizePerPage(perPageInput, 100);
-
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
-
-      // When perPage is false (get all), ignore page offset
-      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-      const { field, direction } = this.parseOrderBy(orderBy);
-      const table = await this.client.openTable(TABLE_THREADS);
-
-      // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
-
-      // Get ALL matching records (no limit/offset yet - need to sort first)
-      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
-      const records = await query.toArray();
-
-      // Apply dynamic sorting BEFORE pagination
-      records.sort((a, b) => {
-        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
-        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
-
-        // Handle null/undefined - treat as "smallest" values
-        if (aValue == null && bValue == null) return 0;
-        if (aValue == null) return direction === 'ASC' ? -1 : 1;
-        if (bValue == null) return direction === 'ASC' ? 1 : -1;
-
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-        }
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
-
-      // Apply pagination AFTER sorting
-      const paginatedRecords = records.slice(offset, offset + perPage);
-
-      const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
-      const threads = paginatedRecords.map(record =>
-        processResultWithTypeConversion(record, schema),
-      ) as StorageThreadType[];
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: offset + perPage < total,
-      };
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

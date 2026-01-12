@@ -7,8 +7,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -873,119 +871,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    // When perPage is false (get all), ignore page offset
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const { field, direction } = this.parseOrderBy(orderBy);
-
-    try {
-      // Get total count - count distinct thread IDs to handle duplicates
-      const countResult = await this.client.query({
-        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
-        query_params: { resourceId },
-        clickhouse_settings: {
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-      const countData = await countResult.json();
-      const total = (countData as any).data[0].total;
-
-      if (total === 0) {
-        return {
-          threads: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      // Get paginated threads - get newest version of each thread by using row number
-      const dataResult = await this.client.query({
-        query: `
-              WITH ranked_threads AS (
-                SELECT
-                  id,
-                  resourceId,
-                  title,
-                  metadata,
-                  toDateTime64(createdAt, 3) as createdAt,
-                  toDateTime64(updatedAt, 3) as updatedAt,
-                  ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
-                FROM ${TABLE_THREADS}
-                WHERE resourceId = {resourceId:String}
-              )
-              SELECT
-                id,
-                resourceId,
-                title,
-                metadata,
-                createdAt,
-                updatedAt
-              FROM ranked_threads
-              WHERE row_num = 1
-              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
-              LIMIT {perPage:Int64} OFFSET {offset:Int64}
-            `,
-        query_params: {
-          resourceId,
-          perPage: perPage,
-          offset: offset,
-        },
-        clickhouse_settings: {
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await dataResult.json();
-      const threads = transformRows<StorageThreadType>(rows.data).map(thread => ({
-        ...thread,
-        metadata: parseMetadata(thread.metadata),
-      }));
-
-      return {
-        threads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: offset + perPage < total,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page },
         },
         error,
       );

@@ -14,8 +14,6 @@ import type {
 } from '@mastra/core/memory';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
-  StorageListThreadsByResourceIdOutput,
-  StorageListThreadsByResourceIdInput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageListMessagesInput,
@@ -239,13 +237,6 @@ export class Memory extends MastraMemory {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const memoryStore = await this.getMemoryStore();
     return memoryStore.getThreadById({ threadId });
-  }
-
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const memoryStore = await this.getMemoryStore();
-    return memoryStore.listThreadsByResourceId(args);
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
@@ -1304,8 +1295,8 @@ ${
     }
 
     // List all threads for the resource and filter for clones
-    const { threads } = await this.listThreadsByResourceId({
-      resourceId: targetResourceId,
+    const { threads } = await this.listThreads({
+      filter: { resourceId: targetResourceId },
       perPage: false, // Get all threads
     });
 

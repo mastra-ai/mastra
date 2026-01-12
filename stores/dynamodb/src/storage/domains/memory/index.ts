@@ -16,8 +16,6 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -598,74 +596,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
-        },
-        error,
-      );
-    }
-  }
-
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    // When perPage is false (get all), ignore page offset
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug('Getting threads by resource ID with pagination', {
-      resourceId,
-      page,
-      perPage,
-      field,
-      direction,
-    });
-
-    try {
-      // Query threads by resource ID using the GSI
-      const query = this.service.entities.thread.query.byResource({ entity: 'thread', resourceId });
-
-      // Get all threads for this resource ID (DynamoDB doesn't support OFFSET/LIMIT)
-      const results = await query.go();
-
-      // Use shared helper method for transformation and sorting
-      const allThreads = this.transformAndSortThreads(results.data, field, direction);
-
-      // Apply pagination in memory
-      const endIndex = offset + perPage;
-      const paginatedThreads = allThreads.slice(offset, endIndex);
-
-      // Calculate pagination info
-      const total = allThreads.length;
-      const hasMore = offset + perPage < total;
-
-      return {
-        threads: paginatedThreads,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page, perPage },
         },
         error,
       );

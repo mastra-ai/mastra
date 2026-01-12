@@ -8,8 +8,6 @@ import type {
   ThreadSortDirection,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
@@ -460,41 +458,6 @@ export class InMemoryMemory extends MemoryStorage {
         thread.updatedAt = now;
       }
     }
-  }
-
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
-
-    if (page < 0) {
-      throw new Error('page must be >= 0');
-    }
-
-    // Prevent unreasonably large page values that could cause performance issues
-    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
-    if (page * perPage > maxOffset) {
-      throw new Error('page value too large');
-    }
-
-    this.logger.debug(`InMemoryMemory: listThreadsByResourceId called for ${resourceId}`);
-    // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.db.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(threads, field, direction);
-    const clonedThreads = sortedThreads.map(thread => ({
-      ...thread,
-      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
-    })) as StorageThreadType[];
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    return {
-      threads: clonedThreads.slice(offset, offset + perPage),
-      total: clonedThreads.length,
-      page,
-      perPage: perPageForResponse,
-      hasMore: offset + perPage < clonedThreads.length,
-    };
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {

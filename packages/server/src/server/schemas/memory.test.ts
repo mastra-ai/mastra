@@ -11,13 +11,14 @@ import { listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
  * All object-type query parameters (`orderBy`, `include`, `filter`) use z.preprocess
  * to handle JSON string parsing from query strings.
  */
-describe('Memory Schema Query Parameter Parsing', () => {
+describe('Memory Schema Query Parsing', () => {
   describe('listMessagesQuerySchema', () => {
     describe('orderBy parameter parsing', () => {
       it('should parse orderBy when passed as an object', () => {
         const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
           page: 0,
-          perPage: 50,
+          perPage: 100,
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
@@ -28,23 +29,18 @@ describe('Memory Schema Query Parameter Parsing', () => {
       });
 
       /**
-       * Regression test: Ensures orderBy JSON strings from URL query params are parsed correctly.
+       * Regression test for #11761: orderBy was failing when passed as a JSON string from URL query params.
        *
-       * When the client sends a request like:
-       * GET /api/memory/threads/xxx/messages?orderBy=%7B%22field%22%3A%22createdAt%22%2C%22direction%22%3A%22ASC%22%7D
-       *
-       * The `orderBy` value arrives at the server as a string: '{"field":"createdAt","direction":"ASC"}'
-       * The schema must parse this JSON string back into an object.
+       * Example URL: /api/memory/threads/abc/messages?orderBy={"field":"createdAt","direction":"ASC"}
        */
       it('should parse orderBy when passed as a JSON string (from URL query params)', () => {
-        // This is what happens when the client sends orderBy as a query parameter
-        // The value is JSON.stringify'd by the client, then URL-encoded
         const jsonString = JSON.stringify({ field: 'createdAt', direction: 'ASC' });
 
         const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
           page: 0,
-          perPage: 50,
-          orderBy: jsonString, // This is a string, not an object
+          perPage: 100,
+          orderBy: jsonString,
         });
 
         expect(result.success).toBe(true);
@@ -53,75 +49,105 @@ describe('Memory Schema Query Parameter Parsing', () => {
         }
       });
 
-      it('should handle orderBy with only field specified as JSON string', () => {
-        const jsonString = JSON.stringify({ field: 'createdAt' });
+      it('should handle updatedAt field in orderBy as JSON string', () => {
+        const jsonString = JSON.stringify({ field: 'updatedAt', direction: 'DESC' });
 
         const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
           page: 0,
-          perPage: 50,
+          perPage: 100,
           orderBy: jsonString,
         });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.data.orderBy).toEqual({ field: 'createdAt' });
-        }
-      });
-
-      it('should handle orderBy with only direction specified as JSON string', () => {
-        const jsonString = JSON.stringify({ direction: 'DESC' });
-
-        const result = listMessagesQuerySchema.safeParse({
-          page: 0,
-          perPage: 50,
-          orderBy: jsonString,
-        });
-
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.orderBy).toEqual({ direction: 'DESC' });
+          expect(result.data.orderBy).toEqual({ field: 'updatedAt', direction: 'DESC' });
         }
       });
     });
 
-    describe('include parameter parsing (reference - this already works)', () => {
-      it('should parse include when passed as a JSON string', () => {
-        const includeArray = [{ id: 'msg-1', withPreviousMessages: 5 }];
-        const jsonString = JSON.stringify(includeArray);
+    describe('include parameter parsing', () => {
+      it('should parse include when passed as an array of objects', () => {
+        const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
+          page: 0,
+          perPage: 100,
+          include: [
+            { role: 'user', withPreviousMessages: 5 },
+            { role: 'assistant', withNextMessages: 3 },
+          ],
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.include).toEqual([
+            { role: 'user', withPreviousMessages: 5 },
+            { role: 'assistant', withNextMessages: 3 },
+          ]);
+        }
+      });
+
+      /**
+       * Regression test for #11761: include was failing when passed as a JSON string from URL query params.
+       *
+       * Example URL: /api/memory/threads/abc/messages?include=[{"role":"user","withPreviousMessages":5}]
+       */
+      it('should parse include when passed as a JSON string (from URL query params)', () => {
+        const jsonString = JSON.stringify([
+          { role: 'user', withPreviousMessages: 5 },
+          { role: 'assistant', withNextMessages: 3 },
+        ]);
 
         const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
           page: 0,
-          perPage: 50,
+          perPage: 100,
           include: jsonString,
         });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.data.include).toEqual(includeArray);
+          expect(result.data.include).toEqual([
+            { role: 'user', withPreviousMessages: 5 },
+            { role: 'assistant', withNextMessages: 3 },
+          ]);
         }
       });
     });
 
-    describe('filter parameter parsing (reference - this already works)', () => {
-      it('should parse filter when passed as a JSON string', () => {
-        const filterObj = {
-          dateRange: {
-            start: '2024-01-01T00:00:00.000Z',
-            end: '2024-12-31T23:59:59.999Z',
-          },
-        };
-        const jsonString = JSON.stringify(filterObj);
+    describe('filter parameter parsing', () => {
+      it('should parse filter when passed as an object', () => {
+        const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
+          page: 0,
+          perPage: 100,
+          filter: { roles: ['user', 'assistant'] },
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.filter).toEqual({ roles: ['user', 'assistant'] });
+        }
+      });
+
+      /**
+       * Regression test for #11761: filter was failing when passed as a JSON string from URL query params.
+       *
+       * Example URL: /api/memory/threads/abc/messages?filter={"roles":["user","assistant"]}
+       */
+      it('should parse filter when passed as a JSON string (from URL query params)', () => {
+        const jsonString = JSON.stringify({ roles: ['user', 'assistant'] });
 
         const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
           page: 0,
-          perPage: 50,
+          perPage: 100,
           filter: jsonString,
         });
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.data.filter).toBeDefined();
-          expect(result.data.filter?.dateRange).toBeDefined();
+          expect(result.data.filter).toEqual({ roles: ['user', 'assistant'] });
         }
       });
     });
@@ -175,6 +201,78 @@ describe('Memory Schema Query Parameter Parsing', () => {
         expect(result.success).toBe(true);
         if (result.success) {
           expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'ASC' });
+        }
+      });
+    });
+
+    describe('optional resourceId parameter', () => {
+      it('should allow listing all threads without resourceId filter', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          page: 0,
+          perPage: 100,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.resourceId).toBeUndefined();
+        }
+      });
+
+      it('should accept resourceId when provided', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          resourceId: 'test-resource',
+          page: 0,
+          perPage: 100,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.resourceId).toBe('test-resource');
+        }
+      });
+    });
+
+    describe('metadata parameter parsing', () => {
+      it('should parse metadata when passed as an object', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          metadata: { category: 'support', priority: 'high' },
+          page: 0,
+          perPage: 100,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.metadata).toEqual({ category: 'support', priority: 'high' });
+        }
+      });
+
+      it('should parse metadata when passed as a JSON string (from URL query params)', () => {
+        const jsonString = JSON.stringify({ category: 'support', priority: 'high' });
+
+        const result = listThreadsQuerySchema.safeParse({
+          metadata: jsonString,
+          page: 0,
+          perPage: 100,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.metadata).toEqual({ category: 'support', priority: 'high' });
+        }
+      });
+
+      it('should allow combining resourceId with metadata filter', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          resourceId: 'user-123',
+          metadata: { status: 'active' },
+          page: 0,
+          perPage: 100,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.resourceId).toBe('user-123');
+          expect(result.data.metadata).toEqual({ status: 'active' });
         }
       });
     });
