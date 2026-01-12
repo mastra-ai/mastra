@@ -506,10 +506,12 @@ program
   .description('Show latest benchmark results for each memory configuration')
   .option('-r, --results <dir>', 'Results directory', './results')
   .option('-d, --dataset <dataset>', 'Filter by dataset')
-  .option('-a, --all', 'Show all results, not just latest')
+  .option('-l, --latest', 'Show only the latest result per config')
   .option('--min-questions <n>', 'Minimum questions to include (default: 20)', parseInt)
+  .option('-s, --sort <by>', 'Sort by: date, accuracy, fixed (default: date)', 'date')
   .action(async options => {
     const minQuestions = options.minQuestions ?? 20;
+    const sortBy = options.sort ?? 'date';
     try {
       console.log(chalk.blue('\n📊 Benchmark Results Summary\n'));
 
@@ -529,6 +531,7 @@ program
         metrics: any;
         config: any;
         timestamp: string;
+        metricsPath: string;
       }> = [];
 
       // First, try new structure
@@ -562,6 +565,7 @@ program
                 metrics: data,
                 config: data.config,
                 timestamp: data.timestamp,
+                metricsPath,
               });
             } catch (error) {
               // Skip runs with missing or invalid metrics
@@ -595,6 +599,7 @@ program
             metrics: data,
             config: data.config,
             timestamp: data.timestamp,
+            metricsPath,
           });
         } catch (error) {
           // Skip runs with missing or invalid metrics
@@ -616,22 +621,32 @@ program
         byMemoryConfig.get(key)!.push(run);
       }
 
-      // Sort groups by worst performing to best performing (based on latest run)
+      // Sort groups based on sortBy option (best/newest at bottom for terminal viewing)
       const sortedConfigs = Array.from(byMemoryConfig.entries()).sort(([_aKey, aRuns], [_bKey, bRuns]) => {
-        // Get latest run for each config (already sorted by timestamp)
+        // Get latest run for each config
         const aLatest = aRuns.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
         const bLatest = bRuns.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
 
-        // Sort by overall accuracy (worst first)
-        return aLatest.metrics.overall_accuracy - bLatest.metrics.overall_accuracy;
+        if (sortBy === 'date') {
+          // Sort by date (oldest first, newest at bottom)
+          return aLatest.timestamp.localeCompare(bLatest.timestamp);
+        } else if (sortBy === 'fixed') {
+          // Sort by fixed accuracy (worst first, best at bottom), fall back to vanilla if no fixed
+          const aFixed = aLatest.metrics.fixed_overall_accuracy ?? aLatest.metrics.overall_accuracy;
+          const bFixed = bLatest.metrics.fixed_overall_accuracy ?? bLatest.metrics.overall_accuracy;
+          return aFixed - bFixed;
+        } else {
+          // Sort by vanilla accuracy (worst first, best at bottom)
+          return aLatest.metrics.overall_accuracy - bLatest.metrics.overall_accuracy;
+        }
       });
 
       for (const [_configKey, runs] of sortedConfigs) {
         // Sort runs by timestamp (newest first)
         runs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-        // Show latest or all
-        const runsToShow = options.all ? runs : [runs[0]];
+        // Show all or just latest
+        const runsToShow = options.latest ? [runs[0]] : runs;
 
         for (const run of runsToShow) {
           // Get terminal width, default to 80 if not available
@@ -650,6 +665,9 @@ program
           }
           console.log(chalk.gray('Run ID:'), chalk.dim(run.runId));
           console.log(chalk.gray('Timestamp:'), chalk.dim(new Date(run.timestamp).toLocaleString()));
+          // Make path relative to cwd
+          const relativePath = require('path').relative(process.cwd(), require('path').resolve(run.metricsPath));
+          console.log(chalk.gray('Metrics:'), chalk.blue(relativePath));
           console.log(chalk.gray('─'.repeat(Math.min(lineWidth, 60))));
 
           // Display metrics using same format as regular runs
@@ -731,8 +749,8 @@ program
 
       console.log(chalk.bold('\n' + '═'.repeat(lineWidth)));
       console.log(chalk.gray(`\nFound ${allRuns.length} total runs across ${byMemoryConfig.size} configurations`));
-      if (!options.all && byMemoryConfig.size > 0) {
-        console.log(chalk.gray('Use --all to see all runs, not just the latest'));
+      if (!options.latest && byMemoryConfig.size > 0 && allRuns.length > byMemoryConfig.size) {
+        console.log(chalk.gray('Use --latest to see only the latest run per config'));
       }
     } catch (error) {
       console.error(chalk.red('\nError:'), error);
