@@ -2,19 +2,22 @@
 '@mastra/core': patch
 ---
 
-Improve RequestContext type inference for entries(), keys(), values(), and forEach()
+Fix TypeScript type narrowing when iterating over typed RequestContext
 
-The `entries()` method now returns a discriminated union of tuples, enabling proper type narrowing when iterating:
+The `set()` and `get()` methods on a typed `RequestContext` already provide full type safety. However, when iterating with `entries()`, `keys()`, `values()`, or `forEach()`, TypeScript couldn't narrow the value type based on key checks.
+
+Now it can:
 
 ```typescript
-const context = new RequestContext<{ name: string; age: number }>();
+const ctx = new RequestContext<{ userId: string; maxTokens: number }>();
 
-for (const [key, value] of context.entries()) {
-  if (key === 'age') {
-    // value is now correctly inferred as `number`
+// Direct access:
+const tokens = ctx.get('maxTokens'); // number
+
+// Iteration now works too:
+for (const [key, value] of ctx.entries()) {
+  if (key === 'maxTokens') {
+    value.toFixed(0); // TypeScript knows value is number
   }
 }
 ```
-
-Fixes #4467
-
