@@ -17,16 +17,17 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 - [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store message history and maintain context across interactions.
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
+- [Network Approval | Agents](https://mastra.ai/en/docs/agents/network-approval): Learn how to require approvals, suspend execution, and resume suspended networks while keeping humans in control of agent network workflows.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 - [Using Agents | Agents](https://mastra.ai/en/docs/agents/overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
-- [Processors | Agents | Mastra Docs](https://mastra.ai/en/docs/agents/processors): Learn how to use input and output processors to transform, validate, and control messages in Mastra agents.
+- [Processors | Agents](https://mastra.ai/en/docs/agents/processors): Learn how to use input and output processors to transform, validate, and control messages in Mastra agents.
 - [Structured Output | Agents](https://mastra.ai/en/docs/agents/structured-output): Learn how to generate structured data from agents using schemas and validation.
 - [Using Tools | Agents](https://mastra.ai/en/docs/agents/using-tools): Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 - [Contributing Templates | Community](https://mastra.ai/en/docs/community/contributing-templates): How to contribute your own templates to the Mastra ecosystem
 - [Discord Community | Community](https://mastra.ai/en/docs/community/discord): Information about the Mastra Discord community and MCP bot.
 - [License | Community](https://mastra.ai/en/docs/community/licensing): Mastra License
 - [Deploy to Cloud Providers | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers): Deploy your Mastra applications to cloud providers
-- [Deploy a Mastra Server | Deployment](https://mastra.ai/en/docs/deployment/mastra-server): Learn how to build a Mastra server with build settings and deployment options.
+- [Deploy a Mastra Server | Deployment](https://mastra.ai/en/docs/deployment/mastra-server): Learn how to build and deploy a Mastra server.
 - [Deploy in a Monorepo | Deployment](https://mastra.ai/en/docs/deployment/monorepo): Learn how to deploy Mastra applications that are part of a monorepo setup
 - [Deployment Overview | Deployment](https://mastra.ai/en/docs/deployment/overview): Learn about different deployment options for your Mastra applications
 - [Deploy with a Web Framework | Deployment](https://mastra.ai/en/docs/deployment/web-framework): Learn how Mastra can be deployed when integrated with a Web Framework
@@ -68,7 +69,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [PostHog Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/posthog): Send traces to PostHog for AI observability and analytics
 - [Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/overview): Set up Tracing for Mastra applications
 - [Sensitive Data Filter | Processors | Observability](https://mastra.ai/en/docs/observability/tracing/processors/sensitive-data-filter): Protect sensitive information in your traces with automatic data redaction
-- [Chunking and Embedding Documents | RAG | Mastra Docs](https://mastra.ai/en/docs/rag/chunking-and-embedding): Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
+- [Chunking and Embedding Documents | RAG](https://mastra.ai/en/docs/rag/chunking-and-embedding): Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
 - [GraphRAG | RAG](https://mastra.ai/en/docs/rag/graph-rag): Guide on graph-based retrieval in Mastra's RAG systems for documents with complex relationships.
 - [RAG (Retrieval-Augmented Generation) in Mastra | RAG](https://mastra.ai/en/docs/rag/overview): Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 - [Retrieval, Semantic Search, Reranking | RAG](https://mastra.ai/en/docs/rag/retrieval): Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
@@ -83,7 +84,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Custom Adapters | Server](https://mastra.ai/en/docs/server/custom-adapters): Create a custom server adapter for frameworks other than Hono or Express.
 - [Custom API Routes | Server](https://mastra.ai/en/docs/server/custom-api-routes): Expose additional HTTP endpoints from your Mastra server.
 - [Mastra Client SDK | Server](https://mastra.ai/en/docs/server/mastra-client): Learn how to set up and use the Mastra Client SDK
-- [Server Configuration | Server](https://mastra.ai/en/docs/server/mastra-server): Configure the Mastra server with custom settings for port, timeout, CORS, and more.
+- [Server Overview | Server](https://mastra.ai/en/docs/server/mastra-server): Overview of the Mastra server, covering HTTP endpoints, middleware, authentication, and client integration.
 - [Middleware | Server](https://mastra.ai/en/docs/server/middleware): Apply custom middleware functions to intercept requests.
 - [Request Context | Server](https://mastra.ai/en/docs/server/request-context): Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
 - [Server Adapters | Server](https://mastra.ai/en/docs/server/server-adapters): Manually configure a Mastra server using Hono or Express adapters.
@@ -150,6 +151,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Memory | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/memory): Learn how to migrate memory-related changes when upgrading to v1.
 - [Overview | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/overview): Overview of breaking changes when upgrading to Mastra v1.
 - [Processors | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/processors): Learn how to migrate processor changes when upgrading to v1.
+- [RAG | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/rag): Migrate RAG-related breaking changes when upgrading to v1.
 - [Storage | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/storage): Learn how to migrate storage-related changes when upgrading to v1.
 - [Tools | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/tools): Learn how to migrate tool-related changes when upgrading to v1.
 - [Tracing | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/tracing): Migration guide for updating from otel-telemetry or AI tracing to the new observability system.
@@ -287,6 +289,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Tools API | Client SDK](https://mastra.ai/en/reference/client-js/tools): Learn how to interact with and execute tools available in the Mastra platform using the client-js SDK.
 - [Reference: Vectors API | Client SDK](https://mastra.ai/en/reference/client-js/vectors): Learn how to work with vector embeddings for semantic search and similarity matching in Mastra using the client-js SDK.
 - [Reference: Workflows API | Client SDK](https://mastra.ai/en/reference/client-js/workflows): Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
+- [Reference: Configuration](https://mastra.ai/en/reference/configuration): Reference documentation on Mastra's configuration options
 - [Reference: Mastra.addGateway() | Core](https://mastra.ai/en/reference/core/addGateway): Add a gateway to the Mastra instance
 - [Reference: Mastra.getAgent() | Core](https://mastra.ai/en/reference/core/getAgent): Documentation for the `Agent.getAgent()` method in Mastra, which retrieves an agent by name.
 - [Reference: Mastra.getAgentById() | Core](https://mastra.ai/en/reference/core/getAgentById): Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID.
@@ -384,7 +387,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Tool Call Filter | Processors](https://mastra.ai/en/reference/processors/tool-call-filter): Documentation for the ToolCallFilter processor in Mastra, which filters out tool calls and results from messages.
 - [Reference: Unicode Normalizer | Processors](https://mastra.ai/en/reference/processors/unicode-normalizer): Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.
 - [Reference: Working Memory Processor | Processors](https://mastra.ai/en/reference/processors/working-memory-processor): Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions.
-- [Reference: Reference: .chunk() | RAG](https://mastra.ai/en/reference/rag/chunk): Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
+- [Reference: .chunk() | RAG](https://mastra.ai/en/reference/rag/chunk): Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 - [Reference: DatabaseConfig | RAG](https://mastra.ai/en/reference/rag/database-config): API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
 - [Reference: MDocument | Document Processing | RAG](https://mastra.ai/en/reference/rag/document): Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 - [Reference: Embed | RAG](https://mastra.ai/en/reference/rag/embeddings): Documentation for embedding functionality in Mastra using the AI SDK.

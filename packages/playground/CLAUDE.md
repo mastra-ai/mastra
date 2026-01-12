@@ -175,3 +175,8 @@ export function App({ a, b }: AppProps) {
 - All data-fetching hooks must come from `packages/playground-ui`
 - Pages should be thin wrappers around `playground-ui` components
 - When in doubt, add functionality to `playground-ui` instead
+
+
+## E2E Testing (MUST DO)
+
+On every change to this package, you MUST use the `e2e-frontend-validation` skill

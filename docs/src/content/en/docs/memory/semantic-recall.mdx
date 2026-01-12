@@ -67,7 +67,7 @@ const agent = new Agent({
     // this is the default vector db if omitted
     vector: new LibSQLVector({
       id: 'agent-vector',
-      connectionUrl: "file:./local.db",
+      url: "file:./local.db",
     }),
   }),
 });

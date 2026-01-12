@@ -58,6 +58,7 @@ npx @mastra/codemod@beta v1
 - **[Memory](/guides/v1/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
 - **[Storage](/guides/v1/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
 - **[Vectors](/guides/v1/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
+- **[RAG](/guides/v1/migrations/upgrade-to-v1/rag)** - Parameter naming updated for clarity.
 - **[MCP](/guides/v1/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
 - **[Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
 - **[Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
@@ -102,6 +103,7 @@ npx @mastra/codemod@beta v1
 
 ### Low Impact Changes
 
+- Rename `keepSeparator` to `separatorPosition` in chunk options - [RAG](/guides/v1/migrations/upgrade-to-v1/rag)
 - Rename `createRunAsync` to `createRun` - [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
 - Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)
 - Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)
