@@ -1,4 +1,61 @@
-import { MemoryConfigOptions } from './data/types';
+import { MemoryConfig } from '@mastra/core/memory';
+import { MemoryConfigOptions, MemoryConfigType } from './data/types';
+
+// ============================================================================
+// Memory Configuration Definitions
+// ============================================================================
+
+/**
+ * Static definition of a memory configuration's properties.
+ * All derived flags are computed once here, not scattered across prepare/run.
+ */
+export interface MemoryConfigDefinition {
+  /** The config type identifier */
+  type: MemoryConfigType;
+
+  /** Memory options passed to Mastra Memory */
+  memoryOptions: MemoryConfig;
+
+  // --- Derived flags ---
+
+  /** Requires a real LLM model (not mock) */
+  needsRealModel: boolean;
+
+  /** Uses semantic recall for embeddings */
+  usesSemanticRecall: boolean;
+
+  /** Uses working memory */
+  usesWorkingMemory: boolean;
+
+  /** Uses tailored (per-question) templates */
+  usesTailored: boolean;
+
+  /** Uses observational memory */
+  usesObservationalMemory: boolean;
+
+  /** Uses shortcut OM (finalize at end) */
+  usesShortcutOM: boolean;
+
+  /** Uses Cerebras GLM model for OM */
+  usesGlmModel: boolean;
+
+  /** Model to use for OM Observer/Reflector (null = use default) */
+  omModel: string | null;
+
+  /** Max input tokens for finalize (null = no limit) */
+  omMaxInputTokens: number | null;
+
+  /** Requires sequential processing (no concurrency) */
+  requiresSequential: boolean;
+
+  /** Model to use for the main agent (defaults to openai/gpt-4o) */
+  agentModel?: string;
+
+  /** Model to use for the eval agent (defaults to openai/gpt-4o) */
+  evalModel?: string;
+}
+
+// --- Shared config values ---
 
 const semanticRecall = {
   topK: 10,
@@ -8,121 +65,230 @@ const semanticRecall = {
 
 const lastMessages = 10;
 
-// Observational Memory configuration
-// These thresholds allow more context to accumulate before triggering observation/reflection
-export const observationalMemoryConfig = {
-  // Using defaults: observationThreshold: 10000, reflectionThreshold: 30000
-  // observationThreshold: { min: 4000, max: 6000 },
-  // reflectionThreshold: { min: 12000, max: 18000 },
-  // Resource scope for cross-session memory
-  scope: 'resource',
-} as const;
+// Cerebras GLM model config
+export const CEREBRAS_GLM_MODEL = 'cerebras/glm-4.7';
+export const CEREBRAS_GLM_MAX_TOKENS = 200000;
 
-export function getMemoryOptions(memoryConfig: string): MemoryConfigOptions {
-  switch (memoryConfig) {
-    case 'semantic-recall':
-      return {
-        type: 'semantic-recall',
-        options: {
-          lastMessages,
-          semanticRecall,
-          workingMemory: { enabled: false },
-        },
-      };
+// ============================================================================
+// Config Definitions Map
+// ============================================================================
 
-    case 'working-memory':
-      return {
-        type: 'working-memory',
-        options: {
-          lastMessages,
-          semanticRecall: false,
-          workingMemory: {
-            enabled: true,
-            scope: 'resource',
-            version: 'vnext',
-          },
-        },
-      };
+const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
+  'semantic-recall': {
+    type: 'semantic-recall',
+    memoryOptions: {
+      lastMessages,
+      semanticRecall,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: false,
+    usesSemanticRecall: true,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: false,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: false,
+  },
 
-    // tailored means a custom working memory template is passed in per-question - to align with how working memory is intended to be used to track specific relevant information.
-    case 'working-memory-tailored':
-      return {
-        type: 'working-memory',
-        options: {
-          lastMessages,
-          semanticRecall: false,
-          workingMemory: {
-            enabled: true,
-            scope: 'resource',
-            version: 'vnext',
-          },
-        },
-      };
+  'working-memory': {
+    type: 'working-memory',
+    memoryOptions: {
+      lastMessages,
+      semanticRecall: false,
+      workingMemory: {
+        enabled: true,
+        scope: 'resource',
+        version: 'vnext',
+      },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: true,
+    usesTailored: false,
+    usesObservationalMemory: false,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+  },
 
-    // Combined means semantic recall + working memory
-    case 'combined':
-      return {
-        type: 'combined',
-        options: {
-          lastMessages,
-          semanticRecall,
-          workingMemory: {
-            enabled: true,
-            scope: 'resource',
-          },
-        },
-      };
+  'working-memory-tailored': {
+    type: 'working-memory-tailored',
+    memoryOptions: {
+      lastMessages,
+      semanticRecall: false,
+      workingMemory: {
+        enabled: true,
+        scope: 'resource',
+        version: 'vnext',
+      },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: true,
+    usesTailored: true,
+    usesObservationalMemory: false,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'gpt-4o',
+  },
 
-    case 'combined-tailored':
-      return {
-        type: 'combined-tailored',
-        options: {
-          lastMessages,
-          semanticRecall,
-          workingMemory: {
-            enabled: true,
-            scope: 'resource',
-            version: 'vnext',
-          },
-        },
-      };
+  combined: {
+    type: 'combined',
+    memoryOptions: {
+      lastMessages,
+      semanticRecall,
+      workingMemory: {
+        enabled: true,
+        scope: 'resource',
+      },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: true,
+    usesWorkingMemory: true,
+    usesTailored: false,
+    usesObservationalMemory: false,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+  },
 
-    case 'observational-memory':
-      // Observational Memory uses its own processor, minimal Memory config
-      return {
-        type: 'observational-memory',
-        options: {
-          lastMessages: 5, // OM handles context, just keep minimal recent
-          semanticRecall: false,
-          workingMemory: { enabled: false },
-        },
-      };
+  'combined-tailored': {
+    type: 'combined-tailored',
+    memoryOptions: {
+      lastMessages,
+      semanticRecall,
+      workingMemory: {
+        enabled: true,
+        scope: 'resource',
+        version: 'vnext',
+      },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: true,
+    usesWorkingMemory: true,
+    usesTailored: true,
+    usesObservationalMemory: false,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+  },
 
-    case 'observational-memory-shortcut':
-      // Shortcut: process all sessions without observation, then finalize at the end
-      // This dramatically reduces LLM API costs (1 Observer call + 1-2 Reflector calls per question)
-      return {
-        type: 'observational-memory-shortcut',
-        options: {
-          lastMessages: 5,
-          semanticRecall: false,
-          workingMemory: { enabled: false },
-        },
-      };
+  'observational-memory': {
+    type: 'observational-memory',
+    memoryOptions: {
+      lastMessages: 5, // OM handles context, just keep minimal recent
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+  },
 
-    case 'observational-memory-shortcut-glm':
-      // Shortcut using Cerebras GLM-4.7 (200k context, very fast)
-      // Uses mid-loop reflection to stay within token limits
-      return {
-        type: 'observational-memory-shortcut-glm',
-        options: {
-          lastMessages: 5,
-          semanticRecall: false,
-          workingMemory: { enabled: false },
-        },
-      };
+  'observational-memory-shortcut': {
+    type: 'observational-memory-shortcut',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: true,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'gpt-4o',
+  },
 
-    default:
-      throw new Error(`Unknown memory config: ${memoryConfig}`);
+  'observational-memory-shortcut-glm': {
+    type: 'observational-memory-shortcut-glm',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: true,
+    usesGlmModel: true,
+    omModel: CEREBRAS_GLM_MODEL,
+    omMaxInputTokens: CEREBRAS_GLM_MAX_TOKENS,
+    requiresSequential: true,
+    agentModel: 'gpt-4o',
+  },
+};
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Get the full config definition for a memory config type.
+ */
+export function getMemoryConfig(memoryConfig: MemoryConfigType): MemoryConfigDefinition {
+  const config = MEMORY_CONFIGS[memoryConfig];
+  if (!config) {
+    throw new Error(`Unknown memory config: ${memoryConfig}`);
   }
+  return config;
+}
+
+/**
+ * Get memory options in the legacy format (for backwards compatibility).
+ */
+export function getMemoryOptions(memoryConfig: string): MemoryConfigOptions {
+  const config = getMemoryConfig(memoryConfig as MemoryConfigType);
+  return {
+    type: config.type,
+    options: config.memoryOptions,
+  };
+}
+
+/**
+ * Check if a string is a valid memory config type.
+ */
+export function isValidMemoryConfig(memoryConfig: string): memoryConfig is MemoryConfigType {
+  return memoryConfig in MEMORY_CONFIGS;
+}
+
+/**
+ * Get all available memory config types.
+ */
+export function getAvailableConfigs(): MemoryConfigType[] {
+  return Object.keys(MEMORY_CONFIGS) as MemoryConfigType[];
 }

@@ -1,8 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
-import { MessageHistory } from '@mastra/core/processors';
-import { openai } from '@ai-sdk/openai';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
@@ -13,8 +11,7 @@ import { appendFileSync, existsSync, writeFileSync } from 'fs';
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
-import { getMemoryOptions, observationalMemoryConfig } from '../config';
-import { makeRetryModel } from '../retry-model';
+import { getMemoryConfig, getMemoryOptions, type MemoryConfigDefinition } from '../config';
 import { DatasetLoader } from '../data/loader';
 
 // Rate limit configuration
@@ -82,31 +79,6 @@ async function checkRateLimitBeforeRequest(): Promise<void> {
 }
 
 /**
- * Check rate limit headers after response and update state
- */
-async function checkRateLimitAndWait(
-  response: any,
-  spinner?: Ora | { updateStatus: (status: string) => void },
-): Promise<void> {
-  updateRateLimiterFromResponse(response);
-
-  if (rateLimiter.remainingTokens < RATE_LIMIT_TOKEN_THRESHOLD || rateLimiter.remainingRequests < 5) {
-    const updateStatus = (status: string) => {
-      if (spinner && 'updateStatus' in spinner) {
-        spinner.updateStatus(status);
-      } else if (spinner && 'text' in spinner) {
-        spinner.text = status;
-      }
-    };
-    updateStatus(`Rate limited - waiting...`);
-    await waitForRateLimit(
-      60,
-      `Rate limit approaching (${rateLimiter.remainingTokens} tokens, ${rateLimiter.remainingRequests} requests remaining)`,
-    );
-  }
-}
-
-/**
  * Wrapper to handle 429 errors with retry
  */
 async function withRateLimitRetry<T>(
@@ -152,7 +124,6 @@ async function withRateLimitRetry<T>(
 export interface RunOptions {
   dataset: DatasetType;
   memoryConfig: MemoryConfigType;
-  model: string;
   preparedDataDir?: string;
   outputDir?: string;
   subset?: number;
@@ -177,7 +148,12 @@ interface PreparedQuestionMeta {
   questionDate?: string;
 }
 
-const retry4o = makeRetryModel(openai('gpt-4o'));
+/**
+ * Normalize model ID to provider/model format for ModelRouterLanguageModel
+ */
+function normalizeModelId(modelId: string): `${string}/${string}` {
+  return (modelId.includes('/') ? modelId : `openai/${modelId}`) as `${string}/${string}`;
+}
 
 export class RunCommand {
   private preparedDataDir: string;
@@ -200,8 +176,10 @@ export class RunCommand {
 🚀 Starting LongMemEval benchmark run: ${runId}
 `),
     );
+    const configDef = getMemoryConfig(options.memoryConfig);
+    
     console.log(chalk.gray(`Dataset: ${options.dataset}`));
-    console.log(chalk.gray(`Model: ${options.model}`));
+    console.log(chalk.gray(`Model: ${configDef.agentModel}`));
     console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
     if (options.subset) {
       console.log(chalk.gray(`Subset: ${options.subset} questions`));
@@ -394,8 +372,9 @@ Active evaluations:`;
         const result = await this.evaluateQuestion(
           meta,
           preparedDir,
-          retry4o.model,
+          normalizeModelId(configDef.agentModel ?? 'gpt-4o'),
           options,
+          configDef,
           concurrency > 1
             ? {
                 updateStatus: (status: string) => {
@@ -480,7 +459,7 @@ Active evaluations:`;
     await this.saveResults(runDir, results, metrics, options);
 
     // Display results
-    this.displayMetrics(metrics, options);
+    this.displayMetrics(metrics, options, configDef);
 
     // Display uninvestigated failures
     this.displayUninvestigatedFailures(results);
@@ -491,8 +470,9 @@ Active evaluations:`;
   private async evaluateQuestion(
     meta: PreparedQuestionMeta,
     preparedDir: string,
-    modelProvider: any,
+    agentModelId: `${string}/${string}`,
     options: RunOptions,
+    configDef: MemoryConfigDefinition,
     spinner?: Ora | { updateStatus: (status: string) => void },
   ): Promise<EvaluationResult> {
     const questionStart = Date.now();
@@ -513,10 +493,7 @@ Active evaluations:`;
     const benchmarkVectorStore = new BenchmarkVectorStore('read');
 
     const memoryOptions = getMemoryOptions(options.memoryConfig);
-    const usesObservationalMemory =
-      options.memoryConfig === 'observational-memory' ||
-      options.memoryConfig === 'observational-memory-shortcut' ||
-      options.memoryConfig === 'observational-memory-shortcut-glm';
+    const usesObservationalMemory = configDef.usesObservationalMemory;
 
     // Only load BenchmarkStore for non-OM configs (OM uses PersistableInMemoryMemory)
     let benchmarkStore: BenchmarkStore | undefined;
@@ -547,7 +524,6 @@ Active evaluations:`;
 
     // Create observational memory processor if using OM config
     let observationalMemory: ObservationalMemory | undefined;
-    let messageHistory: MessageHistory | undefined;
     let omStorage: PersistableInMemoryMemory | undefined;
 
     if (usesObservationalMemory) {
@@ -575,14 +551,9 @@ Active evaluations:`;
           reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
           recognizePatterns: false,
         },
-        scope: observationalMemoryConfig.scope,
+        scope: 'resource',
       });
 
-      // MessageHistory for persisting messages
-      messageHistory = new MessageHistory({
-        storage: omStorage,
-        lastMessages: 10,
-      });
     }
 
     // Create agent with the specified model
@@ -601,10 +572,7 @@ When answering questions, carefully review the conversation history to identify 
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
-      model: modelProvider,
-      // model: 'anthropic/claude-haiku-4-5',
-      // model: 'cerebras/zai-glm-4.7',
-      // model: 'cerebras/gpt-oss-120b',
+      model: agentModelId,
       instructions: [
         { role: 'system', content: agentInstructions },
         ...(meta.questionDate
@@ -688,11 +656,11 @@ When answering questions, carefully review the conversation history to identify 
 `,
     );
 
+    const evalModelId = normalizeModelId(configDef.evalModel ?? 'openai/gpt-4o');
     const evalAgent = new Agent({
       id: 'longmemeval-metric-agent',
       name: 'LongMemEval Metric Agent',
-      // model: 'cerebras/gpt-oss-120b',
-      model: retry4o.model,
+      model: evalModelId,
       instructions:
         'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct.',
     });
@@ -887,32 +855,21 @@ When answering questions, carefully review the conversation history to identify 
 
     // Save metrics
     const metricsPath = join(runDir, 'metrics.json');
-    const usesObservationalMemoryForMetrics =
-      options.memoryConfig === 'observational-memory' ||
-      options.memoryConfig === 'observational-memory-shortcut' ||
-      options.memoryConfig === 'observational-memory-shortcut-glm';
+    const metricsConfigDef = getMemoryConfig(options.memoryConfig);
     const metricsData = {
       ...metrics,
       config: {
         dataset: options.dataset,
-        model: options.model,
+        model: metricsConfigDef.agentModel,
         memoryConfig: options.memoryConfig,
         subset: options.subset,
-        // Store OM config for reproducibility (actual values used, with defaults as fallback)
-        ...(usesObservationalMemoryForMetrics && {
+        // Store OM config for reproducibility
+        ...(metricsConfigDef.usesObservationalMemory && {
           observationalMemoryConfig: {
-            scope: observationalMemoryConfig.scope,
-            focus: observationalMemoryConfig.focus,
-            observationThreshold:
-              (observationalMemoryConfig as any).observationThreshold ??
-              OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
-            reflectionThreshold:
-              (observationalMemoryConfig as any).reflectionThreshold ??
-              OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
-            observerModel:
-              (observationalMemoryConfig as any).observerModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
-            reflectorModel:
-              (observationalMemoryConfig as any).reflectorModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
+            scope: 'resource',
+            observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
+            reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+            recognizePatterns: false,
           },
         }),
       },
@@ -1038,7 +995,7 @@ Results saved to: ${runDir}`),
     return metrics;
   }
 
-  private displayMetrics(metrics: BenchmarkMetrics, options?: RunOptions): void {
+  private displayMetrics(metrics: BenchmarkMetrics, options?: RunOptions, configDef?: MemoryConfigDefinition): void {
     console.log(
       chalk.bold(`
 📊 Benchmark Results
@@ -1052,7 +1009,7 @@ Results saved to: ${runDir}`),
 `),
       );
       console.log(chalk.gray('Dataset:'), chalk.cyan(options.dataset));
-      console.log(chalk.gray('Model:'), chalk.cyan(options.model));
+      console.log(chalk.gray('Model:'), chalk.cyan(configDef?.agentModel ?? 'gpt-4o'));
       console.log(chalk.gray('Memory Config:'), chalk.cyan(options.memoryConfig));
       if (options.subset) {
         console.log(chalk.gray('Subset:'), chalk.cyan(`${options.subset} questions`));

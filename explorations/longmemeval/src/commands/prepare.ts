@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
+import { ObservationalMemory } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
 import { MockLanguageModelV1, MockLanguageModelV2 } from '../test-utils/mock-model';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
@@ -16,15 +16,12 @@ import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from 
 import type { LongMemEvalQuestion, MemoryConfigOptions, MemoryConfigType } from '../data/types';
 import type { CoreMessage } from 'ai';
 
-import { getMemoryOptions, observationalMemoryConfig } from '../config';
+import { getMemoryConfig, getMemoryOptions } from '../config';
 import { makeRetryModel } from '../retry-model';
 import { google } from '@ai-sdk/google';
 import { makeDeterministicIds } from './deterministic-ids';
 
 const geminiFlash = makeRetryModel(google('gemini-2.5-flash'));
-// Cerebras GLM-4.7 model for GLM shortcut config (200k context window)
-const CEREBRAS_GLM_MODEL = 'cerebras/zai-glm-4.7';
-const CEREBRAS_GLM_MAX_TOKENS = 200000;
 
 export interface PrepareOptions {
   dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
@@ -59,11 +56,12 @@ export class PrepareCommand {
     const questions = await this.loader.loadDataset(options.dataset);
     spinner.succeed(`Loaded ${questions.length} questions`);
 
+    // Get consolidated config definition
+    const configDef = getMemoryConfig(options.memoryConfig);
+
     // Load working memory templates if using tailored working memory
     let wmTemplates: Record<string, any> = {};
-    const usesTailoredWorkingMemory =
-      options.memoryConfig === 'working-memory-tailored' || options.memoryConfig === 'combined-tailored';
-    if (usesTailoredWorkingMemory) {
+    if (configDef.usesTailored) {
       const templatePath = join(this.baseDir, 'wm-templates', `${options.dataset}.json`);
       if (existsSync(templatePath)) {
         try {
@@ -105,28 +103,17 @@ export class PrepareCommand {
     // Get memory configuration
     const memoryOptions = getMemoryOptions(options.memoryConfig);
 
-    // Use real model for working memory and observational memory, mock for others
-    const needsRealModel =
-      options.memoryConfig === 'working-memory' ||
-      options.memoryConfig === 'working-memory-tailored' ||
-      options.memoryConfig === 'combined' ||
-      options.memoryConfig === 'combined-tailored' ||
-      options.memoryConfig === 'observational-memory' ||
-      options.memoryConfig === 'observational-memory-shortcut' ||
-      options.memoryConfig === 'observational-memory-shortcut-glm';
-
-    // GLM config uses Cerebras, others use Gemini (which needs OPENAI_API_KEY for embeddings)
-    const usesGlm = options.memoryConfig === 'observational-memory-shortcut-glm';
-    if (needsRealModel && !usesGlm && !process.env.OPENAI_API_KEY) {
+    // Validate API keys based on config requirements
+    if (configDef.needsRealModel && !configDef.usesGlmModel && !process.env.OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is required for working memory or observational memory preparation');
     }
-    if (usesGlm && !process.env.CEREBRAS_API_KEY) {
+    if (configDef.usesGlmModel && !process.env.CEREBRAS_API_KEY) {
       throw new Error('CEREBRAS_API_KEY is required for GLM-based observational memory preparation');
     }
 
     // For GLM config, we'll use Mastra model string format in ObservationalMemory config
     // For others, use the geminiFlash model
-    const model = needsRealModel
+    const model = configDef.needsRealModel
       ? geminiFlash.model
       : new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -157,7 +144,7 @@ export class PrepareCommand {
     console.log(chalk.gray(`Question concurrency: ${questionConcurrency}`));
 
     // Warn about working memory concurrency
-    if ((options.memoryConfig === 'working-memory' || options.memoryConfig === 'combined') && questionConcurrency > 1) {
+    if (configDef.usesWorkingMemory && questionConcurrency > 1) {
       console.log(
         chalk.yellow(
           `⚠️  Note: Running working memory questions concurrently. Each question has its own resource scope.`,
@@ -289,6 +276,7 @@ export class PrepareCommand {
             options,
             model,
             memoryOptions,
+            configDef,
             true,
             slotIndex,
             activeQuestions,
@@ -435,6 +423,7 @@ export class PrepareCommand {
     options: PrepareOptions,
     model: any,
     memoryOptions: MemoryConfigOptions,
+    configDef: import('../config').MemoryConfigDefinition,
     isConcurrent: boolean = false,
     slotIndex?: number,
     activeQuestions?: Map<
@@ -451,7 +440,7 @@ export class PrepareCommand {
     // await benchmarkStore.init();
 
     // Create vector index if using semantic recall
-    if (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')) {
+    if (configDef.usesSemanticRecall) {
       await benchmarkVectorStore.createIndex({
         indexName: 'memory_messages',
         dimension: 1536, // text-embedding-3-small dimension
@@ -459,29 +448,16 @@ export class PrepareCommand {
       });
     }
 
-    const usesWorkingMemory =
-      options.memoryConfig === 'working-memory' ||
-      options.memoryConfig === 'working-memory-tailored' ||
-      options.memoryConfig === 'combined' ||
-      options.memoryConfig === 'combined-tailored';
-    const usesObservationalMemory =
-      options.memoryConfig === 'observational-memory' ||
-      options.memoryConfig === 'observational-memory-shortcut' ||
-      options.memoryConfig === 'observational-memory-shortcut-glm';
-    const usesShortcutOM =
-      options.memoryConfig === 'observational-memory-shortcut' ||
-      options.memoryConfig === 'observational-memory-shortcut-glm';
-    const usesGlmShortcut = options.memoryConfig === 'observational-memory-shortcut-glm';
-    const usesTailoredTemplate =
-      options.memoryConfig === 'working-memory-tailored' || options.memoryConfig === 'combined-tailored';
+    // Use derived flags from consolidated config
+    const { usesWorkingMemory, usesObservationalMemory, usesShortcutOM, usesTailored } = configDef;
 
     // Working memory and observational memory must run one session (thread) at a time, in order
     // otherwise the data will not be accurate as memory is meant
     // to build up over time, using the previous state to create the next.
-    if (usesWorkingMemory || usesObservationalMemory) isConcurrent = false;
+    if (configDef.requiresSequential) isConcurrent = false;
 
     // Use custom template if available for tailored configs
-    if (usesTailoredTemplate && wmTemplates && wmTemplates[question.question_id]) {
+    if (usesTailored && wmTemplates && wmTemplates[question.question_id]) {
       memoryOptions.options.workingMemory = {
         enabled: true,
         template: wmTemplates[question.question_id].template,
@@ -496,14 +472,8 @@ export class PrepareCommand {
     // Note: Using 'as any' to work around outdated BenchmarkStore types
     const memory = new Memory({
       storage: benchmarkStore as any,
-      vector:
-        options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')
-          ? benchmarkVectorStore
-          : undefined,
-      embedder:
-        options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')
-          ? cachedOpenAI.embedding('text-embedding-3-small')
-          : undefined,
+      vector: configDef.usesSemanticRecall ? benchmarkVectorStore : undefined,
+      embedder: configDef.usesSemanticRecall ? cachedOpenAI.embedding('text-embedding-3-small') : undefined,
       options: memoryOptions.options,
     });
 
@@ -525,26 +495,25 @@ export class PrepareCommand {
       // For OM: use REAL model for Observer/Reflector subagents (they need real LLMs to extract observations)
       // For shortcut mode: use Infinity thresholds to skip observation during processing
       // (finalize() will be called at the end to do a single observation pass)
-      const isShortcut = usesShortcutOM;
       // GLM shortcut uses Cerebras model (200k context), others use Gemini
-      const omModel = usesGlmShortcut ? CEREBRAS_GLM_MODEL : model;
+      const omModel = configDef.omModel ?? model;
       observationalMemory = new ObservationalMemory({
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         observeFutureOnly: false,
         storage: omStorage,
         observer: {
           model: omModel, // Real model for Observer
-          // Shortcut: use Infinity to skip observation during processing
-          observationThreshold: isShortcut ? Infinity : 30000,
+          // Shortcut: use Infinity to skip observation during processing (finalize() does it at the end)
+          observationThreshold: usesShortcutOM ? Infinity : 30000,
           recognizePatterns: false,
         },
         reflector: {
           model: omModel, // Real model for Reflector
-          // Shortcut: use Infinity to skip reflection during processing
-          reflectionThreshold: isShortcut ? Infinity : 20000,
+          // Shortcut: use Infinity to skip reflection during processing (finalize() does it at the end)
+          reflectionThreshold: usesShortcutOM ? Infinity : 80000,
           recognizePatterns: false,
         },
-        scope: observationalMemoryConfig.scope,
+        scope: 'resource',
         // Debug callback to log all observation events to a file
         onDebugEvent: async (event: any) => {
           if (!omDebugState.debugLogFile) return; // Skip if not initialized yet
@@ -662,10 +631,7 @@ export class PrepareCommand {
       await benchmarkStore.hydrate(dbPath);
     }
 
-    if (
-      existsSync(vectorPath) &&
-      (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined'))
-    ) {
+    if (existsSync(vectorPath) && configDef.usesSemanticRecall) {
       // console.log(chalk.gray('Loading existing vector store...'));
       await benchmarkVectorStore.hydrate(vectorPath);
     }
@@ -868,7 +834,7 @@ export class PrepareCommand {
           } else {
             await benchmarkStore.persist(join(questionDir, 'db.json'));
           }
-          if (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')) {
+          if (configDef.usesSemanticRecall) {
             await benchmarkVectorStore.persist(join(questionDir, 'vector.json'));
           }
         }
@@ -915,8 +881,8 @@ export class PrepareCommand {
       await observationalMemory.finalize(lastSessionId, resourceId, {
         reflect: true,
         reflectionThreshold: 20000, // Reflect if observations exceed 20k tokens
-        // For GLM config: use maxInputTokens to trigger mid-loop reflection within 200k limit
-        maxInputTokens: usesGlmShortcut ? CEREBRAS_GLM_MAX_TOKENS : undefined,
+        // For configs with token limits: use maxInputTokens to trigger mid-loop reflection
+        maxInputTokens: configDef.omMaxInputTokens ?? undefined,
       });
     }
 
@@ -939,7 +905,7 @@ export class PrepareCommand {
     }
 
     // Persist vector store if used
-    if (options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')) {
+    if (configDef.usesSemanticRecall) {
       await benchmarkVectorStore.persist(join(questionDir, 'vector.json'));
     }
 
@@ -961,22 +927,16 @@ export class PrepareCommand {
       sessionCount: sessionsWithDates.length,
       evidenceSessionIds: question.answer_session_ids,
       note: 'Sessions were processed in chronological order (oldest first) for working memory',
-      // Store OM config for reproducibility (actual values used, with defaults as fallback)
+      // Store OM config for reproducibility
       ...(usesObservationalMemory && {
         observationalMemoryConfig: {
-          scope: observationalMemoryConfig.scope,
-          focus: observationalMemoryConfig.focus,
-          // Use configured values if present, otherwise defaults
-          observationThreshold:
-            (observationalMemoryConfig as any).observationThreshold ??
-            OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
-          reflectionThreshold:
-            (observationalMemoryConfig as any).reflectionThreshold ??
-            OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
-          observerModel:
-            (observationalMemoryConfig as any).observerModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
-          reflectorModel:
-            (observationalMemoryConfig as any).reflectorModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
+          scope: 'resource',
+          // Actual values used in ObservationalMemory constructor
+          observationThreshold: 30000,
+          reflectionThreshold: 80000,
+          observerModel: configDef.omModel ?? 'google/gemini-2.0-flash',
+          reflectorModel: configDef.omModel ?? 'google/gemini-2.0-flash',
+          recognizePatterns: false,
         },
       }),
     };

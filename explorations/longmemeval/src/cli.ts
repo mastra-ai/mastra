@@ -221,7 +221,6 @@ program
   .command('run')
   .description('Run LongMemEval benchmark using prepared data')
   .requiredOption('-d, --dataset <dataset>', 'Dataset to use (longmemeval_s, longmemeval_m, longmemeval_oracle)')
-  .requiredOption('-m, --model <model>', 'Model to use (e.g., gpt-4o, claude-3-opus)')
   .option(
     '-c, --memory-config <config>',
     'Memory configuration (last-k, semantic-recall, semantic-recall-reranked, working-memory, working-memory-tailored, combined, combined-tailored)',
@@ -270,7 +269,6 @@ program
       await runCommand.run({
         dataset: options.dataset,
         memoryConfig: options.memoryConfig,
-        model: options.model,
         preparedDataDir: options.preparedData,
         outputDir: options.output,
         subset: options.subset,
