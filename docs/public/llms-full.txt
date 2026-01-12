@@ -15115,11 +15115,9 @@ await run.resume({
   requestContext,
 });
 
-await weatherTool.execute({
-  context: {
-    location: "London",
-  },
-  requestContext,
+await weatherTool.execute(
+  { location: "London" },
+  { requestContext },
 });
 ```
 
@@ -15225,8 +15223,8 @@ export type UserTier = {
 
 export const weatherTool = createTool({
   id: "weather-tool",
-  execute: async ({ requestContext }) => {
-    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("user-tier") as UserTier["user-tier"] | undefined;
 
     if (userTier === "enterprise") {}
   },
@@ -30742,6 +30740,51 @@ To migrate, use the new scorers API instead of legacy evals.
 
 
 ---
+title: "Deployment | v1 Migration Guide"
+description: "Learn how to migrate deployment configuration when upgrading to v1."
+---
+
+# Deployment
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/deployment
+
+The `CloudflareDeployer` configuration has been updated to use standard `wrangler.json` property names.
+
+## Changed
+
+### CloudflareDeployer uses standard wrangler.json property names
+
+The `CloudflareDeployer` constructor now accepts standard `wrangler.json` property names instead of custom camelCase variants. This change aligns the deployer with Cloudflare's official configuration format and provides access to all wrangler configuration options.
+
+Deprecated fields are automatically migrated at runtime with console warnings, but you should update your code to use the new field names.
+
+```diff
+  const deployer = new CloudflareDeployer({
+-   projectName: 'my-worker',
++   name: 'my-worker',
+-   d1Databases: [
++   d1_databases: [
+      {
+        binding: 'DB',
+        database_name: 'my-db',
+        database_id: 'xxx',
+      },
+    ],
+-   kvNamespaces: [
++   kv_namespaces: [
+      {
+        binding: 'KV',
+        id: 'yyy',
+      },
+    ],
+  });
+```
+
+The `workerNamespace` field has been removed as it is no longer used.
+
+For all available configuration options, see the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/).
+
+
+---
 title: "Evals & Scorers | v1 Migration Guide"
 description: "Learn how to migrate evals and scorers changes when upgrading to v1."
 ---
@@ -31694,6 +31737,7 @@ npx @mastra/codemod@beta v1
 - **[Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
 - **[Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
 - **[CLI](/guides/v1/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
+- **[Deployment](/guides/v1/migrations/upgrade-to-v1/deployment)** - CloudflareDeployer configuration updated to use standard wrangler.json property names.
 - **[Client SDKs](/guides/v1/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
 - **[Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
 
@@ -68918,7 +68962,7 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
-    projectName: "hello-mastra",
+    name: "hello-mastra",
     routes: [
       {
         pattern: "example.com/*",
@@ -68926,12 +68970,11 @@ export const mastra = new Mastra({
         custom_domain: true
       }
     ],
-    workerNamespace: "my-namespace",
-    env: {
+    vars: {
       NODE_ENV: "production",
       API_KEY: "<api-key>"
     },
-    d1Databases: [
+    d1_databases: [
       {
         binding: "DB",
         database_name: "my-database",
@@ -68939,62 +68982,30 @@ export const mastra = new Mastra({
         preview_database_id: "your-preview-database-id"
       }
     ],
-    kvNamespaces: [
+    kv_namespaces: [
       {
         binding: "CACHE",
         id: "kv-namespace-id"
       }
     ]
+  })
 });
 ```
 
-## Parameters
+## Constructor options
 
-<PropertiesTable
-  content={[
-    {
-      name: "projectName",
-      type: "string",
-      description: "Name of your worker project.",
-      isOptional: true,
-      defaultValue: "'mastra'",
-    },
-    {
-      name: "routes",
-      type: "CFRoute[]",
-      description:
-        "Array of route configurations for your worker. Each route requires: pattern (string), zone_name (string), custom_domain (boolean, optional).",
-      isOptional: true,
-    },
-    {
-      name: "workerNamespace",
-      type: "string",
-      description: "Namespace for your worker.",
-      isOptional: true,
-    },
-    {
-      name: "env",
-      type: "Record<string, any>",
-      description:
-        "Environment variables to be included in the worker configuration.",
-      isOptional: true,
-    },
-    {
-      name: "d1Databases",
-      type: "D1DatabaseBinding[]",
-      description:
-        "Array of D1 database bindings. Each binding requires: binding (string), database_name (string), database_id (string), preview_database_id (string, optional).",
-      isOptional: true,
-    },
-    {
-      name: "kvNamespaces",
-      type: "KVNamespaceBinding[]",
-      description:
-        "Array of KV namespace bindings. Each binding requires: binding (string), id (string).",
-      isOptional: true,
-    },
-  ]}
-/>
+The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+
+### Migrating from earlier versions
+
+The following fields are deprecated and should be replaced with their standard `wrangler.json` equivalents:
+
+| Deprecated | Use instead |
+|------------|-------------|
+| `projectName` | `name` |
+| `d1Databases` | `d1_databases` |
+| `kvNamespaces` | `kv_namespaces` |
+| `workerNamespace` | *(removed, no longer used)* |
 
 
 ---
