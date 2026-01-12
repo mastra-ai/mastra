@@ -594,22 +594,37 @@ export class StoreMemoryLance extends MemoryStorage {
         whereClauses.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
       }
 
-      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
-        for (const [key, value] of Object.entries(filter.metadata)) {
-          const escapedKey = this.escapeSql(key);
-          const escapedValue = this.escapeSql(JSON.stringify(value).replace(/^"|"$/g, ''));
-          whereClauses.push(`\`metadata.${escapedKey}\` = '${escapedValue}'`);
-        }
-      }
-
       const whereClause = whereClauses.length > 0 ? whereClauses.join(' AND ') : '';
 
-      // Get total count
-      const total = whereClause ? await table.countRows(whereClause) : await table.countRows();
-
-      // Get ALL matching records (no limit/offset yet - need to sort first)
+      // Get ALL matching records (no limit/offset yet - need to filter metadata + sort)
+      // Lance doesn't support nested JSON path queries in SQL WHERE clause
       const query = whereClause ? table.query().where(whereClause) : table.query();
-      const records = await query.toArray();
+      let records = await query.toArray();
+
+      // Apply metadata filters in-memory (AND logic)
+      // Lance stores metadata as a JSON column, not flattened fields
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        records = records.filter((record: any) => {
+          if (!record.metadata) return false;
+
+          // Handle both object and stringified JSON metadata
+          let recordMeta: Record<string, unknown>;
+          if (typeof record.metadata === 'string') {
+            try {
+              recordMeta = JSON.parse(record.metadata);
+            } catch {
+              return false;
+            }
+          } else {
+            recordMeta = record.metadata;
+          }
+
+          // Check all metadata filters match (AND logic)
+          return Object.entries(filter.metadata!).every(([key, value]) => recordMeta[key] === value);
+        });
+      }
+
+      const total = records.length;
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
