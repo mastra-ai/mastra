@@ -935,11 +935,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }
       }
 
+      // Get total count - count AFTER ranking to ensure we count latest versions only
       const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-
-      // Get total count
       const countResult = await this.client.query({
-        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} ${whereClause}`,
+        query: `
+          WITH ranked_threads AS (
+            SELECT
+              id,
+              resourceId,
+              metadata,
+              ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
+            FROM ${TABLE_THREADS}
+          )
+          SELECT count(*) as total 
+          FROM ranked_threads 
+          WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
+        `,
         query_params: queryParams,
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -962,6 +973,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Get paginated threads - get newest version of each thread
+      // Important: Apply WHERE filters AFTER row ranking to ensure we filter on latest versions
       const dataResult = await this.client.query({
         query: `
               WITH ranked_threads AS (
@@ -974,7 +986,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   toDateTime64(updatedAt, 3) as updatedAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
-                ${whereClause}
               )
               SELECT
                 id,
@@ -984,7 +995,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 createdAt,
                 updatedAt
               FROM ranked_threads
-              WHERE row_num = 1
+              WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,

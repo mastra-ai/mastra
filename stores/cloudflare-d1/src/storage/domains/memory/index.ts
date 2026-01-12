@@ -292,8 +292,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          const condition = `json_extract(metadata, '$.${key}') = ?`;
-          const filterValue = JSON.stringify(value).replace(/^"|"$/g, '');
+          // Use json() to properly compare JSON values (handles strings, numbers, booleans, null)
+          const condition = `json_extract(metadata, '$.${key}') = json(?)`;
+          const filterValue = JSON.stringify(value);
           countQuery = countQuery.where(condition, filterValue);
           selectQuery = selectQuery.where(condition, filterValue);
         }
