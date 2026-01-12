@@ -1,4 +1,6 @@
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { GET_PROVIDERS_ROUTE, isProviderConnected } from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
 vi.mock('@mastra/core/llm', async () => {
@@ -46,9 +48,6 @@ vi.mock('@mastra/core/llm', async () => {
     ),
   };
 });
-
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import { GET_PROVIDERS_ROUTE, isProviderConnected } from './agents';
 
 describe('getProvidersHandler', () => {
   // Store original env
