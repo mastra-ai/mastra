@@ -173,11 +173,7 @@ export class ModelSpanTracker {
 
     // Clean output for observability:
     // - Clean tools to only include essential fields (type, id, description, schemas)
-    // - Omit empty text field
-    const cleanOutput: Record<string, any> = { ...restOutput };
-    if (text) {
-      cleanOutput.text = text;
-    }
+    const cleanOutput: Record<string, any> = { ...restOutput, text };
     const cleanedTools = cleanToolsForObservability(tools);
     if (cleanedTools) {
       cleanOutput.tools = cleanedTools;
