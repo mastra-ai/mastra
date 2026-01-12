@@ -331,12 +331,12 @@ Custom metadata allows you to attach additional context to your traces, making i
 You can add metadata to any span using the tracing context:
 
 ```ts
-execute: async ({ inputData, tracingContext }) => {
+execute: async (inputData, context) => {
   const startTime = Date.now();
   const response = await fetch(inputData.endpoint);
 
   // Add custom metadata to the current span
-  tracingContext.currentSpan?.update({
+  context?.tracingContext.currentSpan?.update({
     metadata: {
       apiStatusCode: response.status,
       endpoint: inputData.endpoint,
@@ -499,19 +499,19 @@ const result = await agent.generate({
 When creating child spans within tools or workflow steps, you can pass the `requestContext` parameter to enable metadata extraction:
 
 ```ts
-execute: async ({ tracingContext, requestContext }) => {
+execute: async (inputData, context) => {
   // Create child span WITH requestContext - gets metadata extraction
-  const dbSpan = tracingContext.currentSpan?.createChildSpan({
+  const dbSpan = context?.tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
-    requestContext, // Pass to enable metadata extraction
+    requestContext: context?.requestContext, // Pass to enable metadata extraction
   });
 
   const results = await db.query("SELECT * FROM users");
   dbSpan?.end({ output: results });
 
   // Or create child span WITHOUT requestContext - no metadata extraction
-  const cacheSpan = tracingContext.currentSpan?.createChildSpan({
+  const cacheSpan = context?.tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "cache-check",
     // No requestContext - won't extract metadata
@@ -530,9 +530,9 @@ Child spans allow you to track fine-grained operations within your workflow step
 Create child spans inside a tool call or workflow step to track specific operations:
 
 ```ts
-execute: async ({ inputData, tracingContext }) => {
+execute: async (inputData, context) => {
   // Create another child span for the main database operation
-  const querySpan = tracingContext.currentSpan?.createChildSpan({
+  const querySpan = context?.tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
     input: { query: inputData.query },
