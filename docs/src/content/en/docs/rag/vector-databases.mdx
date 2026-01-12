@@ -34,6 +34,7 @@ After generating embeddings, you need to store them in a database that supports 
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
@@ -192,7 +193,7 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
@@ -260,7 +261,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { OpenSearchVector } from "@mastra/opensearch";
 
-const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL });
+const store = new OpenSearchVector({ id: "opensearch", node: process.env.OPENSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",

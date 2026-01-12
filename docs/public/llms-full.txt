@@ -1307,6 +1307,290 @@ Available examples:
 
 
 ---
+title: "Network Approval | Agents"
+description: Learn how to require approvals, suspend execution, and resume suspended networks while keeping humans in control of agent network workflows.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# Network Approval
+[EN] Source: https://mastra.ai/en/docs/agents/network-approval
+
+Agent networks can require the same [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) oversight used in individual agents and workflows. When a tool, sub-agent, or workflow within a network requires approval or suspends execution, the network pauses and emits events that allow your application to collect user input before resuming.
+
+## Storage
+
+Network approval uses snapshots to capture execution state. Ensure you've enabled a storage provider in your Mastra instance. If storage isn't enabled you'll see an error relating to snapshot not found.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: ":memory:"
+  })
+});
+```
+
+## Approving network tool calls
+
+When a tool within a network has `requireApproval: true`, the network stream emits an `agent-execution-approval` chunk and pauses. To allow the tool to execute, call `approveNetworkToolCall` with the `runId`.
+
+```typescript
+const stream = await routingAgent.network("Process this query", {
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+let runId: string;
+
+for await (const chunk of stream) {
+  runId = stream.runId;
+  // if the requirApproval is in a tool inside a subAgent or the subAgent has requireToolApproval set to true
+  if (chunk.type === "agent-execution-approval") { 
+    console.log("Tool requires approval:", chunk.payload);
+  }
+
+  // if the requirApproval is in a tool directly in the network agent
+  if (chunk.type === "tool-execution-approval") {
+    console.log("Tool requires approval:", chunk.payload);
+  }
+}
+
+// Approve and resume execution
+const approvedStream = await routingAgent.approveNetworkToolCall({
+  runId,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of approvedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+## Declining network tool calls
+
+To decline a pending tool call and prevent execution, call `declineNetworkToolCall`. The network continues without executing the tool.
+
+```typescript
+const declinedStream = await routingAgent.declineNetworkToolCall({
+  runId,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of declinedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+## Resuming suspended networks
+
+When a primitive in the network calls `suspend()`, the stream emits an `agent-execution-suspended`/`tool-execution-suspended`/`workflow-execution-suspended` chunk with a `suspendPayload` containing context from the primitive. Use `resumeNetwork` to provide the data requested by the primitive and continue execution.
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const confirmationTool = createTool({
+  id: "confirmation-tool",
+  description: "Requests user confirmation before proceeding",
+  inputSchema: z.object({
+    action: z.string()
+  }),
+  outputSchema: z.object({
+    confirmed: z.boolean(),
+    action: z.string()
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    action: z.string()
+  }),
+  resumeSchema: z.object({
+    confirmed: z.boolean()
+  }),
+  execute: async ({ action }, { agent } = {}) => {
+    const { resumeData, suspend } = agent ?? {};
+
+    if (!resumeData?.confirmed) {
+      return suspend?.({
+        message: `Please confirm: ${action}`,
+        action
+      });
+    }
+
+    return { confirmed: true, action };
+  }
+});
+```
+
+Handle the suspension and resume with user-provided data:
+
+```typescript
+const stream = await routingAgent.network("Delete the old records", {
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of stream) {
+  if (chunk.type === "workflow-execution-suspended") {
+    console.log(chunk.payload.suspendPayload);
+    // { message: "Please confirm: delete old records", action: "delete old records" }
+  }
+}
+
+// Resume with user confirmation
+const resumedStream = await routingAgent.resumeNetwork(
+  { confirmed: true },
+  {
+    runId: stream.runId,
+    memory: {
+      thread: "user-123",
+      resource: "my-app"
+    }
+  }
+);
+
+for await (const chunk of resumedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+## Automatic primitive resumption
+
+When using primitives that call `suspend()`, you can enable automatic resumption so the network resumes suspended primitives based on the user's next message. This creates a conversational flow where users provide the required information naturally.
+
+### Enabling auto-resume
+
+Set `autoResumeSuspendedTools` to `true` in the agent's `defaultNetworkOptions` or when calling `network()`:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+// Option 1: In agent configuration
+const routingAgent = new Agent({
+  id: "routing-agent",
+  name: "Routing Agent",
+  instructions: "You coordinate tasks across multiple agents",
+  model: "openai/gpt-4o-mini",
+  tools: { confirmationTool },
+  memory: new Memory(),
+  defaultNetworkOptions: {
+    autoResumeSuspendedTools: true,
+  },
+});
+
+// Option 2: Per-request
+const stream = await routingAgent.network("Process this request", {
+  autoResumeSuspendedTools: true,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+```
+
+### How it works
+
+When `autoResumeSuspendedTools` is enabled:
+
+1. A primitive suspends execution by calling `suspend()` with a payload
+2. The suspension is persisted to memory along with the conversation
+3. When the user sends their next message on the same thread, the network:
+   - Detects the suspended primitive from message history
+   - Extracts `resumeData` from the user's message based on the tool's `resumeSchema`
+   - Automatically resumes the primitive with the extracted data
+
+### Example
+
+```typescript
+const stream = await routingAgent.network("Delete the old records", {
+  autoResumeSuspendedTools: true,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of stream) {
+  if (chunk.type === "workflow-execution-suspended") {
+    console.log(chunk.payload.suspendPayload);
+    // { message: "Please confirm: delete old records", action: "delete old records" }
+  }
+}
+
+// User provides confirmation in their next message
+const resumedStream = await routingAgent.network("Yes, confirmed", {
+  autoResumeSuspendedTools: true,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of resumedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+**Conversation flow:**
+
+```
+User: "Delete the old records"
+Agent: "Please confirm: delete old records"
+
+User: "Yes, confirmed"
+Agent: "Records deleted successfully"
+```
+
+### Requirements
+
+For automatic tool resumption to work:
+
+- **Memory configured**: The agent needs memory to track suspended tools across messages
+- **Same thread**: The follow-up message must use the same memory thread and resource identifiers
+- **`resumeSchema` defined**: The tool (either directly in the network agent or in a subAgent) / workflow (step that gets suspended) must define a `resumeSchema` so the agent knows what data to extract from the user's message
+
+### Manual vs automatic resumption
+
+| Approach | Use case |
+|----------|----------|
+| Manual (`resumeNetwork()`) | Programmatic control, webhooks, button clicks, external triggers |
+| Automatic (`autoResumeSuspendedTools`) | Conversational flows where users provide resume data in natural language |
+
+Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
+
+## Related
+
+- [Agent Networks](./networks)
+- [Agent Approval](./agent-approval)
+- [Human-in-the-Loop](/docs/v1/workflows/human-in-the-loop)
+- [Agent Memory](./agent-memory)
+
+
+---
 title: "Agent Networks | Agents"
 description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 packages:
@@ -6470,7 +6754,7 @@ const agent = new Agent({
     // this is the default vector db if omitted
     vector: new LibSQLVector({
       id: 'agent-vector',
-      connectionUrl: "file:./local.db",
+      url: "file:./local.db",
     }),
   }),
 });
@@ -6827,8 +7111,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: 'agent-vector',
       apiKey: process.env.PINECONE_API_KEY,
-      environment: process.env.PINECONE_ENVIRONMENT,
-      indexName: 'agent-embeddings',
     }),
     options: {
       semanticRecall: {
@@ -8190,6 +8472,122 @@ CloudExporter uses intelligent batching to optimize network usage. Traces are bu
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [DefaultExporter](/docs/v1/observability/tracing/exporters/default)
 - [Mastra Cloud Documentation](/docs/v1/mastra-cloud/overview)
+
+
+---
+title: "Datadog Exporter | Tracing | Observability"
+description: "Send traces to Datadog for LLM observability and analytics"
+---
+
+# Datadog Exporter
+[EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/datadog
+
+[Datadog](https://datadoghq.com/) is a comprehensive monitoring platform with dedicated LLM Observability features. The Datadog exporter sends your traces to Datadog's LLM Observability product, providing insights into model performance, token usage, and conversation flows.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/datadog@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Datadog Account**: Sign up at [datadoghq.com](https://datadoghq.com/) with LLM Observability enabled
+2. **API Key**: Get your API key from Datadog Organization Settings → API Keys
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+DD_API_KEY=your-datadog-api-key
+DD_LLMOBS_ML_APP=my-llm-app
+DD_SITE=datadoghq.com  # Optional: defaults to datadoghq.com
+DD_ENV=production      # Optional: environment name
+```
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { DatadogExporter } from "@mastra/datadog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: "my-service",
+        exporters: [
+          new DatadogExporter({
+            mlApp: process.env.DD_LLMOBS_ML_APP!,
+            apiKey: process.env.DD_API_KEY!,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Configuration Options
+
+### Complete Configuration
+
+```typescript
+new DatadogExporter({
+  // Required settings
+  mlApp: process.env.DD_LLMOBS_ML_APP!, // Groups traces under this ML app name
+  apiKey: process.env.DD_API_KEY!, // Required for agentless mode (default)
+
+  // Optional settings
+  site: "datadoghq.com", // Datadog site (datadoghq.eu, us3.datadoghq.com, etc.)
+  service: "my-service", // Service name (defaults to mlApp)
+  env: "production", // Environment name
+  agentless: true, // true = direct HTTPS, false = local Datadog Agent
+
+  // Advanced settings
+  integrationsEnabled: false, // Enable dd-trace auto-instrumentation
+
+  // Diagnostic logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### With Local Datadog Agent
+
+If you have a Datadog Agent running locally, you can route traces through it instead of direct HTTPS:
+
+```typescript
+new DatadogExporter({
+  mlApp: process.env.DD_LLMOBS_ML_APP!,
+  agentless: false, // Use local Datadog Agent
+  env: "production",
+});
+```
+
+Note: When using agent mode, the API key is read from the local agent's configuration.
+
+## Span Type Mapping
+
+Mastra span types are automatically mapped to Datadog LLMObs span kinds:
+
+| Mastra SpanType      | Datadog Kind |
+| -------------------- | ------------ |
+| `AGENT_RUN`          | `agent`      |
+| `MODEL_GENERATION`   | `workflow`   |
+| `MODEL_STEP`         | `llm`        |
+| `TOOL_CALL`          | `tool`       |
+| `MCP_TOOL_CALL`      | `tool`       |
+| `WORKFLOW_RUN`       | `workflow`   |
+| Other workflow types | `task`       |
+| `GENERIC`            | `task`       |
+
+Other/future Mastra span types will default to 'task' when mapped unless specified.
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Datadog LLM Observability Documentation](https://docs.datadoghq.com/llm_observability/)
 
 
 ---
@@ -11270,7 +11668,7 @@ The Vector Query Tool supports database-specific configurations that enable you 
 These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
 
 
-Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
+Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ url: '...' })`).
 :::
 
 ```ts
@@ -11690,6 +12088,7 @@ After generating embeddings, you need to store them in a database that supports 
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
@@ -11848,7 +12247,7 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
@@ -11916,7 +12315,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { OpenSearchVector } from "@mastra/opensearch";
 
-const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL });
+const store = new OpenSearchVector({ id: "opensearch", node: process.env.OPENSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",
@@ -23024,6 +23423,27 @@ You should now be able to chat with your agent in the browser.
 
 Congratulations! You have successfully integrated Mastra with CopilotKit using a separate server approach. Your CopilotKit frontend now communicates with a standalone Mastra agent server.
 
+## Deployment
+
+When deploying your Mastra server with CopilotKit, you must exclude `@copilotkit/runtime` from the bundle. This package contains dependencies that are not compatible with bundling and will cause 500 errors if included.
+
+:::note
+
+This issue doesn't occur during development with `mastra dev` since it doesn't require bundling. However, anyone running `mastra build` for deployment will encounter this issue.
+
+:::
+
+Add the `@copilotkit/runtime` package to your bundler externals configuration:
+
+```typescript title="src/mastra/index.ts" 
+export const mastra = new Mastra({
+  bundler: {
+    externals: ['@copilotkit/runtime'],
+  },
+ // Rest of the configuration...
+});
+```
+
 
 ---
 title: "Amazon EC2 | Deployment"
@@ -24299,6 +24719,92 @@ When you include custom functions:
 3. All functions are served together on the same `/api/inngest` endpoint
 
 This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
+
+## Using with other frameworks
+
+The default `serve` function uses Hono internally. If you're using a different web framework like Express, Fastify, or Koa, use the `createServe` factory function with the appropriate Inngest adapter.
+
+### Express
+
+```ts title="src/server.ts"
+import express from "express";
+import { createServe } from "@mastra/inngest";
+import { serve as expressAdapter } from "inngest/express";
+import { mastra, inngest } from "./mastra";
+
+const app = express();
+
+// Body parsing middleware required for Inngest
+app.use(express.json());
+
+const handler = createServe(expressAdapter)({ mastra, inngest });
+app.use("/api/inngest", handler);
+
+app.listen(3000);
+```
+
+### Fastify
+
+```ts title="src/server.ts"
+import Fastify from "fastify";
+import { createServe } from "@mastra/inngest";
+import { serve as fastifyAdapter } from "inngest/fastify";
+import { mastra, inngest } from "./mastra";
+
+const fastify = Fastify();
+
+// JSON parsing is handled by Fastify's default content-type parser
+const handler = createServe(fastifyAdapter)({ mastra, inngest });
+
+fastify.route({
+  method: ["GET", "POST", "PUT"],
+  url: "/api/inngest",
+  handler,
+});
+
+fastify.listen({ port: 3000 });
+```
+
+### Koa
+
+```ts title="src/server.ts"
+import Koa from "koa";
+import Router from "@koa/router";
+import bodyParser from "koa-bodyparser";
+import { createServe } from "@mastra/inngest";
+import { serve as koaAdapter } from "inngest/koa";
+import { mastra, inngest } from "./mastra";
+
+const app = new Koa();
+const router = new Router();
+
+// Body parsing middleware required for Inngest
+app.use(bodyParser());
+
+const handler = createServe(koaAdapter)({ mastra, inngest });
+router.all("/api/inngest", handler);
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+```
+
+### Next.js
+
+```ts title="app/api/inngest/route.ts"
+import { createServe } from "@mastra/inngest";
+import { serve as nextAdapter } from "inngest/next";
+import { mastra, inngest } from "@/mastra";
+
+const handler = createServe(nextAdapter)({ mastra, inngest });
+
+export { handler as GET, handler as POST, handler as PUT };
+```
+
+### Available adapters
+
+The `createServe` function works with any Inngest adapter. See the [Inngest serve documentation](https://www.inngest.com/docs/reference/serve) for a complete list of available adapters including AWS Lambda, Cloudflare Workers, and more.
 
 ## Flow control
 
@@ -27972,7 +28478,7 @@ import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
   id: 'research-vectors',
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
 export const mastra = new Mastra({
@@ -27980,7 +28486,7 @@ export const mastra = new Mastra({
 });
 ```
 
-For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+For the `url` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
 
 :::note
 
@@ -28003,7 +28509,7 @@ import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
   id: 'research-vectors',
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
 export const mastra = new Mastra({
@@ -32208,7 +32714,6 @@ To migrate, add an `id` field to your vector store constructor.
   const pineconeStore = new PineconeVector({
 +   id: 'pinecone-production',
     apiKey: process.env.PINECONE_API_KEY,
-    environment: process.env.PINECONE_ENVIRONMENT,
   });
 ```
 
@@ -32223,6 +32728,52 @@ To migrate, replace all calls to `getVectors()` with `listVectors()`.
 
 - const vectors = await vectorStore.getVectors({ ... });
 + const vectors = await vectorStore.listVectors({ ... });
+```
+
+### LibSQLVector: `connectionUrl` to `url`
+
+The `connectionUrl` parameter has been renamed to `url` to align with the `@libsql/client` API and match LibSQLStorage.
+
+```diff
+  const vectorStore = new LibSQLVector({
+    id: 'my-vector',
+-   connectionUrl: 'file:./db.sqlite',
++   url: 'file:./db.sqlite',
+  });
+```
+
+### OpenSearchVector: `url` to `node`
+
+The `url` parameter has been renamed to `node` to match the OpenSearch `ClientOptions` API. The constructor now accepts all OpenSearch client options including authentication, SSL, and compression.
+
+```diff
+  const vectorStore = new OpenSearchVector({
+    id: 'my-vector',
+-   url: 'http://localhost:9200',
++   node: 'http://localhost:9200',
+  });
+```
+
+### PineconeVector: `environment` removed
+
+The `environment` parameter has been removed. Use `controllerHostUrl` instead if you need to specify a custom controller host. The constructor now accepts all Pinecone configuration options.
+
+```diff
+  const vectorStore = new PineconeVector({
+    id: 'my-vector',
+    apiKey: process.env.PINECONE_API_KEY,
+-   environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
+
+If you need a custom controller host:
+
+```ts
+const vectorStore = new PineconeVector({
+  id: 'my-vector',
+  apiKey: process.env.PINECONE_API_KEY,
+  controllerHostUrl: 'https://api.pinecone.io',
+});
 ```
 
 
@@ -74600,7 +75151,7 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const memory = new Memory({
   storage: new LibSQLStore({ url: "file:./memory.db" }),
-  vector: new LibSQLVector({ connectionUrl: "file:./vector.db" }),
+  vector: new LibSQLVector({ url: "file:./vector.db" }),
   embedder: embeddingModel,
   options: {
     semanticRecall: true,
@@ -75142,7 +75693,7 @@ export const agent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'test-agent-vector',
-      connectionUrl: "file:./vector-memory.db",
+      url: "file:./vector-memory.db",
     }),
     options: {
       lastMessages: 10,
@@ -76799,6 +77350,159 @@ const exporterWithLogger = new ConsoleExporter({
 
 - [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
 - [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions
+
+
+---
+title: "Reference: DatadogExporter | Observability"
+description: Datadog LLM Observability exporter for Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# DatadogExporter
+[EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/datadog
+
+Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
+
+## Constructor
+
+```typescript
+new DatadogExporter(config: DatadogExporterConfig)
+```
+
+## DatadogExporterConfig
+
+```typescript
+interface DatadogExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  mlApp?: string;
+  site?: string;
+  service?: string;
+  env?: string;
+  agentless?: boolean;
+  integrationsEnabled?: boolean;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "mlApp",
+      type: "string",
+      description: "ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.",
+      required: false,
+    },
+    {
+      name: "site",
+      type: "string",
+      description: "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
+      required: false,
+    },
+    {
+      name: "service",
+      type: "string",
+      description: "Service name for the application. Defaults to mlApp value.",
+      required: false,
+    },
+    {
+      name: "env",
+      type: "string",
+      description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
+      required: false,
+    },
+    {
+      name: "agentless",
+      type: "boolean",
+      description: "Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.",
+      required: false,
+    },
+    {
+      name: "integrationsEnabled",
+      type: "boolean",
+      description: "Enable dd-trace automatic integrations. Default: false.",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to Datadog LLM Observability.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending data and shuts down the exporter. Cancels any pending cleanup timers and disables LLM Observability.
+
+## Usage
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  apiKey: process.env.DD_API_KEY,
+  site: "datadoghq.com",
+  env: "production",
+});
+```
+
+### With Local Datadog Agent
+
+```typescript
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  agentless: false, // Use local Datadog Agent
+  env: "production",
+});
+```
+
+## Span Mapping
+
+Mastra span types are mapped to Datadog LLMObs span kinds:
+
+| Mastra SpanType | Datadog Kind |
+|-----------------|--------------|
+| `AGENT_RUN` | `agent` |
+| `MODEL_GENERATION` | `workflow` |
+| `MODEL_STEP` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_RUN` | `workflow` |
+| All other types | `task` |
+
+All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
+
+## Environment Variables
+
+The exporter reads configuration from these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `DD_API_KEY` | Datadog API key |
+| `DD_LLMOBS_ML_APP` | ML application name |
+| `DD_SITE` | Datadog site |
+| `DD_ENV` | Environment name |
+| `DD_LLMOBS_AGENTLESS_ENABLED` | Set to 'false' or '0' to use local agent |
 
 
 ---
@@ -87182,7 +87886,8 @@ Ensure you have a MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instan
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 ```
@@ -87192,11 +87897,18 @@ const storage = new MongoDBStore({
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "uri",
       type: "string",
       description:
         "MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)",
       isOptional: false,
+    },
+    {
+      name: "url",
+      type: "string",
+      description:
+        "Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).",
+      isOptional: true,
     },
     {
       name: "dbName",
@@ -87214,6 +87926,10 @@ const storage = new MongoDBStore({
   ]}
 />
 
+:::note[Deprecation Notice]
+The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
+:::
+
 ## Constructor Examples
 
 You can instantiate `MongoDBStore` in the following ways:
@@ -87223,13 +87939,13 @@ import { MongoDBStore } from "@mastra/mongodb";
 
 // Basic connection without custom options
 const store1 = new MongoDBStore({
-  url: "mongodb+srv://user:password@cluster.mongodb.net",
+  uri: "mongodb+srv://user:password@cluster.mongodb.net",
   dbName: "mastra_storage",
 });
 
 // Using connection string with options
 const store2 = new MongoDBStore({
-  url: "mongodb+srv://user:password@cluster.mongodb.net",
+  uri: "mongodb+srv://user:password@cluster.mongodb.net",
   dbName: "mastra_storage",
   options: {
     retryWrites: true,
@@ -87263,7 +87979,7 @@ import { Mastra } from "@mastra/core";
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
-  url: process.env.MONGODB_URL,
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
@@ -87279,7 +87995,7 @@ import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
   id: 'mongodb-storage',
-  url: process.env.MONGODB_URL,
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
@@ -87305,7 +88021,8 @@ MongoDB storage includes built-in vector search capabilities for AI applications
 import { MongoDBVector } from "@mastra/mongodb";
 
 const vectorStore = new MongoDBVector({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
@@ -87365,7 +88082,7 @@ export const mongodbAgent = new Agent({
   model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
+      uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     options: {
@@ -99470,7 +100187,7 @@ import { LibSQLVector } from "@mastra/libsql";
 // Create a new vector store instance
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,
 });
@@ -99508,7 +100225,7 @@ const results = await store.query({
 <PropertiesTable
   content={[
     {
-      name: "connectionUrl",
+      name: "url",
       type: "string",
       description:
         "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
@@ -99865,7 +100582,7 @@ export const libsqlAgent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'libsql-agent-vector',
-      connectionUrl: "file:libsql-agent.db",
+      url: "file:libsql-agent.db",
     }),
     embedder: fastembed,
     options: {
@@ -99915,8 +100632,8 @@ import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   id: 'mongodb-vector',
-  url: process.env.MONGODB_URL,
-  database: process.env.MONGODB_DATABASE,
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
 });
 ```
 
@@ -99930,12 +100647,12 @@ const store = new MongoDBVector({
       description: "Unique identifier for this vector store instance",
     },
     {
-      name: "url",
+      name: "uri",
       type: "string",
-      description: "MongoDB connection string (URI)",
+      description: "MongoDB connection string",
     },
     {
-      name: "database",
+      name: "dbName",
       type: "string",
       description: "Name of the MongoDB database to use",
     },
@@ -100269,7 +100986,8 @@ export const mongodbAgent = new Agent({
   model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     vector: new MongoDBVector({
@@ -100306,16 +101024,41 @@ packages:
 # OpenSearch Vector Store
 [EN] Source: https://mastra.ai/en/reference/vectors/opensearch
 
-The OpenSearchVector class provides vector search using [OpenSearch](https://opensearch.org/), a powerful open-source search and analytics engine. It leverages OpenSearch's k-NN capabilities to perform efficient vector similarity search.
+The OpenSearchVector class provides vector search using [OpenSearch](https://opensearch.org/), an open-source search and analytics engine. It uses OpenSearch's k-NN capabilities to perform vector similarity search.
 
 ## Constructor Options
+
+The constructor accepts all [OpenSearch ClientOptions](https://opensearch.org/docs/latest/clients/javascript/index/) plus a required `id` field.
 
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "id",
       type: "string",
-      description: "OpenSearch connection URL (e.g., 'http://localhost:9200')",
+      description: "Unique identifier for this vector store instance",
+    },
+    {
+      name: "node",
+      type: "string | string[] | NodeOptions | NodeOptions[]",
+      description: "OpenSearch node URL(s) (e.g., 'http://localhost:9200')",
+    },
+    {
+      name: "auth",
+      type: "BasicAuth | BearerAuth | AwsSigv4Auth",
+      description: "Authentication configuration",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "ConnectionOptions",
+      description: "SSL/TLS configuration",
+      isOptional: true,
+    },
+    {
+      name: "compression",
+      type: "'gzip'",
+      description: "Enable gzip compression",
+      isOptional: true,
     },
   ]}
 />
@@ -101238,6 +101981,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
 
 ## Constructor Options
 
+The constructor accepts all [Pinecone configuration options](https://docs.pinecone.io/reference/typescript-sdk) plus Mastra-specific fields.
+
 <PropertiesTable
   content={[
     {
@@ -101251,24 +101996,36 @@ It provides real-time vector search, with features like hybrid search, metadata 
       description: "Pinecone API key",
     },
     {
-      name: "environment",
+      name: "controllerHostUrl",
       type: "string",
       isOptional: true,
-      description: "Pinecone environment controller host URL",
+      description: "Custom Pinecone controller host URL",
+    },
+    {
+      name: "additionalHeaders",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "Additional HTTP headers to include in requests",
+    },
+    {
+      name: "sourceTag",
+      type: "string",
+      isOptional: true,
+      description: "Source tag for request tracking",
     },
     {
       name: "cloud",
       type: "'aws' | 'gcp' | 'azure'",
       isOptional: true,
       defaultValue: "aws",
-      description: "Cloud provider for Pinecone serverless",
+      description: "Cloud provider for new index creation",
     },
     {
       name: "region",
       type: "string",
       isOptional: true,
       defaultValue: "us-east-1",
-      description: "Region for Pinecone serverless",
+      description: "Region for new index creation",
     },
   ]}
 />
@@ -101566,7 +102323,6 @@ try {
 Required environment variables:
 
 - `PINECONE_API_KEY`: Your Pinecone API key
-- `PINECONE_ENVIRONMENT`: Pinecone environment (e.g., 'us-west1-gcp')
 
 ## Hybrid Search
 

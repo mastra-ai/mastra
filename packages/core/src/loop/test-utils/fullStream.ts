@@ -128,7 +128,7 @@ export function fullStreamTests({
         },
       });
 
-      const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const data = await convertAsyncIterableToArray(result.fullStream);
       expect(data).toMatchSnapshot();
     });
 
@@ -182,7 +182,7 @@ export function fullStreamTests({
         },
       });
 
-      const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const data = await convertAsyncIterableToArray(result.fullStream);
       expect(data).toMatchSnapshot();
     });
 
@@ -263,7 +263,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     // https://github.com/mastra-ai/mastra/issues/9005
@@ -305,7 +305,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      await convertAsyncIterableToArray(result.fullStream);
 
       // Check that reasoning was stored in messageList even though deltas were empty
       const responseMessages = messageList.get.response.db();
@@ -359,7 +359,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     it('should send files', async () => {
@@ -391,7 +391,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      const converted = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const converted = await convertAsyncIterableToArray(result.fullStream);
 
       expect(converted).toMatchSnapshot();
     });
@@ -442,7 +442,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     it('should send tool calls', async () => {
@@ -534,7 +534,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     it('should send tool call deltas', async () => {
@@ -629,7 +629,7 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
       expect(fullStream).toMatchSnapshot();
     });
@@ -690,7 +690,7 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
       expect(fullStream).toMatchSnapshot();
     });
@@ -747,7 +747,7 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
       expect(fullStream).toMatchSnapshot();
       vi.useFakeTimers();
@@ -799,7 +799,7 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
       expect(fullStream).toMatchSnapshot();
     });

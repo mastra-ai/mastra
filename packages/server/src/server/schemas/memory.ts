@@ -23,19 +23,49 @@ export const optionalAgentIdQuerySchema = z.object({
 
 /**
  * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
+ * Handles JSON parsing from query strings
  */
-const storageOrderBySchema = z.object({
-  field: z.enum(['createdAt', 'updatedAt']).optional(),
-  direction: z.enum(['ASC', 'DESC']).optional(),
-});
+const storageOrderBySchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .object({
+      field: z.enum(['createdAt', 'updatedAt']).optional(),
+      direction: z.enum(['ASC', 'DESC']).optional(),
+    })
+    .optional(),
+);
 
 /**
  * Storage order by configuration for messages (only have createdAt)
+ * Handles JSON parsing from query strings
  */
-const messageOrderBySchema = z.object({
-  field: z.enum(['createdAt']).optional(),
-  direction: z.enum(['ASC', 'DESC']).optional(),
-});
+const messageOrderBySchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .object({
+      field: z.enum(['createdAt']).optional(),
+      direction: z.enum(['ASC', 'DESC']).optional(),
+    })
+    .optional(),
+);
 
 /**
  * Include schema for message listing - handles JSON parsing from query strings
@@ -148,7 +178,7 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string(),
-  orderBy: storageOrderBySchema.optional(),
+  orderBy: storageOrderBySchema,
 });
 
 /**
@@ -164,7 +194,7 @@ export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema;
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  orderBy: messageOrderBySchema.optional(),
+  orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
 });
@@ -194,7 +224,7 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string(),
-  orderBy: storageOrderBySchema.optional(),
+  orderBy: storageOrderBySchema,
 });
 
 /**
@@ -210,7 +240,7 @@ export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
 export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  orderBy: messageOrderBySchema.optional(),
+  orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
 });

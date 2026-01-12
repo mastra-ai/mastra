@@ -94,6 +94,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/network-approval",
+          label: "Network Approval",
+        },
+        {
+          type: "doc",
           id: "agents/adding-voice",
           label: "Voice",
         },

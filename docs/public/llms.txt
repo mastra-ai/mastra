@@ -17,6 +17,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 - [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store message history and maintain context across interactions.
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
+- [Network Approval | Agents](https://mastra.ai/en/docs/agents/network-approval): Learn how to require approvals, suspend execution, and resume suspended networks while keeping humans in control of agent network workflows.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 - [Using Agents | Agents](https://mastra.ai/en/docs/agents/overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 - [Processors | Agents | Mastra Docs](https://mastra.ai/en/docs/agents/processors): Learn how to use input and output processors to transform, validate, and control messages in Mastra agents.
@@ -60,6 +61,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Arize Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/arize): Send traces to Arize Phoenix or Arize AX using OpenTelemetry and OpenInference
 - [Braintrust Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/braintrust): Send traces to Braintrust for evaluation and monitoring
 - [Cloud Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/cloud): Send traces to Mastra Cloud for production monitoring
+- [Datadog Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/datadog): Send traces to Datadog for LLM observability and analytics
 - [Default Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/default): Store traces locally for development and debugging
 - [Langfuse Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/langfuse): Send traces to Langfuse for LLM observability and analytics
 - [LangSmith Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/langsmith): Send traces to LangSmith for LLM observability and evaluation
@@ -360,6 +362,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: BraintrustExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/braintrust): Braintrust exporter for Tracing
 - [Reference: CloudExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/cloud-exporter): API reference for the CloudExporter
 - [Reference: ConsoleExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/console-exporter): API reference for the ConsoleExporter
+- [Reference: DatadogExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/datadog): Datadog LLM Observability exporter for Tracing
 - [Reference: DefaultExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/default-exporter): API reference for the DefaultExporter
 - [Reference: LangfuseExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/langfuse): Langfuse exporter for Tracing
 - [Reference: LangSmithExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/langsmith): LangSmith exporter for Tracing

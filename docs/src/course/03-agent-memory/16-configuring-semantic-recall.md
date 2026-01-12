@@ -15,7 +15,7 @@ const memory = new Memory({
   }), // Storage for message history
   vector: new LibSQLVector({
     id: "learning-memory-vector",
-    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+    url: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }), // Vector database for semantic search
   embedder: "openai/text-embedding-3-small", // Embedder for message embeddings
   options: {
