@@ -283,7 +283,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'UPSERT', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+          text: error instanceof Error ? error.message : 'Invalid upsert arguments',
           details: { tableName: resolvedTableName },
         },
         error,
@@ -346,8 +346,25 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           );
           await this.lanceClient.dropTable(resolvedTableName);
           await this.lanceClient.createTable(resolvedTableName, data);
+        } else if (missingColumns.length > 0) {
+          // Non-empty table with missing columns - filter data to match existing schema
+          // LanceDB requires data to match table schema exactly
+          this.logger.warn(
+            `Table ${resolvedTableName} has ${rowCount} rows and is missing columns ${missingColumns.join(', ')}. ` +
+              `These columns will be dropped from the upsert. To include new columns, recreate the table.`,
+          );
+          const filteredData = data.map(row => {
+            const filtered: Record<string, any> = {};
+            for (const col of existingColumns) {
+              if (col in row) {
+                filtered[col] = row[col];
+              }
+            }
+            return filtered;
+          });
+          await table.add(filteredData, { mode: 'overwrite' });
         } else {
-          // Table has data or schema matches - add data normally
+          // Table has data and schema matches - add data normally
           await table.add(data, { mode: 'overwrite' });
         }
       } else {
@@ -534,6 +551,9 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         const initVector = new Array(dimension).fill(0);
         table = await this.lanceClient.createTable(resolvedTableName, [{ id: '__init__', vector: initVector }]);
         await table.delete("id = '__init__'");
+        // Table is now empty; index will be created when data is upserted and row count >= 256
+        this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
+        return;
       } else {
         table = await this.lanceClient.openTable(resolvedTableName);
       }
