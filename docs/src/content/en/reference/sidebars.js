@@ -811,11 +811,6 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "workflows/workflow-methods/sendEvent",
-              label: ".sendEvent()",
-            },
-            {
-              type: "doc",
               id: "workflows/workflow-methods/sleep",
               label: ".sleep()",
             },
@@ -828,11 +823,6 @@ const sidebars = {
               type: "doc",
               id: "workflows/workflow-methods/then",
               label: ".then()",
-            },
-            {
-              type: "doc",
-              id: "workflows/workflow-methods/waitForEvent",
-              label: ".waitForEvent()",
             },
           ],
         },
