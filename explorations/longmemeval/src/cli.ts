@@ -19,10 +19,8 @@ import { SessionsCommand } from './commands/sessions';
 import { DeterministicIdsCommand } from './commands/deterministic-ids';
 import { ListPartialCommand } from './commands/list-partial';
 import { TokensCommand } from './commands/tokens';
-import { reconcileFromBaseConfig } from './commands/reconcile';
 import {
   getRunVariant,
-  getAvailableVariants,
   resolveConfigAlias,
   getConfigAliases,
   getMemoryConfig,
@@ -130,13 +128,15 @@ function showAvailableOptions() {
   }
 
   console.log(chalk.gray('\n\nUsage:'));
-  console.log(chalk.gray('  pnpm run prepare <variant> <config>'));
-  console.log(chalk.gray('  pnpm run bench <variant> <config>'));
+  console.log(chalk.gray('  pnpm run prepare <config> [-v quick|full]'));
+  console.log(chalk.gray('  pnpm run bench <config> [-v quick|full]'));
   console.log(chalk.gray('\nExamples:'));
-  console.log(chalk.gray('  pnpm run prepare quick om'));
-  console.log(chalk.gray('  pnpm run prepare all om-shortcut'));
-  console.log(chalk.gray('  pnpm run bench all om'));
+  console.log(chalk.gray('  pnpm run prepare om              # uses quick variant by default'));
+  console.log(chalk.gray('  pnpm run prepare om -v full      # full benchmark'));
+  console.log(chalk.gray('  pnpm run bench om'));
+  console.log(chalk.gray('  pnpm run bench om-glm -v full'));
   console.log(chalk.gray('\nAdditional flags:'));
+  console.log(chalk.gray('  -v, --variant      Run variant (quick, full, rip) - default: quick'));
   console.log(chalk.gray('  --offset <n>       Skip first n questions'));
   console.log(chalk.gray('  --question-id <id> Process specific question'));
   console.log(chalk.gray('  -y, --yes          Skip confirmation prompt'));
@@ -144,8 +144,9 @@ function showAvailableOptions() {
 
 // Prepare command
 program
-  .command('prepare [variant] [config]')
+  .command('prepare [config]')
   .description('Prepare LongMemEval data by processing through mock agents')
+  .option('-v, --variant <variant>', 'Run variant (quick, full, rip)', 'quick')
   .option('-o, --output <dir>', 'Output directory for prepared data', './prepared-data')
   .option('--subset <n>', 'Override subset size', parseInt)
   .option('--offset <n>', 'Skip first n questions', parseInt)
@@ -158,10 +159,10 @@ program
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
   .option('-c, --memory-config <config>', 'Memory configuration (legacy)')
-  .action(async (variant, config, options) => {
+  .action(async (config, options) => {
     try {
-      // If no variant provided, show help
-      if (!variant && !options.dataset) {
+      // If no config provided, show help
+      if (!config && !options.dataset) {
         showAvailableOptions();
         process.exit(0);
       }
@@ -183,13 +184,13 @@ program
           prepareConcurrency: options.concurrency ?? 4,
           benchConcurrency: options.concurrency ?? 10,
         };
-      } else if (variant && config) {
-        // New mode: positional arguments
-        resolvedVariant = getRunVariant(variant);
+      } else if (config) {
+        // New mode: config as positional, variant as flag (default: quick)
+        resolvedVariant = getRunVariant(options.variant);
         resolvedConfig = resolveConfigAlias(config);
         dataset = resolvedVariant.dataset;
       } else {
-        console.error(chalk.red('Error: Please provide both <variant> and <config>'));
+        console.error(chalk.red('Error: Please provide a <config>'));
         console.error(chalk.gray('Run without arguments to see available options'));
         process.exit(1);
       }
@@ -239,7 +240,7 @@ program
       const configDef = getMemoryConfig(resolvedConfig as MemoryConfigType);
       if (configDef.readOnlyConfig && configDef.baseConfig) {
         console.log(chalk.green(`✓ Config "${resolvedConfig}" is read-only and uses data from "${configDef.baseConfig}"`));
-        console.log(chalk.gray(`  No preparation needed. Run benchmark directly with: pnpm bench ${resolvedVariant.name} ${resolvedConfig}`));
+        console.log(chalk.gray(`  No preparation needed. Run benchmark directly with: pnpm bench ${resolvedConfig}`));
         console.log(chalk.gray(`  Make sure "${configDef.baseConfig}" is prepared first.\n`));
         return;
       }
@@ -301,9 +302,10 @@ program
 
 // Run benchmark command (aliased as 'bench' too)
 program
-  .command('run [variant] [config]')
+  .command('run [config]')
   .alias('bench')
   .description('Run LongMemEval benchmark using prepared data')
+  .option('-v, --variant <variant>', 'Run variant (quick, full, rip)', 'quick')
   .option('-o, --output <dir>', 'Output directory for results', './results')
   .option('--prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
   .option('--subset <n>', 'Override subset size', parseInt)
@@ -313,10 +315,10 @@ program
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
   .option('-c, --memory-config <config>', 'Memory configuration (legacy)')
-  .action(async (variant, config, options) => {
+  .action(async (config, options) => {
     try {
-      // If no variant provided, show help
-      if (!variant && !options.dataset) {
+      // If no config provided, show help
+      if (!config && !options.dataset) {
         showAvailableOptions();
         process.exit(0);
       }
@@ -338,13 +340,13 @@ program
           prepareConcurrency: options.concurrency ?? 4,
           benchConcurrency: options.concurrency ?? 10,
         };
-      } else if (variant && config) {
-        // New mode: positional arguments
-        resolvedVariant = getRunVariant(variant);
+      } else if (config) {
+        // New mode: config as positional, variant as flag (default: quick)
+        resolvedVariant = getRunVariant(options.variant);
         resolvedConfig = resolveConfigAlias(config);
         dataset = resolvedVariant.dataset;
       } else {
-        console.error(chalk.red('Error: Please provide both <variant> and <config>'));
+        console.error(chalk.red('Error: Please provide a <config>'));
         console.error(chalk.gray('Run without arguments to see available options'));
         process.exit(1);
       }
