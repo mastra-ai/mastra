@@ -174,7 +174,8 @@ pnpm turbo watch build --filter="@mastra/core" --filter="@mastra/cli"
 vim packages/core/src/agent/agent.ts
 
 # 3. Test (from example directory)
-cd examples/weather-agent
+cd examples/agent
+pnpm install
 node ../../packages/cli/dist/index.js dev
 ```
 
