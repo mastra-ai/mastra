@@ -1,6 +1,17 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 /**
+ * Debug logging controlled by OM_DEV_DEBUG environment variable.
+ */
+const OM_DEBUG = process.env.OM_DEV_DEBUG === '1' || process.env.OM_DEV_DEBUG === 'true';
+
+function omWarn(...args: unknown[]): void {
+  if (OM_DEBUG) {
+    console.warn(...args);
+  }
+}
+
+/**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
  */
@@ -306,7 +317,7 @@ export function parseObserverOutput(output: string): ObserverResult {
   const observations = parsed.observations || '';
 
   if (!parsed.currentTask) {
-    console.warn('[OM Observer] Warning: Observations missing <current-task> section.');
+    omWarn('[OM Observer] Warning: Observations missing <current-task> section.');
   }
 
   // Only include patterns if there are any
