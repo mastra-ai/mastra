@@ -1,5 +1,68 @@
 import { MemoryConfig } from '@mastra/core/memory';
-import { MemoryConfigOptions, MemoryConfigType } from './data/types';
+import { DatasetType, MemoryConfigOptions, MemoryConfigType } from './data/types';
+
+// ============================================================================
+// Run Variants - Define operational parameters
+// ============================================================================
+
+/**
+ * A run variant defines operational parameters like concurrency and subset size.
+ * These are separate from memory configs to allow mixing and matching.
+ */
+export interface RunVariant {
+  /** Variant name */
+  name: string;
+  /** Description for help text */
+  description: string;
+  /** Dataset to use */
+  dataset: DatasetType;
+  /** Number of questions to process (undefined = all) */
+  subset?: number;
+  /** Concurrency for prepare command */
+  prepareConcurrency: number;
+  /** Concurrency for bench command */
+  benchConcurrency: number;
+}
+
+/**
+ * All available run variants.
+ */
+export const RUN_VARIANTS: Record<string, RunVariant> = {
+  quick: {
+    name: 'quick',
+    description: 'Quick test run with 10 questions',
+    dataset: 'longmemeval_s',
+    subset: 10,
+    prepareConcurrency: 1,
+    benchConcurrency: 5,
+  },
+  all: {
+    name: 'all',
+    description: 'Full benchmark run with all questions',
+    dataset: 'longmemeval_s',
+    subset: undefined,
+    prepareConcurrency: 4,
+    benchConcurrency: 10,
+  },
+};
+
+/**
+ * Get a run variant by name.
+ */
+export function getRunVariant(name: string): RunVariant {
+  const variant = RUN_VARIANTS[name];
+  if (!variant) {
+    throw new Error(`Unknown run variant: ${name}. Available: ${Object.keys(RUN_VARIANTS).join(', ')}`);
+  }
+  return variant;
+}
+
+/**
+ * Get all available run variant names.
+ */
+export function getAvailableVariants(): string[] {
+  return Object.keys(RUN_VARIANTS);
+}
 
 // ============================================================================
 // Memory Configuration Definitions
@@ -68,6 +131,54 @@ const lastMessages = 10;
 // Cerebras GLM model config
 export const CEREBRAS_GLM_MODEL = 'cerebras/glm-4.7';
 export const CEREBRAS_GLM_MAX_TOKENS = 200000;
+
+// ============================================================================
+// Config Aliases - Short names for memory configs
+// ============================================================================
+
+/**
+ * Short aliases for memory config types.
+ * Allows using 'om' instead of 'observational-memory', etc.
+ */
+export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
+  // Short aliases
+  semantic: 'semantic-recall',
+  working: 'working-memory',
+  'working-tailored': 'working-memory-tailored',
+  combined: 'combined',
+  'combined-tailored': 'combined-tailored',
+  om: 'observational-memory',
+  'om-shortcut': 'observational-memory-shortcut',
+  'om-shortcut-glm': 'observational-memory-shortcut-glm',
+
+  // Full names (for completeness)
+  'semantic-recall': 'semantic-recall',
+  'working-memory': 'working-memory',
+  'working-memory-tailored': 'working-memory-tailored',
+  'observational-memory': 'observational-memory',
+  'observational-memory-shortcut': 'observational-memory-shortcut',
+  'observational-memory-shortcut-glm': 'observational-memory-shortcut-glm',
+};
+
+/**
+ * Resolve a config name (alias or full) to the canonical MemoryConfigType.
+ */
+export function resolveConfigAlias(nameOrAlias: string): MemoryConfigType {
+  const resolved = CONFIG_ALIASES[nameOrAlias];
+  if (!resolved) {
+    throw new Error(
+      `Unknown memory config: ${nameOrAlias}. Available: ${Object.keys(CONFIG_ALIASES).join(', ')}`,
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Get all available config aliases (short names only).
+ */
+export function getConfigAliases(): string[] {
+  return ['semantic', 'working', 'working-tailored', 'combined', 'combined-tailored', 'om', 'om-shortcut', 'om-shortcut-glm'];
+}
 
 // ============================================================================
 // Config Definitions Map

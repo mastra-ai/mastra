@@ -9,7 +9,7 @@ import { existsSync, statSync } from 'fs';
 import { execSync } from 'child_process';
 
 import { DatasetLoader } from './data/loader';
-import type { EvaluationResult, BenchmarkMetrics, QuestionType } from './data/types';
+import type { EvaluationResult, BenchmarkMetrics, QuestionType, DatasetType, MemoryConfigType } from './data/types';
 import { PrepareCommand } from './commands/prepare';
 import { RunCommand } from './commands/run';
 import { SyncCommand } from './commands/sync';
@@ -19,6 +19,14 @@ import { SessionsCommand } from './commands/sessions';
 import { DeterministicIdsCommand } from './commands/deterministic-ids';
 import { ListPartialCommand } from './commands/list-partial';
 import { TokensCommand } from './commands/tokens';
+import {
+  getRunVariant,
+  getAvailableVariants,
+  resolveConfigAlias,
+  getConfigAliases,
+  RUN_VARIANTS,
+  CONFIG_ALIASES,
+} from './config';
 
 const program = new Command();
 
@@ -96,32 +104,105 @@ function calculateMetrics(results: EvaluationResult[]): BenchmarkMetrics {
 
 program.name('longmemeval').description('LongMemEval benchmark for Mastra Memory').version('0.1.0');
 
+// Helper to show available variants and configs
+function showAvailableOptions() {
+  console.log(chalk.blue('\n📋 Available Run Variants:\n'));
+  for (const [name, variant] of Object.entries(RUN_VARIANTS)) {
+    const subsetInfo = variant.subset ? `${variant.subset} questions` : 'all questions';
+    console.log(
+      chalk.bold(`  ${name.padEnd(10)}`),
+      chalk.gray(`- ${variant.description}`),
+      chalk.dim(`(${subsetInfo}, prepare: ${variant.prepareConcurrency}x, bench: ${variant.benchConcurrency}x)`),
+    );
+  }
+
+  console.log(chalk.blue('\n📋 Available Memory Configs:\n'));
+  const aliases = getConfigAliases();
+  for (const alias of aliases) {
+    const fullName = CONFIG_ALIASES[alias];
+    if (alias !== fullName) {
+      console.log(chalk.bold(`  ${alias.padEnd(20)}`), chalk.gray(`→ ${fullName}`));
+    } else {
+      console.log(chalk.bold(`  ${alias}`));
+    }
+  }
+
+  console.log(chalk.gray('\n\nUsage:'));
+  console.log(chalk.gray('  pnpm run prepare <variant> <config>'));
+  console.log(chalk.gray('  pnpm run bench <variant> <config>'));
+  console.log(chalk.gray('\nExamples:'));
+  console.log(chalk.gray('  pnpm run prepare quick om'));
+  console.log(chalk.gray('  pnpm run prepare all om-shortcut'));
+  console.log(chalk.gray('  pnpm run bench all om'));
+  console.log(chalk.gray('\nAdditional flags:'));
+  console.log(chalk.gray('  --offset <n>       Skip first n questions'));
+  console.log(chalk.gray('  --question-id <id> Process specific question'));
+  console.log(chalk.gray('  -y, --yes          Skip confirmation prompt'));
+}
+
 // Prepare command
 program
-  .command('prepare')
+  .command('prepare [variant] [config]')
   .description('Prepare LongMemEval data by processing through mock agents')
-  .option('-d, --dataset <dataset>', 'Dataset to use', 'longmemeval_s')
-  .option(
-    '-c, --memory-config <config>',
-    'Memory configuration (last-k, semantic-recall, semantic-recall-reranked, working-memory, working-memory-tailored, combined, combined-tailored)',
-    'semantic-recall',
-  )
   .option('-o, --output <dir>', 'Output directory for prepared data', './prepared-data')
-  .option('--subset <n>', 'Prepare only a subset of n questions', parseInt)
-  .option('--offset <n>', 'Skip first n questions when using --subset', parseInt)
-  .option('--concurrency <n>', 'Number of questions to process in parallel', parseInt)
+  .option('--subset <n>', 'Override subset size', parseInt)
+  .option('--offset <n>', 'Skip first n questions', parseInt)
+  .option('--concurrency <n>', 'Override concurrency', parseInt)
   .option('--question-id <id>', 'Prepare a specific question by ID')
   .option('--resume-from-message-id <id>', 'Resume processing from a specific message ID')
   .option('--session-limit <n>', 'Limit processing to n sessions after resume point', parseInt)
   .option('--session-offset <n>', 'Start processing from the nth session (1-based)', parseInt)
   .option('-y, --yes', 'Skip confirmation prompt')
-  .action(async options => {
+  // Legacy options for backwards compatibility
+  .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
+  .option('-c, --memory-config <config>', 'Memory configuration (legacy)')
+  .action(async (variant, config, options) => {
     try {
+      // If no variant provided, show help
+      if (!variant && !options.dataset) {
+        showAvailableOptions();
+        process.exit(0);
+      }
+
+      // Resolve variant and config (support legacy options)
+      let resolvedVariant: ReturnType<typeof getRunVariant>;
+      let resolvedConfig: string;
+      let dataset: string;
+
+      if (options.dataset && options.memoryConfig) {
+        // Legacy mode: use -d and -c flags
+        dataset = options.dataset;
+        resolvedConfig = options.memoryConfig;
+        resolvedVariant = {
+          name: 'custom',
+          description: 'Custom run',
+          dataset: dataset as any,
+          subset: options.subset,
+          prepareConcurrency: options.concurrency ?? 4,
+          benchConcurrency: options.concurrency ?? 10,
+        };
+      } else if (variant && config) {
+        // New mode: positional arguments
+        resolvedVariant = getRunVariant(variant);
+        resolvedConfig = resolveConfigAlias(config);
+        dataset = resolvedVariant.dataset;
+      } else {
+        console.error(chalk.red('Error: Please provide both <variant> and <config>'));
+        console.error(chalk.gray('Run without arguments to see available options'));
+        process.exit(1);
+      }
+
+      // Apply overrides
+      const subset = options.subset ?? resolvedVariant.subset;
+      const concurrency = options.concurrency ?? resolvedVariant.prepareConcurrency;
+
       console.log(chalk.blue('\n🚀 LongMemEval Data Preparation\n'));
-      console.log(chalk.gray(`Dataset: ${options.dataset}`));
-      console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
-      if (options.subset) {
-        console.log(chalk.gray(`Subset: ${options.subset} questions`));
+      console.log(chalk.gray(`Variant: ${resolvedVariant.name}`));
+      console.log(chalk.gray(`Dataset: ${dataset}`));
+      console.log(chalk.gray(`Memory Config: ${resolvedConfig}`));
+      console.log(chalk.gray(`Concurrency: ${concurrency}`));
+      if (subset) {
+        console.log(chalk.gray(`Subset: ${subset} questions`));
       }
       if (options.offset) {
         console.log(chalk.gray(`Offset: skipping first ${options.offset} questions`));
@@ -129,20 +210,11 @@ program
       if (options.questionId) {
         console.log(chalk.gray(`Question ID: ${options.questionId}`));
       }
-      if (options.resumeFromMessageId) {
-        console.log(chalk.gray(`Resume from message ID: ${options.resumeFromMessageId}`));
-      }
-      if (options.sessionLimit) {
-        console.log(chalk.gray(`Session limit: ${options.sessionLimit} sessions`));
-      }
-      if (options.sessionOffset) {
-        console.log(chalk.gray(`Session offset: Start from session ${options.sessionOffset}`));
-      }
       console.log();
 
       // Check for OpenAI API key (needed for embeddings in semantic-recall)
       if (
-        (options.memoryConfig === 'semantic-recall' || options.memoryConfig === 'combined') &&
+        (resolvedConfig === 'semantic-recall' || resolvedConfig === 'combined') &&
         !process.env.OPENAI_API_KEY
       ) {
         console.error(chalk.red('Error: OPENAI_API_KEY environment variable is required for semantic recall'));
@@ -152,14 +224,14 @@ program
 
       // Validate dataset option
       const validDatasets = ['longmemeval_s', 'longmemeval_m', 'longmemeval_oracle'];
-      if (!validDatasets.includes(options.dataset)) {
-        console.error(chalk.red(`Invalid dataset: ${options.dataset}`));
+      if (!validDatasets.includes(dataset)) {
+        console.error(chalk.red(`Invalid dataset: ${dataset}`));
         console.error(chalk.gray(`Valid options: ${validDatasets.join(', ')}`));
         process.exit(1);
       }
 
       // Check if dataset exists and download if needed
-      await ensureDatasetExists(options.dataset);
+      await ensureDatasetExists(dataset);
 
       // Show warning and ask for confirmation (skip if -y flag is passed)
       if (!options.yes) {
@@ -194,12 +266,12 @@ program
       // Run prepare command
       const prepareCommand = new PrepareCommand();
       await prepareCommand.run({
-        dataset: options.dataset,
-        memoryConfig: options.memoryConfig,
+        dataset: dataset as DatasetType,
+        memoryConfig: resolvedConfig as MemoryConfigType,
         outputDir: options.output,
-        subset: options.subset,
+        subset,
         offset: options.offset,
-        concurrency: options.concurrency,
+        concurrency,
         questionId: options.questionId,
         resumeFromMessageId: options.resumeFromMessageId,
         sessionLimit: options.sessionLimit,
@@ -216,30 +288,67 @@ program
     }
   });
 
-// Run benchmark command
+// Run benchmark command (aliased as 'bench' too)
 program
-  .command('run')
+  .command('run [variant] [config]')
+  .alias('bench')
   .description('Run LongMemEval benchmark using prepared data')
-  .requiredOption('-d, --dataset <dataset>', 'Dataset to use (longmemeval_s, longmemeval_m, longmemeval_oracle)')
-  .option(
-    '-c, --memory-config <config>',
-    'Memory configuration (last-k, semantic-recall, semantic-recall-reranked, working-memory, working-memory-tailored, combined, combined-tailored)',
-    'semantic-recall',
-  )
   .option('-o, --output <dir>', 'Output directory for results', './results')
   .option('--prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
-  .option('--subset <n>', 'Run on subset of n questions', parseInt)
-  .option('--offset <n>', 'Skip first n questions when using --subset', parseInt)
-  .option('--concurrency <n>', 'Number of parallel requests (default: 5)', parseInt)
+  .option('--subset <n>', 'Override subset size', parseInt)
+  .option('--offset <n>', 'Skip first n questions', parseInt)
+  .option('--concurrency <n>', 'Override concurrency', parseInt)
   .option('--question-id <id>', 'Focus on a specific question by ID')
-  .action(async options => {
+  // Legacy options for backwards compatibility
+  .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
+  .option('-c, --memory-config <config>', 'Memory configuration (legacy)')
+  .action(async (variant, config, options) => {
     try {
+      // If no variant provided, show help
+      if (!variant && !options.dataset) {
+        showAvailableOptions();
+        process.exit(0);
+      }
+
+      // Resolve variant and config (support legacy options)
+      let resolvedVariant: ReturnType<typeof getRunVariant>;
+      let resolvedConfig: string;
+      let dataset: string;
+
+      if (options.dataset && options.memoryConfig) {
+        // Legacy mode: use -d and -c flags
+        dataset = options.dataset;
+        resolvedConfig = options.memoryConfig;
+        resolvedVariant = {
+          name: 'custom',
+          description: 'Custom run',
+          dataset: dataset as any,
+          subset: options.subset,
+          prepareConcurrency: options.concurrency ?? 4,
+          benchConcurrency: options.concurrency ?? 10,
+        };
+      } else if (variant && config) {
+        // New mode: positional arguments
+        resolvedVariant = getRunVariant(variant);
+        resolvedConfig = resolveConfigAlias(config);
+        dataset = resolvedVariant.dataset;
+      } else {
+        console.error(chalk.red('Error: Please provide both <variant> and <config>'));
+        console.error(chalk.gray('Run without arguments to see available options'));
+        process.exit(1);
+      }
+
+      // Apply overrides
+      const subset = options.subset ?? resolvedVariant.subset;
+      const concurrency = options.concurrency ?? resolvedVariant.benchConcurrency;
+
       console.log(chalk.blue('\n🚀 LongMemEval Benchmark Runner\n'));
-      console.log(chalk.gray(`Dataset: ${options.dataset}`));
-      console.log(chalk.gray(`Model: ${options.model}`));
-      console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
-      if (options.subset) {
-        console.log(chalk.gray(`Subset: ${options.subset} questions`));
+      console.log(chalk.gray(`Variant: ${resolvedVariant.name}`));
+      console.log(chalk.gray(`Dataset: ${dataset}`));
+      console.log(chalk.gray(`Memory Config: ${resolvedConfig}`));
+      console.log(chalk.gray(`Concurrency: ${concurrency}`));
+      if (subset) {
+        console.log(chalk.gray(`Subset: ${subset} questions`));
       }
       if (options.offset) {
         console.log(chalk.gray(`Offset: skipping first ${options.offset} questions`));
@@ -258,8 +367,8 @@ program
 
       // Validate dataset option
       const validDatasets = ['longmemeval_s', 'longmemeval_m', 'longmemeval_oracle'];
-      if (!validDatasets.includes(options.dataset)) {
-        console.error(chalk.red(`Invalid dataset: ${options.dataset}`));
+      if (!validDatasets.includes(dataset)) {
+        console.error(chalk.red(`Invalid dataset: ${dataset}`));
         console.error(chalk.gray(`Valid options: ${validDatasets.join(', ')}`));
         process.exit(1);
       }
@@ -267,13 +376,13 @@ program
       // Run benchmark using prepared data
       const runCommand = new RunCommand();
       await runCommand.run({
-        dataset: options.dataset,
-        memoryConfig: options.memoryConfig,
+        dataset: dataset as DatasetType,
+        memoryConfig: resolvedConfig as MemoryConfigType,
         preparedDataDir: options.preparedData,
         outputDir: options.output,
-        subset: options.subset,
+        subset,
         offset: options.offset,
-        concurrency: options.concurrency,
+        concurrency,
         questionId: options.questionId,
       });
 

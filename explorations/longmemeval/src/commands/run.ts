@@ -177,7 +177,7 @@ export class RunCommand {
 `),
     );
     const configDef = getMemoryConfig(options.memoryConfig);
-    
+
     console.log(chalk.gray(`Dataset: ${options.dataset}`));
     console.log(chalk.gray(`Model: ${configDef.agentModel}`));
     console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
@@ -553,7 +553,6 @@ Active evaluations:`;
         },
         scope: 'resource',
       });
-
     }
 
     // Create agent with the specified model
