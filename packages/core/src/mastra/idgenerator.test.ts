@@ -782,21 +782,19 @@ describe('Mastra ID Generator', () => {
   });
 
   /**
-   * FAILING TEST: Context-Aware ID Generator
+   * Context-Aware ID Generator (Feature Request #8131)
    *
-   * This test demonstrates the feature request in GitHub issue #8131:
-   * Users want the ability to determine the context in which idGenerator is called
-   * (e.g., agent, workflow, etc.) to generate more deterministic IDs that can be
-   * used/shared with external applications like external databases.
+   * These tests verify the context-aware ID generation feature that allows users
+   * to generate deterministic IDs based on context (e.g., agent, workflow, etc.)
+   * that can be used/shared with external applications like external databases.
    *
-   * The current idGenerator signature is: () => string
-   * The desired signature should be: (context: IdGeneratorContext) => string
+   * The idGenerator signature is: (context?: IdGeneratorContext) => string
    *
    * Where IdGeneratorContext contains information about:
-   * - idType: 'thread' | 'message' | 'run' | 'step' | etc.
-   * - source: 'agent' | 'workflow' | 'memory' | etc.
+   * - idType: 'thread' | 'message' | 'run' | 'step' | 'generic'
+   * - source: 'agent' | 'workflow' | 'memory'
    * - entityId: the id of the agent, workflow, or other entity
-   * - Additional contextual information (threadId, resourceId, etc.)
+   * - Additional contextual information (threadId, resourceId, role, stepType)
    */
   describe('Context-Aware ID Generator (Feature Request #8131)', () => {
     it('should pass context to idGenerator for deterministic ID generation', async () => {
@@ -808,7 +806,7 @@ describe('Mastra ID Generator', () => {
         resourceId?: string;
       }> = [];
 
-      // This is what users WANT to be able to do - generate IDs based on context
+      // Users can now generate IDs based on context
       const contextAwareIdGenerator = vi.fn(
         (context?: { idType?: string; source?: string; entityId?: string; threadId?: string; resourceId?: string }) => {
           receivedContexts.push(context || {});
@@ -844,7 +842,7 @@ describe('Mastra ID Generator', () => {
       });
 
       const _mastra = new Mastra({
-        idGenerator: contextAwareIdGenerator as any, // Currently this won't work - types don't match
+        idGenerator: contextAwareIdGenerator,
         logger: false,
         agents: { contextTestAgent: agent },
       });
@@ -856,7 +854,6 @@ describe('Mastra ID Generator', () => {
       });
 
       // ASSERT: The idGenerator should have been called with context information
-      // This test will FAIL because currently idGenerator receives NO parameters
       expect(contextAwareIdGenerator).toHaveBeenCalled();
 
       // Check that at least one call received context with idType
@@ -883,7 +880,7 @@ describe('Mastra ID Generator', () => {
       const memory = new MockMemory();
 
       const _mastra = new Mastra({
-        idGenerator: contextAwareIdGenerator as any,
+        idGenerator: contextAwareIdGenerator,
         logger: false,
       });
 
@@ -910,7 +907,7 @@ describe('Mastra ID Generator', () => {
       });
 
       const mastra = new Mastra({
-        idGenerator: contextAwareIdGenerator as any,
+        idGenerator: contextAwareIdGenerator,
         logger: false,
       });
 
@@ -955,8 +952,8 @@ describe('Mastra ID Generator', () => {
         .then(testStep)
         .commit();
 
-      const mastra = new Mastra({
-        idGenerator: contextAwareIdGenerator as any,
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
         logger: false,
         workflows: { 'context-test-workflow': workflow },
       });
@@ -995,7 +992,7 @@ describe('Mastra ID Generator', () => {
       });
 
       const _mastra = new Mastra({
-        idGenerator: contextAwareIdGenerator as any,
+        idGenerator: contextAwareIdGenerator,
         logger: false,
         agents: { sourceTestAgent: agent },
       });
@@ -1019,7 +1016,7 @@ describe('Mastra ID Generator', () => {
       const memory = new MockMemory();
 
       const mastra = new Mastra({
-        idGenerator: contextAwareIdGenerator as any,
+        idGenerator: contextAwareIdGenerator,
         logger: false,
       });
 

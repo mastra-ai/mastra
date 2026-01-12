@@ -4,6 +4,7 @@ import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { IdGeneratorContext } from '../../types';
 import { AIV4Adapter, AIV5Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
@@ -74,7 +75,7 @@ export class MessageList {
     return this.stateManager.getContextMessagesPersisted();
   }
 
-  private generateMessageId?: IdGenerator;
+  private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
 
   // Event recording for observability
@@ -95,7 +96,7 @@ export class MessageList {
     generateMessageId,
     // @ts-ignore Flag for agent network messages
     _agentNetworkAppend,
-  }: { threadId?: string; resourceId?: string; generateMessageId?: AIV4Type.IdGenerator } = {}) {
+  }: { threadId?: string; resourceId?: string; generateMessageId?: (context?: IdGeneratorContext) => string } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
@@ -836,9 +837,15 @@ export class MessageList {
     return now;
   }
 
-  private newMessageId(): string {
+  private newMessageId(role?: string): string {
     if (this.generateMessageId) {
-      return this.generateMessageId();
+      return this.generateMessageId({
+        idType: 'message',
+        source: 'agent',
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+        role,
+      });
     }
     return randomUUID();
   }

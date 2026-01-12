@@ -9,7 +9,7 @@ export type NonEmpty<T extends string> = T extends '' ? never : T;
 
 /**
  * Context information passed to the ID generator function.
- * This allows users to generate deterministic IDs based on the context
+ * This allows users to generate context-aware IDs based on the context
  * in which the ID is being generated.
  */
 export type IdGeneratorContext = {

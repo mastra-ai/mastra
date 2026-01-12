@@ -24,8 +24,8 @@ import type {
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
-import { deepMerge } from '../utils';
 import type { IdGeneratorContext } from '../types';
+import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
 import type {
