@@ -822,6 +822,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       resourceId1 = randomUUID();
       resourceId2 = randomUUID();
 
+      // Use unique metadata values to avoid conflicts with other test blocks
       // Create threads with different metadata
       thread1 = createSampleThreadWithParams(
         randomUUID(),
@@ -829,7 +830,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         new Date(Date.now() - 4000),
         new Date(Date.now() - 4000),
       );
-      thread1.metadata = { category: 'support', priority: 'high', status: 'open' };
+      thread1.metadata = { category: 'support-filter', priority: 'high', status: 'open' };
       thread1.title = 'Thread 1';
 
       thread2 = createSampleThreadWithParams(
@@ -838,7 +839,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         new Date(Date.now() - 3000),
         new Date(Date.now() - 3000),
       );
-      thread2.metadata = { category: 'support', priority: 'low', status: 'closed' };
+      thread2.metadata = { category: 'support-filter', priority: 'low', status: 'closed' };
       thread2.title = 'Thread 2';
 
       thread3 = createSampleThreadWithParams(
@@ -847,7 +848,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         new Date(Date.now() - 2000),
         new Date(Date.now() - 2000),
       );
-      thread3.metadata = { category: 'sales', priority: 'high', status: 'open' };
+      thread3.metadata = { category: 'sales-filter', priority: 'high', status: 'open' };
       thread3.title = 'Thread 3';
 
       thread4 = createSampleThreadWithParams(
@@ -856,7 +857,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         new Date(Date.now() - 1000),
         new Date(Date.now() - 1000),
       );
-      thread4.metadata = { category: 'sales', priority: 'medium' };
+      thread4.metadata = { category: 'sales-filter', priority: 'medium' };
       thread4.title = 'Thread 4';
 
       // Save all threads
@@ -880,7 +881,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     it('should list threads filtered by metadata only', async () => {
       const result = await memoryStorage.listThreads({
-        filter: { metadata: { category: 'support' } },
+        filter: { metadata: { category: 'support-filter' } },
         page: 0,
         perPage: 10,
       });
@@ -892,7 +893,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     it('should list threads filtered by multiple metadata fields (AND logic)', async () => {
       const result = await memoryStorage.listThreads({
-        filter: { metadata: { category: 'support', priority: 'high' } },
+        filter: { metadata: { category: 'support-filter', priority: 'high' } },
         page: 0,
         perPage: 10,
       });
@@ -906,7 +907,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const result = await memoryStorage.listThreads({
         filter: {
           resourceId: resourceId2,
-          metadata: { category: 'sales', priority: 'high' },
+          metadata: { category: 'sales-filter', priority: 'high' },
         },
         page: 0,
         perPage: 10,
@@ -954,7 +955,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     it('should handle metadata filter with no matching threads', async () => {
       const result = await memoryStorage.listThreads({
         filter: {
-          metadata: { category: 'support', priority: 'high', status: 'nonexistent' },
+          metadata: { category: 'support-filter', priority: 'high', status: 'nonexistent' },
         },
         page: 0,
         perPage: 10,
