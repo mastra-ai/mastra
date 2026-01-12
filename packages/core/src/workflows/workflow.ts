@@ -1243,7 +1243,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleep(duration: number | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, number, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || randomUUID()}`;
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
@@ -1273,7 +1273,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleepUntil(date: Date | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || randomUUID()}`;
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
         ? { type: 'sleepUntil', id, fn: date }
@@ -1347,7 +1347,9 @@ export class Workflow<
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+        id:
+          stepOptions?.id ||
+          `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
         execute: mappingConfig as any,
@@ -1390,7 +1392,9 @@ export class Workflow<
       {} as Record<string, any>,
     );
     const mappingStep: any = createStep({
-      id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+      id:
+        stepOptions?.id ||
+        `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
       inputSchema: z.any(),
       outputSchema: z.any(),
       execute: async ctx => {
@@ -1731,7 +1735,15 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
-    const runIdToUse = options?.runId || this.#mastra?.generateId() || randomUUID();
+    const runIdToUse =
+      options?.runId ||
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'workflow',
+        entityId: this.id,
+        resourceId: options?.resourceId,
+      }) ||
+      randomUUID();
 
     // Return a new Run instance with object parameters
     const run =

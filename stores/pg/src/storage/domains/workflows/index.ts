@@ -26,25 +26,6 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
-    updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
-  };
-}
-
 export class WorkflowsPG extends WorkflowsStorage {
   #db: PgDB;
   #schema: string;
@@ -62,6 +43,25 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
+      updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
+    };
   }
 
   /**
@@ -251,7 +251,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result);
+      return this.parseWorkflowRun(result);
     } catch (error) {
       throw new MastraError(
         {
@@ -365,7 +365,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return this.parseWorkflowRun(row);
       });
 
       return { runs, total: total || runs.length };

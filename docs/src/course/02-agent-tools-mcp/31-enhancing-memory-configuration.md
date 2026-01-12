@@ -12,7 +12,7 @@ const memory = new Memory({
   }),
   vector: new LibSQLVector({
     id: "learning-memory-vector",
-    connectionUrl: "file:../../memory.db",
+    url: "file:../../memory.db",
   }),
   embedder: "openai/text-embedding-3-small",
   options: {

@@ -26,7 +26,7 @@ import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
-import type { MastraIdGenerator } from '../types';
+import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
@@ -340,6 +340,10 @@ export class Mastra<
    * This method is used internally by Mastra for creating unique IDs for various entities
    * like workflow runs, agent conversations, and other resources that need unique identification.
    *
+   * @param context - Optional context information about what type of ID is being generated
+   *                  and where it's being requested from. This allows custom ID generators
+   *                  to create deterministic IDs based on context.
+   *
    * @throws {MastraError} When the custom ID generator returns an empty string
    *
    * @example
@@ -347,11 +351,18 @@ export class Mastra<
    * const mastra = new Mastra();
    * const id = mastra.generateId();
    * console.log(id); // "550e8400-e29b-41d4-a716-446655440000"
+   *
+   * // With context for deterministic IDs
+   * const messageId = mastra.generateId({
+   *   idType: 'message',
+   *   source: 'agent',
+   *   threadId: 'thread-123'
+   * });
    * ```
    */
-  public generateId(): string {
+  public generateId(context?: IdGeneratorContext): string {
     if (this.#idGenerator) {
-      const id = this.#idGenerator();
+      const id = this.#idGenerator(context);
       if (!id) {
         const error = new MastraError({
           id: 'MASTRA_ID_GENERATOR_RETURNED_EMPTY_STRING',
