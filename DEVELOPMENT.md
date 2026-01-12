@@ -158,7 +158,7 @@ This starts the Mastra playground using your local packages. The playground prov
 > node /Users/myUser/projects/mastra/packages/cli/dist/index.js dev
 > ```
 >
-> This approach is useful when you have a complex reproduction case in an existing project and want to test against your local changes to Mastra packages. |
+> This approach is useful when you have a complex reproduction case in an existing project and want to test against your local changes to Mastra packages.
 
 You may need to create an agent/tool/workflow in the example project to illustrate the bug you are trying to solve, but the changes in the example should not be committed.
 
