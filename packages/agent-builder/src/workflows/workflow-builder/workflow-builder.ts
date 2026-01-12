@@ -254,7 +254,6 @@ const workflowResearchStep = createStep({
 const taskExecutionStep = createStep({
   id: 'task-execution',
   description: 'Execute the approved task list to create or edit the workflow',
-  // @ts-ignore TODO schema gives false optional value
   inputSchema: TaskExecutionInputSchema,
   outputSchema: TaskExecutionResultSchema,
   suspendSchema: TaskExecutionSuspendSchema,
