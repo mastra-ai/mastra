@@ -20,6 +20,7 @@ type PlanningIterationResult = z.infer<typeof PlanningIterationResultSchema>;
 const planningIterationStep = createStep({
   id: 'planning-iteration',
   description: 'Create or refine task plan with user input',
+  // @ts-ignore TODO enum gives false optional value
   inputSchema: PlanningIterationInputSchema,
   outputSchema: PlanningIterationResultSchema,
   suspendSchema: PlanningIterationSuspendSchema,

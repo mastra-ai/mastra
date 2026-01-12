@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import z from 'zod';
+import { z } from 'zod/v3';
 import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
 import type { MastraScorers } from '../../evals';
@@ -9,6 +9,7 @@ import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
+import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -20,6 +21,7 @@ import type {
   WorkflowEngineType,
   StepParams,
   ToolStep,
+  DefaultEngineType,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -29,9 +31,9 @@ export type EventedEngineType = {};
 
 export function cloneWorkflow<
   TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
   TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<
     string,
     any,
@@ -41,7 +43,7 @@ export function cloneWorkflow<
     any,
     EventedEngineType
   >[],
-  TPrevSchema extends z.ZodType<any> = TInput,
+  TPrevSchema = TInput,
 >(
   workflow: Workflow<EventedEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
   opts: { id: TWorkflowId },
@@ -79,61 +81,91 @@ export function cloneStep<TStepId extends string>(
   };
 }
 
-export function createStep<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+/**
+ * Creates a new workflow step
+ * @param params Configuration parameters for the step
+ * @param params.id Unique identifier for the step
+ * @param params.description Optional description of what the step does
+ * @param params.inputSchema Zod schema defining the input structure
+ * @param params.outputSchema Zod schema defining the output structure
+ * @param params.execute Function that performs the step's operations
+ * @returns A Step object that can be added to the workflow
+ */
+export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
+): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
+// Overload for agent WITH structured output schema
+export function createStep<TStepId extends string, TStepOutput>(
+  agent: Agent<TStepId, any>,
+  agentOptions: AgentStepOptions<TStepOutput> & {
+    structuredOutput: { schema: TStepOutput };
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
+): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
+
+// Overload for agent WITHOUT structured output (default { text: string })
 export function createStep<
   TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
-  TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
+  TStepInput extends { prompt: string },
+  TStepOutput extends { text: string },
+  TResume,
+  TSuspend,
 >(
   agent: Agent<TStepId, any>,
-  agentOptions?: {
+  agentOptions?: AgentStepOptions<TStepOutput> & {
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 export function createStep<
-  TSchemaIn extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+  TSchemaIn,
+  TSuspend,
+  TResume,
+  TSchemaOut,
+  TContext extends ToolExecutionContext<TSuspend, TResume>,
 >(
-  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+  tool: ToolStep<TSchemaIn, TSuspend, TResume, TSchemaOut, TContext>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
+): Step<string, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
 
-export function createStep<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
+// // Processor overload - wraps a Processor as a workflow step
+// export function createStep<TProcessorId extends string>(
+//   processor: Processor<TProcessorId>,
+// ): Step<
+//   `processor:${TProcessorId}`,
+//   any,
+//   InferSchemaOutput<typeof ProcessorStepSchema>,
+//   InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+//   any,
+//   any,
+//   DefaultEngineType
+// >;
+export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
   params:
-    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>
     | Agent<any, any>
-    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
-  agentOrToolOptions?: {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
+    | ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
+  agentOrToolOptions?:
+    | (AgentStepOptions<TStepOutput> & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      })
+    | {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      },
+): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
   if (params instanceof Agent) {
+    const options = (agentOrToolOptions ?? {}) as
+      | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+      | undefined;
+    // Determine output schema based on structuredOutput option
+    const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
+    const { retries, scorers, ...agentOptions } = options ?? {};
+
     return {
       id: params.id,
       description: params.getDescription(),
@@ -144,12 +176,18 @@ export function createStep<
         // threadId: z.string().optional(),
       }),
       // @ts-ignore
-      outputSchema: z.object({
-        text: z.string(),
-      }),
-      retries: agentOrToolOptions?.retries,
-      scorers: agentOrToolOptions?.scorers,
-      execute: async ({ inputData, runId, [PUBSUB_SYMBOL]: pubsub, requestContext, abortSignal, abort }) => {
+      outputSchema,
+      retries,
+      scorers,
+      execute: async ({
+        inputData,
+        runId,
+        [PUBSUB_SYMBOL]: pubsub,
+        requestContext,
+        tracingContext,
+        abortSignal,
+        abort,
+      }) => {
         // TODO: support stream
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -162,9 +200,11 @@ export function createStep<
           streamPromise.reject = reject;
         });
         // TODO: should use regular .stream()
-        const { fullStream } = await params.streamLegacy(inputData.prompt, {
+        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          tracingContext,
           requestContext,
           onFinish: result => {
             streamPromise.resolve(result.text);
@@ -173,7 +213,7 @@ export function createStep<
         });
 
         if (abortSignal.aborted) {
-          return abort();
+          return abort() as TStepOutput;
         }
 
         const toolData = {
@@ -203,7 +243,7 @@ export function createStep<
 
         return {
           text: await streamPromise.promise,
-        };
+        } as TStepOutput;
       },
       component: params.component,
     };
@@ -255,7 +295,7 @@ export function createStep<
         };
 
         // Tool.execute already handles the v1.0 signature properly
-        return params.execute(inputData, context);
+        return params.execute(inputData, context) as TStepOutput;
       },
       component: 'TOOL',
     };
@@ -276,9 +316,9 @@ export function createStep<
 
 export function createWorkflow<
   TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
   TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<
     string,
     any,
@@ -311,10 +351,10 @@ export class EventedWorkflow<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TPrevSchema extends z.ZodType<any> = TInput,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
+  TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
@@ -397,9 +437,9 @@ export class EventedWorkflow<
 export class EventedRun<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
 > extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
   constructor(params: {
     workflowId: string;
@@ -450,9 +490,9 @@ export class EventedRun<
     requestContext,
     perStep,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: TInput;
     requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
@@ -488,8 +528,8 @@ export class EventedRun<
       },
     });
 
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -497,11 +537,7 @@ export class EventedRun<
 
     this.setupAbortHandler();
 
-    const result = await this.executionEngine.execute<
-      z.infer<TState>,
-      z.infer<TInput>,
-      WorkflowResult<TState, TInput, TOutput, TSteps>
-    >({
+    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
@@ -535,9 +571,9 @@ export class EventedRun<
     requestContext,
     perStep,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: TInput;
     requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Add validation checks
@@ -573,8 +609,8 @@ export class EventedRun<
       },
     });
 
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -600,8 +636,8 @@ export class EventedRun<
 
   // TODO: stream
 
-  async resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
+  async resume<TResumeSchema>(params: {
+    resumeData?: TResumeSchema;
     step:
       | Step<string, any, any, TResumeSchema, any, any, TEngineType>
       | [
@@ -676,12 +712,12 @@ export class EventedRun<
     this.setupAbortHandler();
 
     const executionResultPromise = this.executionEngine
-      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: resumeDataToUse,
+        input: snapshot?.context?.input as TInput,
         resume: {
           steps,
           stepResults: snapshot?.context as any,

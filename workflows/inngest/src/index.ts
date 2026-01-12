@@ -1,6 +1,7 @@
 import type { ReadableStream } from 'node:stream/web';
 import { Agent } from '@mastra/core/agent';
 import type { MastraScorers } from '@mastra/core/evals';
+import type { Processor, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
@@ -9,6 +10,7 @@ import { Workflow } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';
+import type { InferSchemaOutput } from '../../../packages/core/dist/stream/base/schema';
 import type { InngestEngineType, InngestWorkflowConfig } from './types';
 import { InngestWorkflow } from './workflow';
 
@@ -19,77 +21,63 @@ export * from './run';
 export * from './serve';
 export * from './types';
 
-export function createStep<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+/**
+ * Creates a new workflow step
+ * @param params Configuration parameters for the step
+ * @param params.id Unique identifier for the step
+ * @param params.description Optional description of what the step does
+ * @param params.inputSchema Zod schema defining the input structure
+ * @param params.outputSchema Zod schema defining the output structure
+ * @param params.execute Function that performs the step's operations
+ * @returns A Step object that can be added to the workflow
+ */
+export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
+): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType>;
 
 // Overload for agent WITH structured output schema
-export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
+export function createStep<TStepId extends string, TStepOutput>(
   agent: Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
     structuredOutput: { schema: TStepOutput };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
-): Step<
-  TStepId,
-  any,
-  z.ZodObject<{ prompt: z.ZodString }>,
-  TStepOutput,
-  z.ZodType<any>,
-  z.ZodType<any>,
-  InngestEngineType
->;
+): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, InngestEngineType>;
 
 // Overload for agent WITHOUT structured output (default { text: string })
 export function createStep<
   TStepId extends string,
-  TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
-  TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
+  TStepInput extends { prompt: string },
+  TStepOutput extends { text: string },
+  TResume,
+  TSuspend,
 >(
   agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions & {
+  agentOptions?: AgentStepOptions<TStepOutput> & {
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
-): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType>;
 
 export function createStep<
-  TSchemaIn extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+  TSchemaIn,
+  TSuspend,
+  TResume,
+  TSchemaOut,
+  TContext extends ToolExecutionContext<TSuspend, TResume>,
 >(
-  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
-  toolOptions?: {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
-): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
-export function createStep<
-  TStepId extends string,
-  TState extends z.ZodObject<any>,
-  TStepInput extends z.ZodType<any>,
-  TStepOutput extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
->(
+  tool: ToolStep<TSchemaIn, TSuspend, TResume, TSchemaOut, TContext>,
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+): Step<string, any, TSchemaIn, TSchemaOut, TSuspend, TResume, InngestEngineType>;
+
+export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
   params:
-    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>
     | Agent<any, any>
-    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
+    | ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
   agentOrToolOptions?:
-    | (AgentStepOptions & {
+    | (AgentStepOptions<TStepOutput> & {
         retries?: number;
         scorers?: DynamicArgument<MastraScorers>;
       })
@@ -97,24 +85,16 @@ export function createStep<
         retries?: number;
         scorers?: DynamicArgument<MastraScorers>;
       },
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
+): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType> {
   // Issue #9965: Preserve InngestWorkflow identity when passed to createStep
   // This ensures nested workflows in foreach are properly detected by isNestedWorkflowStep()
   if (params instanceof InngestWorkflow) {
-    return params as unknown as Step<
-      TStepId,
-      TState,
-      TStepInput,
-      TStepOutput,
-      TResumeSchema,
-      TSuspendSchema,
-      InngestEngineType
-    >;
+    return params as unknown as Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType>;
   }
 
   if (params instanceof Agent) {
     const options = agentOrToolOptions as
-      | (AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+      | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
       | undefined;
     // Determine output schema based on structuredOutput option
     const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
@@ -122,12 +102,14 @@ export function createStep<
     return {
       id: params.name as TStepId,
       description: params.getDescription(),
+      // @ts-ignore fix types
       inputSchema: z.object({
         prompt: z.string(),
         // resourceId: z.string().optional(),
         // threadId: z.string().optional(),
-      }) as unknown as TStepInput,
-      outputSchema: outputSchema as unknown as TStepOutput,
+      }),
+      // @ts-ignore
+      outputSchema,
       retries,
       scorers,
       execute: async ({
@@ -163,9 +145,9 @@ export function createStep<
         let stream: ReadableStream<any>;
 
         if ((await params.getModel()).specificationVersion === 'v1') {
-          const { fullStream } = await params.streamLegacy(inputData.prompt, {
+          const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
-            // resourceId: inputData.resourceId,
+            // resourceId: (inputData as { prompt: string }).resourceId,
             // threadId: inputData.threadId,
             requestContext,
             tracingContext,
@@ -182,7 +164,7 @@ export function createStep<
           });
           stream = fullStream as any;
         } else {
-          const modelOutput = await params.stream(inputData.prompt, {
+          const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
             requestContext,
             tracingContext,
@@ -285,7 +267,7 @@ export function createStep<
             setState,
           },
         };
-        return params.execute(inputData, toolContext);
+        return params.execute(inputData, toolContext) as TStepOutput;
       },
       component: 'TOOL',
     };
@@ -308,9 +290,9 @@ export function init(inngest: Inngest) {
   return {
     createWorkflow<
       TWorkflowId extends string = string,
-      TState extends z.ZodObject<any> = z.ZodObject<any>,
-      TInput extends z.ZodType<any> = z.ZodType<any>,
-      TOutput extends z.ZodType<any> = z.ZodType<any>,
+      TState = any,
+      TInput = any,
+      TOutput = any,
       TSteps extends Step<string, any, any, any, any, any, InngestEngineType>[] = Step<
         string,
         any,
@@ -347,9 +329,9 @@ export function init(inngest: Inngest) {
     },
     cloneWorkflow<
       TWorkflowId extends string = string,
-      TState extends z.ZodObject<any> = z.ZodObject<any>,
-      TInput extends z.ZodType<any> = z.ZodType<any>,
-      TOutput extends z.ZodType<any> = z.ZodType<any>,
+      TState = unknown,
+      TInput = unknown,
+      TOutput = unknown,
       TSteps extends Step<string, any, any, any, any, any, InngestEngineType>[] = Step<
         string,
         any,
@@ -359,12 +341,12 @@ export function init(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-      TPrevSchema extends z.ZodType<any> = TInput,
+      TPrev = TInput,
     >(
-      workflow: Workflow<InngestEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
+      workflow: Workflow<InngestEngineType, TSteps, string, TState, TInput, TOutput, TPrev>,
       opts: { id: TWorkflowId },
-    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
+    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrev> {
+      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrev> = new Workflow({
         id: opts.id,
         inputSchema: workflow.inputSchema,
         outputSchema: workflow.outputSchema,

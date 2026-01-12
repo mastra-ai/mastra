@@ -61,7 +61,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema),
+        zodToJsonSchema(workflow.inputSchema as any),
       )}`;
     })
     .join('\n');
@@ -351,7 +351,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
       const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
@@ -547,7 +547,7 @@ export async function createNetworkLoop({
 
       // Get memory context from initData to pass to sub-agents
       // This ensures sub-agents can access the same thread/resource for memory operations
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const threadId = initData?.threadId || runId;
       const resourceId = initData?.threadResourceId || networkName;
 
@@ -916,7 +916,7 @@ export async function createNetworkLoop({
       });
 
       const memory = await agent.getMemory({ requestContext: requestContext });
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       await memory?.saveMessages({
         messages: [
           {
@@ -1029,7 +1029,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
 
       const agentTools = await agent.listTools({ requestContext });
@@ -2083,6 +2083,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   });
 
   return new MastraAgentNetworkStream({
+    // @ts-ignore
     run,
     createStream: () => {
       if (resumeDataToUse) {

@@ -47,7 +47,10 @@ export type { LLMStepResult } from '../stream/types';
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
+export type ToolsInput = Record<
+  string,
+  ToolAction<any, any, any, any, any, string> | VercelTool | VercelToolV5 | ProviderDefinedTool
+>;
 
 export type AgentInstructions = SystemMessage;
 export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;

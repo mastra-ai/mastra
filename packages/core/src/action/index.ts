@@ -4,7 +4,6 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
 import type { MastraStorage } from '../storage';
 import type { MastraTTS } from '../tts';
-import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { MastraVector } from '../vector';
 
 export type MastraPrimitives = {
@@ -20,8 +19,8 @@ export type MastraUnion = {
   [K in keyof Mastra]: Mastra[K];
 } & MastraPrimitives;
 
-export interface IExecutionContext<TSchemaIn extends ZodLikeSchema | undefined = undefined> {
-  context: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : {};
+export interface IExecutionContext<TSchemaIn = {}> {
+  context: TSchemaIn;
   runId?: string;
   threadId?: string;
   resourceId?: string;
@@ -30,10 +29,10 @@ export interface IExecutionContext<TSchemaIn extends ZodLikeSchema | undefined =
 
 export interface IAction<
   TId extends string,
-  TSchemaIn extends ZodLikeSchema | undefined,
-  TSchemaOut extends ZodLikeSchema | undefined,
+  TSchemaIn,
+  TSchemaOut,
   TContext extends IExecutionContext<TSchemaIn>,
-  TOptions extends unknown = unknown,
+  TOptions = unknown,
 > {
   id: TId;
   description?: string;
@@ -41,8 +40,5 @@ export interface IAction<
   outputSchema?: TSchemaOut;
   // execute must remain optional because ITools extends IAction and tools may need execute to be optional
   // when forwarding tool calls to the client or to a queue instead of executing them in the same process
-  execute?: (
-    context: TContext,
-    options?: TOptions,
-  ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+  execute?: (context: TContext, options?: TOptions) => Promise<TSchemaOut>;
 }

@@ -14,6 +14,7 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
+import type { SchemaWithValidation } from '../stream/base/schema';
 import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
@@ -32,14 +33,14 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
   toolCallId: string;
   messages: any[];
-  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<any>;
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
   threadId?: string;
   resourceId?: string;
 
   // Optional - only present if tool was previously suspended
-  resumeData?: InferZodLikeSchema<TResume>;
+  resumeData?: TResume;
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
@@ -52,7 +53,7 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   workflowId: string;
   state: any;
   setState: (state: any) => void;
-  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<any>;
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
   resumeData?: TResume;
 }
@@ -205,17 +206,17 @@ export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
 export interface ToolAction<
   TSchemaIn,
   TSchemaOut,
-  TSuspend,
-  TResume,
+  TSuspend = unknown,
+  TResume = unknown,
   TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
 > {
   id: TId;
   description: string;
-  inputSchema?: TSchemaIn;
-  outputSchema?: TSchemaOut;
-  suspendSchema?: TSuspend;
-  resumeSchema?: TResume;
+  inputSchema?: SchemaWithValidation<TSchemaIn>;
+  outputSchema?: SchemaWithValidation<TSchemaOut>;
+  suspendSchema?: SchemaWithValidation<TSuspend>;
+  resumeSchema?: SchemaWithValidation<TResume>;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
@@ -223,12 +224,7 @@ export interface ToolAction<
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
-  execute?: (
-    inputData: TSchemaIn,
-    context: TContext,
-  ) => Promise<
-    (TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> & { error?: never } : any) | ValidationError
-  >;
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
   /**
@@ -252,12 +248,12 @@ export interface ToolAction<
   ) => void | PromiseLike<void>;
   onInputAvailable?: (
     options: {
-      input: InferZodLikeSchema<TSchemaIn>;
+      input: TSchemaIn;
     } & ToolCallOptions,
   ) => void | PromiseLike<void>;
   onOutput?: (
     options: {
-      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+      output: TSchemaOut;
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;

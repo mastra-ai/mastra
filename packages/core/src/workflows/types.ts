@@ -1,5 +1,6 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
+import type z from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
@@ -8,9 +9,11 @@ import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
+import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
 import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
+import type { ZodLikeSchema } from '../types/zod-compat';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
@@ -174,7 +177,7 @@ export type TimeTravelContext<P, R, S, T> = Record<
 
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
-export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
+export type StepsRecord<T extends readonly Step<any, any, any, any, any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
 };
 
@@ -190,7 +193,8 @@ export type PathsToStringProps<T> =
       ? {
           [K in keyof T]: T[K] extends object
             ? K extends string
-              ? K | `${K}.${PathsToStringProps<T[K]>}`
+              ? // @ts-ignore
+                  K | `${K}.${PathsToStringProps<T[K]>}`
               : never
             : K extends string
               ? K
@@ -198,10 +202,10 @@ export type PathsToStringProps<T> =
         }[keyof T]
       : never;
 
-export type ExtractSchemaType<T extends z.ZodType<any>> = T extends z.ZodObject<infer V> ? V : never;
+export type ExtractSchemaType<T extends ZodLikeSchema> = T extends ZodLikeSchema<infer V> ? V : never;
 
 export type ExtractSchemaFromStep<
-  TStep extends Step<any, any, any>,
+  TStep extends Step<any, any, any, any, any, any, any>,
   TKey extends 'inputSchema' | 'outputSchema',
 > = TStep[TKey];
 
@@ -216,7 +220,7 @@ export type VariableReference<
       step: TStep;
       path: TVarPath;
     }
-  | { value: any; schema: z.ZodTypeAny };
+  | { value: any; schema: OutputSchema };
 
 export type StreamEvent =
   // old events
@@ -250,20 +254,6 @@ export type WorkflowRunStatus =
   | 'canceled'
   | 'bailed'
   | 'paused';
-
-// Type to get the inferred type at a specific path in a Zod schema
-export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
-  T extends z.ZodObject<infer Shape>
-    ? P extends `${infer Key}.${infer Rest}`
-      ? Key extends keyof Shape
-        ? Shape[Key] extends z.ZodTypeAny
-          ? ZodPathType<Shape[Key], Rest>
-          : never
-        : never
-      : P extends keyof Shape
-        ? Shape[P]
-        : never
-    : never;
 
 /**
  * Unified workflow state that combines metadata with processed execution state.
@@ -459,13 +449,13 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'conditional';
       steps: { type: 'step'; step: Step }[];
-      conditions: ConditionFunction<any, any, any, any, TEngineType>[];
+      conditions: ConditionFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {
       type: 'loop';
       step: Step;
-      condition: LoopConditionFunction<any, any, any, any, TEngineType>;
+      condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
@@ -541,81 +531,76 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
 export type StepParams<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
   id: TStepId;
   description?: string;
-  inputSchema: OutputSchema<TStepInput>;
-  outputSchema: OutputSchema<TStepOutput>;
-  resumeSchema?: OutputSchema<TResume>;
-  suspendSchema?: OutputSchema<TSuspend>;
-  stateSchema?: OutputSchema<TState>;
+  inputSchema: SchemaWithValidation<TStepInput>;
+  outputSchema: SchemaWithValidation<TStepOutput>;
+  resumeSchema?: SchemaWithValidation<TResume>;
+  suspendSchema?: SchemaWithValidation<TSuspend>;
+  stateSchema?: SchemaWithValidation<TState>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 };
 
 export type ToolStep<
-  TSchemaIn extends z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any>,
+  TSchemaIn,
+  TSuspendSchema,
+  TResumeSchema,
+  TSchemaOut,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
   inputSchema: TSchemaIn;
   outputSchema: TSchemaOut;
-  execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
+  execute: (input: TSchemaIn, context?: TContext) => Promise<any>;
 };
 
-export type WorkflowResult<
-  TState extends z.ZodObject<any>,
-  TInput extends z.ZodType<any>,
-  TOutput extends z.ZodType<any>,
-  TSteps extends Step<string, any, any>[],
-> =
+export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, any, any, any, any, any>[]> =
   | ({
       status: 'success';
-      state?: z.infer<TState>;
+      state?: TState;
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
-      result: z.infer<TOutput>;
-      input: z.infer<TInput>;
+      result: TOutput;
+      input: TInput;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
     } & TracingProperties)
   | ({
       status: 'failed';
-      input: z.infer<TInput>;
-      state?: z.infer<TState>;
+      input: TInput;
+      state?: TState;
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
       error: Error;
     } & TracingProperties)
   | ({
       status: 'tripwire';
-      input: z.infer<TInput>;
-      state?: z.infer<TState>;
+      input: TInput;
+      state?: TState;
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
       /** Tripwire data including reason, retry flag, metadata, and processor ID */
@@ -623,17 +608,17 @@ export type WorkflowResult<
     } & TracingProperties)
   | ({
       status: 'suspended';
-      input: z.infer<TInput>;
-      state?: z.infer<TState>;
+      input: TInput;
+      state?: TState;
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
       suspendPayload: any;
@@ -641,56 +626,45 @@ export type WorkflowResult<
     } & TracingProperties)
   | ({
       status: 'paused';
-      state?: z.infer<TState>;
+      state?: TState;
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
-      input: z.infer<TInput>;
+      input: TInput;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
     } & TracingProperties);
 
-export type WorkflowStreamResult<
-  TState extends z.ZodObject<any>,
-  TInput extends z.ZodType<any>,
-  TOutput extends z.ZodType<any>,
-  TSteps extends Step<string, any, any>[],
-> =
+export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<string, any, any>[]> =
   | WorkflowResult<TState, TInput, TOutput, TSteps>
   | {
       status: 'running' | 'waiting' | 'pending' | 'canceled';
-      input: z.infer<TInput>;
+      input: TInput;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
     };
 
-export type WorkflowConfig<
-  TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
-> = {
+export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, TSteps extends Step[]> = {
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
-  inputSchema: TInput;
-  outputSchema: TOutput;
-  stateSchema?: TState;
+  inputSchema: SchemaWithValidation<TInput>;
+  outputSchema: SchemaWithValidation<TOutput>;
+  stateSchema?: SchemaWithValidation<TState>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
@@ -706,18 +680,17 @@ export type WorkflowConfig<
  * Utility type to ensure that TStepState is a subset of TState.
  * This means that all properties in TStepState must exist in TState with compatible types.
  */
-export type SubsetOf<TStepState extends z.ZodObject<any>, TState extends z.ZodObject<any>> =
-  TStepState extends z.ZodObject<infer TStepShape>
-    ? TState extends z.ZodObject<infer TStateShape>
-      ? keyof TStepShape extends keyof TStateShape
-        ? {
-            [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
-          } extends TStepShape
-          ? TStepState
-          : never
+export type SubsetOf<TStepState, TState> = TStepState extends infer TStepShape
+  ? TState extends infer TStateShape
+    ? keyof TStepShape extends keyof TStateShape
+      ? {
+          [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
+        } extends TStepShape
+        ? TStepState
         : never
       : never
-    : never;
+    : never
+  : never;
 
 /**
  * Execution context passed through workflow execution
@@ -806,7 +779,7 @@ export type StepExecutionStartParams = {
  * Parameters for executing a regular (non-workflow) step
  */
 export type RegularStepExecutionParams = {
-  step: Step<any, any, any>;
+  step: Step<any, any, any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   executionContext: ExecutionContext;
   resume?: {
@@ -867,11 +840,11 @@ export type SleepUntilDateParams = {
  * Parameters for evaluating a condition (platform-specific wrapping)
  */
 export type ConditionEvalParams<TEngineType = DefaultEngineType> = {
-  conditionFn: ConditionFunction<any, any, any, any, TEngineType>;
+  conditionFn: ConditionFunction<any, any, any, any, any, TEngineType>;
   index: number;
   workflowId: string;
   runId: string;
-  context: ExecuteFunctionParams<any, any, any, any, TEngineType>;
+  context: ExecuteFunctionParams<any, any, any, any, any, TEngineType>;
   evalSpan?: AnySpan;
 };
 

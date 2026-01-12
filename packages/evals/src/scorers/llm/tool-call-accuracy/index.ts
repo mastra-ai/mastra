@@ -12,7 +12,7 @@ import { TOOL_SELECTION_ACCURACY_INSTRUCTIONS, createAnalyzePrompt, createReason
 
 export interface ToolCallAccuracyOptions {
   model: MastraModelConfig;
-  availableTools: Tool[];
+  availableTools: Tool<unknown, unknown, unknown, unknown>[];
 }
 
 const analyzeOutputSchema = z.object({
