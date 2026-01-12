@@ -115,7 +115,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: "memory-vector",
       apiKey: process.env.PINECONE_API_KEY!,
-      environment: "us-east-1",
     }),
     embedder: new OpenAIEmbedder({
       model: "text-embedding-3-small",
