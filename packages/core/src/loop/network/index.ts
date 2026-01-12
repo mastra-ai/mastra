@@ -688,17 +688,11 @@ export async function createNetworkLoop({
                 },
               ],
               format: 2,
-              ...(requireApprovalMetadata
+              ...(requireApprovalMetadata || suspendedTools
                 ? {
                     metadata: {
-                      requireApprovalMetadata,
-                    },
-                  }
-                : {}),
-              ...(suspendedTools
-                ? {
-                    metadata: {
-                      suspendedTools,
+                      ...(requireApprovalMetadata ? { requireApprovalMetadata } : {}),
+                      ...(suspendedTools ? { suspendedTools } : {}),
                     },
                   }
                 : {}),
