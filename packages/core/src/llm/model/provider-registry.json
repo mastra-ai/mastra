@@ -1208,6 +1208,23 @@
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "gateway": "models.dev"
     },
+    "voyage": {
+      "apiKeyEnvVar": "VOYAGE_API_KEY",
+      "name": "Voyage AI",
+      "models": [
+        "voyage-3-large",
+        "voyage-3.5",
+        "voyage-3.5-lite",
+        "voyage-code-3",
+        "voyage-finance-2",
+        "voyage-law-2",
+        "voyage-multimodal-3",
+        "voyage-multimodal-3.5",
+        "voyage-context-3"
+      ],
+      "docUrl": "https://docs.voyageai.com",
+      "gateway": "models.dev"
+    },
     "inception": {
       "url": "https://api.inceptionlabs.ai/v1/",
       "apiKeyEnvVar": "INCEPTION_API_KEY",
@@ -3150,6 +3167,17 @@
       "gemini-flash-lite-latest",
       "gemini-live-2.5-flash",
       "gemini-live-2.5-flash-preview-native-audio"
+    ],
+    "voyage": [
+      "voyage-3-large",
+      "voyage-3.5",
+      "voyage-3.5-lite",
+      "voyage-code-3",
+      "voyage-finance-2",
+      "voyage-law-2",
+      "voyage-multimodal-3",
+      "voyage-multimodal-3.5",
+      "voyage-context-3"
     ],
     "inception": ["mercury", "mercury-coder"],
     "wandb": [
