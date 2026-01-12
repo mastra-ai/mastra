@@ -77,6 +77,49 @@ describe('Lance vector store tests', () => {
 
         expect(stats?.metric).toBe('l2');
       });
+
+      it('should default tableName to indexName when tableName is not provided', async () => {
+        // This test reproduces the issue where Memory calls createIndex without tableName.
+        // When using LanceVectorStore with Memory, createIndex is called with only
+        // indexName, dimension, and metric - but no tableName.
+        // The fix should default tableName to indexName to maintain compatibility
+        // with the standard CreateIndexParams interface used by Memory.
+
+        // In LanceDB:
+        // - tableName = the table containing the data
+        // - indexName = the column to create an index on (e.g., 'vector')
+        // When Memory calls createIndex({ indexName: 'memory_messages', dimension: 1536 }),
+        // the fix should use 'memory_messages' as both the table name and vector column name.
+
+        const memoryIndexName = 'memory_messages_test_' + Date.now();
+        const generateTableData = (numRows: number) => {
+          return Array.from({ length: numRows }, (_, i) => ({
+            id: String(i + 1),
+            // Use the indexName as the vector column name (what Memory expects)
+            [memoryIndexName]: Array.from({ length: 3 }, () => Math.random()),
+          }));
+        };
+
+        // Create a table with the same name as the indexName (simulating Memory's expectation)
+        await vectorDB.createTable(memoryIndexName, generateTableData(300));
+
+        // Call createIndex WITHOUT tableName - this is what Memory does
+        // Currently fails with "tableName is required"
+        await vectorDB.createIndex({
+          indexName: memoryIndexName,
+          dimension: 3,
+          metric: 'cosine',
+          // tableName intentionally omitted to simulate Memory's behavior
+        } as any);
+
+        // Verify the index was created
+        const stats = await vectorDB.describeIndex({ indexName: memoryIndexName + '_idx' });
+        expect(stats).toBeDefined();
+        expect(stats?.dimension).toBe(3);
+
+        // Cleanup
+        await vectorDB.deleteTable(memoryIndexName);
+      });
     });
 
     describe('list indexes', () => {
