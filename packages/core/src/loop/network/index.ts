@@ -564,24 +564,9 @@ export async function createNetworkLoop({
         });
 
         if (recallResult?.messages) {
-          // Filter to only include user messages that are not internal network JSON
-          conversationContext = recallResult.messages.filter(msg => {
-            // Only include user messages
-            if (msg.role !== 'user') return false;
-
-            // Check if the message content is internal network JSON (shouldn't be for user messages, but check anyway)
-            const textContent = msg.content?.parts?.[0];
-            if (textContent?.type === 'text' && textContent?.text) {
-              try {
-                const parsed = JSON.parse(textContent.text);
-                if (parsed.isNetwork) return false;
-              } catch {
-                // Not JSON, keep the message
-              }
-            }
-
-            return true;
-          });
+          // Filter to only include user messages. Network-internal messages (isNetwork JSON,
+          // completion feedback) are saved as 'assistant' role, so this excludes them.
+          conversationContext = recallResult.messages.filter(msg => msg.role === 'user');
         }
       }
 
