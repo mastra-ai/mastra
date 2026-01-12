@@ -13,11 +13,11 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
+import type { WorkflowSnapshotEntityData } from '../../../entities/utils';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
-import type { WorkflowSnapshotEntityData } from '../../../entities/utils';
 import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB

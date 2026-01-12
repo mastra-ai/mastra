@@ -20,11 +20,11 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
-import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {

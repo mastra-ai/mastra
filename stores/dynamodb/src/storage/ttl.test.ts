@@ -9,7 +9,7 @@ import {
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 
 import { DynamoDBStore } from '..';
 
