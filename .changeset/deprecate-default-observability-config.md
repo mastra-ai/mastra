@@ -5,7 +5,7 @@
 
 Deprecate `default: { enabled: true }` observability configuration
 
-The shorthand `default: { enabled: true }` configuration is now deprecated and will be removed in a future version. Users should migrate to explicit configuration with `LocalExporter`, `CloudExporter`, and `SensitiveDataFilter`.
+The shorthand `default: { enabled: true }` configuration is now deprecated and will be removed in a future version. Users should migrate to explicit configuration with `DefaultExporter`, `CloudExporter`, and `SensitiveDataFilter`.
 
 **Before (deprecated):**
 ```typescript
@@ -22,7 +22,7 @@ const mastra = new Mastra({
 ```typescript
 import {
   Observability,
-  LocalExporter,
+  DefaultExporter,
   CloudExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
@@ -33,7 +33,7 @@ const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new LocalExporter(),
+          new DefaultExporter(),
           new CloudExporter(),
         ],
         spanOutputProcessors: [
