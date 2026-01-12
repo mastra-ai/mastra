@@ -61,7 +61,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema as any),
+        zodToJsonSchema(workflow.inputSchema),
       )}`;
     })
     .join('\n');
@@ -70,7 +70,7 @@ async function getRoutingAgent({
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema((tool as any).inputSchema || z.object({})),
+        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
       )}`;
     })
     .join('\n');
@@ -1027,6 +1027,11 @@ export async function createNetworkLoop({
       result: z.string(),
       isComplete: z.boolean().optional(),
       iteration: z.number(),
+    }),
+    resumeSchema: z.object({
+      approved: z
+        .boolean()
+        .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
     }),
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();

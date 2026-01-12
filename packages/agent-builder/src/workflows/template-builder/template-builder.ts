@@ -53,6 +53,8 @@ import {
   resolveModel,
 } from '../../utils';
 
+type AgentBuilderInputSchemaType = z.infer<typeof AgentBuilderInputSchema>;
+
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
   id: 'clone-template',
@@ -1614,7 +1616,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData<{ targetPath: string }>();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
@@ -1625,7 +1627,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const packageResult = getStepResult(analyzePackageStep);
-    const initData = getInitData<{ targetPath: string }>();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
@@ -1635,7 +1637,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   })
   .then(packageMergeStep)
   .map(async ({ getInitData }) => {
-    const initData = getInitData<{ targetPath: string }>();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       targetPath: initData.targetPath,
     };
@@ -1645,7 +1647,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const cloneResult = getStepResult(cloneTemplateStep);
     const orderResult = getStepResult(orderUnitsStep);
     const installResult = getStepResult(installStep);
-    const initData = getInitData<{ targetPath: string; variables: Record<string, any> }>();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     if (shouldAbortWorkflow(installResult)) {
       throw new Error(`Failure in install step: ${installResult.error || 'Install failed'}`);
@@ -1663,7 +1665,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const copyResult = getStepResult(programmaticFileCopyStep);
     const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData<{ targetPath: string }>();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     return {
       conflicts: copyResult.conflicts,
@@ -1680,7 +1682,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const orderResult = getStepResult(orderUnitsStep);
     const copyResult = getStepResult(programmaticFileCopyStep);
     const mergeResult = getStepResult(intelligentMergeStep);
-    const initData = getInitData<{ targetPath: string }>();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     return {
       commitSha: cloneResult.commitSha,

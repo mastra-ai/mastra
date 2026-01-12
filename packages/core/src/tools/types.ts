@@ -15,7 +15,6 @@ import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
-import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';

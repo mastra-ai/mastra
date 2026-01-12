@@ -409,16 +409,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
-      let step;
+      let step: Step<string, unknown, any, any, any, any>;
       if (isProcessorWorkflow(processorOrWorkflow)) {
         step = processorOrWorkflow;
       } else {
         // Set processorIndex on the processor for span attributes
-        const processor = processorOrWorkflow as Exclude<T, ProcessorWorkflow>;
+        const processor = processorOrWorkflow;
+        // @ts-ignore - TODO: fix types
         processor.processorIndex = index;
         step = createStep(processor);
       }
-      // @ts-ignore
+
       workflow = workflow.then(step);
     }
 
@@ -2120,7 +2121,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
-          // @ts-ignore
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2131,7 +2131,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
-              // @ts-ignore
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),

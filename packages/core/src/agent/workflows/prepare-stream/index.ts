@@ -134,7 +134,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
       },
     })
       .parallel([prepareToolsStep, prepareMemoryStep])
-      // @ts-ignore
+      // @ts-ignore - TODO: fix types
       .map(mapResultsStep)
       .then(streamStep)
       .commit()

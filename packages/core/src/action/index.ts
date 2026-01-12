@@ -19,8 +19,8 @@ export type MastraUnion = {
   [K in keyof Mastra]: Mastra[K];
 } & MastraPrimitives;
 
-export interface IExecutionContext<TSchemaIn = {}> {
-  context: TSchemaIn;
+export interface IExecutionContext<TInput> {
+  context: TInput;
   runId?: string;
   threadId?: string;
   resourceId?: string;
@@ -29,16 +29,16 @@ export interface IExecutionContext<TSchemaIn = {}> {
 
 export interface IAction<
   TId extends string,
-  TSchemaIn,
-  TSchemaOut,
-  TContext extends IExecutionContext<TSchemaIn>,
+  TInput,
+  TOutput,
+  TContext extends IExecutionContext<TInput>,
   TOptions = unknown,
 > {
   id: TId;
   description?: string;
-  inputSchema?: TSchemaIn;
-  outputSchema?: TSchemaOut;
+  inputSchema?: TInput;
+  outputSchema?: TOutput;
   // execute must remain optional because ITools extends IAction and tools may need execute to be optional
   // when forwarding tool calls to the client or to a queue instead of executing them in the same process
-  execute?: (context: TContext, options?: TOptions) => Promise<TSchemaOut>;
+  execute?: (context: TContext, options?: TOptions) => Promise<TOutput>;
 }

@@ -514,7 +514,6 @@ class MastraScorer<
 
     let chainedWorkflow = workflow;
     for (const step of workflowSteps) {
-      // @ts-ignore - Complain about the type mismatch when we chain the steps
       chainedWorkflow = chainedWorkflow.then(step);
     }
 
