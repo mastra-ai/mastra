@@ -49,8 +49,8 @@ describe('Memory Schema Query Parsing', () => {
         }
       });
 
-      it('should handle updatedAt field in orderBy as JSON string', () => {
-        const jsonString = JSON.stringify({ field: 'updatedAt', direction: 'DESC' });
+      it('should handle createdAt field in orderBy as JSON string (messages only support createdAt)', () => {
+        const jsonString = JSON.stringify({ field: 'createdAt', direction: 'DESC' });
 
         const result = listMessagesQuerySchema.safeParse({
           threadId: 'test-thread',
@@ -61,7 +61,7 @@ describe('Memory Schema Query Parsing', () => {
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.data.orderBy).toEqual({ field: 'updatedAt', direction: 'DESC' });
+          expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'DESC' });
         }
       });
     });
@@ -73,16 +73,16 @@ describe('Memory Schema Query Parsing', () => {
           page: 0,
           perPage: 100,
           include: [
-            { role: 'user', withPreviousMessages: 5 },
-            { role: 'assistant', withNextMessages: 3 },
+            { id: 'msg-1', withPreviousMessages: 5 },
+            { id: 'msg-2', withNextMessages: 3 },
           ],
         });
 
         expect(result.success).toBe(true);
         if (result.success) {
           expect(result.data.include).toEqual([
-            { role: 'user', withPreviousMessages: 5 },
-            { role: 'assistant', withNextMessages: 3 },
+            { id: 'msg-1', withPreviousMessages: 5 },
+            { id: 'msg-2', withNextMessages: 3 },
           ]);
         }
       });
@@ -94,8 +94,8 @@ describe('Memory Schema Query Parsing', () => {
        */
       it('should parse include when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify([
-          { role: 'user', withPreviousMessages: 5 },
-          { role: 'assistant', withNextMessages: 3 },
+          { id: 'msg-1', withPreviousMessages: 5 },
+          { id: 'msg-2', withNextMessages: 3 },
         ]);
 
         const result = listMessagesQuerySchema.safeParse({
@@ -108,8 +108,8 @@ describe('Memory Schema Query Parsing', () => {
         expect(result.success).toBe(true);
         if (result.success) {
           expect(result.data.include).toEqual([
-            { role: 'user', withPreviousMessages: 5 },
-            { role: 'assistant', withNextMessages: 3 },
+            { id: 'msg-1', withPreviousMessages: 5 },
+            { id: 'msg-2', withNextMessages: 3 },
           ]);
         }
       });
@@ -149,6 +149,54 @@ describe('Memory Schema Query Parsing', () => {
         if (result.success) {
           expect(result.data.filter).toEqual({ roles: ['user', 'assistant'] });
         }
+      });
+
+      it('should reject malformed JSON in include parameter', () => {
+        const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          page: 0,
+          perPage: 10,
+          include: '{invalid}',
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject incomplete JSON in include parameter', () => {
+        const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          page: 0,
+          perPage: 10,
+          include: '[incomplete',
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject empty string in include parameter', () => {
+        const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          page: 0,
+          perPage: 10,
+          include: '',
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject malformed JSON in filter parameter', () => {
+        const result = listMessagesQuerySchema.safeParse({
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          page: 0,
+          perPage: 10,
+          filter: '{"dateRange":invalid}',
+        });
+
+        expect(result.success).toBe(false);
       });
     });
   });
@@ -274,6 +322,38 @@ describe('Memory Schema Query Parsing', () => {
           expect(result.data.resourceId).toBe('user-123');
           expect(result.data.metadata).toEqual({ status: 'active' });
         }
+      });
+    });
+
+    describe('metadata parameter parsing (negative cases)', () => {
+      it('should reject malformed JSON in metadata parameter', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          page: 0,
+          perPage: 100,
+          metadata: '{invalid}',
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject incomplete JSON in metadata parameter', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          page: 0,
+          perPage: 100,
+          metadata: '{"key":incomplete',
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject empty string in metadata parameter', () => {
+        const result = listThreadsQuerySchema.safeParse({
+          page: 0,
+          perPage: 100,
+          metadata: '',
+        });
+
+        expect(result.success).toBe(false);
       });
     });
   });

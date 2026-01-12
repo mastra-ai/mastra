@@ -76,7 +76,8 @@ const includeSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.array will reject string type)
+        return val;
       }
     }
     return val;
@@ -102,7 +103,8 @@ const filterSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.object will reject string type)
+        return val;
       }
     }
     return val;
@@ -115,6 +117,7 @@ const filterSchema = z.preprocess(
           end: z.coerce.date().optional(),
         })
         .optional(),
+      roles: z.array(z.string()).optional(),
     })
     .optional(),
 );
@@ -127,7 +130,8 @@ const memoryConfigSchema = z.preprocess(val => {
     try {
       return JSON.parse(val);
     } catch {
-      return undefined;
+      // Return invalid string to fail validation (z.record will reject string type)
+      return val;
     }
   }
   return val;
@@ -185,7 +189,8 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.record will reject string type)
+        return val;
       }
     }
     return val;
@@ -243,7 +248,8 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.record will reject string type)
+        return val;
       }
     }
     return val;
