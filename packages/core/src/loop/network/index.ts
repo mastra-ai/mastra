@@ -578,10 +578,13 @@ export async function createNetworkLoop({
         { role: 'user' as const, content: inputData.prompt },
       ];
 
-      // We pass the conversation context directly via messagesForSubAgent.
-      // We also pass memory options to prevent the sub-agent from loading messages
-      // from the network's thread (which contains isNetwork JSON and completion feedback).
-      // However, we still pass threadId/resourceId so working memory tools work.
+      // For stream(): we pass conversation context directly via messagesForSubAgent.
+      // For resumeStream(): the conversation state is reconstructed from the workflow
+      // snapshot (loaded via runId), which contains the preserved messageList.
+      //
+      // We set lastMessages: 0 to prevent loading messages from the network's thread
+      // (which contains isNetwork JSON and completion feedback). We still pass
+      // threadId/resourceId so working memory tools function correctly.
       const result = await (resumeData
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
@@ -590,8 +593,6 @@ export async function createNetworkLoop({
               thread: threadId,
               resource: resourceId,
               options: {
-                // Disable loading message history from the network's thread.
-                // We already pass filtered user messages via messagesForSubAgent.
                 lastMessages: 0,
               },
             },
@@ -603,8 +604,6 @@ export async function createNetworkLoop({
               thread: threadId,
               resource: resourceId,
               options: {
-                // Disable loading message history from the network's thread.
-                // We already pass filtered user messages via messagesForSubAgent.
                 lastMessages: 0,
               },
             },
