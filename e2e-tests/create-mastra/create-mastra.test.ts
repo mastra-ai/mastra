@@ -83,7 +83,7 @@ describe('create mastra', () => {
     });
 
     it(
-      'should open playground',
+      'should open studio',
       {
         timeout: 60 * 1000,
       },

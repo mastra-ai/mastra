@@ -1926,9 +1926,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               let result: any;
               const slugify = await import(`@sindresorhus/slugify`);
-              const subAgentThreadId = inputData.threadId || context?.mastra?.generateId() || randomUUID();
+              const subAgentThreadId =
+                inputData.threadId ||
+                context?.mastra?.generateId({
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                }) ||
+                randomUUID();
               const subAgentResourceId =
-                inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
+                inputData.resourceId ||
+                context?.mastra?.generateId({
+                  idType: 'generic',
+                  source: 'agent',
+                  entityId: agentName,
+                }) ||
+                `${slugify.default(this.id)}-${agentName}`;
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
@@ -2763,7 +2777,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    const runId = options.runId || this.#mastra?.generateId() || randomUUID();
+    const runId =
+      options.runId ||
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+        threadId: threadFromArgs?.id,
+        resourceId,
+      }) ||
+      randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set Tracing context
@@ -3092,7 +3115,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: () => this.#mastra?.generateId() || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
       threadId,
@@ -3166,7 +3189,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: () => this.#mastra?.generateId() || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages: [],
       threadId,

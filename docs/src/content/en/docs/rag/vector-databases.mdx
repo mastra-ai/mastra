@@ -193,7 +193,7 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
@@ -261,7 +261,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { OpenSearchVector } from "@mastra/opensearch";
 
-const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL });
+const store = new OpenSearchVector({ id: "opensearch", node: process.env.OPENSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",
@@ -398,7 +398,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 - Cohere embed-multilingual-v3: 1024 dimensions
 - Google text-embedding-004: 768 dimensions (or custom)
 
-:::important
+:::warning
 Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
 :::
 
@@ -553,7 +553,7 @@ The upsert operation:
 
 Vector stores support rich metadata (any JSON-serializable fields) for filtering and organization. Since metadata is stored with no fixed schema, use consistent field naming to avoid unexpected query results.
 
-:::important
+:::warning
 Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
 :::
 

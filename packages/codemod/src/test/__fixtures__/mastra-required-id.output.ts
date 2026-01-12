@@ -27,7 +27,7 @@ const libsqlStorage = new LibSQLStore({
 
 /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
 const libsqlVector = new LibSQLVector({
-  connectionUrl: "file:../../mastra.db",
+  url: "file:../../mastra.db",
 });
 
 /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
