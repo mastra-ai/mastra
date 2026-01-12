@@ -33,6 +33,42 @@ import {
  */
 type NetworkIdGenerator = (context?: IdGeneratorContext) => string;
 
+/**
+ * Filters messages to extract conversation context for sub-agents.
+ * Includes user messages and assistant messages that are NOT internal network JSON.
+ * Excludes:
+ * - isNetwork: true JSON (result markers after primitive execution)
+ * - Routing agent decision JSON (has primitiveId/primitiveType/selectionReason)
+ */
+function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
+  return messages.filter(msg => {
+    // Include all user messages
+    if (msg.role === 'user') return true;
+
+    // Include assistant messages that are NOT internal network JSON
+    if (msg.role === 'assistant') {
+      // Check ALL parts for network-internal JSON
+      const parts = msg.content?.parts ?? [];
+      for (const part of parts) {
+        if (part?.type === 'text' && part?.text) {
+          try {
+            const parsed = JSON.parse(part.text);
+            // Exclude isNetwork JSON (result markers after execution)
+            if (parsed.isNetwork) return false;
+            // Exclude routing agent decision JSON (has primitiveId + selectionReason)
+            if (parsed.primitiveId && parsed.selectionReason) return false;
+          } catch {
+            // Not JSON, continue checking other parts
+          }
+        }
+      }
+      return true;
+    }
+
+    return false;
+  });
+}
+
 async function getRoutingAgent({
   requestContext,
   agent,
@@ -349,6 +385,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
@@ -463,6 +500,9 @@ export async function createNetworkLoop({
         });
       }
 
+      // Extract conversation context from the memory-loaded messages only.
+      const conversationContext = filterMessagesForSubAgent(result.rememberedMessages ?? []);
+
       const endPayload = {
         task: inputData.task,
         result: isComplete ? object.selectionReason : '',
@@ -473,6 +513,7 @@ export async function createNetworkLoop({
         selectionReason: object.selectionReason,
         iteration: iterationCount,
         runId: stepId,
+        conversationContext,
       };
 
       await writer.write({
@@ -500,6 +541,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -551,38 +593,17 @@ export async function createNetworkLoop({
       const threadId = initData?.threadId || runId;
       const resourceId = initData?.threadResourceId || networkName;
 
-      // Retrieve conversation history from the network thread and filter to only include
-      // user messages. This ensures sub-agents receive the original conversation context
-      // without internal network metadata (isNetwork JSON, completion feedback, etc.)
-      const networkMemory = await agent.getMemory({ requestContext });
-      let conversationContext: MastraDBMessage[] = [];
-
-      if (networkMemory) {
-        const recallResult = await networkMemory.recall({
-          threadId,
-          resourceId,
-        });
-
-        if (recallResult?.messages) {
-          // Filter to only include user messages. Network-internal messages (isNetwork JSON,
-          // completion feedback) are saved as 'assistant' role, so this excludes them.
-          // Reverse to chronological order (oldest first) since recall() returns DESC order.
-          conversationContext = recallResult.messages.filter(msg => msg.role === 'user').reverse();
-        }
-      }
+      // Use conversation context passed from routingStep.
+      const conversationContext = inputData.conversationContext ?? [];
 
       // Build the messages to send to the sub-agent:
-      // 1. Original user messages from conversation history (for context)
+      // 1. Conversation history (user + non-isNetwork assistant messages) for context
       // 2. The routing agent's prompt (the specific task for this sub-agent)
       const messagesForSubAgent: MessageListInput = [
         ...conversationContext,
         { role: 'user' as const, content: inputData.prompt },
       ];
 
-      // For stream(): we pass conversation context directly via messagesForSubAgent.
-      // For resumeStream(): the conversation state is reconstructed from the workflow
-      // snapshot (loaded via runId), which contains the preserved messageList.
-      //
       // We set lastMessages: 0 to prevent loading messages from the network's thread
       // (which contains isNetwork JSON and completion feedback). We still pass
       // threadId/resourceId so working memory tools function correctly.
@@ -797,6 +818,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -1044,6 +1066,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -1444,6 +1467,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),

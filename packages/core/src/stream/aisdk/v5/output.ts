@@ -8,7 +8,7 @@ import {
   generateId,
 } from '@internal/ai-sdk-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from '@internal/ai-sdk-v5';
-import type { MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import type { LLMStepResult, StructuredOutputOptions } from '../../../agent/types';
 import type { TracingContext } from '../../../observability';
 import type { MastraModelOutput } from '../../base/output';
@@ -43,6 +43,10 @@ export type AISDKV5FullOutput<OUTPUT extends OutputSchema = undefined> = {
   error: Error | string | { message: string; stack: string } | undefined;
   tripwire: StepTripwireData | undefined;
   traceId: string | undefined;
+  /** All messages from this execution (input + memory history + response) */
+  messages: MastraDBMessage[];
+  /** Only messages loaded from memory (conversation history) */
+  rememberedMessages: MastraDBMessage[];
   object?: InferSchemaOutput<OUTPUT>;
 };
 
@@ -399,6 +403,10 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
       traceId: this.traceId,
+      // All messages from this execution (input + memory history + response)
+      messages: this.#messageList.get.all.db(),
+      // Only messages loaded from memory (conversation history)
+      rememberedMessages: this.#messageList.get.remembered.db(),
       ...(object ? { object } : {}),
     };
 
