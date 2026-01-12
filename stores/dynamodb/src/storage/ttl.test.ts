@@ -56,12 +56,12 @@ describe('DynamoDB TTL Support', () => {
       marshallOptions: { removeUndefinedValues: true },
     });
 
-    // Start DynamoDB Local using docker-compose
-    dynamodbProcess = spawn('docker-compose', ['up', '-d'], {
+    // Start DynamoDB Local using docker compose
+    dynamodbProcess = spawn('docker', ['compose', 'up', '-d'], {
       cwd: __dirname,
       stdio: 'pipe',
     });
-    dynamodbProcess.stderr?.on('data', data => console.error(`docker-compose stderr: ${data}`));
+    dynamodbProcess.stderr?.on('data', data => console.error(`docker compose stderr: ${data}`));
 
     await new Promise(resolve => setTimeout(resolve, 3000));
     await waitForDynamoDBLocal(setupClient);
