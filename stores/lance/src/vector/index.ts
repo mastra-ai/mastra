@@ -436,13 +436,13 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     metric = 'cosine',
     indexConfig = {},
   }: LanceCreateIndexParams): Promise<void> {
+    // Default tableName to indexName for compatibility with the standard CreateIndexParams interface.
+    // This allows Memory and other consumers to call createIndex without explicitly providing tableName.
+    const resolvedTableName = tableName ?? indexName;
+
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-      }
-
-      if (!tableName) {
-        throw new Error('tableName is required');
       }
 
       if (!indexName) {
@@ -458,7 +458,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { tableName: tableName || '', indexName, dimension, metric },
+          details: { tableName: resolvedTableName, indexName, dimension, metric },
         },
         err,
       );
@@ -466,13 +466,13 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     try {
       const tables = await this.lanceClient.tableNames();
-      if (!tables.includes(tableName)) {
+      if (!tables.includes(resolvedTableName)) {
         throw new Error(
-          `Table ${tableName} does not exist. Please create the table first by calling createTable() method.`,
+          `Table ${resolvedTableName} does not exist. Please create the table first by calling createTable() method.`,
         );
       }
 
-      const table = await this.lanceClient.openTable(tableName);
+      const table = await this.lanceClient.openTable(resolvedTableName);
 
       // Convert metric to LanceDB metric
       type LanceMetric = 'cosine' | 'l2' | 'dot';
@@ -510,7 +510,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { tableName: tableName || '', indexName, dimension },
+          details: { tableName: resolvedTableName, indexName, dimension },
         },
         error,
       );
