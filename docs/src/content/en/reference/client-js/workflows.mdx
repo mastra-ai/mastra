@@ -116,7 +116,7 @@ await run.start({
 });
 
 // Poll for results later
-const result = await workflow.runExecutionResult(run.runId);
+const result = await workflow.runById(run.runId);
 ```
 
 This is useful for long-running workflows where you want to start execution and check results later.
@@ -180,12 +180,18 @@ for await (const chunk of stream) {
 }
 ```
 
-### runExecutionResult()
+### runById()
 
 Get the execution result for a workflow run:
 
 ```typescript
-const result = await workflow.runExecutionResult(runId);
+const result = await workflow.runById(runId);
+
+// Or with options for performance optimization:
+const result = await workflow.runById(runId, {
+  fields: ['status', 'result'],  // Only fetch specific fields
+  withNestedWorkflows: false,     // Skip expensive nested workflow data
+});
 ```
 
 <h3>Run result format</h3>
