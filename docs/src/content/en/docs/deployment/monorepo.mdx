@@ -5,6 +5,9 @@ packages:
   - "@mastra/deployer"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Deploy in a Monorepo
 
 Deploying Mastra in a monorepo follows the same process as a standalone application. This guide covers monorepo-specific considerations. For the core build and deployment steps, see [Deploy a Mastra Server](/docs/v1/deployment/mastra-server).
@@ -51,21 +54,40 @@ Use your monorepo tool to run the build command from the correct package. There'
 
 Examples:
 
-```bash title="npm"
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash
 npm run build --workspace=apps/api
 ```
 
-```bash title="pnpm"
+</TabItem>
+
+<TabItem value="pnpm" label="pnpm">
+
+```bash
 pnpm --filter api run build
 ```
 
-```bash title="Yarn"
+</TabItem>
+
+<TabItem value="yarn" label="yarn">
+
+```bash
 yarn workspace api build
 ```
 
-```bash title="Turborepo"
+</TabItem>
+
+<TabItem value="turborepo" label="Turborepo">
+
+```bash
 turbo run build --filter=api
 ```
+
+</TabItem>
+
+</Tabs>
 
 Your package's `build` script should run `mastra build`:
 
