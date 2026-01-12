@@ -249,10 +249,17 @@ export class MemoryPG extends MemoryStorage {
 
       // Add metadata filters if provided (AND logic)
       // Keys are validated above to prevent SQL injection
+      // metadata column is TEXT type storing JSON, so we need to cast to jsonb first
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          whereClauses.push(`metadata->>'${key}' = $${paramIndex}`);
-          queryParams.push(JSON.stringify(value).replace(/^"|"$/g, ''));
+          // Cast TEXT column to jsonb, then extract with ->> (returns text)
+          whereClauses.push(`metadata::jsonb->>'${key}' = $${paramIndex}::text`);
+          // Convert the value to its JSON string representation (without outer quotes for strings)
+          // JSON.stringify handles all types correctly: "text", true, null, 123, etc.
+          const jsonStr = JSON.stringify(value);
+          // For strings, JSON.stringify adds quotes, but ->> returns text without quotes
+          // For other types (boolean, null, number), keep as-is
+          queryParams.push(typeof value === 'string' ? value : jsonStr);
           paramIndex++;
         }
       }
