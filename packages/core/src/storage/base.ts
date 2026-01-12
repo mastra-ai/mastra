@@ -15,7 +15,8 @@ export type StorageDomains = {
  *
  * @param perPageInput - The raw perPage value from the user
  * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
- * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER, negative values fall back to default)
+ * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER)
+ * @throws Error if perPage is a negative number
  */
 export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
   if (perPageInput === false) {
@@ -24,8 +25,10 @@ export function normalizePerPage(perPageInput: number | false | undefined, defau
     return 0; // Return zero results
   } else if (typeof perPageInput === 'number' && perPageInput > 0) {
     return perPageInput; // Valid positive number
+  } else if (typeof perPageInput === 'number' && perPageInput < 0) {
+    throw new Error('perPage must be >= 0');
   }
-  // For undefined, negative, or other invalid values, use default
+  // For undefined, use default
   return defaultValue;
 }
 
