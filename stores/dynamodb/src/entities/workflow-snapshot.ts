@@ -1,5 +1,5 @@
 import { Entity } from 'electrodb';
-import { baseAttributes } from './utils';
+import { baseAttributes, ttlAttribute, expiresAtAttribute } from './utils';
 
 export const workflowSnapshotEntity = new Entity({
   model: {
@@ -13,6 +13,8 @@ export const workflowSnapshotEntity = new Entity({
       required: true,
     },
     ...baseAttributes,
+    ...ttlAttribute,
+    ...expiresAtAttribute,
     workflow_name: {
       type: 'string',
       required: true,

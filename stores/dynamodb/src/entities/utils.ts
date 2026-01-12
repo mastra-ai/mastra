@@ -49,3 +49,28 @@ export const baseAttributes = {
     },
   },
 } as const;
+
+/**
+ * TTL attribute for DynamoDB automatic item expiration.
+ * This is a Unix timestamp (epoch seconds) that indicates when the item should be deleted.
+ *
+ * Note: For TTL to work, you must enable TTL on your DynamoDB table
+ * specifying this attribute name (default: 'ttl').
+ */
+export const ttlAttribute = {
+  ttl: {
+    type: 'number',
+    required: false,
+  },
+} as const;
+
+/**
+ * Custom TTL attribute with configurable name.
+ * Use this if you've configured TTL on your DynamoDB table with a different attribute name.
+ */
+export const expiresAtAttribute = {
+  expiresAt: {
+    type: 'number',
+    required: false,
+  },
+} as const;

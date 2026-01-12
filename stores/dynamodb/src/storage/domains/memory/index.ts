@@ -22,13 +22,19 @@ import type {
 import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { addTtlToRecord } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
+  private ttlConfig?: DynamoDBTtlConfig;
+
   constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = resolveDynamoDBConfig(config);
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -159,7 +165,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const threadData = {
+    let threadData: Record<string, any> = {
       entity: 'thread',
       id: thread.id,
       resourceId: thread.resourceId,
@@ -168,6 +174,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
     };
+
+    // Add TTL if configured for threads
+    threadData = addTtlToRecord(threadData, 'thread', this.ttlConfig);
 
     try {
       await this.service.entities.thread.upsert(threadData).go();
@@ -532,7 +541,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     // Ensure 'entity' is added and complex fields are handled
     const messagesToSave = messages.map(msg => {
       const now = new Date().toISOString();
-      return {
+      let messageData: Record<string, any> = {
         entity: 'message', // Add entity type
         id: msg.id,
         threadId: msg.threadId,
@@ -547,6 +556,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
         updatedAt: now, // Add updatedAt
       };
+
+      // Add TTL if configured for messages
+      messageData = addTtlToRecord(messageData, 'message', this.ttlConfig);
+
+      return messageData;
     });
 
     try {
@@ -901,7 +915,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const resourceData = {
+    let resourceData: Record<string, any> = {
       entity: 'resource',
       id: resource.id,
       workingMemory: resource.workingMemory,
@@ -909,6 +923,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       createdAt: resource.createdAt?.toISOString() || now.toISOString(),
       updatedAt: now.toISOString(),
     };
+
+    // Add TTL if configured for resources
+    resourceData = addTtlToRecord(resourceData, 'resource', this.ttlConfig);
 
     try {
       await this.service.entities.resource.upsert(resourceData).go();

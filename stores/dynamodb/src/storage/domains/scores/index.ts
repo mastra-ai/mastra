@@ -13,13 +13,19 @@ import type { StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { addTtlToRecord } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 export class ScoresStorageDynamoDB extends ScoresStorage {
   private service: Service<Record<string, any>>;
+  private ttlConfig?: DynamoDBTtlConfig;
+
   constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = resolveDynamoDBConfig(config);
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -137,7 +143,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
           ? JSON.stringify(validatedScore.additionalContext)
           : undefined;
 
-    const scoreData = Object.fromEntries(
+    let scoreData: Record<string, any> = Object.fromEntries(
       Object.entries({
         ...validatedScore,
         entity: 'score',
@@ -159,6 +165,9 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
         updatedAt: now.toISOString(),
       }).filter(([_, value]) => value !== undefined && value !== null),
     );
+
+    // Add TTL if configured for scores
+    scoreData = addTtlToRecord(scoreData, 'score', this.ttlConfig);
 
     try {
       await this.service.entities.score.upsert(scoreData).go();
