@@ -292,7 +292,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     try {
       const tables = await this.lanceClient.tableNames();
-      let table: Table;
+      let table: Table | null;
 
       if (!tables.includes(resolvedTableName)) {
         // Table doesn't exist - create it with the first batch of data
