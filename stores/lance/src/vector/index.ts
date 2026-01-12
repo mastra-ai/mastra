@@ -130,7 +130,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'QUERY', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+          text: error instanceof Error ? error.message : 'Invalid query arguments',
           details: { tableName: resolvedTableName },
         },
         error,
@@ -299,10 +299,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         this.logger.debug(`Table ${resolvedTableName} does not exist. Creating it with the first upsert data.`);
       }
 
-      table = await this.lanceClient.openTable(resolvedTableName).catch(() => {
-        // Table doesn't exist, we'll create it below
-        return null as unknown as Table;
-      });
+      table = (await this.lanceClient.openTable(resolvedTableName).catch(() => null)) as Table | null;
 
       // Generate IDs if not provided
       const vectorIds = ids.length === vectors.length ? ids : vectors.map((_, i) => ids[i] || crypto.randomUUID());
@@ -330,7 +327,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         return rowData;
       });
 
-      if (table) {
+      if (table !== null) {
         // Table exists - check if we need to recreate it due to schema differences
         // This can happen when createIndex creates an empty table with minimal schema
         // and then upsert is called with metadata fields
@@ -555,7 +552,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       // Check row count - LanceDB requires at least 256 rows for IVF_HNSW_PQ index
       const rowCount = await table.countRows();
       if (rowCount < 256) {
-        this.logger.debug(
+        this.logger.warn(
           `Table ${resolvedTableName} has ${rowCount} rows, which is below the 256 row minimum for index creation. Skipping index creation.`,
         );
         return;
