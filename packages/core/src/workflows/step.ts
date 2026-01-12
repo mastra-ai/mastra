@@ -14,6 +14,12 @@ export type SuspendOptions = {
   resumeLabel?: string | string[];
 } & Record<string, any>;
 
+// Create a unique symbol that only exists at the type level
+declare const SuspendBrand: unique symbol;
+
+// Create a branded type that can ONLY be produced by suspend()
+export type InnerOutput = void & { readonly [SuspendBrand]: never };
+
 export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSuspend, EngineType> = {
   runId: string;
   resourceId?: string;
@@ -33,9 +39,9 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
     step: TStep,
   ): InferZodLikeSchema<TStep['outputSchema']>;
   suspend: unknown extends TSuspend
-    ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>
-    : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
-  bail: (result: TStepOutput) => void;
+    ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
+    : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
+  bail: (result: TStepOutput) => InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
@@ -57,7 +63,7 @@ export type ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSche
 
 export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
   params: ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
-) => Promise<TStepOutput>;
+) => Promise<TStepOutput | InnerOutput>;
 
 export type ConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
   params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,

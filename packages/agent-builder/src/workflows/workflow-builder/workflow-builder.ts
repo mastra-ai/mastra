@@ -25,6 +25,8 @@ import {
 import type { DiscoveredWorkflowSchema } from './schema';
 import { restrictedTaskManager } from './tools';
 
+type WorkflowBuilderInputSchemaType = z.infer<typeof WorkflowBuilderInputSchema>;
+
 // Step 1: Always discover existing workflows
 const workflowDiscoveryStep = createStep({
   id: 'workflow-discovery',
@@ -252,7 +254,6 @@ const workflowResearchStep = createStep({
 const taskExecutionStep = createStep({
   id: 'task-execution',
   description: 'Execute the approved task list to create or edit the workflow',
-  // @ts-ignore TODO schema gives false optional value
   inputSchema: TaskExecutionInputSchema,
   outputSchema: TaskExecutionResultSchema,
   suspendSchema: TaskExecutionSuspendSchema,
@@ -540,13 +541,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   .then(workflowResearchStep)
   // Map research result to planning input format
   .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData<{
-      action: 'create' | 'edit';
-      workflowName: string;
-      description: string;
-      requirements: string;
-      projectPath: string;
-    }>();
+    const initData = getInitData<WorkflowBuilderInputSchemaType>();
     const discoveryResult = getStepResult(workflowDiscoveryStep);
     const projectResult = getStepResult(projectDiscoveryStep);
     // const researchResult = getStepResult(workflowResearchStep);
@@ -572,13 +567,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   })
   // Map sub-workflow result to task execution input
   .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData<{
-      action: 'create' | 'edit';
-      workflowName: string;
-      description: string;
-      requirements: string;
-      projectPath: string;
-    }>();
+    const initData = getInitData<WorkflowBuilderInputSchemaType>();
     const discoveryResult = getStepResult(workflowDiscoveryStep);
     const projectResult = getStepResult(projectDiscoveryStep);
     // const researchResult = getStepResult(workflowResearchStep);
