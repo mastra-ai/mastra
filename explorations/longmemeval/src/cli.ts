@@ -507,7 +507,9 @@ program
   .option('-r, --results <dir>', 'Results directory', './results')
   .option('-d, --dataset <dataset>', 'Filter by dataset')
   .option('-a, --all', 'Show all results, not just latest')
+  .option('--min-questions <n>', 'Minimum questions to include (default: 20)', parseInt)
   .action(async options => {
+    const minQuestions = options.minQuestions ?? 20;
     try {
       console.log(chalk.blue('\n📊 Benchmark Results Summary\n'));
 
@@ -550,6 +552,11 @@ program
                 continue;
               }
 
+              // Filter by minimum questions
+              if (data.total_questions < minQuestions) {
+                continue;
+              }
+
               allRuns.push({
                 runId: runDir,
                 metrics: data,
@@ -575,6 +582,11 @@ program
 
           // Filter by dataset if specified
           if (options.dataset && data.config.dataset !== options.dataset) {
+            continue;
+          }
+
+          // Filter by minimum questions
+          if (data.total_questions < minQuestions) {
             continue;
           }
 
@@ -649,8 +661,15 @@ program
             typeAccuracies.length > 0 ? typeAccuracies.reduce((sum, acc) => sum + acc, 0) / typeAccuracies.length : 0;
           metrics.overall_accuracy = recalculatedOverall;
 
+          // Check if fixed accuracy data exists
+          const hasFixedAccuracy = metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
+
           // Question type breakdown
-          console.log(chalk.bold('\nAccuracy by Question Type:'));
+          if (hasFixedAccuracy) {
+            console.log(chalk.bold('\nAccuracy by Question Type:'), chalk.gray('(vanilla → fixed)'));
+          } else {
+            console.log(chalk.bold('\nAccuracy by Question Type:'));
+          }
 
           // Sort question types alphabetically
           const sortedTypes = Object.entries(metrics.accuracy_by_type).sort(([a], [b]) => a.localeCompare(b));
@@ -664,9 +683,16 @@ program
             const filledLength = Math.round(accuracy * barLength);
             const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
 
+            let fixedPart = '';
+            if (hasFixedAccuracy && metrics.fixed_accuracy_by_type[type]) {
+              const fixedMetrics = metrics.fixed_accuracy_by_type[type] as any;
+              const fixedColor = fixedMetrics.accuracy >= 0.8 ? 'green' : fixedMetrics.accuracy >= 0.6 ? 'yellow' : 'red';
+              fixedPart = chalk.gray(' → ') + chalk[fixedColor](`${(fixedMetrics.accuracy * 100).toFixed(1)}%`);
+            }
+
             console.log(
               chalk.gray(`  ${type.padEnd(25)}:`),
-              chalk[typeColor](`${(accuracy * 100).toFixed(1).padStart(5)}%`),
+              chalk[typeColor](`${(accuracy * 100).toFixed(1).padStart(5)}%`) + fixedPart,
               chalk.gray(`[${bar}]`),
               chalk.gray(`(${correct}/${total})`),
             );
@@ -678,11 +704,24 @@ program
           console.log();
           const accuracyColor =
             metrics.overall_accuracy >= 0.8 ? 'green' : metrics.overall_accuracy >= 0.6 ? 'yellow' : 'red';
-          console.log(
-            chalk.bold('Overall Accuracy:'),
-            chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
-            chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
-          );
+          
+          if (hasFixedAccuracy && metrics.fixed_overall_accuracy != null) {
+            const fixedOverallColor =
+              metrics.fixed_overall_accuracy >= 0.8 ? 'green' : metrics.fixed_overall_accuracy >= 0.6 ? 'yellow' : 'red';
+            console.log(
+              chalk.bold('Overall Accuracy:'),
+              chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
+              chalk.gray('→'),
+              chalk[fixedOverallColor](`${(metrics.fixed_overall_accuracy * 100).toFixed(2)}%`),
+              chalk.gray('(fixed)'),
+            );
+          } else {
+            console.log(
+              chalk.bold('Overall Accuracy:'),
+              chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
+              chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
+            );
+          }
         }
       }
 
