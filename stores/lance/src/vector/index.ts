@@ -292,14 +292,14 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     try {
       const tables = await this.lanceClient.tableNames();
-      let table: Table | null;
+      const tableExists = tables.includes(resolvedTableName);
+      let table: Table | null = null;
 
-      if (!tables.includes(resolvedTableName)) {
-        // Table doesn't exist - create it with the first batch of data
+      if (!tableExists) {
         this.logger.debug(`Table ${resolvedTableName} does not exist. Creating it with the first upsert data.`);
+      } else {
+        table = await this.lanceClient.openTable(resolvedTableName);
       }
-
-      table = (await this.lanceClient.openTable(resolvedTableName).catch(() => null)) as Table | null;
 
       // Generate IDs if not provided
       const vectorIds = ids.length === vectors.length ? ids : vectors.map((_, i) => ids[i] || crypto.randomUUID());
@@ -495,7 +495,17 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   }
 
   /**
-   * indexName is actually a column name in a table in lanceDB
+   * Creates a vector index on a table.
+   *
+   * The behavior of `indexName` depends on whether `tableName` is provided:
+   * - With `tableName`: `indexName` is the column to index (advanced use case)
+   * - Without `tableName`: `indexName` becomes the table name, and 'vector' is used as the column (Memory compatibility)
+   *
+   * @param tableName - Optional table name. If not provided, defaults to indexName.
+   * @param indexName - The index/column name, or table name if tableName is not provided.
+   * @param dimension - Vector dimension size.
+   * @param metric - Distance metric: 'cosine', 'euclidean', or 'dotproduct'.
+   * @param indexConfig - Optional index configuration.
    */
   async createIndex({
     tableName,
