@@ -117,6 +117,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.#db.scanKeys(pattern);
 
+      // Return early if no keys found to avoid "Pipeline is empty" error
+      if (keys.length === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();

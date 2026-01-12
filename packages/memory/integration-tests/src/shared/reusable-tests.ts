@@ -965,14 +965,14 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(zeroResult.threads).toHaveLength(0);
       expect(zeroResult.perPage).toBe(0);
 
-      // Test negative perPage (should fall back to default)
-      const negativeResult = await memory.listThreads({
-        filter: { resourceId },
-        page: 0,
-        perPage: -5,
-      });
-      expect(negativeResult.threads.length).toBeGreaterThan(0);
-      expect(negativeResult.perPage).toBe(100); // Default for listThreads
+      // Test negative perPage (should throw an error - invalid input)
+      await expect(
+        memory.listThreads({
+          filter: { resourceId },
+          page: 0,
+          perPage: -5,
+        }),
+      ).rejects.toThrow('perPage must be >= 0');
     });
   });
 

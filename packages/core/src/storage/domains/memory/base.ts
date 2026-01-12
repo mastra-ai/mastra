@@ -161,16 +161,22 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Validates pagination parameters and returns safe offset.
    * @param page - Page number (0-indexed)
-   * @param perPage - Items per page
-   * @throws Error if page is negative, perPage is invalid, or offset would overflow
+   * @param perPage - Items per page (0 is allowed and returns empty results)
+   * @throws Error if page is negative, perPage is negative/invalid, or offset would overflow
    */
   protected validatePagination(page: number, perPage: number): void {
     if (!Number.isFinite(page) || !Number.isSafeInteger(page) || page < 0) {
       throw new Error('page must be >= 0');
     }
 
-    if (!Number.isFinite(perPage) || !Number.isSafeInteger(perPage) || perPage <= 0) {
-      throw new Error('perPage must be > 0');
+    // perPage: 0 is allowed (returns empty results), negative values are rejected
+    if (!Number.isFinite(perPage) || !Number.isSafeInteger(perPage) || perPage < 0) {
+      throw new Error('perPage must be >= 0');
+    }
+
+    // Skip overflow check when perPage is 0 (no offset needed)
+    if (perPage === 0) {
+      return;
     }
 
     // Prevent overflow when calculating offset

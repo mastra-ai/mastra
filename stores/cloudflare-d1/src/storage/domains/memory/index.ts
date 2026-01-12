@@ -284,19 +284,21 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Add resourceId filter if provided
       if (filter?.resourceId) {
-        countQuery = countQuery.where('resourceId = ?', filter.resourceId);
-        selectQuery = selectQuery.where('resourceId = ?', filter.resourceId);
+        countQuery = countQuery.whereAnd('resourceId = ?', filter.resourceId);
+        selectQuery = selectQuery.whereAnd('resourceId = ?', filter.resourceId);
       }
 
       // Add metadata filters if provided (AND logic)
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          // Use json() to properly compare JSON values (handles strings, numbers, booleans, null)
-          const condition = `json_extract(metadata, '$.${key}') = json(?)`;
-          const filterValue = JSON.stringify(value);
-          countQuery = countQuery.where(condition, filterValue);
-          selectQuery = selectQuery.where(condition, filterValue);
+          // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
+          // Compare directly with the value for consistent matching
+          const condition = `json_extract(metadata, '$.${key}') = ?`;
+          // For strings, pass directly. For other types, SQLite handles the comparison.
+          const filterValue = typeof value === 'string' ? value : JSON.stringify(value);
+          countQuery = countQuery.whereAnd(condition, filterValue);
+          selectQuery = selectQuery.whereAnd(condition, filterValue);
         }
       }
 

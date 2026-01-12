@@ -760,9 +760,11 @@ export class MemoryLibSQL extends MemoryStorage {
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          // Use json() to properly compare JSON values (handles strings, numbers, booleans, null)
-          whereClauses.push(`json_extract(metadata, '$.${key}') = json(?)`);
-          queryParams.push(JSON.stringify(value));
+          // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
+          // Compare directly with the value, converting to string for consistent comparison
+          whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+          // For strings, pass directly. For other types, SQLite handles the comparison.
+          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
         }
       }
 
