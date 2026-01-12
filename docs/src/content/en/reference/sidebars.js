@@ -222,7 +222,6 @@ const sidebars = {
         { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
         { type: "doc", id: "core/setLogger", label: ".setLogger()" },
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
-        { type: "doc", id: "core/setTelemetry", label: ".setTelemetry()" },
       ],
     },
     {
