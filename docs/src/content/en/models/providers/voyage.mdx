@@ -1,0 +1,206 @@
+---
+title: "VoyageAI | Models | Mastra"
+description: "Use VoyageAI embedding and reranker models with Mastra."
+---
+
+# VoyageAI
+
+VoyageAI provides text embeddings, multimodal embeddings, contextualized chunk embeddings, and rerankers. Install the `@mastra/voyageai` package to use VoyageAI models with Mastra.
+
+Learn more in the [VoyageAI documentation](https://docs.voyageai.com/).
+
+```bash
+VOYAGE_API_KEY=your-api-key
+```
+
+## Installation
+
+```bash npm2yarn copy
+npm install @mastra/voyageai
+```
+
+## Text Embeddings
+
+```typescript
+import { voyage, voyageEmbedding } from '@mastra/voyageai';
+
+// Use default model (voyage-3.5)
+const result = await voyage.doEmbed({ values: ['Hello world'] });
+
+// Use specific model with options
+const model = voyageEmbedding({
+  model: 'voyage-3-large',
+  inputType: 'query',
+  outputDimension: 512,
+});
+```
+
+### Pre-configured Models
+
+```typescript
+import { voyage } from '@mastra/voyageai';
+
+// Voyage-4 series (highest throughput)
+await voyage.v4large.doEmbed({ values: ['...'] });   // voyage-4-large (120k batch tokens)
+await voyage.v4.doEmbed({ values: ['...'] });        // voyage-4 (320k batch tokens)
+await voyage.v4lite.doEmbed({ values: ['...'] });    // voyage-4-lite (1M batch tokens)
+
+// Voyage-3 series
+await voyage.large.doEmbed({ values: ['...'] });     // voyage-3-large
+await voyage.v35.doEmbed({ values: ['...'] });       // voyage-3.5
+await voyage.v35lite.doEmbed({ values: ['...'] });   // voyage-3.5-lite
+await voyage.code.doEmbed({ values: ['...'] });      // voyage-code-3
+await voyage.finance.doEmbed({ values: ['...'] });   // voyage-finance-2
+await voyage.law.doEmbed({ values: ['...'] });       // voyage-law-2
+```
+
+### With Mastra Memory
+
+```typescript
+import { Memory } from '@mastra/memory';
+import { PgVector } from '@mastra/pg';
+import { voyage } from '@mastra/voyageai';
+
+const memory = new Memory({
+  vector: new PgVector(connectionString),
+  embedder: voyage,
+  options: {
+    semanticRecall: { topK: 5 },
+  },
+});
+```
+
+### With ModelRouter
+
+```typescript
+import { ModelRouterEmbeddingModel } from '@mastra/core';
+
+// Use string format for model selection
+const embedder = new ModelRouterEmbeddingModel('voyage/voyage-3.5');
+const result = await embedder.doEmbed({ values: ['Hello'] });
+```
+
+## Embedding Models
+
+| Model | Use Case | Dimensions | Batch Tokens |
+|-------|----------|------------|--------------|
+| `voyage-4-large` | Best quality, highest batch capacity | 256/512/1024/2048 | 120k |
+| `voyage-4` | Balanced quality/speed, high throughput | 256/512/1024/2048 | 320k |
+| `voyage-4-lite` | Maximum throughput | 256/512/1024/2048 | 1M |
+| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 | 32k |
+| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 | 32k |
+| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 | 32k |
+| `voyage-code-3` | Code retrieval | 256/512/1024/2048 | 32k |
+| `voyage-finance-2` | Finance domain | 1024 | 32k |
+| `voyage-law-2` | Legal domain | 1024 | 32k |
+
+## Multimodal Embeddings
+
+Embed interleaved text, images, and video (3.5 only):
+
+```typescript
+import { voyageMultimodalEmbedding } from '@mastra/voyageai';
+
+const multimodal = voyageMultimodalEmbedding('voyage-multimodal-3.5');
+
+const result = await multimodal.doEmbed({
+  values: [{
+    content: [
+      { type: 'text', text: 'A photo of a cat' },
+      { type: 'image_url', image_url: 'https://example.com/cat.jpg' },
+    ]
+  }]
+});
+```
+
+### Multimodal Models
+
+| Model | Capabilities |
+|-------|--------------|
+| `voyage-multimodal-3` | Text + images |
+| `voyage-multimodal-3.5` | Text + images + video |
+
+## Contextualized Chunk Embeddings
+
+Embed chunks with document context to avoid "context loss":
+
+```typescript
+import { voyageContextualizedEmbedding } from '@mastra/voyageai';
+
+const contextual = voyageContextualizedEmbedding('voyage-context-3');
+
+// Embed document chunks (inner arrays = chunks from same document)
+const result = await contextual.doEmbed({
+  values: [
+    ['Paragraph 1 from doc 1...', 'Paragraph 2 from doc 1...'],
+    ['Content from doc 2...'],
+  ],
+  inputType: 'document',
+});
+
+// Returns embeddings for each chunk, preserving document context
+console.log(result.embeddings.length); // 3 (2 from doc 1, 1 from doc 2)
+console.log(result.chunkCounts);       // [2, 1]
+```
+
+## Rerankers
+
+VoyageAI rerankers implement the `RelevanceScoreProvider` interface:
+
+```typescript
+import { voyage, createVoyageReranker } from '@mastra/voyageai';
+
+// Use pre-configured reranker (rerank-2.5)
+const reranker = voyage.reranker;
+
+// Or create with specific model
+const customReranker = createVoyageReranker('rerank-2.5-lite');
+
+// Score a single document
+const score = await reranker.getRelevanceScore(
+  'What is machine learning?',
+  'Machine learning is a subset of artificial intelligence...'
+);
+
+// Rerank multiple documents
+const results = await reranker.rerankDocuments(
+  'What is the capital of France?',
+  ['Paris is the capital of France.', 'London is the capital of England.'],
+  2  // topK
+);
+```
+
+### Reranker Models
+
+| Model | Context Length | Description |
+|-------|----------------|-------------|
+| `rerank-2.5` | 32000 | Best quality with instruction-following |
+| `rerank-2.5-lite` | 32000 | Optimized for latency and quality |
+| `rerank-2` | 16000 | Second-gen with multilingual support |
+| `rerank-2-lite` | 8000 | Second-gen, latency-optimized |
+
+## Provider Options
+
+VoyageAI supports the following provider-specific options via the `providerOptions` parameter:
+
+```typescript
+const result = await model.doEmbed({
+  values: ['query text'],
+  providerOptions: {
+    voyage: {
+      inputType: 'query',        // 'query' | 'document'
+      outputDimension: 512,      // 256 | 512 | 1024 | 2048
+      outputDtype: 'float',      // 'float' | 'int8' | 'uint8' | 'binary' | 'ubinary'
+      truncation: true,          // Handle long inputs
+    },
+  },
+});
+```
+
+## Direct Package Installation
+
+```bash npm2yarn copy
+npm install @mastra/voyageai
+```
+
+For detailed usage, see the [@mastra/voyageai package documentation](https://www.npmjs.com/package/@mastra/voyageai).
