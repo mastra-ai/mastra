@@ -99,41 +99,25 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm build
 Testing local changes to Mastra follows a simple three-step pattern:
 
 1. Make your changes to the relevant package(s)
-2. Build the packages from the monorepo root
-3. Run the local CLI dev server from example/agent directory
+2. Build the packages
+3. Test your changes inside the `examples/agent` project
 
 ### Step 1: Make Your Changes
-
-Edit the source files in the relevant package. For example:
-
-```bash
-# Editing core agent functionality
-vim packages/core/src/agent/agent.ts
-
-# Editing memory system
-vim packages/memory/src/index.ts
-
-# Editing CLI/playground
-vim packages/cli/src/commands/dev.ts
-```
+Edit the necessary source files. Take note of the affected packages so that you can filter by them in the next step.
 
 ### Step 2: Build the Packages
 
 From the monorepo root, build the packages you modified:
 
 ```bash
-# Watch all packages (recommended for development)
-pnpm turbo watch build
-
-# Watch specific package for faster iteration
-pnpm turbo watch build --filter="@mastra/core"        # @mastra/core
-pnpm turbo watch build --filter="@mastra/cli"         # CLI and playground
-pnpm turbo watch build --filter="@mastra/memory"      # @mastra/memory
-pnpm turbo watch build --filter="@mastra/rag"         # @mastra/rag
-pnpm turbo watch build --filter="@mastra/deployer"    # @mastra/deployer
+# Watch a specific package for faster iteration
+pnpm turbo watch build --filter="@mastra/core"
 
 # Watch multiple packages at once
-pnpm turbo watch build --filter="@mastra/core" --filter="@mastra/cli"
+pnpm turbo watch build --filter="@mastra/core" --filter="mastra"
+
+# Watch all packages (not recommended, use --filter instead)
+pnpm turbo watch build
 
 # Fallback: Build everything once (if watch mode is not needed)
 pnpm build
@@ -141,45 +125,25 @@ pnpm build
 
 Using `pnpm turbo watch build` automatically rebuilds packages when you make changes, eliminating the need to manually rebuild after every modification. If you're unsure which packages depend on your changes, run `pnpm turbo watch build` without a filter to watch everything.
 
-### Step 3: Run the Local CLI from an Example Directory
-
-Navigate to the example directory and run the locally-built CLI:
+### Step 3: Test your changes
+Open a new terminal window and navigate to `examples/agent`. Install its dependencies:
 
 ```bash
 cd examples/agent
-node ../../packages/cli/dist/index.js dev
+pnpm install --ignore-workspace
 ```
 
-This starts the Mastra playground using your local packages. The playground provides an interactive UI to test agents, tools, and workflows.
+It's important that you use `--ignore-workspace` as otherwise the dependencies won't be installed correctly.
 
-> **Note:** You can also run the CLI from any existing Mastra project by using an absolute path to the CLI. For example:
->
-> ```bash
-> node /Users/myUser/projects/mastra/packages/cli/dist/index.js dev
-> ```
->
-> This approach is useful when you have a complex reproduction case in an existing project and want to test against your local changes to Mastra packages.
+Afterwards you can start the Mastra development server:
 
-You may need to create an agent/tool/workflow in the example project to illustrate the bug you are trying to solve, but the changes in the example should not be committed.
-
-### Quick Iteration Loop
-
-Once you have the workflow set up, iteration is fast:
-
-```bash
-# 1. Start watching packages (from monorepo root in one terminal)
-pnpm turbo watch build --filter="@mastra/core" --filter="@mastra/cli"
-
-# 2. Make changes in another terminal
-vim packages/core/src/agent/agent.ts
-
-# 3. Test (from example directory)
-cd examples/agent
-pnpm install
-node ../../packages/cli/dist/index.js dev
+```shell
+pnpm mastra:dev
 ```
 
-## Automated Testing
+Whenever you make changes to the source code, the `turbo watch` process from step 2 will rebuild the packages. You then can restart the development server to see your changes.
+
+## Testing
 
 Mastra uses Vitest for testing. You can run all tests or only specific packages.
 
