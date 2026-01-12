@@ -40,9 +40,7 @@ function extractJsonSchema(schema: any): Record<string, any> | undefined {
  * @param tools - The tools object (Record<string, Tool>)
  * @returns A cleaned tools object suitable for observability
  */
-export function cleanToolsForObservability(
-  tools: Record<string, any> | undefined,
-): Record<string, any> | undefined {
+export function cleanToolsForObservability(tools: Record<string, any> | undefined): Record<string, any> | undefined {
   if (!tools || typeof tools !== 'object') return undefined;
 
   const cleaned: Record<string, any> = {};
