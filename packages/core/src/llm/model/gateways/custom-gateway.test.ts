@@ -458,5 +458,24 @@ describe('Custom Gateway Integration', () => {
       expect(spyGateway.lastResolveCall).toBeDefined();
       expect(spyGateway.lastResolveCall?.providerOptions).toBeUndefined();
     });
+
+    it('should handle empty providerOptions object', async () => {
+      const spyGateway = new SpyCustomGateway();
+      const model = new ModelRouterLanguageModel('custom/my-provider/model-1', [spyGateway]);
+
+      try {
+        await model.doGenerate({
+          inputFormat: 'prompt',
+          mode: { type: 'regular' },
+          prompt: [{ role: 'user', content: 'test' }],
+          providerOptions: {},
+        });
+      } catch (error) {
+        // Expected to fail, but we're only testing parameter passing
+      }
+
+      expect(spyGateway.lastResolveCall).toBeDefined();
+      expect(spyGateway.lastResolveCall?.providerOptions).toEqual({});
+    });
   });
 });

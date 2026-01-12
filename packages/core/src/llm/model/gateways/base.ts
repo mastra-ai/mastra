@@ -62,6 +62,11 @@ export abstract class MastraModelGateway {
   /**
    * Resolve a language model from the gateway.
    * Supports returning either LanguageModelV2 (AI SDK v5) or LanguageModelV3 (AI SDK v6).
+   * @param args.modelId - The model identifier
+   * @param args.providerId - The provider identifier
+   * @param args.apiKey - API key for authentication
+   * @param args.headers - Optional HTTP headers
+   * @param args.providerOptions - Optional provider-specific options (e.g., reasoning settings, token limits)
    */
   abstract resolveLanguageModel(args: {
     modelId: string;

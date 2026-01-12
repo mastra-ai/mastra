@@ -5,7 +5,7 @@ import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { parseModelRouterId } from './gateway-resolver.js';
-import type { GatewayLanguageModel, MastraModelGateway } from './gateways/base.js';
+import type { GatewayLanguageModel, MastraModelGateway, ProviderConfig } from './gateways/base.js';
 import type { ProviderOptions } from './provider-options.js';
 import { findGatewayForModel } from './gateways/index.js';
 
@@ -192,6 +192,16 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return aiSDKV5Model.doStream(options);
   }
 
+  /**
+   * Resolve a language model instance from the gateway with caching.
+   * Models are cached by a hash of their configuration to avoid recreating instances.
+   * @param modelId - The model identifier
+   * @param providerId - The provider identifier
+   * @param apiKey - API key for authentication
+   * @param headers - Optional HTTP headers
+   * @param providerOptions - Optional provider-specific options passed through to the underlying model
+   * @returns A promise resolving to the language model instance
+   */
   private async resolveLanguageModel({
     modelId,
     providerId,
@@ -212,7 +222,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           providerId +
           apiKey +
           (this.config.url || '') +
-          (headers ? JSON.stringify(headers) : ''),
+          (headers ? JSON.stringify(headers) : '') +
+          (providerOptions ? JSON.stringify(providerOptions) : ''),
       )
       .digest('hex');
     if (ModelRouterLanguageModel.modelInstances.has(key)) return ModelRouterLanguageModel.modelInstances.get(key)!;

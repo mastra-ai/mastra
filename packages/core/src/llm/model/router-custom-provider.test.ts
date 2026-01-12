@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
+import type { LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import type { ProviderOptions } from './provider-options.js';
 
 // Mock the @ai-sdk/openai-compatible-v5 module BEFORE importing it
@@ -213,7 +214,7 @@ describe('ModelRouter - Custom Provider Support', () => {
   });
 
   describe('Provider Options Support', () => {
-    function createTrackingMock(mockText: string, trackingFn: any) {
+    function createTrackingMock(mockText: string, trackingFn: (options: LanguageModelV2CallOptions) => void) {
       vi.mocked(createOpenAICompatible).mockReturnValue({
         chatModel: vi.fn((_modelId: string) => {
           const mockModel = createMockModel({ mockText });
