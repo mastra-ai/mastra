@@ -14,6 +14,11 @@ import type {
 } from '../../types';
 import { StorageDomain } from '../base';
 
+// Constants for metadata key validation
+const SAFE_METADATA_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const MAX_METADATA_KEY_LENGTH = 128;
+const DISALLOWED_METADATA_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
 export abstract class MemoryStorage extends StorageDomain {
   constructor() {
     super({
@@ -125,27 +130,30 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * Validates metadata keys to prevent SQL injection attacks.
+   * Validates metadata keys to prevent SQL injection attacks and prototype pollution.
    * Keys must start with a letter or underscore, followed by alphanumeric characters or underscores.
    * @param metadata - The metadata object to validate
-   * @throws Error if any key contains invalid characters
+   * @throws Error if any key contains invalid characters or is a disallowed key
    */
   protected validateMetadataKeys(metadata: Record<string, unknown> | undefined): void {
     if (!metadata) return;
 
-    // Pattern: starts with letter or underscore, followed by alphanumeric or underscore
-    // This is a safe pattern for SQL column/key names
-    const SAFE_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-
     for (const key of Object.keys(metadata)) {
-      if (!SAFE_KEY_PATTERN.test(key)) {
+      // First check for disallowed prototype pollution keys
+      if (DISALLOWED_METADATA_KEYS.has(key)) {
+        throw new Error(`Invalid metadata key: "${key}".`);
+      }
+
+      // Then check pattern
+      if (!SAFE_METADATA_KEY_PATTERN.test(key)) {
         throw new Error(
           `Invalid metadata key: "${key}". Keys must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
         );
       }
+
       // Also limit key length to prevent potential issues
-      if (key.length > 128) {
-        throw new Error(`Metadata key "${key}" exceeds maximum length of 128 characters.`);
+      if (key.length > MAX_METADATA_KEY_LENGTH) {
+        throw new Error(`Metadata key "${key}" exceeds maximum length of ${MAX_METADATA_KEY_LENGTH} characters.`);
       }
     }
   }
@@ -154,16 +162,20 @@ export abstract class MemoryStorage extends StorageDomain {
    * Validates pagination parameters and returns safe offset.
    * @param page - Page number (0-indexed)
    * @param perPage - Items per page
-   * @throws Error if page is negative or offset would overflow
+   * @throws Error if page is negative, perPage is invalid, or offset would overflow
    */
   protected validatePagination(page: number, perPage: number): void {
-    if (page < 0) {
+    if (!Number.isFinite(page) || !Number.isSafeInteger(page) || page < 0) {
       throw new Error('page must be >= 0');
     }
 
-    // Prevent unreasonably large page values that could cause performance issues or overflow
-    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
-    if (page * perPage > maxOffset) {
+    if (!Number.isFinite(perPage) || !Number.isSafeInteger(perPage) || perPage <= 0) {
+      throw new Error('perPage must be > 0');
+    }
+
+    // Prevent overflow when calculating offset
+    const offset = page * perPage;
+    if (!Number.isSafeInteger(offset) || offset > Number.MAX_SAFE_INTEGER) {
       throw new Error('page value too large');
     }
   }

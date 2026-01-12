@@ -8,7 +8,9 @@ const storage = new PostgresStore({
 
 // Should transform
 const threads = await storage.listThreads({
-  filter: { resourceId: 'res-123' },
+  filter: {
+    resourceId: 'res-123'
+  }
 });
 
 // Should NOT transform - different object

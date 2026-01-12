@@ -180,7 +180,16 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(val => (typeof val === 'string' ? JSON.parse(val) : val), z.record(z.unknown()).optional()),
+  metadata: z.preprocess(val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  }, z.record(z.unknown()).optional()),
   orderBy: storageOrderBySchema,
 });
 
@@ -229,7 +238,16 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(val => (typeof val === 'string' ? JSON.parse(val) : val), z.record(z.unknown()).optional()),
+  metadata: z.preprocess(val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  }, z.record(z.unknown()).optional()),
   orderBy: storageOrderBySchema,
 });
 

@@ -1,9 +1,10 @@
 import type { API, FileInfo, Options } from 'jscodeshift';
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances } from '../lib/utils';
 
 /**
  * Migrates from listThreadsByResourceId() to listThreads() with filter wrapping.
- * The new listThreads API requires resourceId to be wrapped in a filter object.
+ * Only transforms calls on tracked Memory instances to avoid false positives.
  *
  * Before:
  * await memory.listThreadsByResourceId({
@@ -21,9 +22,40 @@ import { createTransformer } from '../lib/create-transformer';
  */
 export default createTransformer((fileInfo: FileInfo, api: API, options: Options, context) => {
   const { j, root } = context;
+
+  // Track Memory class instances
+  const memoryInstances = trackClassInstances(j, root, 'Memory');
+
+  // Also track variables assigned from methods that might return memory stores
+  // e.g., const memoryStore = await storage.getStore('memory');
+  const potentialMemoryStores = new Set<string>();
+
+  root.find(j.VariableDeclarator).forEach(path => {
+    if (path.value.id.type === 'Identifier') {
+      const varName = path.value.id.name;
+      const init = path.value.init;
+
+      // Track variables with 'memory' or 'memoryStore' in the name as likely Memory instances
+      if (varName.toLowerCase().includes('memory')) {
+        // But NOT if it's an object literal (which would be our negative test case)
+        if (init?.type !== 'ObjectExpression') {
+          potentialMemoryStores.add(varName);
+        }
+      }
+    }
+  });
+
+  // Combine both sets
+  const allMemoryInstances = new Set([...memoryInstances, ...potentialMemoryStores]);
+
+  // Early return if no instances found
+  if (allMemoryInstances.size === 0) {
+    return;
+  }
+
   let changeCount = 0;
 
-  // Find all .listThreadsByResourceId() calls
+  // Find and transform listThreadsByResourceId() calls on tracked instances
   root
     .find(j.CallExpression, {
       callee: {
@@ -35,7 +67,14 @@ export default createTransformer((fileInfo: FileInfo, api: API, options: Options
       },
     })
     .forEach(path => {
-      const args = path.node.arguments;
+      const { callee } = path.value;
+      if (callee.type !== 'MemberExpression') return;
+      if (callee.object.type !== 'Identifier') return;
+
+      // Only process if called on a tracked instance
+      if (!allMemoryInstances.has(callee.object.name)) return;
+
+      const args = path.value.arguments;
       if (args.length !== 1 || args[0]?.type !== 'ObjectExpression') {
         return;
       }
@@ -48,7 +87,11 @@ export default createTransformer((fileInfo: FileInfo, api: API, options: Options
       const otherProps: any[] = [];
 
       properties.forEach((prop: any) => {
-        if (prop.type === 'ObjectProperty' && prop.key?.type === 'Identifier' && prop.key.name === 'resourceId') {
+        if (
+          (prop.type === 'ObjectProperty' || prop.type === 'Property') &&
+          prop.key?.type === 'Identifier' &&
+          prop.key.name === 'resourceId'
+        ) {
           resourceIdProp = prop;
         } else {
           otherProps.push(prop);
@@ -60,21 +103,19 @@ export default createTransformer((fileInfo: FileInfo, api: API, options: Options
       }
 
       // Create the new filter object
-      const filterProp = j.objectProperty(
+      const filterProp = j.property(
+        'init',
         j.identifier('filter'),
-        j.objectExpression([j.objectProperty(j.identifier('resourceId'), resourceIdProp.value as any)]),
+        j.objectExpression([j.property('init', j.identifier('resourceId'), resourceIdProp.value as any)]),
       );
 
-      // Create new arguments with filter first, then other props
-      const newProperties = [filterProp, ...otherProps];
-
       // Update the method name
-      if (path.node.callee.type === 'MemberExpression' && path.node.callee.property.type === 'Identifier') {
-        path.node.callee.property.name = 'listThreads';
+      if (path.value.callee.type === 'MemberExpression' && path.value.callee.property.type === 'Identifier') {
+        path.value.callee.property.name = 'listThreads';
       }
 
-      // Update the arguments
-      path.node.arguments = [j.objectExpression(newProperties)];
+      // Update the arguments with filter first, then other props
+      path.value.arguments = [j.objectExpression([filterProp, ...otherProps])];
 
       changeCount++;
     });

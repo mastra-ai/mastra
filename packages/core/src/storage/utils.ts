@@ -179,8 +179,8 @@ function toUpperSnakeCase(str: string): string {
  * @example
  * ```ts
  * // Storage operations
- * createStoreErrorId('storage', 'PG', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED')
- * // Returns: 'MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED'
+ * createStoreErrorId('storage', 'PG', 'LIST_THREADS', 'FAILED')
+ * // Returns: 'MASTRA_STORAGE_PG_LIST_THREADS_FAILED'
  *
  * // Vector operations
  * createStoreErrorId('vector', 'CHROMA', 'QUERY', 'FAILED')

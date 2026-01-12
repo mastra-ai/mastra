@@ -1,6 +1,10 @@
 // @ts-nocheck
 import { Memory } from '@mastra/memory';
 
+const storage: any = undefined;
+const memoryStore: any = undefined;
+const resourceId: string = 'dynamic-id';
+
 const memory = new Memory({ storage });
 
 // Basic transformation
@@ -42,3 +46,11 @@ const result4 = await memoryStore.listThreads({
   page: 0,
   perPage: 5
 });
+
+// NEGATIVE: should NOT transform (non-Memory object)
+const other = {
+  listThreadsByResourceId(args: any) {
+    return args;
+  },
+};
+const result5 = await other.listThreadsByResourceId({ resourceId: 'do-not-touch' });
