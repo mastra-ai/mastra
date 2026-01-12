@@ -19,7 +19,6 @@ import type {
 } from '@mastra/core/observability';
 import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
 
-import { cleanToolsForObservability } from './spans/serialization';
 import { extractUsageMetrics } from './usage';
 
 /**
@@ -158,7 +157,8 @@ export class ModelSpanTracker {
 
     // Extract all data from step-finish chunk
     const output = payload.output as Record<string, any>;
-    const { usage: rawUsage, tools, text, ...restOutput } = output;
+    // Exclude tools from output - they're already in the input (request.body)
+    const { usage: rawUsage, tools: _tools, ...restOutput } = output;
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
 
@@ -171,16 +171,8 @@ export class ModelSpanTracker {
       delete cleanMetadata.request;
     }
 
-    // Clean output for observability:
-    // - Clean tools to only include essential fields (type, id, description, schemas)
-    const cleanOutput: Record<string, any> = { ...restOutput, text };
-    const cleanedTools = cleanToolsForObservability(tools);
-    if (cleanedTools) {
-      cleanOutput.tools = cleanedTools;
-    }
-
     this.#currentStepSpan.end({
-      output: cleanOutput,
+      output: restOutput,
       attributes: {
         usage,
         isContinued: stepResult.isContinued,
