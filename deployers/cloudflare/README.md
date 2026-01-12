@@ -43,12 +43,9 @@ const mastra = new Mastra({
 
 ## Configuration
 
-The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json` (see [documentation](https://developers.cloudflare.com/workers/wrangler/configuration/)).
+The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
 
-**Notes:**
-
-- `main` property is fixed by the deployer
-- Some properties have default values set by the deployer
+**Deprecated fields:** If migrating from an earlier version, note that `projectName`, `d1Databases`, `kvNamespaces`, and `workerNamespace` are deprecated. Use the standard `wrangler.json` property names instead (`name`, `d1_databases`, `kv_namespaces`).
 
 ## Environment Variables
 

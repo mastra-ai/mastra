@@ -49,4 +49,15 @@ export const mastra = new Mastra({
 
 ## Constructor options
 
-The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json` (see [documentation](https://developers.cloudflare.com/workers/wrangler/configuration/)).
+The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+
+### Migrating from earlier versions
+
+The following fields are deprecated and should be replaced with their standard `wrangler.json` equivalents:
+
+| Deprecated | Use instead |
+|------------|-------------|
+| `projectName` | `name` |
+| `d1Databases` | `d1_databases` |
+| `kvNamespaces` | `kv_namespaces` |
+| `workerNamespace` | *(removed, no longer used)* |

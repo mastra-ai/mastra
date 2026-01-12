@@ -68,7 +68,6 @@ export class CloudflareDeployer extends Deployer {
 
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
-      main: './index.mjs',
       compatibility_date: '2025-04-01',
       compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
       observability: {
@@ -77,6 +76,7 @@ export class CloudflareDeployer extends Deployer {
         },
       },
       ...userConfig,
+      main: './index.mjs',
       vars: envsAsObject,
     };
 
