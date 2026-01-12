@@ -356,9 +356,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           const filteredData = data.map(row => {
             const filtered: Record<string, any> = {};
             for (const col of existingColumns) {
-              if (col in row) {
-                filtered[col] = row[col];
-              }
+              // Include column from row if present, otherwise set to null
+              filtered[col] = col in row ? row[col] : null;
             }
             return filtered;
           });
