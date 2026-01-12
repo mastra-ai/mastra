@@ -1,11 +1,7 @@
 // Tests for payload index creation (required for Qdrant Cloud and strict_mode_config = true)
 // See: https://github.com/mastra-ai/mastra/issues/8923
-//
-// To setup a Qdrant server, run:
-// docker run -p 6333:6333 qdrant/qdrant
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import type { PayloadSchemaType } from './index';
 import { QdrantVector } from './index';
 
 const dimension = 3;
