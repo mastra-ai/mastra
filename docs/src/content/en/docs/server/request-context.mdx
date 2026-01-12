@@ -64,11 +64,9 @@ await run.resume({
   requestContext,
 });
 
-await weatherTool.execute({
-  context: {
-    location: "London",
-  },
-  requestContext,
+await weatherTool.execute(
+  { location: "London" },
+  { requestContext },
 });
 ```
 
@@ -174,8 +172,8 @@ export type UserTier = {
 
 export const weatherTool = createTool({
   id: "weather-tool",
-  execute: async ({ requestContext }) => {
-    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("user-tier") as UserTier["user-tier"] | undefined;
 
     if (userTier === "enterprise") {}
   },
