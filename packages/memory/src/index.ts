@@ -998,20 +998,140 @@ ${
   }
 
   /**
-   * Updates the metadata of a list of messages
-   * @param messages - The list of messages to update
+   * Updates a list of messages and syncs the vector database for semantic recall.
+   * When message content is updated, the corresponding vector embeddings are also updated
+   * to ensure semantic recall stays in sync with the message content.
+   *
+   * @param messages - The list of messages to update (must include id, can include partial content)
+   * @param memoryConfig - Optional memory configuration to determine if semantic recall is enabled
    * @returns The list of updated messages
    */
   public async updateMessages({
     messages,
+    memoryConfig,
   }: {
-    messages: Partial<MastraDBMessage> & { id: string }[];
+    messages: (Partial<MastraDBMessage> & { id: string })[];
+    memoryConfig?: MemoryConfig;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
-    // TODO: Possibly handle updating the vector db here when a message is updated.
-
     const memoryStore = await this.getMemoryStore();
+    const config = this.getMergedThreadConfig(memoryConfig);
+
+    // Update vector database if semantic recall is enabled and any messages have content updates
+    if (this.vector && config.semanticRecall) {
+      const messagesWithContent = messages.filter(m => m.content !== undefined);
+
+      if (messagesWithContent.length > 0) {
+        // Get existing messages to obtain threadId and resourceId for vector metadata
+        const existingMessagesResult = await memoryStore.listMessagesById({
+          messageIds: messagesWithContent.map(m => m.id),
+        });
+        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+
+        // Collect embeddings for messages with new text content
+        const embeddingData: Array<{
+          embeddings: number[][];
+          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+        }> = [];
+        let dimension: number | undefined;
+
+        // Delete old vectors and prepare new embeddings
+        await Promise.all(
+          messagesWithContent.map(async message => {
+            const existingMessage = existingMessagesMap.get(message.id);
+            if (!existingMessage) return;
+
+            // Extract text from the new content
+            let textForEmbedding: string | null = null;
+            const content = message.content;
+
+            if (content) {
+              if (
+                'content' in content &&
+                content.content &&
+                typeof content.content === 'string' &&
+                content.content.trim() !== ''
+              ) {
+                textForEmbedding = content.content;
+              } else if ('parts' in content && content.parts && Array.isArray(content.parts) && content.parts.length > 0) {
+                // Extract text from all text parts, concatenate
+                const joined = (content.parts as any[])
+                  .filter(part => part?.type === 'text')
+                  .map(part => (part as TextPart).text)
+                  .join(' ')
+                  .trim();
+                if (joined) textForEmbedding = joined;
+              }
+            }
+
+            // If there's new text content, embed it
+            if (textForEmbedding) {
+              const result = await this.embedMessageContent(textForEmbedding);
+              dimension = result.dimension;
+
+              embeddingData.push({
+                embeddings: result.embeddings,
+                metadata: result.chunks.map(() => ({
+                  message_id: message.id,
+                  thread_id: existingMessage.threadId,
+                  resource_id: existingMessage.resourceId,
+                })),
+              });
+            }
+          }),
+        );
+
+        // Delete old vectors from all existing memory indexes
+        // We need to do this even if there's no new content to embed
+        try {
+          const indexes = await this.vector.listIndexes();
+          const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+
+          for (const indexName of memoryIndexes) {
+            for (const message of messagesWithContent) {
+              try {
+                await this.vector.deleteVectors({
+                  indexName,
+                  filter: { message_id: message.id },
+                });
+              } catch {
+                // Ignore errors if vectors don't exist for this message
+                this.logger.debug(`No existing vectors found for message ${message.id} in ${indexName}, skipping delete`);
+              }
+            }
+          }
+        } catch {
+          // Ignore errors if no indexes exist yet
+          this.logger.debug(`No memory indexes found to delete from`);
+        }
+
+        // Upsert new embeddings if any
+        if (embeddingData.length > 0 && dimension !== undefined) {
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+          // Flatten all embeddings and metadata into single arrays
+          const allVectors: number[][] = [];
+          const allMetadata: Array<{
+            message_id: string;
+            thread_id: string | undefined;
+            resource_id: string | undefined;
+          }> = [];
+
+          for (const data of embeddingData) {
+            allVectors.push(...data.embeddings);
+            allMetadata.push(...data.metadata);
+          }
+
+          await this.vector.upsert({
+            indexName,
+            vectors: allVectors,
+            metadata: allMetadata,
+          });
+        }
+      }
+    }
+
     return memoryStore.updateMessages({ messages });
   }
 
