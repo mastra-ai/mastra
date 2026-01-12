@@ -158,9 +158,7 @@ export class DatadogExporter extends BaseExporter {
 
     // Validate required configuration
     if (!mlApp) {
-      this.setDisabled(
-        `Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`,
-      );
+      this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
       this.config = config as any;
       return;
     }
