@@ -742,6 +742,71 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expect(resultIds).toEqual(expect.arrayContaining(expectedIds));
       });
     });
+
+    describe('Sorting with filtering', () => {
+      let filterResourceId1: string;
+      let filterThread1: StorageThreadType;
+      let filterThread2: StorageThreadType;
+
+      beforeEach(async () => {
+        filterResourceId1 = randomUUID();
+
+        // Create threads with different timestamps for sorting tests
+        filterThread1 = createSampleThreadWithParams(
+          randomUUID(),
+          filterResourceId1,
+          new Date(Date.now() - 4000),
+          new Date(Date.now() - 4000),
+        );
+        filterThread1.metadata = { category: 'support', priority: 'high' };
+
+        filterThread2 = createSampleThreadWithParams(
+          randomUUID(),
+          filterResourceId1,
+          new Date(Date.now() - 2000),
+          new Date(Date.now() - 2000),
+        );
+        filterThread2.metadata = { category: 'support', priority: 'low' };
+
+        await memoryStorage.saveThread({ thread: filterThread1 });
+        await memoryStorage.saveThread({ thread: filterThread2 });
+      });
+
+      it('should sort filtered threads by createdAt DESC by default', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: filterResourceId1 },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
+      });
+
+      it('should sort filtered threads by createdAt ASC', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: filterResourceId1 },
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
+      });
+
+      it('should sort filtered threads by updatedAt DESC', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { metadata: { category: 'support' } },
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
+      });
+    });
   });
 
   // Filtering tests should run for ALL storage adapters, not just those that support sorting
@@ -922,41 +987,6 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       // Ensure different threads
       expect(page1.threads[0]?.id).not.toBe(page2.threads[0]?.id);
-    });
-
-    it('should sort filtered threads by createdAt DESC by default', async () => {
-      const result = await memoryStorage.listThreads({
-        filter: { resourceId: resourceId1 },
-        page: 0,
-        perPage: 10,
-      });
-
-      expect(result.threads).toHaveLength(2);
-      expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
-    });
-
-    it('should sort filtered threads by createdAt ASC', async () => {
-      const result = await memoryStorage.listThreads({
-        filter: { resourceId: resourceId1 },
-        page: 0,
-        perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-      });
-
-      expect(result.threads).toHaveLength(2);
-      expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
-    });
-
-    it('should sort filtered threads by updatedAt DESC', async () => {
-      const result = await memoryStorage.listThreads({
-        filter: { metadata: { category: 'support' } },
-        page: 0,
-        perPage: 10,
-        orderBy: { field: 'updatedAt', direction: 'DESC' },
-      });
-
-      expect(result.threads).toHaveLength(2);
-      expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
     });
 
     it('should handle perPage: false to get all filtered results', async () => {
