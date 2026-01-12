@@ -13,6 +13,7 @@ import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
 import { getMemoryConfig, getMemoryOptions, type MemoryConfigDefinition } from '../config';
 import { DatasetLoader } from '../data/loader';
+import { reconcileQuestion } from './reconcile';
 
 // Rate limit configuration
 const RATE_LIMIT_TOKEN_THRESHOLD = 50000; // Pause if remaining tokens below this
@@ -186,11 +187,19 @@ export class RunCommand {
     }
     console.log();
 
-    const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, options.memoryConfig);
+    // For readOnlyConfig, use the base config's prepared data directly
+    const effectiveConfig = configDef.readOnlyConfig && configDef.baseConfig 
+      ? configDef.baseConfig 
+      : options.memoryConfig;
+    const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, effectiveConfig);
 
     if (!existsSync(preparedDir)) {
       throw new Error(`Prepared data not found at: ${preparedDir}
 Please run 'longmemeval prepare' first.`);
+    }
+
+    if (configDef.readOnlyConfig && configDef.baseConfig) {
+      console.log(chalk.gray(`Using prepared data from: ${configDef.baseConfig}`));
     }
 
     // Load original dataset to get correct question order
@@ -204,13 +213,39 @@ Please run 'longmemeval prepare' first.`);
 
     let skippedCount = 0;
     let failedCount = 0;
+    let reconciledCount = 0;
     for (const questionDir of questionDirs) {
       const questionPath = join(preparedDir, questionDir);
       const metaPath = join(questionPath, 'meta.json');
       const progressPath = join(questionPath, 'progress.json');
 
       // Check if question has been prepared
-      if (existsSync(metaPath)) {
+      let hasMetaJson = existsSync(metaPath);
+
+      // If no meta.json and this is a derived config (non-readOnly), try to reconcile from base
+      if (!hasMetaJson && configDef.baseConfig && !configDef.readOnlyConfig) {
+        const baseDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, configDef.baseConfig);
+        const baseQuestionDir = join(baseDir, questionDir);
+        const baseMetaPath = join(baseQuestionDir, 'meta.json');
+
+        if (existsSync(baseMetaPath)) {
+          spinner.text = `Reconciling ${questionDir} from ${configDef.baseConfig}...`;
+          const result = await reconcileQuestion({
+            questionId: questionDir,
+            targetConfig: options.memoryConfig,
+            preparedDataDir: options.preparedDataDir || this.preparedDataDir,
+            dataset: options.dataset,
+            model: configDef.omModel ?? undefined,
+          });
+
+          if (result.copied) {
+            reconciledCount++;
+            hasMetaJson = true;
+          }
+        }
+      }
+
+      if (hasMetaJson) {
         // Check if there's an incomplete or failed preparation
         if (existsSync(progressPath)) {
           const progress = JSON.parse(await readFile(progressPath, 'utf-8'));
@@ -236,8 +271,13 @@ Please run 'longmemeval prepare' first.`);
       return orderA - orderB;
     });
 
+    const statusParts: string[] = [];
+    if (reconciledCount > 0) statusParts.push(`${reconciledCount} reconciled`);
+    if (skippedCount > 0) statusParts.push(`${skippedCount} incomplete`);
+    if (failedCount > 0) statusParts.push(`${failedCount} failed`);
+    
     spinner.succeed(
-      `Loaded ${preparedQuestions.length} prepared questions${skippedCount > 0 || failedCount > 0 ? ` (${skippedCount} incomplete, ${failedCount} failed)` : ''}`,
+      `Loaded ${preparedQuestions.length} prepared questions${statusParts.length > 0 ? ` (${statusParts.join(', ')})` : ''}`,
     );
 
     if (skippedCount > 0) {

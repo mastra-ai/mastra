@@ -19,11 +19,13 @@ import { SessionsCommand } from './commands/sessions';
 import { DeterministicIdsCommand } from './commands/deterministic-ids';
 import { ListPartialCommand } from './commands/list-partial';
 import { TokensCommand } from './commands/tokens';
+import { reconcileFromBaseConfig } from './commands/reconcile';
 import {
   getRunVariant,
   getAvailableVariants,
   resolveConfigAlias,
   getConfigAliases,
+  getMemoryConfig,
   RUN_VARIANTS,
   CONFIG_ALIASES,
 } from './config';
@@ -232,6 +234,15 @@ program
 
       // Check if dataset exists and download if needed
       await ensureDatasetExists(dataset);
+
+      // For readOnlyConfig, no preparation is needed
+      const configDef = getMemoryConfig(resolvedConfig as MemoryConfigType);
+      if (configDef.readOnlyConfig && configDef.baseConfig) {
+        console.log(chalk.green(`✓ Config "${resolvedConfig}" is read-only and uses data from "${configDef.baseConfig}"`));
+        console.log(chalk.gray(`  No preparation needed. Run benchmark directly with: pnpm bench ${resolvedVariant.name} ${resolvedConfig}`));
+        console.log(chalk.gray(`  Make sure "${configDef.baseConfig}" is prepared first.\n`));
+        return;
+      }
 
       // Show warning and ask for confirmation (skip if -y flag is passed)
       if (!options.yes) {

@@ -20,6 +20,7 @@ import { getMemoryConfig, getMemoryOptions } from '../config';
 import { makeRetryModel } from '../retry-model';
 import { google } from '@ai-sdk/google';
 import { makeDeterministicIds } from './deterministic-ids';
+import { reconcileQuestion } from './reconcile';
 
 const geminiFlash = makeRetryModel(google('gemini-2.5-flash'));
 
@@ -58,6 +59,14 @@ export class PrepareCommand {
 
     // Get consolidated config definition
     const configDef = getMemoryConfig(options.memoryConfig);
+
+    // For readOnlyConfig, no preparation is needed - just use the base config's data
+    if (configDef.readOnlyConfig && configDef.baseConfig) {
+      console.log(chalk.green(`\n✓ Config "${options.memoryConfig}" is read-only and uses data from "${configDef.baseConfig}"`));
+      console.log(chalk.gray(`  No preparation needed. Run benchmark directly with: pnpm bench <variant> ${options.memoryConfig}`));
+      console.log(chalk.gray(`  Make sure "${configDef.baseConfig}" is prepared first.\n`));
+      return;
+    }
 
     // Load working memory templates if using tailored working memory
     let wmTemplates: Record<string, any> = {};
@@ -240,6 +249,39 @@ export class PrepareCommand {
             }
           } catch (e) {
             // If we can't read progress, continue with normal processing
+          }
+        }
+
+        // For derived configs, try to reconcile from base config first
+        if (configDef.baseConfig && !existsSync(join(questionDir, 'meta.json'))) {
+          const reconcileResult = await reconcileQuestion({
+            targetConfig: options.memoryConfig,
+            dataset: options.dataset,
+            questionId: question.question_id,
+            preparedDataDir: options.outputDir || this.baseDir,
+            model: configDef.omModel ?? undefined,
+          });
+
+          if (reconcileResult.copied) {
+            cachedCount++;
+            completedCount++;
+
+            mainSpinner.clear();
+            console.log(
+              chalk.green(`✓`),
+              chalk.blue(`${question.question_id}`),
+              chalk.gray(`(${question.question_type})`),
+              chalk.cyan(`[reconciled from ${configDef.baseConfig}]`),
+              reconcileResult.patternsExtracted ? chalk.magenta(`[patterns]`) : '',
+              chalk.gray(`- ${completedCount}/${questionsToProcess.length}`),
+            );
+            mainSpinner.render();
+
+            updateProgress();
+            continue;
+          } else if (reconcileResult.error) {
+            // Base config data doesn't exist - need to prepare from scratch
+            // This is expected if base config hasn't been prepared yet
           }
         }
 

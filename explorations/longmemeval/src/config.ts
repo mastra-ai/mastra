@@ -44,6 +44,14 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     prepareConcurrency: 4,
     benchConcurrency: 10,
   },
+  rip: {
+    name: 'rip-all',
+    description: 'Full benchmark run with all questions, high concurrency',
+    dataset: 'longmemeval_s',
+    subset: undefined,
+    prepareConcurrency: 10,
+    benchConcurrency: 10,
+  },
 };
 
 /**
@@ -116,6 +124,18 @@ export interface MemoryConfigDefinition {
 
   /** Model to use for the eval agent (defaults to openai/gpt-4o) */
   evalModel?: string;
+
+  /** Base config to inherit prepared data from (for derived configs) */
+  baseConfig?: MemoryConfigType;
+
+  /** If true, read directly from baseConfig's data at runtime (no copy/modification) */
+  readOnlyConfig?: boolean;
+
+  /** Enable the recall tool at runtime */
+  recallToolEnabled?: boolean;
+
+  /** Enable pattern recognition during observation */
+  recognizePatterns?: boolean;
 }
 
 // --- Shared config values ---
@@ -150,6 +170,8 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   om: 'observational-memory',
   'om-shortcut': 'observational-memory-shortcut',
   'om-shortcut-glm': 'observational-memory-shortcut-glm',
+  'om-patterns-observed': 'om-patterns-observed',
+  'om-patterns-tool': 'om-patterns-tool',
 
   // Full names (for completeness)
   'semantic-recall': 'semantic-recall',
@@ -166,9 +188,7 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
 export function resolveConfigAlias(nameOrAlias: string): MemoryConfigType {
   const resolved = CONFIG_ALIASES[nameOrAlias];
   if (!resolved) {
-    throw new Error(
-      `Unknown memory config: ${nameOrAlias}. Available: ${Object.keys(CONFIG_ALIASES).join(', ')}`,
-    );
+    throw new Error(`Unknown memory config: ${nameOrAlias}. Available: ${Object.keys(CONFIG_ALIASES).join(', ')}`);
   }
   return resolved;
 }
@@ -177,7 +197,18 @@ export function resolveConfigAlias(nameOrAlias: string): MemoryConfigType {
  * Get all available config aliases (short names only).
  */
 export function getConfigAliases(): string[] {
-  return ['semantic', 'working', 'working-tailored', 'combined', 'combined-tailored', 'om', 'om-shortcut', 'om-shortcut-glm'];
+  return [
+    'semantic',
+    'working',
+    'working-tailored',
+    'combined',
+    'combined-tailored',
+    'om',
+    'om-shortcut',
+    'om-shortcut-glm',
+    'om-patterns-observed',
+    'om-patterns-tool',
+  ];
 }
 
 // ============================================================================
@@ -361,6 +392,53 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     omMaxInputTokens: CEREBRAS_GLM_MAX_TOKENS,
     requiresSequential: true,
     agentModel: 'gpt-4o',
+  },
+
+  'om-patterns-observed': {
+    type: 'om-patterns-observed',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'observational-memory',
+    recognizePatterns: true,
+  },
+
+  'om-patterns-tool': {
+    type: 'om-patterns-tool',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true,  // Just enables recall tool, doesn't modify data
+    recallToolEnabled: true,
   },
 };
 
