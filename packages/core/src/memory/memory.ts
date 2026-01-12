@@ -19,6 +19,8 @@ import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
 } from '../storage';
@@ -338,6 +340,40 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;
+
+  /**
+   * Lists threads with optional filtering by resourceId and metadata.
+   * This is a more flexible alternative to listThreadsByResourceId that supports:
+   * - Optional resourceId filtering (not required)
+   * - Metadata filtering with AND logic (all key-value pairs must match)
+   * - Same pagination and ordering options as listThreadsByResourceId
+   *
+   * @param args.filter - Optional filters for resourceId and/or metadata
+   * @param args.filter.resourceId - Optional resource ID to filter by
+   * @param args.filter.metadata - Optional metadata key-value pairs to filter by (AND logic)
+   * @param args.page - Zero-indexed page number for pagination (defaults to 0)
+   * @param args.perPage - Number of items per page, or false to fetch all (defaults to 100)
+   * @param args.orderBy - Optional sorting configuration with `field` and `direction`
+   * @returns Promise resolving to paginated thread results with metadata
+   *
+   * @example
+   * ```typescript
+   * // Filter by resourceId only
+   * await memory.listThreads({ filter: { resourceId: 'user-123' } });
+   *
+   * // Filter by metadata only
+   * await memory.listThreads({ filter: { metadata: { category: 'support' } } });
+   *
+   * // Filter by both
+   * await memory.listThreads({
+   *   filter: {
+   *     resourceId: 'user-123',
+   *     metadata: { priority: 'high', status: 'open' }
+   *   }
+   * });
+   * ```
+   */
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
    * Saves or updates a thread

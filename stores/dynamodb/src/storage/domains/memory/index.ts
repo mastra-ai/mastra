@@ -18,6 +18,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
@@ -664,6 +666,96 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId, page, perPage },
+        },
+        error,
+      );
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    this.logger.debug('Listing threads with filters', {
+      filter,
+      page,
+      perPage,
+      field,
+      direction,
+    });
+
+    try {
+      let results;
+
+      // If resourceId filter is provided, use the GSI for efficient querying
+      if (filter?.resourceId) {
+        const query = this.service.entities.thread.query.byResource({
+          entity: 'thread',
+          resourceId: filter.resourceId,
+        });
+        results = await query.go();
+      } else {
+        // Otherwise, scan all threads
+        const scan = this.service.entities.thread.scan.where({}, {});
+        results = await scan.go();
+      }
+
+      // Transform threads
+      let allThreads = this.transformAndSortThreads(results.data, field, direction);
+
+      // Apply metadata filters if provided (AND logic)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        allThreads = allThreads.filter(thread => {
+          if (!thread.metadata) return false;
+          return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+        });
+      }
+
+      // Apply pagination in memory
+      const endIndex = offset + perPage;
+      const paginatedThreads = allThreads.slice(offset, endIndex);
+
+      // Calculate pagination info
+      const total = allThreads.length;
+      const hasMore = offset + perPage < total;
+
+      return {
+        threads: paginatedThreads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+            page,
+            perPage,
+          },
         },
         error,
       );

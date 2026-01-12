@@ -20,6 +20,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
@@ -298,6 +300,129 @@ export class MemoryStorageD1 extends MemoryStorage {
             error instanceof Error ? error.message : String(error)
           }`,
           details: { resourceId },
+        },
+        error,
+      );
+      this.logger?.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return {
+        threads: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
+
+    const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
+      ...(row as StorageThreadType),
+      createdAt: ensureDate(row.createdAt) as Date,
+      updatedAt: ensureDate(row.updatedAt) as Date,
+      metadata:
+        typeof row.metadata === 'string'
+          ? (JSON.parse(row.metadata || '{}') as Record<string, any>)
+          : row.metadata || {},
+    });
+
+    try {
+      let countQuery = createSqlBuilder().count().from(fullTableName);
+      let selectQuery = createSqlBuilder().select('*').from(fullTableName);
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        countQuery = countQuery.where('resourceId = ?', filter.resourceId);
+        selectQuery = selectQuery.where('resourceId = ?', filter.resourceId);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const condition = `json_extract(metadata, '$.${key}') = ?`;
+          const filterValue = JSON.stringify(value).replace(/^"|"$/g, '');
+          countQuery = countQuery.where(condition, filterValue);
+          selectQuery = selectQuery.where(condition, filterValue);
+        }
+      }
+
+      const countResult = (await this.#db.executeQuery(countQuery.build())) as {
+        count: number;
+      }[];
+      const total = Number(countResult?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      const limitValue = perPageInput === false ? total : perPage;
+      selectQuery = selectQuery.orderBy(field, direction).limit(limitValue).offset(offset);
+
+      const results = (await this.#db.executeQuery(selectQuery.build())) as Record<string, any>[];
+      const threads = results.map(mapRowToStorageThreadType);
+
+      return {
+        threads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error listing threads: ${error instanceof Error ? error.message : String(error)}`,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );

@@ -19,6 +19,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
@@ -629,6 +631,97 @@ export class StoreMemoryLance extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    try {
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const table = await this.client.openTable(TABLE_THREADS);
+
+      // Build WHERE clause
+      const whereClauses: string[] = [];
+
+      if (filter?.resourceId) {
+        whereClauses.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
+      }
+
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const escapedKey = this.escapeSql(key);
+          const escapedValue = this.escapeSql(JSON.stringify(value).replace(/^"|"$/g, ''));
+          whereClauses.push(`\`metadata.${escapedKey}\` = '${escapedValue}'`);
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? whereClauses.join(' AND ') : '';
+
+      // Get total count
+      const total = whereClause ? await table.countRows(whereClause) : await table.countRows();
+
+      // Get ALL matching records (no limit/offset yet - need to sort first)
+      const query = whereClause ? table.query().where(whereClause) : table.query();
+      const records = await query.toArray();
+
+      // Apply dynamic sorting BEFORE pagination
+      records.sort((a, b) => {
+        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
+        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Apply pagination AFTER sorting
+      const paginatedRecords = records.slice(offset, offset + perPage);
+
+      const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
+      const threads = paginatedRecords.map(record =>
+        processResultWithTypeConversion(record, schema),
+      ) as StorageThreadType[];
+
+      return {
+        threads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: offset + perPage < total,
+      };
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

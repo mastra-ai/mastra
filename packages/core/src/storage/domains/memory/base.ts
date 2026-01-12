@@ -8,6 +8,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageOrderBy,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
@@ -63,6 +65,15 @@ export abstract class MemoryStorage extends StorageDomain {
   ): Promise<StorageListThreadsByResourceIdOutput>;
 
   /**
+   * List threads with optional filtering by resourceId and metadata.
+   * This is a more flexible alternative to listThreadsByResourceId.
+   *
+   * @param args - Filter, pagination, and ordering options
+   * @returns Paginated list of threads matching the filters
+   */
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
+
+  /**
    * Clone a thread and its messages to create a new independent thread.
    * The cloned thread will have clone metadata stored in its metadata field.
    *
@@ -115,6 +126,50 @@ export abstract class MemoryStorage extends StorageDomain {
           ? orderBy.direction
           : defaultDirection,
     };
+  }
+
+  /**
+   * Validates metadata keys to prevent SQL injection attacks.
+   * Keys must start with a letter or underscore, followed by alphanumeric characters or underscores.
+   * @param metadata - The metadata object to validate
+   * @throws Error if any key contains invalid characters
+   */
+  protected validateMetadataKeys(metadata: Record<string, unknown> | undefined): void {
+    if (!metadata) return;
+
+    // Pattern: starts with letter or underscore, followed by alphanumeric or underscore
+    // This is a safe pattern for SQL column/key names
+    const SAFE_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+    for (const key of Object.keys(metadata)) {
+      if (!SAFE_KEY_PATTERN.test(key)) {
+        throw new Error(
+          `Invalid metadata key: "${key}". Keys must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+        );
+      }
+      // Also limit key length to prevent potential issues
+      if (key.length > 128) {
+        throw new Error(`Metadata key "${key}" exceeds maximum length of 128 characters.`);
+      }
+    }
+  }
+
+  /**
+   * Validates pagination parameters and returns safe offset.
+   * @param page - Page number (0-indexed)
+   * @param perPage - Items per page
+   * @throws Error if page is negative or offset would overflow
+   */
+  protected validatePagination(page: number, perPage: number): void {
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
+    // Prevent unreasonably large page values that could cause performance issues or overflow
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
   }
 }
 

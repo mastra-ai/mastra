@@ -742,6 +742,281 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expect(resultIds).toEqual(expect.arrayContaining(expectedIds));
       });
     });
+
+    describe('listThreads with filtering', () => {
+      let resourceId1: string;
+      let resourceId2: string;
+      let thread1: StorageThreadType;
+      let thread2: StorageThreadType;
+      let thread3: StorageThreadType;
+      let thread4: StorageThreadType;
+
+      beforeEach(async () => {
+        resourceId1 = randomUUID();
+        resourceId2 = randomUUID();
+
+        // Create threads with different metadata
+        thread1 = createSampleThreadWithParams(
+          randomUUID(),
+          resourceId1,
+          new Date(Date.now() - 4000),
+          new Date(Date.now() - 4000),
+        );
+        thread1.metadata = { category: 'support', priority: 'high', status: 'open' };
+        thread1.title = 'Thread 1';
+
+        thread2 = createSampleThreadWithParams(
+          randomUUID(),
+          resourceId1,
+          new Date(Date.now() - 3000),
+          new Date(Date.now() - 3000),
+        );
+        thread2.metadata = { category: 'support', priority: 'low', status: 'closed' };
+        thread2.title = 'Thread 2';
+
+        thread3 = createSampleThreadWithParams(
+          randomUUID(),
+          resourceId2,
+          new Date(Date.now() - 2000),
+          new Date(Date.now() - 2000),
+        );
+        thread3.metadata = { category: 'sales', priority: 'high', status: 'open' };
+        thread3.title = 'Thread 3';
+
+        thread4 = createSampleThreadWithParams(
+          randomUUID(),
+          resourceId2,
+          new Date(Date.now() - 1000),
+          new Date(Date.now() - 1000),
+        );
+        thread4.metadata = { category: 'sales', priority: 'medium' };
+        thread4.title = 'Thread 4';
+
+        // Save all threads
+        await memoryStorage.saveThread({ thread: thread1 });
+        await memoryStorage.saveThread({ thread: thread2 });
+        await memoryStorage.saveThread({ thread: thread3 });
+        await memoryStorage.saveThread({ thread: thread4 });
+      });
+
+      it('should list threads filtered by resourceId only', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.total).toBe(2);
+        expect(result.threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
+      });
+
+      it('should list threads filtered by metadata only', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { metadata: { category: 'support' } },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.total).toBe(2);
+        expect(result.threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
+      });
+
+      it('should list threads filtered by multiple metadata fields (AND logic)', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { metadata: { category: 'support', priority: 'high' } },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(1);
+        expect(result.total).toBe(1);
+        expect(result.threads[0]?.id).toBe(thread1.id);
+      });
+
+      it('should list threads filtered by both resourceId and metadata', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: {
+            resourceId: resourceId2,
+            metadata: { category: 'sales', priority: 'high' },
+          },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(1);
+        expect(result.total).toBe(1);
+        expect(result.threads[0]?.id).toBe(thread3.id);
+      });
+
+      it('should list all threads when no filter is provided', async () => {
+        const result = await memoryStorage.listThreads({
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads.length).toBeGreaterThanOrEqual(4);
+        expect(result.total).toBeGreaterThanOrEqual(4);
+        const resultIds = result.threads.map(t => t.id);
+        expect(resultIds).toEqual(expect.arrayContaining([thread1.id, thread2.id, thread3.id, thread4.id]));
+      });
+
+      it('should return empty array when no threads match the filter', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { metadata: { category: 'nonexistent' } },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+
+      it('should return empty array when resourceId does not exist', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: 'nonexistent-resource' },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+
+      it('should handle metadata filter with no matching threads', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: {
+            metadata: { category: 'support', priority: 'high', status: 'nonexistent' },
+          },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+
+      it('should paginate filtered results correctly', async () => {
+        const page1 = await memoryStorage.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 0,
+          perPage: 1,
+        });
+
+        expect(page1.threads).toHaveLength(1);
+        expect(page1.total).toBe(2);
+        expect(page1.hasMore).toBe(true);
+
+        const page2 = await memoryStorage.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 1,
+          perPage: 1,
+        });
+
+        expect(page2.threads).toHaveLength(1);
+        expect(page2.total).toBe(2);
+        expect(page2.hasMore).toBe(false);
+
+        // Ensure different threads
+        expect(page1.threads[0]?.id).not.toBe(page2.threads[0]?.id);
+      });
+
+      it('should sort filtered threads by createdAt DESC by default', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
+      });
+
+      it('should sort filtered threads by createdAt ASC', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
+      });
+
+      it('should sort filtered threads by updatedAt DESC', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { metadata: { category: 'support' } },
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
+      });
+
+      it('should handle perPage: false to get all filtered results', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: resourceId1 },
+          perPage: false,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.total).toBe(2);
+        expect(result.perPage).toBe(false);
+      });
+
+      it('should filter threads that do not have metadata field', async () => {
+        const result = await memoryStorage.listThreads({
+          filter: { metadata: { status: 'open' } },
+          page: 0,
+          perPage: 10,
+        });
+
+        // Only thread1 and thread3 have status: 'open', thread4 doesn't have status field
+        expect(result.threads).toHaveLength(2);
+        expect(result.total).toBe(2);
+        const resultIds = result.threads.map(t => t.id);
+        expect(resultIds).toEqual(expect.arrayContaining([thread1.id, thread3.id]));
+        expect(resultIds).not.toContain(thread4.id);
+      });
+
+      it('should return consistent timestamps from getThreadById and listThreads', async () => {
+        // Save and update a thread
+        const testThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: testThread });
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await memoryStorage.updateThread({
+          id: testThread.id,
+          title: 'Updated for listThreads timestamp test',
+          metadata: { timestampTest: true },
+        });
+
+        // Get thread via getThreadById
+        const threadById = await memoryStorage.getThreadById({ threadId: testThread.id });
+
+        // Get thread via listThreads
+        const { threads } = await memoryStorage.listThreads({
+          filter: { resourceId: testThread.resourceId },
+          page: 0,
+          perPage: 10,
+        });
+        const threadFromList = threads.find(t => t.id === testThread.id);
+
+        expect(threadById).toBeDefined();
+        expect(threadFromList).toBeDefined();
+
+        const getTimestamp = (date: Date | string) =>
+          date instanceof Date ? date.getTime() : new Date(date).getTime();
+
+        // Timestamps should be identical
+        expect(getTimestamp(threadFromList!.createdAt)).toBe(getTimestamp(threadById!.createdAt));
+        expect(getTimestamp(threadFromList!.updatedAt)).toBe(getTimestamp(threadById!.updatedAt));
+      });
+    });
   });
 }
 

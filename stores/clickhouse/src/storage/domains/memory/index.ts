@@ -9,6 +9,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -984,6 +986,160 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId, page },
+        },
+        error,
+      );
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    try {
+      // Build WHERE clauses
+      const whereClauses: string[] = [];
+      const queryParams: Record<string, any> = {};
+
+      if (filter?.resourceId) {
+        whereClauses.push('resourceId = {resourceId:String}');
+        queryParams.resourceId = filter.resourceId;
+      }
+
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIndex}`;
+          whereClauses.push(`JSONExtractString(metadata, '${key}') = {${paramName}:String}`);
+          queryParams[paramName] = JSON.stringify(value).replace(/^"|"$/g, '');
+          metadataIndex++;
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+      // Get total count
+      const countResult = await this.client.query({
+        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} ${whereClause}`,
+        query_params: queryParams,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const countData = await countResult.json();
+      const total = (countData as any).data[0].total;
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Get paginated threads - get newest version of each thread
+      const dataResult = await this.client.query({
+        query: `
+              WITH ranked_threads AS (
+                SELECT
+                  id,
+                  resourceId,
+                  title,
+                  metadata,
+                  toDateTime64(createdAt, 3) as createdAt,
+                  toDateTime64(updatedAt, 3) as updatedAt,
+                  ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
+                FROM ${TABLE_THREADS}
+                ${whereClause}
+              )
+              SELECT
+                id,
+                resourceId,
+                title,
+                metadata,
+                createdAt,
+                updatedAt
+              FROM ranked_threads
+              WHERE row_num = 1
+              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
+              LIMIT {perPage:Int64} OFFSET {offset:Int64}
+            `,
+        query_params: {
+          ...queryParams,
+          perPage: perPage,
+          offset: offset,
+        },
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = await dataResult.json();
+      const threads = transformRows<StorageThreadType>(rows.data).map(thread => ({
+        ...thread,
+        metadata: parseMetadata(thread.metadata),
+      }));
+
+      return {
+        threads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+            page,
+          },
         },
         error,
       );

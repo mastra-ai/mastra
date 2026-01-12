@@ -138,6 +138,38 @@ export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
+export type StorageListThreadsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter options for querying threads.
+   */
+  filter?: {
+    /**
+     * Filter threads by resource ID.
+     */
+    resourceId?: string;
+    /**
+     * Filter threads by metadata key-value pairs.
+     * All specified key-value pairs must match (AND logic).
+     */
+    metadata?: Record<string, unknown>;
+  };
+};
+
+export type StorageListThreadsOutput = PaginationInfo & {
+  threads: StorageThreadType[];
+};
+
 /**
  * Metadata stored on cloned threads to track their origin
  */

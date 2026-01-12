@@ -10,6 +10,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
@@ -486,6 +488,49 @@ export class InMemoryMemory extends MemoryStorage {
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    return {
+      threads: clonedThreads.slice(offset, offset + perPage),
+      total: clonedThreads.length,
+      page,
+      perPage: perPageForResponse,
+      hasMore: offset + perPage < clonedThreads.length,
+    };
+  }
+
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate pagination parameters (throws on invalid input)
+    this.validatePagination(page, perPage);
+
+    this.logger.debug(`InMemoryMemory: listThreads called with filter: ${JSON.stringify(filter)}`);
+
+    // Start with all threads
+    let threads = Array.from(this.db.threads.values());
+
+    // Apply resourceId filter if provided
+    if (filter?.resourceId) {
+      threads = threads.filter((t: any) => t.resourceId === filter.resourceId);
+    }
+
+    // Apply metadata filter if provided (AND logic - all key-value pairs must match)
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      threads = threads.filter(thread => {
+        if (!thread.metadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+      });
+    }
+
+    const sortedThreads = this.sortThreads(threads, field, direction);
+    const clonedThreads = sortedThreads.map(thread => ({
+      ...thread,
+      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
+    })) as StorageThreadType[];
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     return {
       threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,

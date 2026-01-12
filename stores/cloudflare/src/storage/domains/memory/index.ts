@@ -8,6 +8,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -152,6 +154,86 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get threads by resource ID with pagination',
+        },
+        error,
+      );
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    try {
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const { field, direction } = this.parseOrderBy(orderBy);
+
+      // List all keys in the threads table
+      const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
+      const keyObjs = await this.#db.listKV(TABLE_THREADS, { prefix: `${prefix}${TABLE_THREADS}` });
+
+      const threads: StorageThreadType[] = [];
+
+      for (const { name: key } of keyObjs) {
+        const data = await this.#db.getKV(TABLE_THREADS, key);
+        if (!data) continue;
+
+        // Apply resourceId filter if provided
+        if (filter?.resourceId && data.resourceId !== filter.resourceId) {
+          continue;
+        }
+
+        // Apply metadata filters if provided (AND logic)
+        if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+          const metadata = this.ensureMetadata(data.metadata);
+          if (!metadata) continue; // Skip if thread has no metadata
+          const matches = Object.entries(filter.metadata).every(([key, value]) => metadata[key] === value);
+          if (!matches) continue;
+        }
+
+        threads.push(data);
+      }
+
+      // Apply dynamic sorting
+      threads.sort((a, b) => {
+        const aTime = new Date(a[field] || 0).getTime();
+        const bTime = new Date(b[field] || 0).getTime();
+        return direction === 'ASC' ? aTime - bTime : bTime - aTime;
+      });
+
+      // Apply pagination
+      const end = perPageInput === false ? threads.length : offset + perPage;
+      const paginatedThreads = threads.slice(offset, end);
+
+      return {
+        page,
+        perPage: perPageForResponse,
+        total: threads.length,
+        hasMore: perPageInput === false ? false : offset + perPage < threads.length,
+        threads: paginatedThreads,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: 'Failed to list threads with filters',
         },
         error,
       );

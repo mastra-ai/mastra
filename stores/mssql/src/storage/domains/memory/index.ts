@@ -18,6 +18,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import sql from 'mssql';
@@ -260,6 +262,142 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
+            page,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        threads: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_PAGE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: error instanceof Error ? error.message : 'Invalid pagination parameters',
+        details: { page, perPage },
+      });
+    }
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: error instanceof Error ? error.message : 'Invalid metadata key',
+        details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+      });
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    try {
+      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const whereClauses: string[] = [];
+      const params: Record<string, any> = {};
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        whereClauses.push('[resourceId] = @resourceId');
+        params.resourceId = filter.resourceId;
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIndex}`;
+          whereClauses.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
+          params[paramName] = JSON.stringify(value).replace(/^"|"$/g, '');
+          metadataIndex++;
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${tableName} ${whereClause}`;
+
+      const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
+      const countRequest = this.pool.request();
+      for (const [key, value] of Object.entries(params)) {
+        countRequest.input(key, value);
+      }
+      const countResult = await countRequest.query(countQuery);
+      const total = parseInt(countResult.recordset[0]?.count ?? '0', 10);
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
+      const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dataRequest = this.pool.request();
+
+      for (const [key, value] of Object.entries(params)) {
+        dataRequest.input(key, value);
+      }
+      dataRequest.input('offset', offset);
+
+      if (limitValue > 2147483647) {
+        dataRequest.input('perPage', sql.BigInt, limitValue);
+      } else {
+        dataRequest.input('perPage', limitValue);
+      }
+
+      const rowsResult = await dataRequest.query(dataQuery);
+      const rows = rowsResult.recordset || [];
+      const threads = rows.map(thread => ({
+        ...thread,
+        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      }));
+
+      return {
+        threads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
             page,
           },
         },

@@ -9,6 +9,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
@@ -781,6 +783,130 @@ export class MemoryLibSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return {
+        threads: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    try {
+      const whereClauses: string[] = [];
+      const queryParams: InValue[] = [];
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        whereClauses.push('resourceId = ?');
+        queryParams.push(filter.resourceId);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+          queryParams.push(JSON.stringify(value).replace(/^"|"$/g, ''));
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${TABLE_THREADS} ${whereClause}`;
+
+      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        createdAt: new Date(row.createdAt as string),
+        updatedAt: new Date(row.updatedAt as string),
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      });
+
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count ${baseQuery}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataResult = await this.#client.execute({
+        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, offset],
+      });
+
+      const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
+
+      return {
+        threads,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );

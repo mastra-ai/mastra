@@ -18,6 +18,8 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -757,6 +759,100 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      // Validate pagination parameters (throws on invalid input)
+      this.validatePagination(page, perPage);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, perPage },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    try {
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const { field, direction } = this.parseOrderBy(orderBy);
+      const collection = await this.getCollection(TABLE_THREADS);
+
+      // Build MongoDB query object
+      const query: any = {};
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        query.resourceId = filter.resourceId;
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // MongoDB properly escapes dot notation keys in the driver
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query[`metadata.${key}`] = value;
+        }
+      }
+
+      const total = await collection.countDocuments(query);
+
+      if (perPage === 0) {
+        return {
+          threads: [],
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: offset < total,
+        };
+      }
+
+      // MongoDB sort: 1 = ASC, -1 = DESC
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
+      let cursor = collection
+        .find(query)
+        .sort({ [field]: sortOrder })
+        .skip(offset);
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+      const threads = await cursor.toArray();
+
+      return {
+        threads: threads.map((thread: any) => ({
+          id: thread.id,
+          title: thread.title,
+          resourceId: thread.resourceId,
+          createdAt: formatDateForMongoDB(thread.createdAt),
+          updatedAt: formatDateForMongoDB(thread.updatedAt),
+          metadata: thread.metadata || {},
+        })),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );

@@ -16,6 +16,8 @@ import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } fr
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
   MemoryStorage,
   StorageCloneThreadInput,
@@ -244,6 +246,11 @@ export class Memory extends MastraMemory {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const memoryStore = await this.getMemoryStore();
     return memoryStore.listThreadsByResourceId(args);
+  }
+
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.listThreads(args);
   }
 
   private async handleWorkingMemoryFromMetadata({
