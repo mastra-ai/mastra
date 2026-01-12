@@ -1,5 +1,5 @@
 import { Entity } from 'electrodb';
-import { baseAttributes, ttlAttribute, expiresAtAttribute } from './utils';
+import { baseAttributes } from './utils';
 
 export const scoreEntity = new Entity({
   model: {
@@ -13,8 +13,6 @@ export const scoreEntity = new Entity({
       required: true,
     },
     ...baseAttributes,
-    ...ttlAttribute,
-    ...expiresAtAttribute,
     id: {
       type: 'string',
       required: true,
