@@ -8,6 +8,7 @@
 
 import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
+import type { ToolCallPayload, ToolResultPayload } from '@mastra/core/stream';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -685,11 +686,63 @@ export class BraintrustExporter extends BaseExporter {
 
   /**
    * Transforms MODEL_GENERATION output to Braintrust Thread view format.
+   * Builds messages from step outputs: toolCalls, toolResults, and text.
+   * @see https://github.com/mastra-ai/mastra/issues/11735
    */
   private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
-      const { text, ...rest } = output;
-      return { role: 'assistant', content: text, ...rest };
+      const modelSteps = output?.modelSteps as
+        | Array<{
+            output: {
+              text?: string;
+              toolCalls?: ToolCallPayload[];
+              toolResults?: ToolResultPayload[];
+            };
+          }>
+        | undefined;
+
+      if (modelSteps && modelSteps.length > 0) {
+        const messages: OpenAIMessage[] = [];
+
+        for (const step of modelSteps) {
+          const stepOutput = step.output || {};
+          const { text, toolCalls, toolResults } = stepOutput;
+
+          const message: OpenAIMessage = {
+            role: 'assistant',
+            content: text || '',
+          };
+
+          if (toolCalls && toolCalls.length > 0) {
+            message.tool_calls = toolCalls.map(tc => ({
+              id: tc.toolCallId,
+              type: 'function' as const,
+              function: {
+                name: tc.toolName,
+                arguments: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args),
+              },
+            }));
+          }
+
+          messages.push(message);
+
+          messages.push(
+            ...(toolResults ?? []).map(tr => ({
+              role: 'tool' as const,
+              content: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+              tool_call_id: tr.toolCallId,
+            })),
+          );
+        }
+
+        if (messages.length > 0) {
+          return messages;
+        }
+      }
+
+      // Fallback: simple assistant message with text
+      const { text } = output || {};
+      return { role: 'assistant', content: text || '' };
     }
 
     return output;

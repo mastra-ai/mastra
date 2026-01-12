@@ -637,6 +637,86 @@ describe('BraintrustExporter', () => {
         }),
       );
     });
+
+    /**
+     * Test for GitHub issue #11735: Thread view truncated for last turn in Braintrust
+     *
+     * When an LLM generation has steps with messages, the output should be
+     * converted to OpenAI format so Braintrust's Thread view displays properly.
+     *
+     * Each step's output contains text, toolCalls, and messages (AI SDK format).
+     *
+     * @see https://github.com/mastra-ai/mastra/issues/11735
+     */
+    it('should reconstruct LLM output from steps for Thread view (issue #11735)', async () => {
+      const traceId = 'step-output-reconstruction-trace';
+
+      // Create the MODEL_GENERATION span with steps
+      // Each step has output containing text, toolCalls, and toolResults
+      const llmSpan = createMockSpan({
+        id: 'model-gen-span',
+        traceId,
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [{ role: 'user', content: 'What is 2+2?' }],
+        output: {
+          text: 'The answer is 4.',
+          // Steps accumulated by ModelSpanTracker (named 'modelSteps' to avoid deepClean stripping)
+          modelSteps: [
+            {
+              output: {
+                text: '',
+                toolCalls: [{ toolName: 'calculator', toolCallId: 'tc-1', args: { a: 2, b: 2 } }],
+                toolResults: [{ toolCallId: 'tc-1', toolName: 'calculator', result: { result: 4 } }],
+              },
+            },
+            {
+              output: {
+                text: 'The answer is 4.',
+              },
+            },
+          ],
+        },
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+
+      // Start MODEL_GENERATION span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Reset mock to capture only the end call
+      mockSpan.log.mockClear();
+
+      // End MODEL_GENERATION span - this should convert messages from steps
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...llmSpan, endTime: new Date() },
+      });
+
+      // The output should be converted from AI SDK format to OpenAI format
+      expect(mockSpan.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: [
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'tc-1',
+                  type: 'function',
+                  function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+                },
+              ],
+            },
+            { role: 'tool', content: '{"result":4}', tool_call_id: 'tc-1' },
+            { role: 'assistant', content: 'The answer is 4.' },
+          ],
+        }),
+      );
+    });
   });
 
   describe('AI SDK v5 Message Conversion', () => {
@@ -2275,6 +2355,8 @@ function createMockSpan({
   output,
   errorInfo,
   tags,
+  traceId,
+  parentSpanId,
 }: {
   id: string;
   name: string;
@@ -2286,6 +2368,8 @@ function createMockSpan({
   output?: any;
   errorInfo?: any;
   tags?: string[];
+  traceId?: string;
+  parentSpanId?: string;
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -2299,11 +2383,11 @@ function createMockSpan({
     tags,
     startTime: new Date(),
     endTime: undefined,
-    traceId: isRoot ? `${id}-trace` : 'parent-trace-id',
+    traceId: traceId ?? (isRoot ? `${id}-trace` : 'parent-trace-id'),
     get isRootSpan() {
       return isRoot;
     },
-    parentSpanId: isRoot ? undefined : 'parent-id',
+    parentSpanId: parentSpanId ?? (isRoot ? undefined : 'parent-id'),
     isEvent: false,
   } as AnyExportedSpan;
 

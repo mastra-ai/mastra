@@ -17,7 +17,13 @@ import type {
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
-import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+import type {
+  OutputSchema,
+  ChunkType,
+  StepStartPayload,
+  StepFinishPayload,
+  ToolResultPayload,
+} from '@mastra/core/stream';
 
 import { extractUsageMetrics } from './usage';
 
@@ -51,6 +57,16 @@ export class ModelSpanTracker {
   #toolOutputAccumulators: Map<string, ToolOutputAccumulator> = new Map();
   /** Tracks toolCallIds that had streaming output (to skip redundant tool-result spans) */
   #streamedToolCallIds: Set<string> = new Set();
+  /**
+   * Accumulated step spans for message reconstruction in exporters.
+   * @see https://github.com/mastra-ai/mastra/issues/11735
+   */
+  #steps: Span<SpanType.MODEL_STEP>[] = [];
+  /**
+   * Accumulated tool results for the current step.
+   * @see https://github.com/mastra-ai/mastra/issues/11735
+   */
+  #currentStepToolResults: ToolResultPayload[] = [];
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
@@ -86,6 +102,8 @@ export class ModelSpanTracker {
   /**
    * End the generation span with optional raw usage data.
    * If usage is provided, it will be converted to UsageStats with cache token details.
+   * Includes accumulated steps for message reconstruction in exporters.
+   * @see https://github.com/mastra-ai/mastra/issues/11735
    */
   endGeneration(options?: EndGenerationOptions): void {
     const { usage, providerMetadata, ...spanOptions } = options ?? {};
@@ -93,6 +111,15 @@ export class ModelSpanTracker {
     if (spanOptions.attributes) {
       spanOptions.attributes.completionStartTime = this.#completionStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+    }
+    // Include accumulated step outputs for exporters to reconstruct message history
+    // Extract output from each step span (output contains text, toolCalls, messages, etc.)
+    // Note: Field is named 'modelSteps' to avoid being stripped by deepClean (which strips 'steps')
+    if (spanOptions.output && this.#steps.length > 0) {
+      spanOptions.output = {
+        ...spanOptions.output,
+        modelSteps: this.#steps.map(step => ({ output: step.output })),
+      };
     }
 
     this.#modelSpan?.end(spanOptions);
@@ -150,7 +177,9 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the current Model execution step with token usage, finish reason, output, and metadata
+   * End the current Model execution step with token usage, finish reason, output, and metadata.
+   * Accumulates step output data for message reconstruction in exporters.
+   * @see https://github.com/mastra-ai/mastra/issues/11735
    */
   #endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<any, OUTPUT>) {
     if (!this.#currentStepSpan) return;
@@ -170,8 +199,13 @@ export class ModelSpanTracker {
       delete cleanMetadata.request;
     }
 
+    // Include tool results in output for exporters to reconstruct conversation (issue #11735)
+    // Output contains: text, toolCalls (assistant output), toolResults (tool responses)
     this.#currentStepSpan.end({
-      output: otherOutput,
+      output: {
+        ...otherOutput,
+        toolResults: this.#currentStepToolResults.length > 0 ? [...this.#currentStepToolResults] : undefined,
+      },
       attributes: {
         usage,
         isContinued: stepResult.isContinued,
@@ -182,6 +216,13 @@ export class ModelSpanTracker {
         ...cleanMetadata,
       },
     });
+
+    // Accumulate step spans for message reconstruction (issue #11735)
+    this.#steps.push(this.#currentStepSpan);
+
+    // Reset tool results for next step
+    this.#currentStepToolResults = [];
+
     this.#currentStepSpan = undefined;
     this.#stepIndex++;
   }
@@ -551,7 +592,13 @@ export class ModelSpanTracker {
               break;
 
             case 'tool-result': {
-              const toolCallId = chunk.payload?.toolCallId;
+              const payload = chunk.payload as ToolResultPayload;
+              const toolCallId = payload?.toolCallId;
+
+              // Accumulate tool result for message reconstruction (issue #11735)
+              if (payload) {
+                this.#currentStepToolResults.push(payload);
+              }
 
               // Skip tool-result if we already tracked streaming for this toolCallId
               // (the tool-output span captures duration and content better)
@@ -562,7 +609,7 @@ export class ModelSpanTracker {
 
               // For non-streaming tools, create the span but remove args from output
               // (args are redundant - already on the TOOL_CALL span input)
-              const { args, ...cleanPayload } = chunk.payload || {};
+              const { args, ...cleanPayload } = payload || {};
               this.#createEventSpan(chunk.type, cleanPayload);
               break;
             }

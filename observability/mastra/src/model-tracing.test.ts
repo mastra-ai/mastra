@@ -505,4 +505,57 @@ describe('ModelSpanTracker', () => {
       });
     });
   });
+
+  describe('modelSteps accumulation for message reconstruction (issue #11735)', () => {
+    it('should accumulate step outputs with toolResults in MODEL_GENERATION span', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        // Tool result arrives
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId: 'call_123',
+            toolName: 'calculator',
+            result: 4,
+          },
+        },
+        // Step finishes with toolCalls and text
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'The answer is 4.',
+              toolCalls: [{ toolCallId: 'call_123', toolName: 'calculator', args: { a: 2, b: 2 } }],
+            },
+            stepResult: { reason: 'stop' },
+            metadata: {},
+          },
+        },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      tracker.endGeneration({ output: { text: 'The answer is 4.' } });
+
+      // Get the MODEL_GENERATION span
+      const modelGenSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(modelGenSpans).toHaveLength(1);
+
+      const output = modelGenSpans[0]!.output as any;
+      expect(output.modelSteps).toBeDefined();
+      expect(output.modelSteps).toHaveLength(1);
+      expect(output.modelSteps[0].output.toolResults).toEqual([
+        { toolCallId: 'call_123', toolName: 'calculator', result: 4 },
+      ]);
+    });
+  });
 });
