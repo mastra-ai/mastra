@@ -566,7 +566,8 @@ export async function createNetworkLoop({
         if (recallResult?.messages) {
           // Filter to only include user messages. Network-internal messages (isNetwork JSON,
           // completion feedback) are saved as 'assistant' role, so this excludes them.
-          conversationContext = recallResult.messages.filter(msg => msg.role === 'user');
+          // Reverse to chronological order (oldest first) since recall() returns DESC order.
+          conversationContext = recallResult.messages.filter(msg => msg.role === 'user').reverse();
         }
       }
 
