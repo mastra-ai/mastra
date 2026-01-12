@@ -1630,6 +1630,7 @@ ${formattedMessages}
         };
       });
 
+      const runParallel = true;
       // Execute all observations in parallel
       console.info(`[OM] Starting parallel observation of ${observationTasks.length} threads`);
       const observationResults: Array<{
@@ -1641,12 +1642,13 @@ ${formattedMessages}
           suggestedContinuation?: string;
           patterns?: Record<string, string[]>;
         };
-      }> = [];
-      for (const runTask of observationTasks) {
-        const result = await runTask();
-        if (result) observationResults.push(result);
+      } | null> = runParallel ? await Promise.all(observationTasks.map(fn => fn())) : [];
+      if (!runParallel) {
+        for (const runTask of observationTasks) {
+          const result = await runTask();
+          if (result) observationResults.push(result);
+        }
       }
-      // const observationResults = await Promise.all(observationTasks);
       console.info(`[OM] All parallel observations complete`);
 
       // Combine results: wrap each thread's observations and append to existing
