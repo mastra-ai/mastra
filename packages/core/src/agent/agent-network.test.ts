@@ -5319,11 +5319,9 @@ describe('Agent - network - message history transfer to sub-agents', () => {
     }
 
     // The second sub-agent call should not see internal network JSON from the first call
-    if (subAgentReceivedPrompts.length >= 2) {
-      const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
-
-      expect(secondCallPrompt).not.toContain('"isNetwork":true');
-      expect(secondCallPrompt).not.toContain('selectionReason');
-    }
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+    const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
+    expect(secondCallPrompt).not.toContain('"isNetwork":true');
+    expect(secondCallPrompt).not.toContain('selectionReason');
   });
 });
