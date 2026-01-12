@@ -1,6 +1,4 @@
 /**
- * Test for GitHub Issue #9859: Support OpenAI Apps SDK metadata in Mastra Tool API
- * https://github.com/mastra-ai/mastra/issues/9859
  *
  * This test verifies that MCP tool annotations (annotations, _meta) are properly
  * supported in Mastra tools and exposed via the MCP protocol.

@@ -643,9 +643,7 @@ export class CoreToolBuilder extends MastraBase {
       parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
-      // Include MCP tool annotations if present (Issue #9859)
       annotations: 'annotations' in this.originalTool ? this.originalTool.annotations : undefined,
-      // Include arbitrary metadata if present (Issue #9859)
       _meta: '_meta' in this.originalTool ? this.originalTool._meta : undefined,
     } as unknown as CoreTool;
   }
