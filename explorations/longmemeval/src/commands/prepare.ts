@@ -16,7 +16,7 @@ import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from 
 import type { LongMemEvalQuestion, MemoryConfigOptions, MemoryConfigType } from '../data/types';
 import type { CoreMessage } from 'ai';
 
-import { getMemoryConfig, getMemoryOptions } from '../config';
+import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling } from '../config';
 import { makeRetryModel } from '../retry-model';
 import { google } from '@ai-sdk/google';
 import { makeDeterministicIds } from './deterministic-ids';
@@ -29,6 +29,7 @@ export interface PrepareOptions {
   memoryConfig: MemoryConfigType;
   outputDir?: string;
   subset?: number;
+  perTypeCount?: number;
   offset?: number;
   concurrency?: number;
   questionId?: string;
@@ -94,14 +95,20 @@ export class PrepareCommand {
       }
       console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
     } else {
-      // Apply offset and subset if requested
-      const offset = options.offset || 0;
-      if (offset > 0) {
-        questionsToProcess = questions.slice(offset);
-        console.log(chalk.gray(`Skipping first ${offset} questions`));
-      }
-      if (options.subset) {
-        questionsToProcess = questionsToProcess.slice(0, options.subset);
+      // Apply stratified sampling if perTypeCount is set
+      if (options.perTypeCount) {
+        console.log(chalk.gray(`\nApplying stratified sampling (${options.perTypeCount} per type):`));
+        questionsToProcess = applyStratifiedSampling(questions, options.perTypeCount);
+      } else {
+        // Apply offset and subset if requested
+        const offset = options.offset || 0;
+        if (offset > 0) {
+          questionsToProcess = questions.slice(offset);
+          console.log(chalk.gray(`Skipping first ${offset} questions`));
+        }
+        if (options.subset) {
+          questionsToProcess = questionsToProcess.slice(0, options.subset);
+        }
       }
     }
 

@@ -18,6 +18,8 @@ export interface RunVariant {
   dataset: DatasetType;
   /** Number of questions to process (undefined = all) */
   subset?: number;
+  /** Number of questions per type for stratified sampling (overrides subset) */
+  perTypeCount?: number;
   /** Concurrency for prepare command */
   prepareConcurrency: number;
   /** Concurrency for bench command */
@@ -52,6 +54,14 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     prepareConcurrency: 10,
     benchConcurrency: 10,
   },
+  sample: {
+    name: 'sample',
+    description: 'Stratified sample: 10 questions per type (60 total)',
+    dataset: 'longmemeval_s',
+    perTypeCount: 10,
+    prepareConcurrency: 2,
+    benchConcurrency: 10,
+  },
 };
 
 /**
@@ -70,6 +80,37 @@ export function getRunVariant(name: string): RunVariant {
  */
 export function getAvailableVariants(): string[] {
   return Object.keys(RUN_VARIANTS);
+}
+
+/**
+ * Apply stratified sampling to a list of questions.
+ * Sorts questions by ID (deterministic) and takes the first N of each type.
+ */
+export function applyStratifiedSampling<T extends { question_id: string; question_type: string }>(
+  questions: T[],
+  perTypeCount: number
+): T[] {
+  // Sort by question_id for deterministic ordering
+  const sorted = [...questions].sort((a, b) => a.question_id.localeCompare(b.question_id));
+
+  // Group by question type
+  const byType = new Map<string, T[]>();
+  for (const q of sorted) {
+    const existing = byType.get(q.question_type) || [];
+    existing.push(q);
+    byType.set(q.question_type, existing);
+  }
+
+  // Take first N of each type
+  const result: T[] = [];
+  for (const [type, typeQuestions] of byType) {
+    const selected = typeQuestions.slice(0, perTypeCount);
+    result.push(...selected);
+    console.log(`  ${type}: ${selected.length}/${typeQuestions.length} questions`);
+  }
+
+  // Sort final result by question_id for consistent ordering
+  return result.sort((a, b) => a.question_id.localeCompare(b.question_id));
 }
 
 // ============================================================================

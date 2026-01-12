@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, writeFileSync } from 'fs';
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
-import { getMemoryConfig, getMemoryOptions, type MemoryConfigDefinition } from '../config';
+import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling, type MemoryConfigDefinition } from '../config';
 import { DatasetLoader } from '../data/loader';
 import { reconcileQuestion } from './reconcile';
 
@@ -128,6 +128,7 @@ export interface RunOptions {
   preparedDataDir?: string;
   outputDir?: string;
   subset?: number;
+  perTypeCount?: number;
   offset?: number;
   concurrency?: number;
   questionId?: string;
@@ -317,21 +318,37 @@ Focusing on question: ${options.questionId}
 `),
       );
     } else {
-      // Apply offset and subset if requested
-      const offset = options.offset || 0;
-      if (offset > 0) {
-        questionsToProcess = preparedQuestions.slice(offset);
-        console.log(chalk.gray(`Skipping first ${offset} questions`));
-      }
-      if (options.subset) {
-        questionsToProcess = questionsToProcess.slice(0, options.subset);
-      }
-      if (offset > 0 || options.subset) {
-        console.log(
-          chalk.gray(`
+      // Apply stratified sampling if perTypeCount is set
+      if (options.perTypeCount) {
+        console.log(chalk.gray(`\nApplying stratified sampling (${options.perTypeCount} per type):`));
+        // Map prepared questions to include question_type for sampling
+        const withTypes = preparedQuestions.map(q => ({
+          ...q,
+          question_id: q.questionId,
+          question_type: q.questionType,
+        }));
+        const sampled = applyStratifiedSampling(withTypes, options.perTypeCount);
+        questionsToProcess = sampled.map(q => {
+          const { question_id, question_type, ...rest } = q;
+          return rest as typeof preparedQuestions[0];
+        });
+      } else {
+        // Apply offset and subset if requested
+        const offset = options.offset || 0;
+        if (offset > 0) {
+          questionsToProcess = preparedQuestions.slice(offset);
+          console.log(chalk.gray(`Skipping first ${offset} questions`));
+        }
+        if (options.subset) {
+          questionsToProcess = questionsToProcess.slice(0, options.subset);
+        }
+        if (offset > 0 || options.subset) {
+          console.log(
+            chalk.gray(`
 Processing questions ${offset + 1}-${offset + questionsToProcess.length} of ${preparedQuestions.length} total
 `),
-        );
+          );
+        }
       }
     }
 

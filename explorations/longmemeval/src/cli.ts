@@ -197,6 +197,7 @@ program
 
       // Apply overrides
       const subset = options.subset ?? resolvedVariant.subset;
+      const perTypeCount = resolvedVariant.perTypeCount;
       const concurrency = options.concurrency ?? resolvedVariant.prepareConcurrency;
 
       console.log(chalk.blue('\n🚀 LongMemEval Data Preparation\n'));
@@ -204,7 +205,9 @@ program
       console.log(chalk.gray(`Dataset: ${dataset}`));
       console.log(chalk.gray(`Memory Config: ${resolvedConfig}`));
       console.log(chalk.gray(`Concurrency: ${concurrency}`));
-      if (subset) {
+      if (perTypeCount) {
+        console.log(chalk.gray(`Stratified Sample: ${perTypeCount} per type`));
+      } else if (subset) {
         console.log(chalk.gray(`Subset: ${subset} questions`));
       }
       if (options.offset) {
@@ -281,7 +284,8 @@ program
         dataset: dataset as DatasetType,
         memoryConfig: resolvedConfig as MemoryConfigType,
         outputDir: options.output,
-        subset,
+        subset: perTypeCount ? undefined : subset, // Don't use subset if using perTypeCount
+        perTypeCount,
         offset: options.offset,
         concurrency,
         questionId: options.questionId,
@@ -353,6 +357,7 @@ program
 
       // Apply overrides
       const subset = options.subset ?? resolvedVariant.subset;
+      const perTypeCount = resolvedVariant.perTypeCount;
       const concurrency = options.concurrency ?? resolvedVariant.benchConcurrency;
 
       console.log(chalk.blue('\n🚀 LongMemEval Benchmark Runner\n'));
@@ -360,7 +365,9 @@ program
       console.log(chalk.gray(`Dataset: ${dataset}`));
       console.log(chalk.gray(`Memory Config: ${resolvedConfig}`));
       console.log(chalk.gray(`Concurrency: ${concurrency}`));
-      if (subset) {
+      if (perTypeCount) {
+        console.log(chalk.gray(`Stratified Sample: ${perTypeCount} per type`));
+      } else if (subset) {
         console.log(chalk.gray(`Subset: ${subset} questions`));
       }
       if (options.offset) {
@@ -393,7 +400,8 @@ program
         memoryConfig: resolvedConfig as MemoryConfigType,
         preparedDataDir: options.preparedData,
         outputDir: options.output,
-        subset,
+        subset: perTypeCount ? undefined : subset, // Don't use subset if using perTypeCount
+        perTypeCount,
         offset: options.offset,
         concurrency,
         questionId: options.questionId,
