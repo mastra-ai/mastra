@@ -936,7 +936,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       }
 
       // Get total count - count AFTER ranking to ensure we count latest versions only
-      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
       const countResult = await this.client.query({
         query: `
           WITH ranked_threads AS (
