@@ -261,7 +261,7 @@ describe('LocalExporter', () => {
         await expect(exporter.init({ mastra: mockMastraWithoutStorage })).resolves.not.toThrow();
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          'DefaultExporter disabled: Storage not available. Traces will not be persisted.',
+          'LocalExporter disabled: Storage not available. Traces will not be persisted.',
         );
       });
     });
