@@ -972,7 +972,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         perPage: -5,
       });
       expect(negativeResult.threads.length).toBeGreaterThan(0);
-      expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId
+      expect(negativeResult.perPage).toBe(100); // Default for listThreads
     });
   });
 

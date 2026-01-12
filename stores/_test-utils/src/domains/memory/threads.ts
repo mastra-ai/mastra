@@ -71,8 +71,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await memoryStorage.saveThread({ thread: thread1 });
       await memoryStorage.saveThread({ thread: thread2 });
 
-      const { threads } = await memoryStorage.listThreadsByResourceId({
-        resourceId: thread1.resourceId,
+      const { threads } = await memoryStorage.listThreads({
+        filter: { resourceId: thread1.resourceId },
         page: 0,
         perPage: 10,
       });
@@ -103,9 +103,9 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread).toEqual(updatedThread);
     });
 
-    it('should return consistent timestamps from getThreadById and listThreadsByResourceId (issue #11496)', async () => {
+    it('should return consistent timestamps from getThreadById and listThreads (issue #11496)', async () => {
       // This test verifies that timestamps are consistent across different retrieval methods.
-      // The bug was that listThreadsByResourceId returned timestamps from non-timezone-aware columns,
+      // The bug was that listThreads returned timestamps from non-timezone-aware columns,
       // while getThreadById used timezone-aware columns, causing inconsistent UTC timestamps.
 
       const thread = createSampleThread();
@@ -122,9 +122,9 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       // Get thread via getThreadById
       const threadById = await memoryStorage.getThreadById({ threadId: thread.id });
 
-      // Get thread via listThreadsByResourceId
-      const { threads } = await memoryStorage.listThreadsByResourceId({
-        resourceId: thread.resourceId,
+      // Get thread via listThreads
+      const { threads } = await memoryStorage.listThreads({
+        filter: { resourceId: thread.resourceId },
         page: 0,
         perPage: 10,
       });
@@ -259,24 +259,24 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       );
       await Promise.all(threadPromises);
 
-      const page1 = await memoryStorage.listThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+      const page1 = await memoryStorage.listThreads({ filter: { resourceId }, page: 0, perPage: 7 });
       expect(page1.threads).toHaveLength(7);
       expect(page1.total).toBe(17);
       expect(page1.page).toBe(0);
       expect(page1.perPage).toBe(7);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await memoryStorage.listThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+      const page3 = await memoryStorage.listThreads({ filter: { resourceId }, page: 2, perPage: 7 });
       expect(page3.threads).toHaveLength(3); // 17 total, page 2 (skip 14), get 3 remaining
       expect(page3.total).toBe(17);
       expect(page3.hasMore).toBe(false);
     });
 
-    it('should return paginated results when no pagination params for listThreadsByResourceId', async () => {
+    it('should return paginated results when no pagination params for listThreads', async () => {
       const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
       await memoryStorage.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
-      const results = await memoryStorage.listThreadsByResourceId({ resourceId, page: 0, perPage: 100 });
+      const results = await memoryStorage.listThreads({ filter: { resourceId }, page: 0, perPage: 100 });
       expect(Array.isArray(results.threads)).toBe(true);
       expect(results.threads.length).toBe(1);
       expect(results.total).toBe(1);
@@ -380,7 +380,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   //     expect(retrievedThread?.updatedAt.toISOString()).toBe(now.toISOString());
   //   });
 
-  //   it('should handle date serialization in listThreadsByResourceId', async () => {
+  //   it('should handle date serialization in listThreads', async () => {
   //     const now = new Date();
   //     const thread1 = createSampleThread({ date: now });
   //     const thread2 = { ...createSampleThread({ date: now }), resourceId: thread1.resourceId };
@@ -388,8 +388,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
   //     await Promise.all(threads.map(thread => storage.saveThread({ thread })));
 
-  //     const { threads: retrievedThreads } = await storage.listThreadsByResourceId({
-  //       resourceId: threads[0]?.resourceId!,
+  //     const { threads: retrievedThreads } = await storage.listThreads({
+  //       filter: { resourceId: threads[0]?.resourceId! },
   //       offset: 0,
   //       limit: 10,
   //     });
@@ -489,10 +489,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       }
     });
 
-    describe('listThreadsByResourceId sorting', () => {
+    describe('listThreads sorting', () => {
       it('should sort paginated threads by createdAt DESC by default', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
         });
@@ -503,8 +503,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by createdAt ASC', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -516,8 +516,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort threads by createdAt DESC', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'createdAt', direction: 'DESC' },
           page: 0,
           perPage: 3,
@@ -529,8 +529,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by updatedAt ASC', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'updatedAt', direction: 'ASC' },
@@ -542,8 +542,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by updatedAt DESC', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -555,8 +555,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt DESC when only field is specified (direction defaults to DESC)', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'createdAt' },
           page: 0,
           perPage: 3,
@@ -568,8 +568,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by updatedAt DESC when only field is specified (direction defaults to DESC)', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'updatedAt' },
           page: 0,
           perPage: 3,
@@ -581,8 +581,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt ASC when only direction ASC is specified (field defaults to createdAt)', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           orderBy: { direction: 'ASC' },
           page: 0,
           perPage: 3,
@@ -594,8 +594,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt DESC when only direction DESC is specified (field defaults to createdAt)', async () => {
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId },
           orderBy: { direction: 'DESC' },
           page: 0,
           perPage: 3,
@@ -608,30 +608,30 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       it('should maintain sort order consistency across pages', async () => {
         // Get all threads sorted by updatedAt DESC for comparison
-        const { threads: allThreads } = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const { threads: allThreads } = await memoryStorage.listThreads({
+          filter: { resourceId },
           orderBy: { field: 'updatedAt', direction: 'DESC' },
           page: 0,
           perPage: 10,
         });
 
         // Get paginated results
-        const page1 = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const page1 = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
-        const page2 = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const page2 = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 1,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
-        const page3 = await memoryStorage.listThreadsByResourceId({
-          resourceId,
+        const page3 = await memoryStorage.listThreads({
+          filter: { resourceId },
           page: 2,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -648,8 +648,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should handle empty results with sorting parameters', async () => {
         const emptyResourceId = `empty-resource-${randomUUID()}`;
 
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId: emptyResourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: emptyResourceId },
           page: 0,
           perPage: 10,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -668,8 +668,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           thread: { ...createSampleThread(), resourceId: singleResourceId },
         });
 
-        const result = await memoryStorage.listThreadsByResourceId({
-          resourceId: singleResourceId,
+        const result = await memoryStorage.listThreads({
+          filter: { resourceId: singleResourceId },
           page: 0,
           perPage: 10,
           orderBy: { field: 'updatedAt', direction: 'ASC' },
@@ -720,8 +720,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           }),
         ]);
 
-        const { threads: result } = await memoryStorage.listThreadsByResourceId({
-          resourceId: identicalResourceId,
+        const { threads: result } = await memoryStorage.listThreads({
+          filter: { resourceId: identicalResourceId },
           page: 0,
           perPage: 3,
           orderBy: { field: 'createdAt', direction: 'ASC' },

@@ -322,8 +322,8 @@ const sidebars = {
         { type: "doc", id: "memory/getThreadById", label: ".getThreadById()" },
         {
           type: "doc",
-          id: "memory/listThreadsByResourceId",
-          label: ".listThreadsByResourceId()",
+          id: "memory/listThreads",
+          label: ".listThreads()",
         },
         { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/recall", label: ".recall()" },

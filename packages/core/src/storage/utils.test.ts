@@ -393,7 +393,7 @@ describe('createStorageErrorId', () => {
   });
 
   it('should normalize complex operation names', () => {
-    expect(createStorageErrorId('PG', 'listThreadsByResourceId', 'FAILED')).toBe(
+    expect(createStorageErrorId('PG', 'listThreads', 'FAILED')).toBe(
       'MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED',
     );
 

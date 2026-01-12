@@ -329,7 +329,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * This method supports:
    * - Optional resourceId filtering (not required)
    * - Metadata filtering with AND logic (all key-value pairs must match)
-   * - Same pagination and ordering options as listThreadsByResourceId
+   * - Same pagination and ordering options as listThreads
    *
    * @param args.filter - Optional filters for resourceId and/or metadata
    * @param args.filter.resourceId - Optional resource ID to filter by

@@ -82,7 +82,7 @@ class MockStorage extends MemoryStorage {
   async updateMessages(args: any) {
     return args.messages || [];
   }
-  async listThreadsByResourceId(_args: any): Promise<any> {
+  async listThreads(_args: any): Promise<any> {
     return { threads: [], total: 0, page: 1, perPage: false, hasMore: false };
   }
 }
