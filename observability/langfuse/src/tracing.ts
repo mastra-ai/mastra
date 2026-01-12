@@ -206,9 +206,11 @@ export class LangfuseExporter extends BaseExporter {
       return;
     }
 
-    const langfuseSpan = traceData.spans.get(span.id);
+    let langfuseSpan = traceData.spans.get(span.id);
+
+    // FIX: If span doesn't exist (cross-process scenario), create it now
+    // This handles distributed workflows (e.g., Inngest) where span_started was in a different process
     if (!langfuseSpan) {
-      // For event spans that only send SPAN_ENDED, we might not have the span yet
       if (isEnd && span.isEvent) {
         // Just make sure it's not in active spans
         traceData.activeSpans.delete(span.id);
@@ -218,6 +220,23 @@ export class LangfuseExporter extends BaseExporter {
         return;
       }
 
+      // Create the span retroactively for cross-process scenarios
+      const langfuseParent = this.getLangfuseParent({ traceData, span, method });
+      if (langfuseParent) {
+        const payload = this.buildSpanPayload(span, true);
+        langfuseSpan =
+          span.type === SpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
+        traceData.spans.set(span.id, langfuseSpan);
+        this.logger.debug('Langfuse exporter: Created span retroactively for cross-process event', {
+          traceId: span.traceId,
+          spanId: span.id,
+          spanName: span.name,
+          method,
+        });
+      }
+    }
+
+    if (!langfuseSpan) {
       this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
         traceId: span.traceId,
         spanId: span.id,
@@ -330,6 +349,19 @@ export class LangfuseExporter extends BaseExporter {
       return this.traceMap.get(span.traceId);
     }
 
+    // FIX: If trace doesn't exist but we have a traceId, create it
+    // This handles spans from different processes (e.g., Inngest/distributed workflows)
+    if (span.traceId) {
+      this.logger.debug('Langfuse exporter: Creating trace for cross-process span', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        method,
+      });
+      this.initTrace(span);
+      return this.traceMap.get(span.traceId);
+    }
+
     this.logger.warn('Langfuse exporter: No trace data found for span', {
       traceId: span.traceId,
       spanId: span.id,
@@ -339,6 +371,7 @@ export class LangfuseExporter extends BaseExporter {
       parentSpanId: span.parentSpanId,
       method,
     });
+    return undefined;
   }
 
   private getLangfuseParent(options: {
@@ -358,15 +391,17 @@ export class LangfuseExporter extends BaseExporter {
     if (traceData.events.has(parentId)) {
       return traceData.events.get(parentId);
     }
-    this.logger.warn('Langfuse exporter: No parent data found for span', {
+
+    // FIX: Parent not in local map - fall back to trace instead of returning undefined
+    // This enables cross-process parent linking for distributed workflows (e.g., Inngest)
+    this.logger.debug('Langfuse exporter: Parent not in local map, falling back to trace', {
       traceId: span.traceId,
       spanId: span.id,
       spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
       parentSpanId: span.parentSpanId,
       method,
     });
+    return traceData.trace;
   }
 
   private buildTracePayload(span: AnyExportedSpan): Record<string, any> {
@@ -555,3 +590,4 @@ export class LangfuseExporter extends BaseExporter {
     await super.shutdown();
   }
 }
+
