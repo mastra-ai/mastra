@@ -143,10 +143,10 @@ Using `pnpm turbo watch build` automatically rebuilds packages when you make cha
 
 ### Step 3: Run the Local CLI from an Example Directory
 
-Navigate to an example that exercises your changes and run the locally-built CLI:
+Navigate to the example directory and run the locally-built CLI:
 
 ```bash
-cd examples/weather-agent
+cd examples/agent
 node ../../packages/cli/dist/index.js dev
 ```
 
