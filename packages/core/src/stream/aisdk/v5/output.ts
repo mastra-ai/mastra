@@ -300,7 +300,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   get content(): LLMStepResult['content'] {
-    return this.#messageList.get.response.aiV5.modelContent();
+    return this.#modelOutput.messageList.get.response.aiV5.modelContent();
   }
 
   /**
@@ -404,10 +404,10 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       tripwire: this.#modelOutput.tripwire,
       traceId: this.traceId,
       // All messages from this execution (input + memory history + response)
-      messages: this.#messageList.get.all.db(),
+      messages: this.#modelOutput.messageList.get.all.db(),
       // Only messages loaded from memory (conversation history)
-      rememberedMessages: this.#messageList.get.remembered.db(),
-      ...(object ? { object } : {}),
+      rememberedMessages: this.#modelOutput.messageList.get.remembered.db(),
+      ...(object !== undefined ? { object } : {}),
     };
 
     fullOutput.response.messages = this.#modelOutput.messageList.get.response.aiV5.model();
