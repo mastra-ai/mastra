@@ -5075,21 +5075,13 @@ describe('Agent - network - tool approval and suspension', () => {
 
 describe('Agent - network - message history transfer to sub-agents', () => {
   it('should pass original user message history to sub-agents WITHOUT memory so they have conversation context', async () => {
-    // This test reproduces issue #11468:
-    // When an orchestrating agent decides which secondary agent to call,
-    // the message history is not transferred to the secondary agent,
-    // making it difficult for it to understand the context for action.
-    //
-    // This test specifically covers the case where the sub-agent does NOT
-    // have its own memory configured. In this case, the sub-agent should
-    // still receive the original conversation context.
+    // Sub-agents without their own memory should still receive conversation context
+    // from the network so they can understand prior messages in the conversation.
 
     const memory = new MockMemory();
 
-    // Track what messages the sub-agent receives
     let subAgentReceivedPrompts: any[] = [];
 
-    // Create a mock model for the sub-agent that captures what it receives
     const subAgentMockModel = new MockLanguageModelV2({
       doGenerate: async ({ prompt }) => {
         subAgentReceivedPrompts.push(prompt);
@@ -5114,7 +5106,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       },
     });
 
-    // Sub-agent WITHOUT memory - should still receive conversation context
     const questionAnswerAgent = new Agent({
       id: 'question-answer-agent',
       name: 'Question Answer Agent',
@@ -5122,10 +5113,9 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       instructions:
         'Answer questions based on the conversation history. If asked about names, look for where the user introduced themselves.',
       model: subAgentMockModel,
-      // NOTE: No memory configured - this is the key difference!
+      // No memory configured
     });
 
-    // Routing agent mock - routes to the question-answer-agent
     const routingResponse = JSON.stringify({
       primitiveId: 'questionAnswerAgent',
       primitiveType: 'agent',
@@ -5133,7 +5123,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       selectionReason: 'User is asking a question that requires conversation context',
     });
 
-    // Completion response - mark as complete after sub-agent executes
     const completionResponse = JSON.stringify({
       isComplete: true,
       finalResult: 'Your name is Alice.',
@@ -5167,7 +5156,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       },
     });
 
-    // Network/orchestrator agent
     const networkAgent = new Agent({
       id: 'network-agent',
       name: 'Network Agent',
@@ -5180,9 +5168,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
     const threadId = 'test-thread-message-history';
     const resourceId = 'test-resource-message-history';
 
-    // User sends a multi-turn conversation:
-    // 1. First they introduce themselves
-    // 2. Then they ask a question that requires knowing message 1
     const anStream = await networkAgent.network(
       [
         { role: 'user', content: 'My name is Alice.' },
@@ -5196,35 +5181,21 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       },
     );
 
-    // Consume the stream
     for await (const _chunk of anStream) {
-      // Process stream
+      // Consume stream
     }
 
-    // Verify sub-agent was called
     expect(subAgentReceivedPrompts.length).toBeGreaterThan(0);
 
-    // Extract the messages that the sub-agent received
     const lastPrompt = subAgentReceivedPrompts[subAgentReceivedPrompts.length - 1];
-
-    // The sub-agent should have received the original user message "My name is Alice."
-    // in its prompt/messages so it can answer the question correctly.
-    // Convert prompt to string to search for the context
     const promptString = JSON.stringify(lastPrompt);
 
-    // This assertion should PASS if the bug is fixed, but will FAIL currently
-    // because the sub-agent only receives the routing agent's prompt ("What is my name?")
-    // and not the original conversation context ("My name is Alice.")
-    expect(
-      promptString,
-      'Sub-agent should receive original user message "My name is Alice." to have conversation context',
-    ).toContain('My name is Alice');
+    // Sub-agent should receive the original user message for context
+    expect(promptString).toContain('My name is Alice');
   });
 
   it('should NOT include internal network JSON messages (isNetwork: true) in sub-agent context', async () => {
-    // When fixing the message history issue, we need to ensure that internal
-    // network routing messages (with isNetwork: true) are filtered out,
-    // as they would confuse the sub-agent.
+    // Internal network routing messages should be filtered out from sub-agent context.
 
     const memory = new MockMemory();
 
@@ -5263,7 +5234,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       memory,
     });
 
-    // First routing call selects sub-agent
     const routingResponse1 = JSON.stringify({
       primitiveId: 'subAgent',
       primitiveType: 'agent',
@@ -5271,7 +5241,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       selectionReason: 'First step',
     });
 
-    // Second routing call selects sub-agent again (multi-step network)
     const routingResponse2 = JSON.stringify({
       primitiveId: 'subAgent',
       primitiveType: 'agent',
@@ -5279,14 +5248,12 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       selectionReason: 'Second step',
     });
 
-    // Completion check after step 1 - not complete
     const notCompleteResponse = JSON.stringify({
       isComplete: false,
       finalResult: '',
       completionReason: '',
     });
 
-    // Completion check after step 2 - complete
     const completeResponse = JSON.stringify({
       isComplete: true,
       finalResult: 'All done.',
@@ -5298,7 +5265,6 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       doGenerate: async () => {
         routingCallCount++;
         let text: string;
-        // Call sequence: routing1, completion1, routing2, completion2
         if (routingCallCount === 1) text = routingResponse1;
         else if (routingCallCount === 2) text = notCompleteResponse;
         else if (routingCallCount === 3) text = routingResponse2;
@@ -5348,21 +5314,16 @@ describe('Agent - network - message history transfer to sub-agents', () => {
       },
     });
 
-    // Consume the stream
     for await (const _chunk of anStream) {
-      // Process stream
+      // Consume stream
     }
 
-    // The second sub-agent call should NOT see the internal network JSON from the first call
-    // (messages with isNetwork: true should be filtered out)
+    // The second sub-agent call should not see internal network JSON from the first call
     if (subAgentReceivedPrompts.length >= 2) {
       const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
 
-      // This should NOT contain internal network routing data
-      expect(secondCallPrompt, 'Sub-agent should NOT receive internal network JSON messages').not.toContain(
-        '"isNetwork":true',
-      );
-      expect(secondCallPrompt, 'Sub-agent should NOT see routing selection reasons').not.toContain('selectionReason');
+      expect(secondCallPrompt).not.toContain('"isNetwork":true');
+      expect(secondCallPrompt).not.toContain('selectionReason');
     }
   });
 });

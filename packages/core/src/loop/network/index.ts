@@ -530,32 +530,78 @@ export async function createNetworkLoop({
       const threadId = initData?.threadId || runId;
       const resourceId = initData?.threadResourceId || networkName;
 
-      const agentHasOwnMemory = agentForStep.hasOwnMemory();
+      // Retrieve conversation history from the network thread and filter to only include
+      // user messages. This ensures sub-agents receive the original conversation context
+      // without internal network metadata (isNetwork JSON, completion feedback, etc.)
+      const networkMemory = await agent.getMemory({ requestContext });
+      let conversationContext: MastraDBMessage[] = [];
 
+      if (networkMemory) {
+        const recallResult = await networkMemory.recall({
+          threadId,
+          resourceId,
+        });
+
+        if (recallResult?.messages) {
+          // Filter to only include user messages that are not internal network JSON
+          conversationContext = recallResult.messages.filter(msg => {
+            // Only include user messages
+            if (msg.role !== 'user') return false;
+
+            // Check if the message content is internal network JSON (shouldn't be for user messages, but check anyway)
+            const textContent = msg.content?.parts?.[0];
+            if (textContent?.type === 'text' && textContent?.text) {
+              try {
+                const parsed = JSON.parse(textContent.text);
+                if (parsed.isNetwork) return false;
+              } catch {
+                // Not JSON, keep the message
+              }
+            }
+
+            return true;
+          });
+        }
+      }
+
+      // Build the messages to send to the sub-agent:
+      // 1. Original user messages from conversation history (for context)
+      // 2. The routing agent's prompt (the specific task for this sub-agent)
+      const messagesForSubAgent: MessageListInput = [
+        ...conversationContext,
+        { role: 'user' as const, content: inputData.prompt },
+      ];
+
+      // We pass the conversation context directly via messagesForSubAgent.
+      // We also pass memory options to prevent the sub-agent from loading messages
+      // from the network's thread (which contains isNetwork JSON and completion feedback).
+      // However, we still pass threadId/resourceId so working memory tools work.
       const result = await (resumeData
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
             runId,
-            ...(agentHasOwnMemory
-              ? {
-                  memory: {
-                    thread: threadId,
-                    resource: resourceId,
-                  },
-                }
-              : {}),
+            memory: {
+              thread: threadId,
+              resource: resourceId,
+              options: {
+                // Disable loading message history from the network's thread.
+                // We already pass filtered user messages via messagesForSubAgent.
+                lastMessages: 0,
+              },
+            },
           })
-        : agentForStep.stream(inputData.prompt, {
+        : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
-            ...(agentHasOwnMemory
-              ? {
-                  memory: {
-                    thread: threadId,
-                    resource: resourceId,
-                  },
-                }
-              : {}),
+            memory: {
+              thread: threadId,
+              resource: resourceId,
+              options: {
+                // Disable loading message history from the network's thread.
+                // We already pass filtered user messages via messagesForSubAgent.
+                lastMessages: 0,
+              },
+            },
           }));
 
       let requireApprovalMetadata: Record<string, any> | undefined;
