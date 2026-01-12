@@ -14,9 +14,12 @@ import {
   RESET_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+  ENHANCE_INSTRUCTIONS_ROUTE,
   STREAM_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_DEPRECATED_ROUTE,
+  APPROVE_NETWORK_TOOL_CALL_ROUTE,
+  DECLINE_NETWORK_TOOL_CALL_ROUTE,
 } from '../../handlers/agents';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
@@ -58,6 +61,8 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   EXECUTE_AGENT_TOOL_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
+  APPROVE_NETWORK_TOOL_CALL_ROUTE,
+  DECLINE_NETWORK_TOOL_CALL_ROUTE,
 
   // ============================================================================
   // Network Routes
@@ -71,6 +76,11 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   RESET_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+
+  // ============================================================================
+  // Instruction Enhancement Routes
+  // ============================================================================
+  ENHANCE_INSTRUCTIONS_ROUTE,
 
   // ============================================================================
   // Agent Tool Routes

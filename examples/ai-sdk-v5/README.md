@@ -90,5 +90,5 @@ The agent will use its weather tool to fetch real-time data and provide detailed
 
 ## Learn More
 
-- [Mastra Documentation](https://docs.mastra.ai) - Learn about Mastra's features and capabilities
+- [Mastra Documentation](https://mastra.ai/docs) - Learn about Mastra's features and capabilities
 - [AI SDK Documentation](https://sdk.vercel.ai) - Explore AI SDK v5 features

@@ -1,0 +1,15 @@
+{
+  // This is a comment
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    /* This is a block comment */
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "paths": {
+      "@src/*": ["./src/*"],
+      "@specs/*": ["./specs/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

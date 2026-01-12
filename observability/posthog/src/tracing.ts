@@ -1,8 +1,43 @@
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { BaseExporter } from '@mastra/observability';
 import { PostHog } from 'posthog-node';
+
+/**
+ * Token usage format compatible with PostHog.
+ * @see https://posthog.com/docs/llm-analytics/generations#event-properties
+ */
+export interface PostHogUsageMetrics {
+  $ai_input_tokens?: number;
+  $ai_output_tokens?: number;
+  $ai_cache_read_input_tokens?: number;
+  $ai_cache_creation_input_tokens?: number;
+}
+
+/**
+ * Formats UsageStats to PostHog's expected property format.
+ *
+ * @param usage - The UsageStats from span attributes
+ * @returns PostHog-formatted usage properties
+ */
+export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
+  if (!usage) return {};
+
+  const props: PostHogUsageMetrics = {};
+
+  if (usage.inputTokens !== undefined) props.$ai_input_tokens = usage.inputTokens;
+  if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
+
+  // Cache read tokens from inputDetails
+  if (usage.inputDetails?.cacheRead !== undefined) props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
+
+  // Cache write tokens from inputDetails
+  if (usage.inputDetails?.cacheWrite !== undefined)
+    props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
+
+  return props;
+}
 
 interface PostHogMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -29,7 +64,9 @@ interface MastraContent {
 type SpanData = string | MastraMessage[] | Record<string, unknown> | unknown;
 
 export interface PosthogExporterConfig extends BaseExporterConfig {
-  apiKey: string;
+  /** PostHog API key. Defaults to POSTHOG_API_KEY environment variable. */
+  apiKey?: string;
+  /** PostHog host URL. Defaults to POSTHOG_HOST environment variable or US region. */
   host?: string;
   flushAt?: number;
   flushInterval?: number;
@@ -41,6 +78,7 @@ export interface PosthogExporterConfig extends BaseExporterConfig {
 type SpanCache = {
   startTime: Date;
   type: SpanType;
+  isRootSpan: boolean;
 };
 
 type TraceMetadata = {
@@ -50,7 +88,7 @@ type TraceMetadata = {
 
 export class PosthogExporter extends BaseExporter {
   name = 'posthog';
-  private client: PostHog;
+  private client: PostHog | null;
   private config: PosthogExporterConfig;
   private traceMap = new Map<string, TraceMetadata>();
 
@@ -59,27 +97,26 @@ export class PosthogExporter extends BaseExporter {
   private static readonly DEFAULT_FLUSH_AT = 20;
   private static readonly DEFAULT_FLUSH_INTERVAL = 10000;
 
-  constructor(config: PosthogExporterConfig) {
+  constructor(config: PosthogExporterConfig = {}) {
     super(config);
-    this.config = config;
 
-    if (!config.apiKey) {
-      this.setDisabled('Missing required API key');
-      this.client = null as any;
+    // Read API key from config or environment variable
+    const apiKey = config.apiKey ?? process.env.POSTHOG_API_KEY;
+
+    if (!apiKey) {
+      this.setDisabled('Missing required API key. Set POSTHOG_API_KEY environment variable or pass apiKey in config.');
+      this.client = null;
+      this.config = config;
       return;
     }
 
-    const clientConfig = this.buildClientConfig(config);
-    this.client = new PostHog(config.apiKey, clientConfig);
+    this.config = { ...config, apiKey };
+    const clientConfig = this.buildClientConfig(this.config);
+    this.client = new PostHog(apiKey, clientConfig);
     this.logInitialization(config.serverless ?? false, clientConfig);
   }
 
-  private buildClientConfig(config: PosthogExporterConfig): {
-    host: string;
-    flushAt: number;
-    flushInterval: number;
-    privacyMode?: boolean;
-  } {
+  private buildClientConfig(config: PosthogExporterConfig) {
     const isServerless = config.serverless ?? false;
     const flushAt =
       config.flushAt ?? (isServerless ? PosthogExporter.SERVERLESS_FLUSH_AT : PosthogExporter.DEFAULT_FLUSH_AT);
@@ -107,15 +144,16 @@ export class PosthogExporter extends BaseExporter {
 
   private logInitialization(
     isServerless: boolean,
-    config: { host: string; flushAt: number; flushInterval: number },
+    config: { host: string; flushAt: number; flushInterval: number; privacyMode?: boolean },
   ): void {
     const message = isServerless ? 'PostHog exporter initialized in serverless mode' : 'PostHog exporter initialized';
-
-    this.logger.info(message, config);
+    this.logger.debug(message, config);
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (!this.client) return;
+    if (!this.client) {
+      return;
+    }
 
     try {
       if (event.exportedSpan.isEvent) {
@@ -154,6 +192,7 @@ export class PosthogExporter extends BaseExporter {
     traceData.spans.set(span.id, {
       startTime: this.toDate(span.startTime),
       type: span.type,
+      isRootSpan: span.isRootSpan,
     });
 
     if (!traceData.distinctId) {
@@ -168,13 +207,11 @@ export class PosthogExporter extends BaseExporter {
     const traceData = this.traceMap.get(span.traceId);
 
     if (!traceData) {
-      this.logger.warn(`Trace data not found for ended span: ${span.id}`);
       return;
     }
 
     const cachedSpan = traceData.spans.get(span.id);
     if (!cachedSpan) {
-      this.logger.warn(`Span cache not found for ended span: ${span.id}`);
       return;
     }
 
@@ -182,21 +219,85 @@ export class PosthogExporter extends BaseExporter {
     const endTime = span.endTime ? this.toDate(span.endTime).getTime() : Date.now();
     const latency = (endTime - startTime) / 1000;
 
-    const eventName = this.mapToPostHogEvent(span.type);
     const distinctId = this.getDistinctId(span, traceData);
-    const properties = this.buildEventProperties(span, latency);
 
-    this.client.capture({
-      distinctId,
-      event: eventName,
-      properties,
-      timestamp: new Date(endTime),
-    });
+    // For root spans, only send $ai_trace (not $ai_span) to avoid duplicate entries
+    // For non-root spans, send $ai_span or $ai_generation as normal
+    if (span.isRootSpan) {
+      this.captureTraceEvent(span, distinctId, endTime);
+    } else {
+      const eventName = this.mapToPostHogEvent(span.type);
+
+      // Check if parent is the root span - if so, use traceId as parent_id
+      // since we don't create an $ai_span for root spans
+      const parentIsRootSpan = this.isParentRootSpan(span, traceData);
+      const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
+
+      this.client?.capture({
+        distinctId,
+        event: eventName,
+        properties,
+        timestamp: new Date(endTime),
+      });
+    }
 
     traceData.spans.delete(span.id);
     if (traceData.spans.size === 0) {
       this.traceMap.delete(span.traceId);
     }
+  }
+
+  /**
+   * Capture an explicit $ai_trace event for root spans.
+   * This gives us control over trace-level metadata like name and tags,
+   * rather than relying on PostHog's pseudo-trace auto-creation.
+   */
+  private captureTraceEvent(span: AnyExportedSpan, distinctId: string, endTime: number): void {
+    // Note: We don't set $ai_latency on $ai_trace events because PostHog
+    // aggregates latency from child events. Setting it here causes double-counting.
+    const traceProperties: Record<string, any> = {
+      $ai_trace_id: span.traceId,
+      $ai_span_name: span.name,
+      $ai_is_error: !!span.errorInfo,
+    };
+
+    if (span.metadata?.sessionId) {
+      traceProperties.$ai_session_id = span.metadata.sessionId;
+    }
+
+    if (span.input) {
+      traceProperties.$ai_input_state = span.input;
+    }
+
+    if (span.output) {
+      traceProperties.$ai_output_state = span.output;
+    }
+
+    if (span.errorInfo) {
+      traceProperties.$ai_error = {
+        message: span.errorInfo.message,
+        ...(span.errorInfo.id && { id: span.errorInfo.id }),
+        ...(span.errorInfo.category && { category: span.errorInfo.category }),
+      };
+    }
+
+    // Add tags as custom properties (PostHog doesn't have native tag support on traces)
+    if (span.tags?.length) {
+      for (const tag of span.tags) {
+        traceProperties[tag] = true;
+      }
+    }
+
+    // Add custom metadata (excluding userId and sessionId which are handled separately)
+    const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
+    Object.assign(traceProperties, customMetadata);
+
+    this.client?.capture({
+      distinctId,
+      event: '$ai_trace',
+      properties: traceProperties,
+      timestamp: new Date(endTime),
+    });
   }
 
   private async captureEventSpan(span: AnyExportedSpan): Promise<void> {
@@ -206,7 +307,7 @@ export class PosthogExporter extends BaseExporter {
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0);
 
-    this.client.capture({
+    this.client?.capture({
       distinctId,
       event: eventName,
       properties,
@@ -228,20 +329,10 @@ export class PosthogExporter extends BaseExporter {
   }
 
   private mapToPostHogEvent(spanType: SpanType): string {
-    switch (spanType) {
-      case SpanType.MODEL_GENERATION:
-      case SpanType.MODEL_STEP:
-        return '$ai_generation';
-      case SpanType.MODEL_CHUNK:
-      case SpanType.TOOL_CALL:
-      case SpanType.MCP_TOOL_CALL:
-      case SpanType.PROCESSOR_RUN:
-      case SpanType.AGENT_RUN:
-      case SpanType.WORKFLOW_RUN:
-      case SpanType.GENERIC:
-      default:
-        return '$ai_span';
+    if (spanType == SpanType.MODEL_GENERATION) {
+      return '$ai_generation';
     }
+    return '$ai_span';
   }
 
   private getDistinctId(span: AnyExportedSpan, traceData?: TraceMetadata): string {
@@ -260,7 +351,31 @@ export class PosthogExporter extends BaseExporter {
     return 'anonymous';
   }
 
-  private buildEventProperties(span: AnyExportedSpan, latency: number): Record<string, any> {
+  /**
+   * Check if the parent of this span is the root span.
+   * We need this because we don't create $ai_span for root spans,
+   * so children of root spans should use $ai_trace_id as their $ai_parent_id.
+   */
+  private isParentRootSpan(span: AnyExportedSpan, traceData: TraceMetadata): boolean {
+    if (!span.parentSpanId) {
+      return false;
+    }
+
+    // Look up the parent span in our cache to check if it's a root span
+    const parentCache = traceData.spans.get(span.parentSpanId);
+    if (parentCache) {
+      return parentCache.isRootSpan;
+    }
+
+    // Parent not found in cache - shouldn't happen normally, but default to false
+    return false;
+  }
+
+  private buildEventProperties(
+    span: AnyExportedSpan,
+    latency: number,
+    parentIsRootSpan: boolean = false,
+  ): Record<string, any> {
     const baseProperties: Record<string, any> = {
       $ai_trace_id: span.traceId,
       $ai_latency: latency,
@@ -268,7 +383,9 @@ export class PosthogExporter extends BaseExporter {
     };
 
     if (span.parentSpanId) {
-      baseProperties.$ai_parent_id = span.parentSpanId;
+      // If parent is the root span, use trace_id as parent_id since we don't
+      // create an $ai_span for root spans (only $ai_trace)
+      baseProperties.$ai_parent_id = parentIsRootSpan ? span.traceId : span.parentSpanId;
     }
 
     if (span.metadata?.sessionId) {
@@ -284,7 +401,7 @@ export class PosthogExporter extends BaseExporter {
       }
     }
 
-    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_STEP) {
+    if (span.type === SpanType.MODEL_GENERATION) {
       baseProperties.$ai_generation_id = span.id;
       return { ...baseProperties, ...this.buildGenerationProperties(span) };
     } else {
@@ -329,19 +446,8 @@ export class PosthogExporter extends BaseExporter {
     if (span.input) props.$ai_input = this.formatMessages(span.input, 'user');
     if (span.output) props.$ai_output_choices = this.formatMessages(span.output, 'assistant');
 
-    if (attrs.usage) {
-      const { usage } = attrs;
-      const inputTokens = usage.inputTokens ?? usage.promptTokens;
-      const outputTokens = usage.outputTokens ?? usage.completionTokens;
-      const totalTokens = usage.totalTokens;
-
-      if (inputTokens !== undefined) props.$ai_input_tokens = inputTokens;
-      if (outputTokens !== undefined) props.$ai_output_tokens = outputTokens;
-      if (totalTokens !== undefined) props.$ai_total_tokens = totalTokens;
-
-      if (usage.reasoningTokens !== undefined) props.reasoning_tokens = usage.reasoningTokens;
-      if (usage.cachedInputTokens !== undefined) props.cached_input_tokens = usage.cachedInputTokens;
-    }
+    // Extract usage properties using the shared utility
+    Object.assign(props, formatUsageMetrics(attrs.usage));
 
     if (attrs.parameters) {
       if (attrs.parameters.temperature !== undefined) props.$ai_temperature = attrs.parameters.temperature;

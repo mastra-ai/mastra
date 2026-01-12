@@ -5,7 +5,7 @@ import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe, it, expect } from 'vitest';
-import { getResuableTests, StorageType } from './reusable-tests';
+import { getResuableTests, StorageType } from './shared/reusable-tests';
 
 const files = ['upstash-test-vector.db', 'upstash-test-vector.db-shm', 'upstash-test-vector.db-wal'];
 
@@ -39,7 +39,7 @@ describe('Memory with UpstashStore Integration', () => {
     }),
     vector: new LibSQLVector({
       // TODO: use upstash vector in tests
-      connectionUrl: 'file:upstash-test-vector.db',
+      url: 'file:upstash-test-vector.db',
       id: randomUUID(),
     }),
     embedder: fastembed,

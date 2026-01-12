@@ -1,6 +1,8 @@
 ---
 title: "Structured Output | Agents"
 description: "Learn how to generate structured data from agents using schemas and validation."
+packages:
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -23,7 +25,7 @@ Agents can return structured data by defining the expected output with either [Z
 
 Define the `output` shape using [Zod](https://zod.dev/):
 
-```typescript showLineNumbers copy
+```typescript
 import { z } from "zod";
 
 const response = await testAgent.generate("Help me plan my day.", {
@@ -45,7 +47,7 @@ console.log(response.object);
 
 You can also use JSON Schema to define your output structure:
 
-```typescript showLineNumbers copy
+```typescript
 const response = await testAgent.generate("Help me plan my day.", {
   structuredOutput: {
     schema: {
@@ -72,7 +74,11 @@ console.log(response.object);
 </Tabs>
 
 
-> See [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+:::info
+
+Visit [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+
+:::
 
 ### Example output
 
@@ -99,7 +105,7 @@ The `response.object` will contain the structured data as defined by the schema.
 
 Streaming also supports structured output. The final structured object is available on `stream.fullStream` and after the stream completes on `stream.object`. Text stream chunks are still emitted, but they contain natural language text rather than structured data.
 
-```typescript showLineNumbers copy
+```typescript
 import { z } from "zod";
 
 const stream = await testAgent.stream("Help me plan my day.", {
@@ -131,7 +137,7 @@ for await (const chunk of stream.textStream) {
 
 When your main agent isn't proficient at creating structured output you can provide a `model` to `structuredOutput`. In this case, Mastra uses a second agent under the hood to extract structured data from the main agent's natural language response. This makes two LLM calls, one to generate the response and another to turn that response into the structured object, which adds some latency and cost but can improve accuracy for complex structuring tasks.
 
-```typescript showLineNumbers copy
+```typescript
 import { z } from "zod";
 
 const response = await testAgent.generate("Analyze the TypeScript programming language.", {
@@ -156,13 +162,17 @@ const response = await testAgent.generate("Analyze the TypeScript programming la
 console.log(response.object);
 ```
 
-## Response format
+## LLM Structured Output support
+
+Structured output support varies across LLM's due to the model itself. There are various workarounds provided to be able to use the full range of features supported for structured output, mainly returning structured output, tool calling, and the combination of the two.
+
+### `jsonPromptInjection`
 
 By default, Mastra passes the schema to the model provider using the `response_format` API parameter. Most model providers have built-in support for this, which reliably enforces the schema.
 
 If your model provider doesn't support `response_format`, you'll get an error from the API. When this happens, set `jsonPromptInjection: true`. This adds the schema to the system prompt instead, instructing the model to output JSON. This is less reliable than the API parameter approach.
 
-```typescript showLineNumbers copy
+```typescript
 import { z } from "zod";
 
 const response = await testAgent.generate("Help me plan my day.", {
@@ -194,11 +204,55 @@ const response = await agentWithTools.generate("Your prompt", {
 ```
 :::
 
+### Using a separate structuring model
+
+When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
+
+```typescript
+const response = await testAgent.generate("Tell me about TypeScript.", {
+  structuredOutput: {
+    schema: yourSchema
+    model: 'openai/gpt-4o'
+  }
+});
+```
+
+### Multi-step approach with `prepareStep`
+
+For models that don't support tools and structured outputs together, you can use `prepareStep` to handle them in separate steps.
+
+```typescript
+const result = await agent.stream("weather in vancouver?", {
+  prepareStep: async ({ stepNumber }) => {
+    if (stepNumber === 0) {
+      return {
+        model: "anthropic/claude-sonnet-4-20250514",
+        tools: {
+          weatherTool,
+        },
+        toolChoice: "required",
+      };
+    }
+    return {
+      model: "anthropic/claude-sonnet-4-20250514",
+      tools: undefined,
+      structuredOutput: {
+        schema: z.object({
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+        }),
+      },
+    };
+  },
+});
+```
+
 ## Error handling
 
 When schema validation fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`.
 
-```typescript showLineNumbers copy
+```typescript
 import { z } from "zod";
 
 const response = await testAgent.generate("Tell me about TypeScript.", {

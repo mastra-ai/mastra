@@ -48,6 +48,22 @@ The Mastra documentation are organized into several sections:
 
 All documentation should be written in English and placed in the appropriate section under `docs/src/content/en/`.
 
+### Frontmatter Requirements
+
+All MDX files should include frontmatter with `title` and `description`. For documentation that relates to specific Mastra packages, add a `packages` field:
+
+```yaml
+---
+title: "Memory Overview"
+description: "Learn about Mastra's memory system"
+packages:
+  - "@mastra/memory"
+  - "@mastra/core"
+---
+```
+
+The `packages` field enables embedded documentation generation for npm packages, allowing coding agents to access relevant docs directly from `node_modules`. See [EMBEDDED_DOCS.md](../scripts/EMBEDDED_DOCS.md) for more details.
+
 ### Edit this Page via GitHub
 
 Every page on [mastra.ai](https://mastra.ai/) has an **Edit this page** link. You can click that link to edit the source code for that page in **GitHub**.

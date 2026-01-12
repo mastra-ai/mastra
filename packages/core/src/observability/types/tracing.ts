@@ -5,6 +5,7 @@ import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
+import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
@@ -49,6 +50,27 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
+export enum EntityType {
+  /** Agent/Model execution */
+  AGENT = 'agent',
+  /** Eval */
+  EVAL = 'eval',
+  /** Input Processor */
+  INPUT_PROCESSOR = 'input_processor',
+  /** Input Step Processor */
+  INPUT_STEP_PROCESSOR = 'input_step_processor',
+  /** Output Processor */
+  OUTPUT_PROCESSOR = 'output_processor',
+  /** Output Step Processor */
+  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
+  /** Workflow Step */
+  WORKFLOW_STEP = 'workflow_step',
+  /** Tool */
+  TOOL = 'tool',
+  /** Workflow */
+  WORKFLOW_RUN = 'workflow_run',
+}
+
 // ============================================================================
 // Type-Specific Attributes Interfaces
 // ============================================================================
@@ -62,8 +84,8 @@ export interface AIBaseAttributes {}
  * Agent Run attributes
  */
 export interface AgentRunAttributes extends AIBaseAttributes {
-  /** Agent identifier */
-  agentId: string;
+  /** Conversation/thread/session identifier for multi-turn interactions */
+  conversationId?: string;
   /** Agent Instructions **/
   instructions?: string;
   /** Agent Prompt **/
@@ -74,20 +96,48 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
 }
 
-/** Token usage statistics - supports both v5 and legacy formats */
+/**
+ * Detailed breakdown of input token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface InputTokenDetails {
+  /** Regular text tokens (non-cached, non-audio, non-image) */
+  text?: number;
+  /** Tokens served from cache (cache hit/read) */
+  cacheRead?: number;
+  /** Tokens written to cache (cache creation - Anthropic only) */
+  cacheWrite?: number;
+  /** Audio input tokens */
+  audio?: number;
+  /** Image input tokens (includes PDF pages) */
+  image?: number;
+}
+
+/**
+ * Detailed breakdown of output token usage by type.
+ * Based on OpenInference semantic conventions.
+ */
+export interface OutputTokenDetails {
+  /** Regular text output tokens */
+  text?: number;
+  /** Reasoning/thinking tokens (o1, Claude thinking, Gemini thoughts) */
+  reasoning?: number;
+  /** Audio output tokens */
+  audio?: number;
+  /** Image output tokens (DALL-E, etc.) */
+  image?: number;
+}
+
+/** Token usage statistics */
 export interface UsageStats {
-  // VNext paths
+  /** Total input tokens (sum of all input details) */
   inputTokens?: number;
+  /** Total output tokens (sum of all output details) */
   outputTokens?: number;
-  // Legacy format (for backward compatibility)
-  promptTokens?: number;
-  completionTokens?: number;
-  // Common fields
-  totalTokens?: number;
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
-  promptCacheHitTokens?: number;
-  promptCacheMissTokens?: number;
+  /** Detailed breakdown of input token usage */
+  inputDetails?: InputTokenDetails;
+  /** Detailed breakdown of output token usage */
+  outputDetails?: OutputTokenDetails;
 }
 
 /**
@@ -100,7 +150,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   provider?: string;
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
-  /** Token usage statistics - supports both v5 and legacy formats */
+  /** Token usage statistics */
   usage?: UsageStats;
   /** Model parameters */
   parameters?: {
@@ -126,6 +176,14 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string;
+  /** Unique identifier for the response */
+  responseId?: string;
+  /** Server address for the model endpoint */
+  serverAddress?: string;
+  /** Server port for the model endpoint */
+  serverPort?: number;
 }
 
 /**
@@ -158,7 +216,6 @@ export interface ModelChunkAttributes extends AIBaseAttributes {
  * Tool Call attributes
  */
 export interface ToolCallAttributes extends AIBaseAttributes {
-  toolId?: string;
   toolType?: string;
   toolDescription?: string;
   success?: boolean;
@@ -168,8 +225,6 @@ export interface ToolCallAttributes extends AIBaseAttributes {
  * MCP Tool Call attributes
  */
 export interface MCPToolCallAttributes extends AIBaseAttributes {
-  /** Id of the MCP tool/function */
-  toolId: string;
   /** MCP server identifier */
   mcpServer: string;
   /** MCP server version */
@@ -182,10 +237,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
-  /** Name of the Processor */
-  processorName: string;
-  /** Processor type (input or output) */
-  processorType: 'input' | 'output';
+  /** Processor executor type (workflow or legacy) */
+  processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
   /** MessageList mutations performed by this processor */
@@ -204,8 +257,6 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
  * Workflow Run attributes
  */
 export interface WorkflowRunAttributes extends AIBaseAttributes {
-  /** Workflow identifier */
-  workflowId: string;
   /** Workflow status */
   status?: WorkflowRunStatus;
 }
@@ -214,8 +265,6 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
  * Workflow Step attributes
  */
 export interface WorkflowStepAttributes extends AIBaseAttributes {
-  /** Step identifier */
-  stepId: string;
   /** Step status */
   status?: WorkflowStepStatus;
 }
@@ -335,6 +384,12 @@ interface BaseSpan<TType extends SpanType> {
   name: string;
   /** Type of the span */
   type: TType;
+  /** Entity type that created the span */
+  entityType?: EntityType;
+  /** Entity id that created the span */
+  entityId?: string;
+  /** Entity name that created the span */
+  entityName?: string;
   /** When span started */
   startTime: Date;
   /** When span ended */
@@ -512,11 +567,22 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   tags?: string[];
 }
 
+/**
+ * Options for ending a model generation span
+ */
+export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
+  /** Raw usage data from AI SDK - will be converted to UsageStats with cache token details */
+  usage?: LanguageModelUsage;
+  /** Provider-specific metadata for extracting cache tokens */
+  providerMetadata?: ProviderMetadata;
+}
+
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void;
+  endGeneration(options?: EndGenerationOptions): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
+  startStep(payload?: StepStartPayload): void;
 }
 
 /**
@@ -591,6 +657,12 @@ interface CreateBaseOptions<TType extends SpanType> {
   name: string;
   /** Span type */
   type: TType;
+  /** Entity type that created the span */
+  entityType?: EntityType;
+  /** Entity id that created the span */
+  entityId?: string;
+  /** Entity name that created the span */
+  entityName?: string;
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
   /** Request Context for metadata extraction */
@@ -683,6 +755,9 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
 export interface GetOrCreateSpanOptions<TType extends SpanType> {
   type: TType;
   name: string;
+  entityType?: EntityType;
+  entityId?: string;
+  entityName?: string;
   input?: any;
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
@@ -823,6 +898,33 @@ export type TracingProperties = {
 // ============================================================================
 
 /**
+ * Options for controlling serialization of span data.
+ * These options control how input, output, and attributes are cleaned before export.
+ */
+export interface SerializationOptions {
+  /**
+   * Maximum length for string values
+   * @default 1024
+   */
+  maxStringLength?: number;
+  /**
+   * Maximum depth for nested objects
+   * @default 6
+   */
+  maxDepth?: number;
+  /**
+   * Maximum number of items in arrays
+   * @default 50
+   */
+  maxArrayLength?: number;
+  /**
+   * Maximum number of keys in objects
+   * @default 50
+   */
+  maxObjectKeys?: number;
+}
+
+/**
  * Configuration for a single observability instance
  */
 export interface ObservabilityInstanceConfig {
@@ -842,10 +944,15 @@ export interface ObservabilityInstanceConfig {
   includeInternalSpans?: boolean;
   /**
    * RequestContext keys to automatically extract as metadata for all spans
-   * created with this observablity configuration.
+   * created with this observability configuration.
    * Supports dot notation for nested values.
    */
   requestContextKeys?: string[];
+  /**
+   * Options for controlling serialization of span data (input/output/attributes).
+   * Use these to customize truncation limits for large payloads.
+   */
+  serializationOptions?: SerializationOptions;
 }
 
 /**
@@ -1048,9 +1155,3 @@ export type ConfigSelector = (
   options: ConfigSelectorOptions,
   availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
 ) => string | undefined;
-
-// ============================================================================
-// Tracing Storage Interfaces
-// ============================================================================
-
-export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';

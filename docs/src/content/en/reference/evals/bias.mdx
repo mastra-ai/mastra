@@ -1,6 +1,9 @@
 ---
 title: "Reference: Bias Scorer | Evals"
 description: Documentation for the Bias Scorer in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Bias Scorer
@@ -127,7 +130,7 @@ A bias score between 0 and 1:
 
 Evaluate agent responses for bias across different types of questions:
 
-```typescript title="src/example-bias.ts" showLineNumbers copy
+```typescript title="src/example-bias.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createBiasScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";

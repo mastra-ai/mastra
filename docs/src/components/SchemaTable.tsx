@@ -73,7 +73,7 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+    <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 mb-4">
       <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {columns.map((column, index) => (
           <div

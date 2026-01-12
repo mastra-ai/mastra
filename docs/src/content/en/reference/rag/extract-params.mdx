@@ -1,6 +1,8 @@
 ---
 title: "Reference: ExtractParams | RAG"
 description: Documentation for metadata extraction configuration in Mastra.
+packages:
+  - "@mastra/rag"
 ---
 
 # ExtractParams
@@ -9,7 +11,7 @@ ExtractParams configures metadata extraction from document chunks using LLM anal
 
 ## Example
 
-```typescript showLineNumbers copy
+```typescript
 import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText(text);
@@ -188,7 +190,7 @@ The `extract` parameter accepts the following fields:
 
 ## Advanced Example
 
-```typescript showLineNumbers copy
+```typescript
 import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText(text);

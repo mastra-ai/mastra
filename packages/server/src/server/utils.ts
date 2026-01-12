@@ -14,6 +14,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
       outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
       resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
       suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+      stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
       component: step.component,
     };
@@ -27,7 +28,23 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
   }, {});
 }
 
-export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
+export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): WorkflowInfo {
+  if (partial) {
+    // Return minimal info in partial mode
+    return {
+      name: workflow.name,
+      description: workflow.description,
+      stepCount: Object.keys(workflow.steps).length,
+      stepGraph: workflow.serializedStepGraph,
+      options: workflow.options,
+      steps: {},
+      allSteps: {},
+      inputSchema: undefined,
+      outputSchema: undefined,
+      stateSchema: undefined,
+    } as WorkflowInfo;
+  }
+
   return {
     name: workflow.name,
     description: workflow.description,
@@ -39,6 +56,7 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
         outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
         resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
         suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+        stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
         component: step.component,
       };
       return acc;
@@ -47,7 +65,9 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
     stepGraph: workflow.serializedStepGraph,
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
+    stateSchema: workflow.stateSchema ? stringify(zodToJsonSchema(workflow.stateSchema)) : undefined,
     options: workflow.options,
+    isProcessorWorkflow: workflow.type === 'processor',
   };
 }
 

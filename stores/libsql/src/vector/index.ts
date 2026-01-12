@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
@@ -25,7 +26,11 @@ interface LibSQLQueryVectorParams extends QueryVectorParams<LibSQLVectorFilter> 
 }
 
 export interface LibSQLVectorConfig {
-  connectionUrl: string;
+  /**
+   * The URL of the LibSQL database.
+   * Examples: 'file:./dev.db', 'file::memory:', 'libsql://your-db.turso.io'
+   */
+  url: string;
   authToken?: string;
   syncUrl?: string;
   syncInterval?: number;
@@ -48,7 +53,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   private readonly initialBackoffMs: number;
 
   constructor({
-    connectionUrl,
+    url,
     authToken,
     syncUrl,
     syncInterval,
@@ -59,15 +64,15 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     super({ id });
 
     this.turso = createClient({
-      url: connectionUrl,
-      syncUrl: syncUrl,
+      url,
+      syncUrl,
       authToken,
       syncInterval,
     });
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
 
-    if (connectionUrl.includes(`file:`) || connectionUrl.includes(`:memory:`)) {
+    if (url.includes(`file:`) || url.includes(`:memory:`)) {
       this.turso
         .execute('PRAGMA journal_mode=WAL;')
         .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
@@ -134,7 +139,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_QUERY_INVALID_ARGS',
+          id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -182,7 +187,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('LIBSQL', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -197,7 +202,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('LIBSQL', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -255,7 +260,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('LIBSQL', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName: args.indexName, dimension: args.dimension },
@@ -296,7 +301,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('LIBSQL', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName: args.indexName },
@@ -329,7 +334,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('LIBSQL', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -387,7 +392,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (e: any) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('LIBSQL', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -419,7 +424,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     // Validate that both id and filter are not provided at the same time
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: 'LIBSQL_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE_PARAMS',
+        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -429,7 +434,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'LIBSQL_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -468,7 +473,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       if (!filter || Object.keys(filter).length === 0) {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_UPDATE_EMPTY_FILTER',
+          id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -481,7 +486,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       if (!filterSql || filterSql.trim() === '') {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_UPDATE_INVALID_FILTER',
+          id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'INVALID_FILTER'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -499,7 +504,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       if (matchAllPatterns.includes(normalizedCondition)) {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_UPDATE_MATCH_ALL_FILTER',
+          id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'MATCH_ALL_FILTER'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, filterSql: normalizedCondition },
@@ -512,7 +517,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       whereValues = filterValues;
     } else {
       throw new MastraError({
-        id: 'LIBSQL_VECTOR_UPDATE_MISSING_PARAMS',
+        id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -544,7 +549,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('LIBSQL', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: errorDetails,
@@ -567,7 +572,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('LIBSQL', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -598,7 +603,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     // Validate that exactly one of filter or ids is provided
     if (!filter && !ids) {
       throw new MastraError({
-        id: 'LIBSQL_VECTOR_DELETE_MISSING_PARAMS',
+        id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -608,7 +613,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
     if (filter && ids) {
       throw new MastraError({
-        id: 'LIBSQL_VECTOR_DELETE_CONFLICTING_PARAMS',
+        id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
@@ -623,7 +628,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       // Delete by IDs
       if (ids.length === 0) {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_DELETE_EMPTY_IDS',
+          id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'EMPTY_IDS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -639,7 +644,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
       if (!filter || Object.keys(filter).length === 0) {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_DELETE_EMPTY_FILTER',
+          id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'EMPTY_FILTER'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -652,7 +657,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       if (!filterSql || filterSql.trim() === '') {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_DELETE_INVALID_FILTER',
+          id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'INVALID_FILTER'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -670,7 +675,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       if (matchAllPatterns.includes(normalizedCondition)) {
         throw new MastraError({
-          id: 'LIBSQL_VECTOR_DELETE_MATCH_ALL_FILTER',
+          id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'MATCH_ALL_FILTER'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, filterSql: normalizedCondition },
@@ -691,7 +696,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('LIBSQL', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -711,7 +716,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_VECTOR_TRUNCATE_INDEX_FAILED',
+          id: createVectorErrorId('LIBSQL', 'TRUNCATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName: args.indexName },

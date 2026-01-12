@@ -1,6 +1,8 @@
 ---
 title: "Reference: PosthogExporter | Observability"
 description: PostHog exporter for Tracing
+packages:
+  - "@mastra/posthog"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -19,7 +21,7 @@ new PosthogExporter(config: PosthogExporterConfig)
 
 ```typescript
 interface PosthogExporterConfig extends BaseExporterConfig {
-  apiKey: string;
+  apiKey?: string;
   host?: string;
   flushAt?: number;
   flushInterval?: number;
@@ -38,13 +40,13 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "apiKey",
       type: "string",
-      description: "PostHog project API key",
-      required: true,
+      description: "PostHog project API key. Falls back to POSTHOG_API_KEY env var.",
+      required: false,
     },
     {
       name: "host",
       type: "string",
-      description: "PostHog host URL (default: 'https://us.i.posthog.com')",
+      description: "PostHog host URL. Falls back to POSTHOG_HOST env var. (default: 'https://us.i.posthog.com')",
       required: false,
     },
     {
@@ -105,6 +107,17 @@ async shutdown(): Promise<void>
 Flushes pending batched events and shuts down the PostHog client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { PosthogExporter } from "@mastra/posthog";
+
+// Reads from POSTHOG_API_KEY, POSTHOG_HOST
+const exporter = new PosthogExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { PosthogExporter } from "@mastra/posthog";

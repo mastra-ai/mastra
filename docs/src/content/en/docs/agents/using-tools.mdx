@@ -1,6 +1,8 @@
 ---
 title: "Using Tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
+packages:
+  - "@mastra/core"
 ---
 
 # Using Tools
@@ -17,7 +19,7 @@ When creating tools, keep descriptions simple and focused on what the tool does,
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
-```typescript {14} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -47,7 +49,7 @@ To make a tool available to an agent, add it to `tools`. Mentioning available to
 
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
 
-```typescript {8,10} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```typescript {11} title="src/mastra/agents/weather-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
@@ -66,7 +68,7 @@ export const weatherAgent = new Agent({
 
 The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
 
-```typescript title="src/test-tool.ts" showLineNumbers copy
+```typescript title="src/test-tool.ts"
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("weatherAgent");
@@ -78,20 +80,74 @@ const result = await agent.generate("What's the weather in London?");
 
 When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
 
-```typescript {8} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/agents/weather-agent.ts"
 import { weatherTool } from "../tools/weather-tool";
 import { activitiesTool } from "../tools/activities-tool";
 
 export const weatherAgent = new Agent({
   id: "weather-agent",
   name: "Weather Agent",
-  // ..
   tools: { weatherTool, activitiesTool },
 });
+```
+
+## Using workflows as tools
+
+Workflows can be added to agents through the `workflows` configuration. When you add a workflow, Mastra automatically converts it to a tool that the agent can call. The generated tool is named `workflow-<workflowName>` and uses the workflow's `inputSchema` and `outputSchema`.
+
+```typescript {14-16} title="src/mastra/agents/research-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { researchWorkflow } from "../workflows/research-workflow";
+
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: `
+      You are a research assistant.
+      Use the research workflow to gather and compile information on topics.`,
+  model: "openai/gpt-5.1",
+  tools: {
+    weatherTool,
+  },
+  workflows: {
+    researchWorkflow,
+  },
+});
+```
+
+The workflow should include a `description` to help the agent understand when to use it:
+
+```typescript title="src/mastra/workflows/research-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const researchWorkflow = createWorkflow({
+  id: "research-workflow",
+  description: "Gathers information on a topic and compiles a summary report.",
+  inputSchema: z.object({
+    topic: z.string(),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+    sources: z.array(z.string()),
+  }),
+})
+  .then(gatherSourcesStep)
+  .then(compileReportStep)
+  .commit();
+```
+
+When the agent calls the workflow tool, it receives a response containing the workflow result and a `runId` that can be used to track the execution:
+
+```typescript
+{
+  result: { summary: "...", sources: ["..."] },
+  runId: "abc-123"
+}
 ```
 
 ## Related
 
 - [MCP Overview](/docs/v1/mcp/overview)
 - [Agent Memory](/docs/v1/agents/agent-memory)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)

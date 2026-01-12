@@ -1,6 +1,5 @@
 import { MainContentContent } from '@/components/ui/containers/MainContent';
 import { CopyButton } from '@/components/ui/copy-button';
-import { PlaygroundTabs, Tab, TabContent, TabList } from '@/components/ui/playground-tabs';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';
@@ -60,114 +59,80 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </MainContentContent>
     );
 
+  const commandLineConfig = `npx -y mcp-remote ${sseUrl}`;
+
   return (
     <MainContentContent isDivided={true}>
-      <div className="px-8 py-20 mx-auto max-w-[604px] w-full">
+      <div className="px-8 py-12 mx-auto max-w-2xl w-full">
         <Txt as="h1" variant="header-md" className="text-icon6 font-medium pb-4">
           {server.name}
         </Txt>
 
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <Badge
-              icon={<span className="font-mono w-6 text-accent1 text-ui-xs font-medium">SSE</span>}
-              className="!text-icon4"
-            >
-              {sseUrl}
-            </Badge>
-            <CopyButton tooltip="Copy SSE URL" content={sseUrl} iconSize="sm" />
-          </div>
-
-          <div className="flex items-center gap-1">
-            <Badge
-              icon={<span className="font-mono w-6 text-accent1 text-ui-xs font-medium">HTTP</span>}
-              className="!text-icon4"
-            >
-              {httpStreamUrl}
-            </Badge>
-            <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} iconSize="sm" />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 pt-3 pb-9">
+        <div className="flex items-center gap-1 pb-6">
           <Badge icon={<FolderIcon className="text-icon6" />} className="rounded-r-sm !text-icon4">
             Version
           </Badge>
-
           <Badge className="rounded-l-sm !text-icon4">{server.version_detail.version}</Badge>
         </div>
 
-        <McpSetupTabs sseUrl={sseUrl} serverName={server.name} />
+        <Txt className="text-icon3 pb-4">
+          This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use
+          case.
+        </Txt>
+
+        <div className="flex flex-col gap-4">
+          {/* HTTP Stream */}
+          <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
+            <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">HTTP</span>}>
+              Regular HTTP Endpoint
+            </Badge>
+
+            <Txt className="text-icon3 pt-1 pb-2">Use for stateless HTTP transport with streamable responses.</Txt>
+
+            <div className="flex items-start gap-2">
+              <Txt className="px-2 py-1 bg-surface4 rounded-lg">{httpStreamUrl}</Txt>
+              <div className="pt-1">
+                <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} iconSize="sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* SSE */}
+          <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
+            <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">SSE</span>}>
+              Server-Sent Events
+            </Badge>
+
+            <Txt className="text-icon3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
+
+            <div className="flex items-start gap-2">
+              <Txt className="px-2 py-1 bg-surface4 rounded-lg">{sseUrl}</Txt>
+              <div className="pt-1">
+                <CopyButton tooltip="Copy SSE URL" content={sseUrl} iconSize="sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Command Line */}
+          <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
+            <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">CLI</span>}>Command Line</Badge>
+
+            <Txt className="text-icon3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
+
+            <div className="flex items-start gap-2">
+              <Txt className="px-2 py-1 bg-surface4 rounded-lg">{commandLineConfig}</Txt>
+              <div className="pt-1">
+                <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} iconSize="sm" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="h-full overflow-y-scroll border-l-sm border-border1">
         <McpToolList server={server} />
       </div>
     </MainContentContent>
-  );
-};
-
-const McpSetupTabs = ({ sseUrl, serverName }: { sseUrl: string; serverName: string }) => {
-  const { Link } = useLinkComponent();
-  return (
-    <PlaygroundTabs defaultTab="cursor">
-      <TabList>
-        <Tab value="cursor">Cursor</Tab>
-        <Tab value="windsurf">Windsurf</Tab>
-      </TabList>
-
-      <TabContent value="cursor">
-        <Txt className="text-icon3 pb-4">
-          Cursor comes with built-in MCP Support.{' '}
-          <Link
-            href="https://docs.cursor.com/context/model-context-protocol"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-icon6"
-          >
-            Following the documentation
-          </Link>
-          , you can register an MCP server using SSE with the following configuration.
-        </Txt>
-
-        <CodeMirrorBlock
-          editable={false}
-          value={`{
-    "mcpServers": {
-      "${serverName}": {
-        "url": "${sseUrl}"
-      }
-    }
-  }`}
-        />
-      </TabContent>
-      <TabContent value="windsurf">
-        <Txt className="text-icon3 pb-4">
-          Windsurf comes with built-in MCP Support.{' '}
-          <Link
-            href="https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-icon6"
-          >
-            Following the documentation
-          </Link>
-          , you can register an MCP server using SSE with the following configuration.
-        </Txt>
-
-        <CodeMirrorBlock
-          editable={false}
-          value={`{
-    "mcpServers": {
-      "${serverName}": {
-        "command": "npx",
-        "args": ["-y", "mcp-remote", "${sseUrl}"]
-      }
-    }
-  }`}
-        />
-      </TabContent>
-    </PlaygroundTabs>
   );
 };
 

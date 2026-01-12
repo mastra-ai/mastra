@@ -1,9 +1,12 @@
+import type { Server } from 'node:http';
+import { serve } from '@hono/node-server';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
   consumeSSEStream,
+  createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
@@ -25,8 +28,6 @@ describe('Hono Server Adapter', () => {
         tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
       });
 
       await adapter.init();
@@ -306,5 +307,152 @@ describe('Hono Server Adapter', () => {
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
     });
+  });
+
+  describe('Abort Signal', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('should not have aborted signal when route handler executes', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Track the abort signal state when the handler executes
+      let abortSignalAborted: boolean | undefined;
+
+      // Create a test route that checks the abort signal state
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/abort-signal',
+        responseType: 'json',
+        handler: async (params: any) => {
+          // Capture the abort signal state when handler runs
+          abortSignalAborted = params.abortSignal?.aborted;
+          return { signalAborted: abortSignalAborted };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Make a POST request with a JSON body (this triggers body parsing which can cause the issue)
+      const response = await app.request(
+        new Request('http://localhost/test/abort-signal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ test: 'data' }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // The abort signal should NOT be aborted during normal request handling
+      expect(result.signalAborted).toBe(false);
+      expect(abortSignalAborted).toBe(false);
+    });
+
+    it('should provide abort signal to route handlers', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/abort-signal-exists',
+        responseType: 'json',
+        handler: async (params: any) => {
+          receivedAbortSignal = params.abortSignal;
+          return { hasSignal: !!params.abortSignal };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/abort-signal-exists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // Route handler should receive an abort signal
+      expect(result.hasSignal).toBe(true);
+      expect(receivedAbortSignal).toBeDefined();
+      expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  // Multipart FormData tests
+  createMultipartTestSuite({
+    suiteName: 'Hono Multipart FormData',
+
+    setupAdapter: async (context, options) => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        taskStore: context.taskStore,
+        bodyLimitOptions: options?.bodyLimitOptions,
+      });
+
+      await adapter.init();
+
+      return { app, adapter };
+    },
+
+    startServer: async (app: Hono) => {
+      const server = serve({
+        fetch: app.fetch,
+        port: 0, // Random available port
+      }) as Server;
+
+      // Wait for server to be listening
+      await new Promise<void>(resolve => {
+        server.once('listening', () => resolve());
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+
+      return {
+        baseUrl: `http://localhost:${address.port}`,
+        cleanup: async () => {
+          await new Promise<void>(resolve => {
+            server.close(() => resolve());
+          });
+        },
+      };
+    },
+
+    registerRoute: async (adapter, app, route, options) => {
+      await adapter.registerRoute(app, route, options || { prefix: '' });
+    },
+
+    getContextMiddleware: adapter => adapter.createContextMiddleware(),
+
+    applyMiddleware: (app, middleware) => {
+      app.use('*', middleware);
+    },
   });
 });

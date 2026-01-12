@@ -1,5 +1,6 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import type { ZodLikeSchema } from '../types/zod-compat';
+import { isZodArray, isZodObject } from '../utils/zod-utils';
 
 export interface ValidationError<T = any> {
   error: true;
@@ -78,18 +79,73 @@ function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
     return input;
   }
 
-  // Check if schema is an array type
-  if (schema instanceof z.ZodArray) {
+  // Check if schema is an array type (using typeName to avoid dual-package hazard)
+  if (isZodArray(schema as z.ZodTypeAny)) {
     return [];
   }
 
-  // Check if schema is an object type
-  if (schema instanceof z.ZodObject) {
+  // Check if schema is an object type (using typeName to avoid dual-package hazard)
+  if (isZodObject(schema as z.ZodTypeAny)) {
     return {};
   }
 
   // For other schema types, return the original input and let Zod validate
   return input;
+}
+
+/**
+ * Checks if a value is a plain object (created by {} or new Object()).
+ * This excludes class instances, built-in objects like Date/Map/URL, etc.
+ *
+ * @param value The value to check
+ * @returns true if the value is a plain object
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Recursively converts undefined values to null in an object.
+ * This is needed for OpenAI compat layers which convert .optional() to .nullable()
+ * for strict mode compliance. When fields are omitted (undefined), we convert them
+ * to null so the schema validation passes, and the transform then converts null back
+ * to undefined. (GitHub #11457)
+ *
+ * Only recurses into plain objects to preserve class instances and built-in objects
+ * like Date, Map, URL, etc. (GitHub #11502)
+ *
+ * @param input The input to process
+ * @returns The processed input with undefined values converted to null
+ */
+function convertUndefinedToNull(input: unknown): unknown {
+  if (input === undefined) {
+    return null;
+  }
+
+  if (input === null || typeof input !== 'object') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    return input.map(convertUndefinedToNull);
+  }
+
+  // Only recurse into plain objects - preserve class instances, built-in objects
+  // (Date, Map, Set, URL, etc.) and any other non-plain objects
+  if (!isPlainObject(input)) {
+    return input;
+  }
+
+  // It's a plain object - recursively process all properties
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    result[key] = convertUndefinedToNull(value);
+  }
+  return result;
 }
 
 /**
@@ -112,7 +168,14 @@ export function validateToolInput<T = any>(
 
   // Normalize undefined/null input to appropriate default for the schema type
   // This handles LLMs that send undefined instead of {} or [] for optional parameters
-  const normalizedInput = normalizeNullishInput(schema, input);
+  let normalizedInput = normalizeNullishInput(schema, input);
+
+  // Convert undefined values to null recursively (GitHub #11457)
+  // This is needed because OpenAI compat layers convert .optional() to .nullable()
+  // for strict mode compliance. When fields are omitted (undefined), we convert them
+  // to null so the schema validation passes. The schema's transform will then convert
+  // null back to undefined to match the original .optional() semantics.
+  normalizedInput = convertUndefinedToNull(normalizedInput);
 
   // Validate the normalized input
   const validation = schema.safeParse(normalizedInput);

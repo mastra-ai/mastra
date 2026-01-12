@@ -1,6 +1,7 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
+import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
+import type { SuspendOptions } from '../workflows';
 import type { ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
@@ -66,8 +67,7 @@ export class Tool<
     TResumeSchema
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>
-{
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -165,9 +165,9 @@ export class Tool<
               ...context,
               ...(context.suspend
                 ? {
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return context.suspend?.(args);
+                      return context.suspend?.(args, suspendOptions);
                     },
                   }
                 : {}),
@@ -231,18 +231,18 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return baseContext.agent?.suspend?.(args);
+                      return baseContext.agent?.suspend?.(args, suspendOptions);
                     },
                   }
                 : baseContext.agent,
               workflow: baseContext.workflow
                 ? {
                     ...baseContext.workflow,
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return baseContext.workflow?.suspend?.(args);
+                      return baseContext.workflow?.suspend?.(args, suspendOptions);
                     },
                   }
                 : baseContext.workflow,
@@ -371,26 +371,16 @@ export function createTool<
     TSuspendSchema,
     TResumeSchema
   >,
-  TExecute extends ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId
-  >['execute'] = ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>['execute'],
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-    execute?: TExecute;
-  },
-): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>,
+): [TSchemaIn, TSchemaOut] extends [ZodLikeSchema, ZodLikeSchema]
   ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
       execute: (
-        inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+        inputData: InferZodLikeSchema<TSchemaIn>,
         context?: TContext,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+      ) => Promise<InferZodLikeSchemaInput<TSchemaOut> & { error?: never }>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   return new Tool(opts) as any;

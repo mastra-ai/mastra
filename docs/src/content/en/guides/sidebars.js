@@ -25,13 +25,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "getting-started/astro",
-          label: "Astro",
+          id: "getting-started/vite-react",
+          label: "React",
         },
         {
           type: "doc",
-          id: "getting-started/vite-react",
-          label: "React",
+          id: "getting-started/astro",
+          label: "Astro",
         },
         {
           type: "doc",
@@ -43,11 +43,28 @@ const sidebars = {
           id: "getting-started/express",
           label: "Express",
         },
+        {
+          type: "doc",
+          id: "getting-started/hono",
+          label: "Hono",
+        },
       ],
     },
     {
       type: "category",
-      label: "Build your UI",
+      label: "Agent Frameworks",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "agent-frameworks/ai-sdk",
+          label: "AI SDK",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Agentic UIs",
       collapsed: false,
       items: [
         {
@@ -64,6 +81,53 @@ const sidebars = {
           type: "doc",
           id: "build-your-ui/assistant-ui",
           label: "Assistant UI",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Deployment",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "deployment/amazon-ec2",
+          label: "Amazon EC2",
+        },
+        {
+          type: "doc",
+          id: "deployment/aws-lambda",
+          label: "AWS Lambda",
+        },
+        {
+          type: "doc",
+          id: "deployment/azure-app-services",
+          label: "Azure App Services",
+        },
+        {
+          type: "doc",
+          id: "deployment/cloudflare-deployer",
+          label: "Cloudflare",
+        },
+        {
+          type: "doc",
+          id: "deployment/digital-ocean",
+          label: "Digital Ocean",
+        },
+        {
+          type: "doc",
+          id: "deployment/netlify-deployer",
+          label: "Netlify",
+        },
+        {
+          type: "doc",
+          id: "deployment/vercel-deployer",
+          label: "Vercel",
+        },
+        {
+          type: "doc",
+          id: "deployment/inngest",
+          label: "Inngest",
         },
       ],
     },

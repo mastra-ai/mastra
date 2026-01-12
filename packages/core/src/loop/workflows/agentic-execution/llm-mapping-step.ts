@@ -1,5 +1,6 @@
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
+import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -50,6 +51,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         part: processed,
         blocked,
         reason,
+        tripwireOptions,
+        processorId,
       } = await processorRunner.processPart(
         chunk,
         rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
@@ -63,7 +66,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            tripwireReason: reason || 'Output processor blocked content',
+            reason: reason || 'Output processor blocked content',
+            retry: tripwireOptions?.retry,
+            metadata: tripwireOptions?.metadata,
+            processorId,
           },
         } as ChunkType<OUTPUT>);
         return;
@@ -85,7 +91,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      if (inputData?.every(toolCall => toolCall?.result === undefined)) {
+      if (inputData?.some(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -133,8 +139,22 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           rest.messageList.add(msg, 'response');
         }
 
-        initialResult.stepResult.isContinued = false;
-        return bail(initialResult);
+        // Only set isContinued = false if this is NOT a retry scenario
+        // When stepResult.reason is 'retry', the llm-execution-step has already set
+        // isContinued = true and we should preserve that to allow the agentic loop to continue
+        if (initialResult.stepResult.reason !== 'retry') {
+          initialResult.stepResult.isContinued = false;
+        }
+
+        // Update messages field to include any error messages we added to messageList
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
       }
 
       if (inputData?.length) {
@@ -155,7 +175,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
           await processAndEnqueueChunk(chunk);
 
-          if (initialResult?.metadata?.modelVersion === 'v2') {
+          if (supportedLanguageModelSpecifications.includes(initialResult?.metadata?.modelVersion)) {
             await rest.options?.onChunk?.({
               chunk: convertMastraChunkToAISDKv5({
                 chunk,
@@ -199,6 +219,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           },
         };
       }
+
+      // Fallback: if inputData is empty or undefined, return initialResult as-is
+      return initialResult;
     },
   });
 }

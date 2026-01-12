@@ -93,8 +93,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/agentrouter",
-          label: "AgentRouter",
+          id: "providers/abacus",
+          label: "Abacus",
         },
         {
           type: "doc",
@@ -143,6 +143,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cloudflare-ai-gateway",
+          label: "Cloudflare AI Gateway",
+        },
+        {
+          type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
         },
@@ -173,6 +178,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/friendli",
+          label: "Friendli",
+        },
+        {
+          type: "doc",
           id: "providers/github-models",
           label: "GitHub Models",
         },
@@ -180,6 +190,11 @@ const sidebars = {
           type: "doc",
           id: "providers/google-vertex",
           label: "Google Vertex AI",
+        },
+        {
+          type: "doc",
+          id: "providers/helicone",
+          label: "Helicone",
         },
         {
           type: "doc",
@@ -258,6 +273,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/nano-gpt",
+          label: "NanoGPT",
+        },
+        {
+          type: "doc",
           id: "providers/nebius",
           label: "Nebius Token Factory",
         },
@@ -270,6 +290,11 @@ const sidebars = {
           type: "doc",
           id: "providers/ollama",
           label: "Ollama",
+        },
+        {
+          type: "doc",
+          id: "providers/ollama-cloud",
+          label: "Ollama Cloud",
         },
         {
           type: "doc",
@@ -308,6 +333,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/siliconflow-cn",
+          label: "SiliconFlow (China)",
+        },
+        {
+          type: "doc",
           id: "providers/submodel",
           label: "submodel",
         },
@@ -340,6 +370,11 @@ const sidebars = {
           type: "doc",
           id: "providers/wandb",
           label: "Weights & Biases",
+        },
+        {
+          type: "doc",
+          id: "providers/xiaomi",
+          label: "Xiaomi",
         },
         {
           type: "doc",

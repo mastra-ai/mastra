@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -18,15 +19,109 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (MemoryStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  async init(): Promise<void> {
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the memory domain collections.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      // Threads collection indexes
+      { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1 } },
+      { collection: TABLE_THREADS, keys: { createdAt: -1 } },
+      { collection: TABLE_THREADS, keys: { updatedAt: -1 } },
+      // Messages collection indexes
+      { collection: TABLE_MESSAGES, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_MESSAGES, keys: { thread_id: 1 } },
+      { collection: TABLE_MESSAGES, keys: { resourceId: 1 } },
+      { collection: TABLE_MESSAGES, keys: { createdAt: -1 } },
+      { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
+      // Resources collection indexes
+      { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
+      { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const threadsCollection = await this.getCollection(TABLE_THREADS);
+    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
+
+    await Promise.all([
+      threadsCollection.deleteMany({}),
+      messagesCollection.deleteMany({}),
+      resourcesCollection.deleteMany({}),
+    ]);
   }
 
   private parseRow(row: any): MastraDBMessage {
@@ -55,7 +150,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
-    const collection = await this.operations.getCollection(TABLE_MESSAGES);
+    const collection = await this.getCollection(TABLE_MESSAGES);
     const includedMessages: any[] = [];
 
     for (const inc of include) {
@@ -98,7 +193,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     try {
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
+      const collection = await this.getCollection(TABLE_MESSAGES);
       const rawMessages = await collection
         .find({ id: { $in: messageIds } })
         .sort({ createdAt: -1 })
@@ -112,7 +207,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -131,7 +226,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -143,7 +238,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_PAGE',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -160,7 +255,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
+      const collection = await this.getCollection(TABLE_MESSAGES);
 
       // Build query conditions - use $in for multiple thread IDs
       const query: any = { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } };
@@ -170,11 +265,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        query.createdAt = { ...query.createdAt, $gte: filter.dateRange.start };
+        const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
+        query.createdAt = { ...query.createdAt, [startOp]: formatDateForMongoDB(filter.dateRange.start) };
       }
 
       if (filter?.dateRange?.end) {
-        query.createdAt = { ...query.createdAt, $lte: filter.dateRange.end };
+        const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
+        query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
       // Get total count
@@ -262,7 +359,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -293,8 +390,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         throw new Error('Thread ID is required');
       }
 
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
-      const threadsCollection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_MESSAGES);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
 
       // Prepare messages for insertion
       const messagesToInsert = messages.map(message => {
@@ -340,7 +437,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -362,7 +459,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
 
     const messageIds = messages.map(m => m.id);
-    const collection = await this.operations.getCollection(TABLE_MESSAGES);
+    const collection = await this.getCollection(TABLE_MESSAGES);
 
     const existingMessages = await collection.find({ id: { $in: messageIds } }).toArray();
 
@@ -438,7 +535,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     // Update thread timestamps
     if (threadIdsToUpdate.size > 0) {
-      const threadsCollection = await this.operations.getCollection(TABLE_THREADS);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
       await threadsCollection.updateMany(
         { id: { $in: Array.from(threadIdsToUpdate) } },
         { $set: { updatedAt: new Date() } },
@@ -453,7 +550,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_RESOURCES);
+      const collection = await this.getCollection(TABLE_RESOURCES);
       const result = await collection.findOne<any>({ id: resourceId });
 
       if (!result) {
@@ -470,7 +567,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -482,7 +579,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     try {
-      const collection = await this.operations.getCollection(TABLE_RESOURCES);
+      const collection = await this.getCollection(TABLE_RESOURCES);
       await collection.updateOne(
         { id: resource.id },
         {
@@ -498,7 +595,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -539,7 +636,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updatedAt: new Date(),
       };
 
-      const collection = await this.operations.getCollection(TABLE_RESOURCES);
+      const collection = await this.getCollection(TABLE_RESOURCES);
       const updateDoc: any = { updatedAt: updatedResource.updatedAt };
 
       if (workingMemory !== undefined) {
@@ -556,7 +653,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('MONGODB', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -568,7 +665,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
       const result = await collection.findOne<any>({ id: threadId });
       if (!result) {
         return null;
@@ -581,7 +678,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -600,7 +697,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_MONGODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -612,7 +709,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
@@ -656,7 +753,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args.resourceId },
@@ -668,7 +765,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
       await collection.updateOne(
         { id: thread.id },
         {
@@ -683,7 +780,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -705,7 +802,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
-        id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_NOT_FOUND',
+        id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         details: { threadId: id, status: 404 },
@@ -723,7 +820,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     };
 
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
       await collection.updateOne(
         { id },
         {
@@ -736,7 +833,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id },
@@ -751,18 +848,49 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
       // First, delete all messages associated with the thread
-      const collectionMessages = await this.operations.getCollection(TABLE_MESSAGES);
+      const collectionMessages = await this.getCollection(TABLE_MESSAGES);
       await collectionMessages.deleteMany({ thread_id: threadId });
       // Then delete the thread itself
-      const collectionThreads = await this.operations.getCollection(TABLE_THREADS);
+      const collectionThreads = await this.getCollection(TABLE_THREADS);
       await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    try {
+      const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+
+      // Get unique thread IDs from messages before deleting
+      const messagesToDelete = await messagesCollection.find({ id: { $in: messageIds } }).toArray();
+      const threadIds = [...new Set(messagesToDelete.map((m: any) => m.thread_id))];
+
+      // Delete the messages
+      await messagesCollection.deleteMany({ id: { $in: messageIds } });
+
+      // Update thread timestamps for affected threads
+      if (threadIds.length > 0) {
+        await threadsCollection.updateMany({ id: { $in: threadIds } }, { $set: { updatedAt: new Date() } });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );

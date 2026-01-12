@@ -1,4 +1,4 @@
-import type { TranscriptionModel, SpeechModel } from 'ai-v5';
+import type { TranscriptionModel, SpeechModel } from '@internal/ai-sdk-v5';
 
 import type { ToolsInput } from '../agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -8,13 +8,19 @@ import { AISDKTranscription } from './aisdk/transcription';
 import { MastraVoice } from './voice';
 import type { VoiceEventType, VoiceEventMap } from '.';
 
+const supportedSpecificationVersions = ['v2', 'v3'];
+
 // Helper to check if something is an AI SDK model
 function isTranscriptionModel(obj: any): obj is TranscriptionModel {
-  return obj && typeof obj === 'object' && obj.modelId && obj.specificationVersion === 'v2';
+  return (
+    obj && typeof obj === 'object' && obj.modelId && supportedSpecificationVersions.includes(obj.specificationVersion)
+  );
 }
 
 function isSpeechModel(obj: any): obj is SpeechModel {
-  return obj && typeof obj === 'object' && obj.modelId && obj.specificationVersion === 'v2';
+  return (
+    obj && typeof obj === 'object' && obj.modelId && supportedSpecificationVersions.includes(obj.specificationVersion)
+  );
 }
 
 export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {

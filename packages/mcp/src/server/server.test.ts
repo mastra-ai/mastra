@@ -187,6 +187,7 @@ describe('MCPServer', () => {
       expect(server.name).toBe('TestServer');
       expect(server.version).toBe('1.0.0');
       expect(server.description).toBeUndefined();
+      expect(server.instructions).toBeUndefined();
       expect(server.repository).toBeUndefined();
       // MCPServerBase stores releaseDate as string, compare directly or re-parse
       expect(server.releaseDate).toBe(mockDateISO);
@@ -222,6 +223,33 @@ describe('MCPServer', () => {
       expect(server.packageCanonical).toBe('npm');
       expect(server.packages).toEqual(packages);
       expect(server.remotes).toEqual(remotes);
+    });
+
+    it('should initialize with instructions when provided', () => {
+      const instructions = 'You are a helpful assistant. Use the available tools to help users.';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        instructions,
+      };
+      const server = new MCPServer(customConfig);
+
+      expect(server.instructions).toBe(instructions);
+    });
+
+    it('should pass instructions to underlying SDK Server', () => {
+      const instructions = 'You are a weather assistant with access to real-time weather data.';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        instructions,
+      };
+      const server = new MCPServer(customConfig);
+
+      // Access the underlying SDK Server
+      const sdkServer = server.getServer();
+
+      // Check that the SDK Server was initialized with instructions
+      // @ts-ignore - accessing private property for testing
+      expect(sdkServer._instructions).toBe(instructions);
     });
   });
 
@@ -2356,6 +2384,127 @@ describe('MCPServer - Elicitation', () => {
     expect(client1Handler).toHaveBeenCalled();
     expect(client2Handler).not.toHaveBeenCalled();
   }, 10000);
+
+  it('should support custom timeout in elicitation request options', async () => {
+    let elicitationStartTime: number | undefined;
+    let elicitationEndTime: number | undefined;
+
+    // Create a tool that uses custom timeout for elicitation
+    const toolWithCustomTimeout: ToolsInput = {
+      customTimeoutTool: {
+        description: 'A tool that uses custom timeout for elicitation',
+        parameters: z.object({
+          message: z.string().describe('Message to show to user'),
+          customTimeout: z.number().optional().describe('Custom timeout in milliseconds'),
+        }),
+        execute: async (inputData, context) => {
+          try {
+            const elicitation = context?.mcp?.elicitation;
+            elicitationStartTime = Date.now();
+            const result = await elicitation.sendRequest(
+              {
+                message: inputData.message,
+                requestedSchema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'string' },
+                  },
+                },
+              },
+              { timeout: inputData.customTimeout || 5000 },
+            );
+            elicitationEndTime = Date.now();
+            return result;
+          } catch (error) {
+            elicitationEndTime = Date.now();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        },
+      },
+    };
+
+    const customTimeoutPort = 9600 + Math.floor(Math.random() * 1000);
+    const customTimeoutServer = new MCPServer({
+      name: 'CustomTimeoutServer',
+      version: '1.0.0',
+      tools: toolWithCustomTimeout,
+    });
+
+    const customTimeoutHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = new URL(req.url || '', `http://localhost:${customTimeoutPort}`);
+      await customTimeoutServer.startHTTP({
+        url,
+        httpPath: '/http',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => customTimeoutHttpServer.listen(customTimeoutPort, () => resolve()));
+
+    try {
+      // Create a client that responds after a delay but within the custom timeout
+      const mockElicitationHandler = vi.fn(async () => {
+        // Simulate a slow response that takes 200ms
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return {
+          action: 'accept' as const,
+          content: { data: 'response data' },
+        };
+      });
+
+      const customTimeoutClient = new InternalMastraMCPClient({
+        name: 'custom-timeout-client',
+        server: {
+          url: new URL(`http://localhost:${customTimeoutPort}/http`),
+        },
+      });
+      customTimeoutClient.elicitation.onRequest(mockElicitationHandler);
+      await customTimeoutClient.connect();
+
+      const tools = await customTimeoutClient.tools();
+      const tool = tools['customTimeoutTool'];
+      expect(tool).toBeDefined();
+
+      // Execute with a custom timeout of 5000ms (plenty of time for 200ms response)
+      const result = await tool.execute!({
+        message: 'Test with custom timeout',
+        customTimeout: 5000,
+      });
+
+      // Should succeed because the response (200ms) is well within the timeout (5000ms)
+      expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+      expect(result.isError).toBeFalsy();
+
+      // Verify the timing shows it completed successfully
+      expect(elicitationStartTime).toBeDefined();
+      expect(elicitationEndTime).toBeDefined();
+      const duration = elicitationEndTime! - elicitationStartTime!;
+      // Should take at least 200ms (the simulated delay)
+      expect(duration).toBeGreaterThanOrEqual(200);
+      // But should complete well before the timeout
+      expect(duration).toBeLessThan(5000);
+
+      await customTimeoutClient.disconnect();
+    } finally {
+      customTimeoutHttpServer.closeAllConnections?.();
+      await new Promise<void>((resolve, reject) => {
+        customTimeoutHttpServer.close(err => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      await customTimeoutServer.close();
+    }
+  }, 15000);
 });
 
 describe('MCPServer with Tool Output Schema', () => {

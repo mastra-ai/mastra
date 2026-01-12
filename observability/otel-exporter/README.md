@@ -4,6 +4,18 @@ Export Mastra traces to any OpenTelemetry-compatible observability platform.
 
 > **⚠️ Important:** This package requires you to install an additional exporter package based on your provider. Each provider section below includes the specific installation command.
 
+## Environment Variables
+
+All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
+
+| Provider  | Environment Variables                                                                       |
+| --------- | ------------------------------------------------------------------------------------------- |
+| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)         |
+| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)       |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                         |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)         |
+
 ## Supported Providers
 
 ### Dash0
@@ -15,7 +27,16 @@ Export Mastra traces to any OpenTelemetry-compatible observability platform.
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
-#### Configuration
+#### Zero-Config Setup
+
+```bash
+# Required
+DASH0_API_KEY=your-api-key
+DASH0_ENDPOINT=ingress.us-west-2.aws.dash0.com:4317
+
+# Optional
+DASH0_DATASET=production
+```
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
@@ -26,19 +47,23 @@ const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'mastra-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              dash0: {
-                apiKey: process.env.DASH0_API_KEY, // Required at runtime
-                endpoint: 'ingress.us-west-2.aws.dash0.com:4317', // Required at runtime
-                dataset: 'production', // Optional: dataset name
-              }
-            },
-          })
-        ],
+        serviceName: 'my-service',
+        exporters: [new OtelExporter({ provider: { dash0: {} } })],
       },
+    },
+  },
+});
+```
+
+#### Explicit Configuration
+
+```typescript
+new OtelExporter({
+  provider: {
+    dash0: {
+      apiKey: 'your-api-key',
+      endpoint: 'ingress.us-west-2.aws.dash0.com:4317',
+      dataset: 'production', // Optional
     },
   },
 });
@@ -54,7 +79,16 @@ const mastra = new Mastra({
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
-#### Configuration
+#### Zero-Config Setup
+
+```bash
+# Required
+SIGNOZ_API_KEY=your-api-key
+
+# Optional
+SIGNOZ_REGION=us  # 'us' | 'eu' | 'in'
+SIGNOZ_ENDPOINT=https://my-signoz.example.com  # For self-hosted
+```
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
@@ -65,19 +99,23 @@ const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'mastra-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              signoz: {
-                apiKey: process.env.SIGNOZ_API_KEY, // Required at runtime
-                region: 'us', // Optional: 'us' | 'eu' | 'in', defaults to 'us'
-                // endpoint: 'https://my-signoz.example.com', // Optional: for self-hosted
-              }
-            },
-          })
-        ],
+        serviceName: 'my-service',
+        exporters: [new OtelExporter({ provider: { signoz: {} } })],
       },
+    },
+  },
+});
+```
+
+#### Explicit Configuration
+
+```typescript
+new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: 'your-api-key',
+      region: 'us', // Optional: 'us' | 'eu' | 'in'
+      endpoint: 'https://my-signoz.example.com', // Optional: for self-hosted
     },
   },
 });
@@ -91,7 +129,15 @@ const mastra = new Mastra({
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
-#### Configuration
+#### Zero-Config Setup
+
+```bash
+# Required
+NEW_RELIC_LICENSE_KEY=your-license-key
+
+# Optional
+NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # For EU region
+```
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
@@ -102,18 +148,22 @@ const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'mastra-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              newrelic: {
-                apiKey: process.env.NEW_RELIC_LICENSE_KEY, // Required at runtime
-                // endpoint: 'https://otlp.eu01.nr-data.net', // Optional: for EU region
-              }
-            },
-          })
-        ],
+        serviceName: 'my-service',
+        exporters: [new OtelExporter({ provider: { newrelic: {} } })],
       },
+    },
+  },
+});
+```
+
+#### Explicit Configuration
+
+```typescript
+new OtelExporter({
+  provider: {
+    newrelic: {
+      apiKey: 'your-license-key',
+      endpoint: 'https://otlp.eu01.nr-data.net', // Optional: for EU region
     },
   },
 });
@@ -128,7 +178,16 @@ const mastra = new Mastra({
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 ```
 
-#### Configuration
+#### Zero-Config Setup
+
+```bash
+# Required
+TRACELOOP_API_KEY=your-api-key
+
+# Optional
+TRACELOOP_DESTINATION_ID=my-destination
+TRACELOOP_ENDPOINT=https://custom.traceloop.com
+```
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
@@ -139,19 +198,23 @@ const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'mastra-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              traceloop: {
-                apiKey: process.env.TRACELOOP_API_KEY, // Required at runtime
-                destinationId: 'my-destination', // Optional
-                // endpoint: 'https://custom.traceloop.com', // Optional
-              }
-            },
-          })
-        ],
+        serviceName: 'my-service',
+        exporters: [new OtelExporter({ provider: { traceloop: {} } })],
       },
+    },
+  },
+});
+```
+
+#### Explicit Configuration
+
+```typescript
+new OtelExporter({
+  provider: {
+    traceloop: {
+      apiKey: 'your-api-key',
+      destinationId: 'my-destination', // Optional
+      endpoint: 'https://custom.traceloop.com', // Optional
     },
   },
 });
@@ -165,7 +228,16 @@ const mastra = new Mastra({
 npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
 ```
 
-#### Configuration
+#### Zero-Config Setup
+
+```bash
+# Required
+LMNR_PROJECT_API_KEY=your-api-key
+
+# Optional
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
+```
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter';
@@ -176,19 +248,23 @@ const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'mastra-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              laminar: {
-                apiKey: process.env.LMNR_PROJECT_API_KEY, // Required at runtime
-                // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
-                // endpoint: 'https://api.lmnr.ai/v1/traces', // Optional
-              }
-            },
-          })
-        ],
+        serviceName: 'my-service',
+        exporters: [new OtelExporter({ provider: { laminar: {} } })],
       },
+    },
+  },
+});
+```
+
+#### Explicit Configuration
+
+```typescript
+new OtelExporter({
+  provider: {
+    laminar: {
+      apiKey: 'your-api-key',
+      teamId: 'your-team-id', // Optional, for backwards compatibility
+      endpoint: 'https://api.lmnr.ai/v1/traces', // Optional
     },
   },
 });
@@ -340,7 +416,7 @@ The OtelExporter uses OpenTelemetry's `BatchSpanProcessor` for efficient span ex
 - **Default batch size**: 512 spans (configurable via `batchSize`)
 - **Export interval**: Every 5 seconds or when batch is full
 - **Queue size**: Up to 2048 spans queued in memory
-- **Production-ready**: Optimized for high-throughput applications
+- **High-throughput support**: Handles large volumes of spans efficiently
 
 This approach ensures:
 
@@ -359,7 +435,7 @@ Spans are named following OTEL conventions:
 
 - **LLM Operations**: `chat {model}` or `tool_selection {model}`
 - **Tool Execution**: `tool.execute {tool_name}`
-- **Agent Runs**: `agent.{agent_id}`
+- **Agent Runs**: `invoke_agent {agent_name}`
 - **Workflow Runs**: `workflow.{workflow_id}`
 
 ### Attributes
@@ -369,7 +445,7 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 #### Core Attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, agent.run, workflow.run)
-- `gen_ai.system` - AI provider (openai, anthropic, etc.)
+- `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
 
 #### LLM-Specific Attributes
@@ -382,8 +458,12 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 - `gen_ai.request.top_p` - Top-p sampling parameter
 - `gen_ai.request.top_k` - Top-k sampling parameter
 - `gen_ai.response.finish_reasons` - Reason for completion
+- `gen_ai.response.model` - Actual model used in response (may differ from request)
+- `gen_ai.response.id` - Unique response identifier
 - `gen_ai.prompt` - Input prompt (for Model spans)
 - `gen_ai.completion` - Model output (for Model spans)
+- `server.address` - Server address for the model endpoint
+- `server.port` - Server port for the model endpoint
 
 #### Tool Attributes
 
@@ -395,7 +475,10 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 
 #### Agent & Workflow Attributes
 
-- `agent.id` - Agent identifier
+- `gen_ai.agent.id` - Agent identifier
+- `gen_ai.agent.name` - Human-readable agent name
+- `gen_ai.conversation.id` - Conversation/thread/session identifier
+- `agent.id` - Agent identifier (also included for compatibility)
 - `agent.max_steps` - Maximum agent steps
 - `workflow.id` - Workflow identifier
 - `workflow.status` - Workflow execution status
@@ -406,6 +489,43 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 - `error.type` - Error identifier
 - `error.message` - Error description
 - `error.domain` - Error domain/category
+
+### Opt-In Content Attributes
+
+For enhanced observability, you can enable additional content attributes that capture detailed message data. These attributes may contain sensitive information and should only be enabled with proper consent and security considerations.
+
+To enable content attributes:
+
+```typescript
+new OtelExporter({
+  provider: {
+    /* your provider config */
+  },
+  genAiConventions: {
+    includeContentAttributes: true, // Default: false
+  },
+});
+```
+
+When enabled, the following additional attributes are captured:
+
+#### Model Content Attributes
+
+- `gen_ai.input.messages` - Structured input messages in OpenTelemetry format
+- `gen_ai.output.messages` - Structured output messages in OpenTelemetry format
+
+These attributes convert Mastra's message format to the OpenTelemetry GenAI standard message schema, providing detailed conversation history and tool interactions.
+
+#### Agent Content Attributes
+
+- `gen_ai.system_instructions` - Agent system instructions/prompts
+
+**Privacy Considerations:**
+
+- These attributes may contain user data, prompts, and model responses
+- Only enable in environments where data privacy and compliance requirements are met
+- Consider using span processors to filter sensitive data before export
+- Review your organization's data retention and privacy policies before enabling
 
 ## Troubleshooting
 

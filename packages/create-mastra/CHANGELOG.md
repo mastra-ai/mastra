@@ -1,5 +1,108 @@
 # create-mastra
 
+## 1.0.0-beta.14
+
+### Patch Changes
+
+- Replace deprecated client.getTraces with a client.listTraces ([#11711](https://github.com/mastra-ai/mastra/pull/11711))
+
+- dependencies updates: ([#11642](https://github.com/mastra-ai/mastra/pull/11642))
+  - Updated dependency [`fs-extra@^11.3.3` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.3) (from `^11.3.2`, in `dependencies`)
+
+- Make initialState optional in studio ([#11744](https://github.com/mastra-ai/mastra/pull/11744))
+
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Fix peer dependency conflicts in browsing-agent template. Updated template dependencies to align with @browserbasehq/stagehand@2.5.6 requirements: ([#11346](https://github.com/mastra-ai/mastra/pull/11346))
+  - Updated `dotenv` from `^17.2.1` to `^16.4.5`
+  - Updated `zod` from `^3.25.76` to `^3.25.67`
+
+  This ensures `npx create-mastra@latest --template browsing-agent` can be installed and run without peer dependency errors.
+
+- Add initial state input to workflow form in studio ([#11560](https://github.com/mastra-ai/mastra/pull/11560))
+
+- Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers ([#11562](https://github.com/mastra-ai/mastra/pull/11562))
+
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- Add Antigravity IDE support to create-mastra CLI. Users can now select Antigravity during project initialization and automatically configure the global Mastra MCP server for the IDE, reducing manual setup and enabling immediate use of Mastra agents. ([#11374](https://github.com/mastra-ai/mastra/pull/11374))
+
+### Patch Changes
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
+## 1.0.0-beta.11
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Add `Run` instance to client-js. `workflow.createRun` returns the `Run` instance which can be used for the different run methods. ([#11207](https://github.com/mastra-ai/mastra/pull/11207))
+  With this change, run methods cannot be called directly on workflow instance anymore
+
+  ```diff
+  - const result = await workflow.stream({ runId: '123', inputData: { ... } });
+  + const run = await workflow.createRun({ runId: '123' });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- fix isTopLevelSpan value definition on SpanScoring to properly recognize lack of span?.parentSpanId value (null or empty string) ([#11083](https://github.com/mastra-ai/mastra/pull/11083))
+
+## 1.0.0-beta.9
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Fix default value showing on workflow form after user submits ([#10983](https://github.com/mastra-ai/mastra/pull/10983))
+
+- Move useScorers down to trace page to trigger it once for all trace spans ([#10985](https://github.com/mastra-ai/mastra/pull/10985))
+
+- Update Observability Trace Spans list UI, so a user can expand/collapse span children/descendants and can filter the list by span type or name ([#10378](https://github.com/mastra-ai/mastra/pull/10378))
+
+- Fix workflow trigger form overflow ([#10986](https://github.com/mastra-ai/mastra/pull/10986))
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix select options overflow when list is long by adding maximum height ([#10813](https://github.com/mastra-ai/mastra/pull/10813))
+
 ## 1.0.0-beta.5
 
 ### Patch Changes

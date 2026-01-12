@@ -1,15 +1,17 @@
 ---
 title: "Reference: Workflow.foreach() | Workflows"
 description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.foreach()
 
-The `.foreach()` method creates a loop that executes a step for each item in an array.
+The `.foreach()` method creates a loop that executes a step for each item in an array. It always returns an array containing the output from each iteration, preserving the original order.
 
 ## Usage example
 
-```typescript copy
+```typescript
 workflow.foreach(step1, { concurrency: 2 });
 ```
 
@@ -50,11 +52,76 @@ workflow.foreach(step1, { concurrency: 2 });
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance for method chaining",
+      description: "The workflow instance for method chaining. The output type is an array of the step's output type.",
     },
   ]}
 />
 
+## Behavior
+
+### Execution and waiting
+
+The `.foreach()` method processes all items before the next step executes. The step following `.foreach()` only runs after every iteration has completed, regardless of concurrency settings. With `concurrency: 1` (default), items process sequentially. With higher concurrency, items process in parallel batches, but the next step still waits for all batches to finish.
+
+If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/v1/workflows/control-flow#nested-workflows-inside-foreach) for examples.
+
+### Output structure
+
+`.foreach()` always outputs an array. Each element in the output array corresponds to the result of processing the element at the same index in the input array.
+
+```typescript
+// Input: [{ value: 1 }, { value: 2 }, { value: 3 }]
+// Step adds 10 to each value
+// Output: [{ value: 11 }, { value: 12 }, { value: 13 }]
+```
+
+### Using `.then()` after `.foreach()`
+
+When you chain `.then()` after `.foreach()`, the next step receives the entire output array as its input. This allows you to aggregate or process all results together.
+
+```typescript
+workflow
+  .foreach(processItemStep)    // Output: array of processed items
+  .then(aggregateStep)         // Input: the entire array
+  .commit();
+```
+
+### Using `.map()` after `.foreach()`
+
+Use `.map()` to transform the array output before passing it to the next step:
+
+```typescript
+workflow
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    total: inputData.reduce((sum, item) => sum + item.value, 0),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+### Chaining multiple `.foreach()` calls
+
+When you chain `.foreach()` calls, each operates on the array from the previous step:
+
+```typescript
+workflow
+  .foreach(stepA)    // If input is [a, b, c], output is [A, B, C]
+  .foreach(stepB)    // Operates on [A, B, C], output is [A', B', C']
+  .commit();
+```
+
+If a step inside `.foreach()` returns an array, the output becomes an array of arrays. Use `.map()` with `.flat()` to flatten:
+
+```typescript
+workflow
+  .foreach(chunkStep)           // Output: [[chunk1, chunk2], [chunk3, chunk4]]
+  .map(async ({ inputData }) => inputData.flat())  // Output: [chunk1, chunk2, chunk3, chunk4]
+  .foreach(embedStep)
+  .commit();
+```
+
 ## Related
 
-- [Repeating with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
+- [Looping with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)

@@ -175,6 +175,6 @@ The Agent app should be deployed first, then the deployment URL should be added 
 
 ## Learn More
 
-- [Mastra Documentation](https://docs.mastra.ai)
-- [MCP Protocol](https://docs.mastra.ai/mcp)
+- [Mastra Documentation](https://mastra.ai/docs)
+- [MCP Protocol](https://mastra.ai/docs/mcp/overview)
 - [Turborepo Documentation](https://turborepo.com/docs)

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Unicode Normalizer | Processors"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
+packages:
+  - "@mastra/core"
 ---
 
 # UnicodeNormalizer
@@ -9,7 +11,7 @@ The `UnicodeNormalizer` is an **input processor** that normalizes Unicode text t
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 const processor = new UnicodeNormalizer({
@@ -94,7 +96,7 @@ const processor = new UnicodeNormalizer({
 
 ## Extended usage example
 
-```typescript title="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/normalized-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { UnicodeNormalizer } from "@mastra/core/processors";
 

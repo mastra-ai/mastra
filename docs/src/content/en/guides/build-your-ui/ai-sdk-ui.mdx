@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Using AI SDK UI
 
-[AI SDK UI](https://sdk.vercel.ai) is a free open-source library that gives you the tools you need to build AI-powered products. Mastra has great integration with AI SDK UI, including model routing, streaming support, custom React hooks, custom tool/UI, and more.
+[AI SDK UI](https://sdk.vercel.ai) is a library of React utilities and components for building AI-powered interfaces. In this guide, you'll learn how to use `@mastra/ai-sdk` to convert Mastra's output to AI SDK-compatible formats, enabling you to use its hooks and components in your frontend.
 
 :::note
 Migrating from AI SDK v4 to v5? See the [migration guide](/guides/v1/migrations/ai-sdk-v4-to-v5).
@@ -16,42 +16,71 @@ Migrating from AI SDK v4 to v5? See the [migration guide](/guides/v1/migrations/
 
 :::tip
 
-Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) to see real-world examples of AI SDK integrated with Mastra.
+Want to see more examples? Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) or the [Next.js quickstart guide](/guides/v1/getting-started/next-js).
 
 :::
 
-## Streaming
+## Getting Started
 
-The recommended way of using Mastra and AI SDK together is by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
+Use Mastra and AI SDK UI together by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. This includes chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
+
+`@mastra/ai-sdk` integrates with AI SDK UI's three main hooks: [`useChat()`](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot), [`useCompletion()`](https://ai-sdk.dev/docs/ai-sdk-ui/completion), and [`useObject()`](https://ai-sdk.dev/docs/ai-sdk-ui/object-generation).
+
+Install the required packages to get started:
 
 <Tabs>
   <TabItem value="npm" label="npm">
     ```bash copy
-    npm install @mastra/ai-sdk@beta
+    npm install @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
     ```bash copy
-    pnpm add @mastra/ai-sdk@beta
+    pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
     ```bash copy
-    yarn add @mastra/ai-sdk@beta
+    yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="bun" label="bun">
     ```bash copy
-    bun add @mastra/ai-sdk@beta
+    bun add @mastra/ai-sdk@beta @ai-sdk/react ai
     ```
   </TabItem>
 </Tabs>
 
-### `chatRoute()`
+You're now ready to follow the integration guides and recipes below!
 
-When setting up a [custom API route](/docs/v1/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
+## Integration Guides
 
-```typescript title="src/mastra/index.ts" copy
+Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Below you'll find two main approaches to achieve this:
+
+- [Mastra's server](#mastras-server)
+- [Framework-agnostic](#framework-agnostic)
+
+Once you have your API routes set up, you can use them in the [`useChat()`](#usechat) hook.
+
+### Mastra's server
+
+Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/v1/server/custom-api-routes) feature for this.
+
+:::info
+
+Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) is an example of this setup.
+
+:::
+
+You can use [`chatRoute()`](/reference/v1/ai-sdk/chat-route), [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route), and [`networkRoute()`](/reference/v1/ai-sdk/network-route) to create API routes that stream Mastra content in AI SDK-compatible format. Once implemented, you can use these API routes in [`useChat()`](#usechat).
+
+<Tabs>
+
+<TabItem value="chatRoute" label="chatRoute()">
+
+This example shows how to set up a chat route at the `/chat` endpoint that uses an agent with the ID `weatherAgent`.
+
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { chatRoute } from "@mastra/ai-sdk";
 
@@ -67,43 +96,15 @@ export const mastra = new Mastra({
 });
 ```
 
-Once you have your `/chat` API route set up, you can call the `useChat()` hook in your application.
+You can also use dynamic agent routing, see the [`chatRoute()` reference documentation](/reference/v1/ai-sdk/chat-route) for more details.
 
-```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
-  transport: new DefaultChatTransport({
-    api: "http://localhost:4111/chat",
-  }),
-});
-```
+</TabItem>
 
-Pass extra agent stream execution options:
+<TabItem value="workflowRoute" label="workflowRoute()">
 
-```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
-  transport: new DefaultChatTransport({
-    api: "http://localhost:4111/chat",
-    prepareSendMessagesRequest({ messages }) {
-      return {
-        body: {
-          messages,
-          // Pass memory config
-          memory: {
-            thread: "user-1",
-            resource: "user-1",
-          },
-        },
-      };
-    },
-  }),
-});
-```
+This example shows how to set up a workflow route at the `/workflow` endpoint that uses a workflow with the ID `weatherWorkflow`.
 
-### `workflowRoute()`
-
-Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
-
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { workflowRoute } from "@mastra/ai-sdk";
 
@@ -112,47 +113,30 @@ export const mastra = new Mastra({
     apiRoutes: [
       workflowRoute({
         path: "/workflow",
-        agent: "weatherAgent",
+        workflow: "weatherWorkflow",
       }),
     ],
   },
 });
 ```
 
-Once you have your `/workflow` API route set up, you can call the `useChat()` hook in your application.
-
-```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
-  transport: new DefaultChatTransport({
-    api: "http://localhost:4111/workflow",
-    prepareSendMessagesRequest({ messages }) {
-      return {
-        body: {
-          inputData: {
-            city: messages[messages.length - 1].parts[0].text,
-          },
-          //Or resumeData for resuming a suspended workflow
-          resumeData: {
-            confirmation: messages[messages.length - 1].parts[0].text
-          }
-        },
-      };
-    },
-  }),
-});
-```
+You can also use dynamic workflow routing, see the [`workflowRoute()` reference documentation](/reference/v1/ai-sdk/workflow-route) for more details.
 
 :::tip Agent streaming in workflows
-When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are automatically streamed to the UI in real-time. This provides a seamless streaming experience even when agents are running inside workflow steps.
 
-Learn more in [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui).
+When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
+
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+
 :::
 
-### `networkRoute()`
+</TabItem>
 
-Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.
+<TabItem value="networkRoute" label="networkRoute()">
 
-```typescript title="src/mastra/index.ts" copy
+This example shows how to set up a network route at the `/network` endpoint that uses an agent with the ID `weatherAgent`.
+
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { networkRoute } from "@mastra/ai-sdk";
 
@@ -168,333 +152,106 @@ export const mastra = new Mastra({
 });
 ```
 
-Once you have your `/network` API route set up, you can call the `useChat()` hook in your application.
+You can also use dynamic network routing, see the [`networkRoute()` reference documentation](/reference/v1/ai-sdk/network-route) for more details.
 
-```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
-  transport: new DefaultChatTransport({
-    api: "http://localhost:4111/network",
-  }),
-});
-```
+</TabItem>
 
-### Custom UI
-
-The `@mastra/ai-sdk` package transforms and emits Mastra streams (e.g workflow, network streams) into AI SDK-compatible [uiMessages DataParts](https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message#datauipart) format.
-
-- **Top-level parts**: These are streamed via direct workflow and network stream transformations (e.g in `workflowRoute()` and `networkRoute()`)
-  - `data-workflow`: Aggregates a workflow run with step inputs/outputs and final usage.
-  - `data-network`: Aggregates a routing/network run with ordered steps (agent/workflow/tool executions) and outputs.
-
-- **Nested parts**: These are streamed via nested and merged streams from within a tool's `execute()` method.
-  - `data-tool-workflow`: Nested workflow emitted from within a tool stream.
-  - `data-tool-network`: Nested network emitted from within an tool stream.
-  - `data-tool-agent`: Nested agent emitted from within an tool stream.
-
-Here's an example: For a [nested agent stream within a tool](/docs/v1/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted and can be leveraged on the client as documented below:
-
-```typescript title="app/page.tsx" copy
-"use client";
-
-import { useChat } from "@ai-sdk/react";
-import { AgentTool } from '../ui/agent-tool';
-import { DefaultChatTransport } from 'ai';
-import type { AgentDataPart } from "@mastra/ai-sdk";
-
-export default function Page() {
-  const { messages } = useChat({
-    transport: new DefaultChatTransport({
-    api: 'http://localhost:4111/chat',
-    }),
-  });
-
-  return (
-    <div>
-      {messages.map((message) => (
-        <div key={message.id}>
-          {message.parts.map((part, i) => {
-            switch (part.type) {
-              case 'data-tool-agent':
-                return (
-                  <AgentTool {...part.data as AgentDataPart} key={`${message.id}-${i}`} />
-                );
-              default:
-                return null;
-            }
-          })}
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-```typescript title="ui/agent-tool.ts" copy
-import { Tool, ToolContent, ToolHeader, ToolOutput } from "../ai-elements/tool";
-import type { AgentDataPart } from "@mastra/ai-sdk";
-
-export const AgentTool = ({ id, text, status }: AgentDataPart) => {
-  return (
-    <Tool>
-      <ToolHeader
-        type={`${id}`}
-        state={status === 'finished' ? 'output-available' : 'input-available'}
-      />
-      <ToolContent>
-        <ToolOutput output={text} />
-      </ToolContent>
-    </Tool>
-  );
-};
-```
-
-### Custom Tool streaming
-
-To stream custom data parts from within your tool execution function, use the
-`writer.custom()` method.
-
-```typescript {5,8,15} showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-
-export const testTool = createTool({
-  // ...
-  execute: async ({ context, writer }) => {
-    const { value } = context;
-
-   await writer?.custom({
-      type: "data-tool-progress",
-      status: "pending"
-    });
-
-    const response = await fetch(...);
-
-   await writer?.custom({
-      type: "data-tool-progress",
-      status: "success"
-    });
-
-    return {
-      value: ""
-    };
-  }
-});
-```
-
-For more information about tool streaming see [Tool streaming documentation](/docs/v1/streaming/tool-streaming)
-
-### Stream Transformations
-
-To manually transform Mastra's streams to AI SDK-compatible format, use the `toAISdkStream()` utility.
-
-```typescript title="app/api/chat/route.ts" copy {3,13}
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
-
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages);
-
-  // Transform stream into AI SDK format and create UI messages stream
-  const uiMessageStream = createUIMessageStream({
-    originalMessages: messages,
-    execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, { from: "agent" })!) {
-        writer.write(part);
-      }
-    },
-  });
-
-  // Create a Response that streams the UI message stream to the client
-  return createUIMessageStreamResponse({
-    stream: uiMessageStream,
-  });
-}
-```
-
-#### Stream Transformation Options
-
-The `toAISdkStream()` function accepts the following options:
-
-<PropertiesTable
-  content={[
-    {
-      name: "from",
-      type: "'agent' | 'network' | 'workflow'",
-      isRequired: true,
-      description: "The type of Mastra stream being converted.",
-    },
-    {
-      name: "lastMessageId",
-      type: "string",
-      isOptional: true,
-      description: "(Agent only) The ID of the last message in the conversation.",
-    },
-    {
-      name: "sendStart",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description: "(Agent only) Whether to send start events.",
-    },
-    {
-      name: "sendFinish",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description: "(Agent only) Whether to send finish events.",
-    },
-    {
-      name: "sendReasoning",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream the actual reasoning content from models that support extended thinking.",
-    },
-    {
-      name: "sendSources",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "(Agent only) Whether to include source citations in the output.",
-    },
-    {
-      name: "messageMetadata",
-      type: "Function",
-      isOptional: true,
-      description: "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.",
-    },
-    {
-      name: "onError",
-      type: "Function",
-      isOptional: true,
-      description: "(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.",
-    },
-  ]}
-/>
-
-**Example with reasoning enabled:**
-
-```typescript title="app/api/chat/route.ts" copy {11-14}
-import { mastra } from "../../mastra";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
-
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const myAgent = mastra.getAgent("reasoningAgent");
-  const stream = await myAgent.stream(messages, {
-    providerOptions: {
-      openai: { reasoningEffort: "high" },
-    },
-  });
-
-  const uiMessageStream = createUIMessageStream({
-    initialMessages: messages,
-    execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(stream, {
-        from: "agent",
-        sendReasoning: true, // Enable reasoning content streaming
-      })!) {
-        writer.write(part);
-      }
-    },
-  });
-
-  return createUIMessageStreamResponse({
-    stream: uiMessageStream,
-  });
-}
-```
-
-### Client Side Stream Transformations
-
-If you have a client-side `response` from `agent.stream(...)` and want AI SDK-formatted parts without custom SSE parsing, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and pipe it through `toAISdkStream`:
-
-```typescript title="client-stream-to-ai-sdk.ts" copy
-import { createUIMessageStream } from "ai";
-import { toAISdkStream } from "@mastra/ai-sdk";
-import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
-
-// Client SDK agent stream
-const response = await agent.stream({
-  messages: "What is the weather in Tokyo",
-});
-
-const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
-  start(controller) {
-    response
-      .processDataStream({
-        onChunk: async (chunk) => {
-          controller.enqueue(chunk as ChunkType);
-        },
-      })
-      .finally(() => controller.close());
-  },
-});
-
-const uiMessageStream = createUIMessageStream({
-  execute: async ({ writer }) => {
-    for await (const part of toAISdkStream(
-      chunkStream as unknown as MastraModelOutput,
-      { from: "agent" },
-    )) {
-      writer.write(part);
-    }
-  },
-});
-
-for await (const part of uiMessageStream) {
-  console.log(part);
-}
-```
-
-## UI Hooks
-
-Mastra supports AI SDK UI hooks for connecting frontend components directly to agents using HTTP streams.
-
-Install the required AI SDK React package:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install @ai-sdk/react
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add @ai-sdk/react
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add @ai-sdk/react
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add @ai-sdk/react
-    ```
-  </TabItem>
 </Tabs>
 
-### Using `useChat()`
+### Framework-agnostic
 
-The `useChat()` hook handles real-time chat interactions between your frontend and a Mastra agent, enabling you to send prompts and receive streaming responses over HTTP.
+If you don't want to run Mastra's server and instead use frameworks like Next.js or Express, you can use the [`handleChatStream()`](/reference/v1/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/v1/ai-sdk/handle-workflow-stream), and [`handleNetworkStream()`](/reference/v1/ai-sdk/handle-network-stream) functions in your own API route handlers.
 
-```typescript {8-12} title="app/test/chat.tsx" copy
-"use client";
+They return a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
+The examples below show you how to use them with Next.js App Router.
+
+<Tabs>
+
+<TabItem value="handleChatStream" label="handleChatStream()">
+
+This example shows how to set up a chat route at the `/chat` endpoint that uses an agent with the ID `weatherAgent`.
+
+```typescript title="app/chat/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+<TabItem value="handleWorkflowStream" label="handleWorkflowStream()">
+
+This example shows how to set up a workflow route at the `/workflow` endpoint that uses a workflow with the ID `weatherWorkflow`.
+
+```typescript title="app/workflow/route.ts"
+import { handleWorkflowStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleWorkflowStream({
+    mastra,
+    workflowId: 'weatherWorkflow',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+<TabItem value="handleNetworkStream" label="handleNetworkStream()">
+
+This example shows how to set up a network route at the `/network` endpoint that uses an agent with the ID `routingAgent`.
+
+```typescript title="app/network/route.ts"
+import { handleNetworkStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleNetworkStream({
+    mastra,
+    agentId: 'routingAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+### `useChat()`
+
+Whether you created API routes through [Mastra's server](#mastras-server) or used a [framework of your choice](#framework-agnostic), you can now use the API endpoints in the `useChat()` hook.
+
+Assuming you set up a route at `/chat` that uses a weather agent, you can ask it questions as seen below. It's important that you set the correct `api` URL.
+
+```ts {9}
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport } from "ai";
 
-export function Chat() {
-  const [inputValue, setInputValue] = useState('')
-  const { messages, sendMessage} = useChat({
+export default function Chat() {
+  const [inputValue, setInputValue] = useState("")
+  const { messages, sendMessage } = useChat({
     transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat',
+      api: "http://localhost:4111/chat",
     }),
   });
 
@@ -507,86 +264,721 @@ export function Chat() {
     <div>
       <pre>{JSON.stringify(messages, null, 2)}</pre>
       <form onSubmit={handleFormSubmit}>
-        <input value={inputValue} onChange={e=>setInputValue(e.target.value)} placeholder="Name of city" />
+        <input value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Name of the city" />
       </form>
     </div>
   );
 }
 ```
 
-Requests sent using the `useChat()` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
+Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
-```typescript title="app/api/chat/route.ts" copy
-import { mastra } from "../../mastra";
-
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages, { format: "aisdk" });
-
-  return stream.toUIMessageStreamResponse();
-}
-```
-
-> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/v1/agents/agent-memory) for key implementation details.
-
-### Using `useCompletion()`
+### `useCompletion()`
 
 The `useCompletion()` hook handles single-turn completions between your frontend and a Mastra agent, allowing you to send a prompt and receive a streamed response over HTTP.
 
-```typescript {6-8} title="app/test/completion.tsx" copy
-"use client";
+Your frontend could look like this:
 
-import { useCompletion } from "@ai-sdk/react";
+```typescript title="app/page.tsx"
+import { useCompletion } from '@ai-sdk/react';
 
-export function Completion() {
+export default function Page() {
   const { completion, input, handleInputChange, handleSubmit } = useCompletion({
-    api: "api/completion"
+    api: '/api/completion',
+  });
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        name="prompt"
+        value={input}
+        onChange={handleInputChange}
+        id="input"
+      />
+      <button type="submit">Submit</button>
+      <div>{completion}</div>
+    </form>
+  );
+}
+```
+
+Below are two approaches to implementing the backend:
+
+<Tabs>
+
+<TabItem value="mastra-server" label="Mastra Server">
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+import { registerApiRoute } from '@mastra/core/server';
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/completion', {
+        method: 'POST',
+        handler: async (c) => {
+          const { prompt } = await c.req.json();
+          const mastra = c.get('mastra');
+          const stream = await handleChatStream({
+            mastra,
+            agentId: 'weatherAgent',
+            params: {
+              messages: [
+                {
+                  id: "1",
+                  role: 'user',
+                  parts: [
+                    {
+                      type: 'text',
+                      text: prompt
+                    }
+                  ]
+                }
+              ],
+            }
+          })
+
+          return createUIMessageStreamResponse({ stream });
+        }
+      })
+    ]
+  }
+});
+```
+
+</TabItem>
+
+<TabItem value="nextjs" label="Next.js">
+
+```ts title="app/completion/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+// Allow streaming responses up to 30 seconds
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { prompt }: { prompt: string } = await req.json();
+
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params: {
+      messages: [
+        {
+          id: "1",
+          role: 'user',
+          parts: [
+            {
+              type: 'text',
+              text: prompt
+            }
+          ]
+        }
+      ],
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+## Custom UI
+
+Custom UI (also known as Generative UI) allows you to render custom React components based on data streamed from Mastra. Instead of displaying raw text or JSON, you can create visual components for tool outputs, workflow progress, agent network execution, and custom events.
+
+Use Custom UI when you want to:
+
+- Render tool outputs as visual components (e.g., a weather card instead of JSON)
+- Display workflow step progress with status indicators
+- Visualize agent network execution with step-by-step updates
+- Show progress indicators or status updates during long-running operations
+
+### Data part types
+
+Mastra streams data to the frontend as "parts" within messages. Each part has a `type` that determines how to render it. The `@mastra/ai-sdk` package transforms Mastra streams into AI SDK-compatible [UI Message DataParts](https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message#datauipart).
+
+| Data Part Type | Source | Description |
+|----------------|--------|-------------|
+| `tool-{toolKey}` | AI SDK built-in | Tool invocation with states: `input-available`, `output-available`, `output-error` |
+| `data-workflow` | `workflowRoute()` | Workflow execution with step inputs, outputs, and status |
+| `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
+| `data-tool-agent` | Nested agent in tool | Agent output streamed from within a tool's `execute()` |
+| `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
+| `data-tool-network` | Nested network in tool | Network output streamed from within a tool's `execute()` |
+| `data-{custom}` | `writer.custom()` | Custom events for progress indicators, status updates, etc. |
+
+### Rendering tool outputs
+
+AI SDK automatically creates `tool-{toolKey}` parts when an agent calls a tool. These parts include the tool's state and output, which you can use to render custom components.
+
+The tool part cycles through states:
+- `input-streaming`: Tool input is being streamed (when tool call streaming is enabled)
+- `input-available`: Tool has been called with complete input, waiting for execution
+- `output-available`: Tool execution completed with output
+- `output-error`: Tool execution failed
+
+Here's an example of rendering a weather tool's output as a custom `WeatherCard` component.
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Define a tool with an `outputSchema` so the frontend knows the shape of the data to render.
+
+```typescript title="src/mastra/tools/weather-tool.ts" {10-17}
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The location to get the weather for"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    feelsLike: z.number(),
+    humidity: z.number(),
+    windSpeed: z.number(),
+    conditions: z.string(),
+    location: z.string(),
+  }),
+  execute: async ({ location }) => {
+    const response = await fetch(
+      `https://api.weatherapi.com/v1/current.json?key=${process.env.WEATHER_API_KEY}&q=${location}`
+    );
+    const data = await response.json();
+    return {
+      temperature: data.current.temp_c,
+      feelsLike: data.current.feelslike_c,
+      humidity: data.current.humidity,
+      windSpeed: data.current.wind_kph,
+      conditions: data.current.condition.text,
+      location: data.location.name,
+    };
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Check for `tool-{toolKey}` parts in the message and render a custom component based on the tool's state and output.
+
+```typescript title="src/components/chat.tsx" {24-35}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { WeatherCard } from "./weather-card";
+import { Loader } from "./loader";
+
+export function Chat() {
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/weatherAgent",
+    }),
   });
 
   return (
     <div>
-      <form onSubmit={handleSubmit}>
-        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
-      </form>
-      <p>Completion result: {completion}</p>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            // Handle user text messages
+            if (part.type === "text" && message.role === "user") {
+              return <p key={index}>{part.text}</p>;
+            }
+
+            // Handle weather tool output
+            if (part.type === "tool-weatherTool") {
+              switch (part.state) {
+                case "input-available":
+                  return <Loader key={index} />;
+                case "output-available":
+                  return <WeatherCard key={index} {...part.output} />;
+                case "output-error":
+                  return <div key={index}>Error: {part.errorText}</div>;
+                default:
+                  return null;
+              }
+            }
+
+            return null;
+          })}
+        </div>
+      ))}
     </div>
   );
 }
 ```
 
-Requests sent using the `useCompletion()` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
+</TabItem>
 
-```typescript title="app/api/completion/route.ts" copy
-import { mastra } from "../../../mastra";
+</Tabs>
 
-export async function POST(req: Request) {
-  const { prompt } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream([{ role: "user", content: prompt }], {
-    format: "aisdk",
+:::tip
+
+The tool part type follows the pattern `tool-{toolKey}`, where `toolKey` is the key used when registering the tool with the agent. For example, if you register tools as `tools: { weatherTool }`, the part type will be `tool-weatherTool`.
+
+:::
+
+### Rendering workflow data
+
+When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts that contain the workflow's execution state, including step statuses and outputs.
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Define a workflow with multiple steps that will emit `data-workflow` parts as it executes.
+
+```typescript title="src/mastra/workflows/activities-workflow.ts"
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const fetchWeather = createStep({
+  id: "fetch-weather",
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    // Fetch weather data...
+    return { temperature: 22, conditions: "Sunny" };
+  },
+});
+
+const planActivities = createStep({
+  id: "plan-activities",
+  inputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+  execute: async ({ inputData, mastra }) => {
+    const agent = mastra?.getAgent("activityAgent");
+    const response = await agent?.generate(
+      `Suggest activities for ${inputData.conditions} weather at ${inputData.temperature}°C`
+    );
+    return { activities: response?.text || "" };
+  },
+});
+
+export const activitiesWorkflow = createWorkflow({
+  id: "activities-workflow",
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+})
+  .then(fetchWeather)
+  .then(planActivities);
+
+activitiesWorkflow.commit();
+```
+
+Register the workflow with Mastra and expose it via `workflowRoute()` to stream workflow events to the frontend.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  workflows: { activitiesWorkflow },
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow/activitiesWorkflow",
+        workflow: "activitiesWorkflow",
+      }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Check for `data-workflow` parts and render each step's status and output using the `WorkflowDataPart` type for type safety.
+
+```typescript title="src/components/workflow-chat.tsx" {3,5,45-47}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+type StepStatus = "running" | "success" | "failed" | "suspended" | "waiting";
+
+function StepIndicator({ name, status, output }: { 
+  name: string; 
+  status: StepStatus; 
+  output: unknown;
+}) {
+  return (
+    <div className="step">
+      <div className="step-header">
+        <span>{name}</span>
+        <span className={`status status-${status}`}>{status}</span>
+      </div>
+      {status === "success" && output && (
+        <pre>{JSON.stringify(output, null, 2)}</pre>
+      )}
+    </div>
+  );
+}
+
+export function WorkflowChat() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/activitiesWorkflow",
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          inputData: {
+            location: messages[messages.length - 1]?.parts[0]?.text,
+          },
+        },
+      }),
+    }),
   });
 
-  return stream.toUIMessageStreamResponse();
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "data-workflow") {
+              const workflowData = part.data as WorkflowData;
+              const steps = Object.values(workflowData.steps);
+              
+              return (
+                <div key={index} className="workflow-progress">
+                  <h3>Workflow: {workflowData.name}</h3>
+                  <p>Status: {workflowData.status}</p>
+                  {steps.map((step) => (
+                    <StepIndicator
+                      key={step.name}
+                      name={step.name}
+                      status={step.status}
+                      output={step.output}
+                    />
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
 }
 ```
 
+</TabItem>
+
+</Tabs>
+
+For more details on workflow streaming, see [Workflow Streaming](/docs/v1/streaming/workflow-streaming).
+
+### Rendering network data
+
+When using `networkRoute()` or `handleNetworkStream()`, Mastra emits `data-network` parts that contain the agent network's execution state, including which agents were called and their outputs.
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Register agents with Mastra and expose the routing agent via `networkRoute()` to stream network execution events to the frontend.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { networkRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  agents: { routingAgent, researchAgent, weatherAgent },
+  server: {
+    apiRoutes: [
+      networkRoute({
+        path: "/network",
+        agent: "routingAgent",
+      }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Check for `data-network` parts and render each agent's execution step using the `NetworkDataPart` type for type safety.
+
+```typescript title="src/components/network-chat.tsx" {3,5,42-44}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import type { NetworkDataPart } from "@mastra/ai-sdk";
+
+type NetworkData = NetworkDataPart["data"];
+
+function AgentStep({ step }: { step: NetworkData["steps"][number] }) {
+  return (
+    <div className="agent-step">
+      <div className="step-header">
+        <span className="agent-name">{step.name}</span>
+        <span className={`status status-${step.status}`}>{step.status}</span>
+      </div>
+      {step.input && (
+        <div className="step-input">
+          <strong>Input:</strong>
+          <pre>{JSON.stringify(step.input, null, 2)}</pre>
+        </div>
+      )}
+      {step.output && (
+        <div className="step-output">
+          <strong>Output:</strong>
+          <pre>{typeof step.output === "string" ? step.output : JSON.stringify(step.output, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function NetworkChat() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/network",
+    }),
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "data-network") {
+              const networkData = part.data as NetworkData;
+              
+              return (
+                <div key={index} className="network-execution">
+                  <div className="network-header">
+                    <h3>Agent Network: {networkData.name}</h3>
+                    <span className={`status status-${networkData.status}`}>
+                      {networkData.status}
+                    </span>
+                  </div>
+                  <div className="network-steps">
+                    {networkData.steps.map((step, stepIndex) => (
+                      <AgentStep key={stepIndex} step={step} />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+For more details on agent networks, see [Agent Networks](/docs/v1/agents/networks).
+
+### Custom events
+
+Use `writer.custom()` within a tool's `execute()` function to emit custom data parts. This is useful for progress indicators, status updates, or any custom UI updates during tool execution.
+
+Custom event types must start with `data-` to be recognized as data parts.
+
+:::warning
+
+You must `await` the `writer.custom()` call, otherwise you may encounter a `WritableStream is locked` error.
+
+:::
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Use `writer.custom()` inside the tool's `execute()` function to emit custom `data-` prefixed events at different stages of execution.
+
+```typescript title="src/mastra/tools/task-tool.ts" {18-24,30-36}
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const taskTool = createTool({
+  id: "process-task",
+  description: "Process a task with progress updates",
+  inputSchema: z.object({
+    task: z.string().describe("The task to process"),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+    status: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    const { task } = inputData;
+
+    // Emit "in progress" custom event
+    await context?.writer?.custom({
+      type: "data-tool-progress",
+      data: {
+        status: "in-progress",
+        message: "Gathering information...",
+      },
+    });
+
+    // Simulate work
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // Emit "done" custom event
+    await context?.writer?.custom({
+      type: "data-tool-progress",
+      data: {
+        status: "done",
+        message: `Successfully processed "${task}"`,
+      },
+    });
+
+    return {
+      result: `Task "${task}" has been completed successfully!`,
+      status: "completed",
+    };
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Filter message parts for your custom event type and render a progress indicator that updates as new events arrive.
+
+```typescript title="src/components/task-chat.tsx" {31-41,45}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useMemo } from "react";
+
+type ProgressData = {
+  status: "in-progress" | "done";
+  message: string;
+};
+
+function ProgressIndicator({ progress }: { progress: ProgressData }) {
+  return (
+    <div className="progress-indicator">
+      {progress.status === "in-progress" ? (
+        <span className="spinner" />
+      ) : (
+        <span className="check-icon" />
+      )}
+      <span className={`status-${progress.status}`}>{progress.message}</span>
+    </div>
+  );
+}
+
+export function TaskChat() {
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/taskAgent",
+    }),
+  });
+
+  // Extract the latest progress event from messages
+  const latestProgress = useMemo(() => {
+    const allProgressParts: ProgressData[] = [];
+    messages.forEach((message) => {
+      message.parts.forEach((part) => {
+        if (part.type === "data-tool-progress") {
+          allProgressParts.push(part.data as ProgressData);
+        }
+      });
+    });
+    return allProgressParts[allProgressParts.length - 1];
+  }, [messages]);
+
+  return (
+    <div>
+      {latestProgress && <ProgressIndicator progress={latestProgress} />}
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "text") {
+              return <p key={index}>{part.text}</p>;
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+### Tool streaming
+
+Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/v1/streaming/tool-streaming).
+
+### Examples
+
+For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-dojo.mastra.ai/). The repository includes implementations for:
+
+- [Generative UIs](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces.tsx) - Custom components for tool outputs
+- [Workflows](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow.tsx) - Workflow step visualization
+- [Agent Networks](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/network.tsx) - Network execution display
+- [Custom Events](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces-with-custom-events.tsx) - Progress indicators with custom events
+
+## Recipes
+
+### Stream transformations
+
+To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
+
+### Loading historical messages
+
+When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
+
 ### Passing additional data
 
-`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RequestContext`.
+[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/v1/server/request-context).
 
-```typescript {16-26} title="app/test/chat-extra.tsx" copy
-"use client";
+Here's an example of the frontend code:
 
+```typescript {15-25}
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
 import { DefaultChatTransport } from 'ai';
 
-export function ChatExtra() {
+export function ChatAdditional() {
   const [inputValue, setInputValue] = useState('')
   const { messages, sendMessage } = useChat({
     transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat',
+      api: 'http://localhost:4111/chat-extra',
     }),
   });
 
@@ -609,20 +1001,65 @@ export function ChatExtra() {
     <div>
       <pre>{JSON.stringify(messages, null, 2)}</pre>
       <form onSubmit={handleFormSubmit}>
-        <input value={inputValue} onChange={e=>setInputValue(e.target.value)} placeholder="Name of city" />
+        <input value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Name of the city" />
       </form>
     </div>
   );
 }
 ```
 
-```typescript {8,12} title="app/api/chat-extra/route.ts" copy
-import { mastra } from "../../../mastra";
+Two examples on how to implement the backend portion of it.
+
+<Tabs>
+
+<TabItem value="mastra-server" label="Mastra Server">
+
+Add a `chatRoute()` to your Mastra configuration like shown above. Then, add a server-level middleware:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      async (c, next) => {
+        const requestContext = c.get("requestContext");
+
+        if (c.req.method === "POST") {
+          const clonedReq = c.req.raw.clone();
+          const body = await clonedReq.json();
+
+          if (body?.data) {
+            for (const [key, value] of Object.entries(body.data)) {
+              requestContext.set(key, value);
+            }
+          }
+        }
+        await next();
+      },
+    ],
+  },
+});
+```
+
+:::info
+
+You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/v1/server/request-context) for more details.
+
+:::
+
+</TabItem>
+
+<TabItem value="nextjs" label="Next.js">
+
+```typescript title="app/chat-extra/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
 import { RequestContext } from "@mastra/core/request-context";
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
 
   const requestContext = new RequestContext();
 
@@ -632,46 +1069,513 @@ export async function POST(req: Request) {
     }
   }
 
-  const stream = await myAgent.stream(messages, {
-    requestContext,
-    format: "aisdk",
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params: {
+      messages,
+      requestContext,
+    },
   });
-  return stream.toUIMessageStreamResponse();
+  return createUIMessageStreamResponse({ stream });
 }
 ```
 
-### Handling `requestContext` with `server.middleware`
+</TabItem>
 
-You can also populate the `RequestContext` by reading custom data in a server middleware:
+</Tabs>
 
-```typescript {8,17} title="mastra/index.ts" copy
+### Workflow suspend/resume with user approval
+
+Workflows can suspend execution and wait for user input before continuing. This is useful for approval flows, confirmations, or any human-in-the-loop scenario.
+
+The workflow uses:
+- `suspendSchema` / `resumeSchema` - Define the data structure for suspend payload and resume input
+- `suspend()` - Pauses the workflow and sends the suspend payload to the UI
+- `resumeData` - Contains the user's response when the workflow resumes
+- `bail()` - Exits the workflow early (e.g., when user rejects)
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Create a workflow step that suspends for approval. The step checks `resumeData` to determine if it's resuming, and calls `suspend()` on first execution.
+
+```typescript title="src/mastra/workflows/approval-workflow.ts"
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const requestApproval = createStep({
+  id: "request-approval",
+  inputSchema: z.object({ requestId: z.string(), summary: z.string() }),
+  outputSchema: z.object({
+    approved: z.boolean(),
+    requestId: z.string(),
+    approvedBy: z.string().optional(),
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean(),
+    approverName: z.string().optional(),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    requestId: z.string(),
+  }),
+  execute: async ({ inputData, resumeData, suspend, bail }) => {
+    // User rejected - bail out
+    if (resumeData?.approved === false) {
+      return bail({ message: "Request rejected" });
+    }
+    // User approved - continue
+    if (resumeData?.approved) {
+      return {
+        approved: true,
+        requestId: inputData.requestId,
+        approvedBy: resumeData.approverName || "User",
+      };
+    }
+    // First execution - suspend and wait
+    return await suspend({
+      message: `Please approve: ${inputData.summary}`,
+      requestId: inputData.requestId,
+    });
+  },
+});
+
+export const approvalWorkflow = createWorkflow({
+  id: "approval-workflow",
+  inputSchema: z.object({ requestId: z.string(), summary: z.string() }),
+  outputSchema: z.object({
+    approved: z.boolean(),
+    requestId: z.string(),
+    approvedBy: z.string().optional(),
+  }),
+})
+  .then(requestApproval);
+
+approvalWorkflow.commit();
+```
+
+Register the workflow. Storage is required for suspend/resume to persist state.
+
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  agents: { weatherAgent },
+  workflows: { approvalWorkflow },
+  storage: new LibSQLStore({
+    url: "file:../mastra.db",
+  }),
   server: {
-    middleware: [
-      async (c, next) => {
-        const requestContext = c.get("requestContext");
-
-        if (c.req.method === "POST") {
-          try {
-            const clonedReq = c.req.raw.clone();
-            const body = await clonedReq.json();
-
-            if (body?.data) {
-              for (const [key, value] of Object.entries(body.data)) {
-                requestContext.set(key, value);
-              }
-            }
-          } catch {}
-        }
-        await next();
-      },
+    apiRoutes: [
+      workflowRoute({ path: "/workflow/approvalWorkflow", workflow: "approvalWorkflow" }),
     ],
   },
 });
 ```
 
-> You can then access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/v1/server-db/request-context) for more details.
+</TabItem>
 
+<TabItem value="frontend" label="Frontend">
+
+Detect when the workflow is suspended and send resume data with `runId`, `step`, and `resumeData`.
+
+```typescript title="src/components/approval-workflow.tsx"
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useMemo, useState } from "react";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+
+export function ApprovalWorkflow() {
+  const [requestId, setRequestId] = useState("");
+  const [summary, setSummary] = useState("");
+
+  const { messages, sendMessage, setMessages, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/approvalWorkflow",
+      prepareSendMessagesRequest: ({ messages }) => {
+        const lastMessage = messages[messages.length - 1];
+        const text = lastMessage.parts.find((p) => p.type === "text")?.text;
+        const metadata = lastMessage.metadata as Record<string, string>;
+
+        // Resuming: send runId, step, and resumeData
+        if (text === "Approve" || text === "Reject") {
+          return {
+            body: {
+              runId: metadata.runId,
+              step: "request-approval",
+              resumeData: { approved: text === "Approve" },
+            },
+          };
+        }
+        // Starting: send inputData
+        return {
+          body: { inputData: { requestId: metadata.requestId, summary: metadata.summary } },
+        };
+      },
+    }),
+  });
+
+  // Find suspended workflow
+  const suspended = useMemo(() => {
+    for (const m of messages) {
+      for (const p of m.parts) {
+        if (p.type === "data-workflow" && (p.data as WorkflowData).status === "suspended") {
+          return { data: p.data as WorkflowData, runId: p.id };
+        }
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const handleApprove = () => {
+    setMessages([]);
+    sendMessage({ text: "Approve", metadata: { runId: suspended?.runId } });
+  };
+
+  const handleReject = () => {
+    setMessages([]);
+    sendMessage({ text: "Reject", metadata: { runId: suspended?.runId } });
+  };
+
+  return (
+    <div>
+      {!suspended ? (
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          setMessages([]);
+          sendMessage({ text: "Start", metadata: { requestId, summary } });
+        }}>
+          <input value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="Request ID" />
+          <input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Summary" />
+          <button type="submit" disabled={status !== "ready"}>Submit</button>
+        </form>
+      ) : (
+        <div>
+          <p>{(suspended.data.steps["request-approval"]?.suspendPayload as { message: string })?.message}</p>
+          <button onClick={handleApprove}>Approve</button>
+          <button onClick={handleReject}>Reject</button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+Key points:
+- The suspend payload is accessible via `step.suspendPayload`
+- To resume, send `runId`, `step` (the step ID), and `resumeData` in the request body
+- Storage must be configured for suspend/resume to persist workflow state
+
+For a complete implementation, see the [workflow-suspend-resume example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-suspend-resume.tsx) in UI Dojo.
+
+### Nested agent streams in tools
+
+Tools can call agents internally and stream the agent's output back to the UI. This creates `data-tool-agent` parts that can be rendered alongside the tool's final output.
+
+The pattern uses:
+- `context.mastra.getAgent()` - Get an agent instance from within a tool
+- `agent.stream()` - Stream the agent's response
+- `stream.fullStream.pipeTo(context.writer)` - Pipe the agent's stream to the tool's writer
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Create a tool that calls an agent and pipes its stream to the tool's writer.
+
+```typescript title="src/mastra/tools/nested-agent-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const nestedAgentTool = createTool({
+  id: "nested-agent-stream",
+  description: "Analyze weather using a nested agent",
+  inputSchema: z.object({
+    city: z.string().describe("The city to analyze"),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    const agent = context?.mastra?.getAgent("weatherAgent");
+    if (!agent) {
+      return { summary: "Weather agent not available" };
+    }
+
+    const stream = await agent.stream(
+      `Analyze the weather in ${inputData.city} and provide a summary.`
+    );
+
+    // Pipe the agent's stream to emit data-tool-agent parts
+    await stream.fullStream.pipeTo(context!.writer!);
+
+    return { summary: (await stream.text) ?? "No summary available" };
+  },
+});
+```
+
+Create an agent that uses this tool.
+
+```typescript title="src/mastra/agents/forecast-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { nestedAgentTool } from "../tools/nested-agent-tool";
+
+export const forecastAgent = new Agent({
+  id: "forecast-agent",
+  instructions: "Use the nested-agent-stream tool when asked about weather.",
+  model: "openai/gpt-4o-mini",
+  tools: { nestedAgentTool },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Handle `data-tool-agent` parts to display the nested agent's streamed output.
+
+```typescript title="src/components/nested-agent-chat.tsx"
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import type { AgentDataPart } from "@mastra/ai-sdk";
+
+export function NestedAgentChat() {
+  const [input, setInput] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/forecastAgent",
+    }),
+  });
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        sendMessage({ text: input });
+        setInput("");
+      }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Enter a city" />
+        <button type="submit" disabled={status !== "ready"}>Get Forecast</button>
+      </form>
+
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "text") {
+              return <p key={index}>{part.text}</p>;
+            }
+            if (part.type === "data-tool-agent") {
+              const { id, data } = part as AgentDataPart;
+              return (
+                <div key={index} className="nested-agent">
+                  <strong>Nested Agent: {id}</strong>
+                  {data.text && <p>{data.text}</p>}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+Key points:
+- Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
+- The `AgentDataPart` has `id` (on the part) and `data.text` (the agent's streamed text)
+- The tool still returns its own output after the stream completes
+
+For a complete implementation, see the [tool-nested-streams example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/tool-nested-streams.tsx) in UI Dojo.
+
+### Streaming agent text from workflow steps
+
+Workflow steps can stream an agent's text output in real-time by piping the agent's stream to the step's `writer`. This lets users see the agent "thinking" while the workflow executes, rather than waiting for the step to complete.
+
+The pattern uses:
+- `writer` in workflow step - Pipe the agent's `fullStream` to the step's writer
+- `text` and `data-workflow` parts - The frontend receives streaming text alongside step progress
+
+<Tabs>
+
+<TabItem value="backend" label="Backend">
+
+Create a workflow step that streams an agent's response by piping to the step's `writer`.
+
+```typescript title="src/mastra/workflows/weather-workflow.ts"
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { weatherAgent } from "../agents/weather-agent";
+
+const analyzeWeather = createStep({
+  id: "analyze-weather",
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ analysis: z.string(), location: z.string() }),
+  execute: async ({ inputData, writer }) => {
+    const response = await weatherAgent.stream(
+      `Analyze the weather in ${inputData.location} and provide insights.`
+    );
+
+    // Pipe agent stream to step writer for real-time text streaming
+    await response.fullStream.pipeTo(writer);
+
+    return {
+      analysis: await response.text,
+      location: inputData.location,
+    };
+  },
+});
+
+const calculateScore = createStep({
+  id: "calculate-score",
+  inputSchema: z.object({ analysis: z.string(), location: z.string() }),
+  outputSchema: z.object({ score: z.number(), summary: z.string() }),
+  execute: async ({ inputData }) => {
+    const score = inputData.analysis.includes("sunny") ? 85 : 50;
+    return { score, summary: `Comfort score for ${inputData.location}: ${score}/100` };
+  },
+});
+
+export const weatherWorkflow = createWorkflow({
+  id: "weather-workflow",
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ score: z.number(), summary: z.string() }),
+})
+  .then(analyzeWeather)
+  .then(calculateScore);
+
+weatherWorkflow.commit();
+```
+
+Register the workflow with a `workflowRoute()`. Text streaming is enabled by default.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  workflows: { weatherWorkflow },
+  server: {
+    apiRoutes: [
+      workflowRoute({ path: "/workflow/weather", workflow: "weatherWorkflow" }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="Frontend">
+
+Render both `text` parts (streaming agent output) and `data-workflow` parts (step progress).
+
+```typescript title="src/components/weather-workflow.tsx"
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+
+export function WeatherWorkflow() {
+  const [location, setLocation] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/weather",
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          inputData: {
+            location: messages[messages.length - 1].parts.find((p) => p.type === "text")?.text,
+          },
+        },
+      }),
+    }),
+  });
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        sendMessage({ text: location });
+        setLocation("");
+      }}>
+        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Enter city" />
+        <button type="submit" disabled={status !== "ready"}>Analyze</button>
+      </form>
+
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            // Streaming agent text
+            if (part.type === "text" && message.role === "assistant") {
+              return (
+                <div key={index}>
+                  {status === "streaming" && <p><em>Agent analyzing...</em></p>}
+                  <p>{part.text}</p>
+                </div>
+              );
+            }
+            // Workflow step progress
+            if (part.type === "data-workflow") {
+              const workflow = part.data as WorkflowData;
+              return (
+                <div key={index}>
+                  {Object.entries(workflow.steps).map(([stepId, step]) => (
+                    <div key={stepId}>
+                      <strong>{stepId}</strong>: {step.status}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+Key points:
+- The step's `writer` is available in the `execute` function (not via `context`)
+- `includeTextStreamParts` defaults to `true` on `workflowRoute()`, so text streams by default
+- Text parts stream in real-time while `data-workflow` parts update with step status
+
+For a complete implementation, see the [workflow-agent-text-stream example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-agent-text-stream.tsx) in UI Dojo.
+
+### Multi-stage progress with branching workflows
+
+For workflows with conditional branching (e.g., express vs standard shipping), you can track progress across different branches by including a identifier in your custom events.
+
+The UI Dojo example uses a `stage` field in the event data to identify which branch is executing (e.g., `"validation"`, `"standard-processing"`, `"express-processing"`). The frontend groups events by this field to show a pipeline-style progress UI.
+
+See the [branching-workflow.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/workflows/branching-workflow.ts) (backend) and [workflow-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-custom-events.tsx) (frontend) in UI Dojo.
+
+### Progress indicators in agent networks
+
+When using agent networks, you can emit custom progress events from tools used by sub-agents to show which agent is currently active.
+
+The UI Dojo example includes a `stage` field in the event data to identify which sub-agent is running (e.g., `"report-generation"`, `"report-review"`). The frontend groups events by this field and displays the latest status for each.
+
+See the [report-generation-tool.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/tools/report-generation-tool.ts) (backend) and [agent-network-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/agent-network-custom-events.tsx) (frontend) in UI Dojo.

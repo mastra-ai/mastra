@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.getLLM() | Agents"
 description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getLLM()
@@ -9,7 +11,7 @@ The `.getLLM()` method retrieves the language model instance configured for an a
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.getLLM();
 ```
 
@@ -43,7 +45,7 @@ await agent.getLLM();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 await agent.getLLM({
   requestContext: new RequestContext(),
   model: "openai/gpt-5.1",
@@ -75,4 +77,4 @@ await agent.getLLM({
 ## Related
 
 - [Agents overview](/docs/v1/agents/overview)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)

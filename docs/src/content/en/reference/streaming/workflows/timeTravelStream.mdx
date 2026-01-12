@@ -1,0 +1,172 @@
+---
+title: "Reference: Run.timeTravelStream() | Streaming"
+description: Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
+packages:
+  - "@mastra/core"
+---
+
+# Run.timeTravelStream()
+
+The `.timeTravelStream()` method re-executes a workflow starting from any specific step with streaming events. This allows you to receive real-time updates during time travel execution while maintaining full visibility into each step's progress.
+
+## Usage example
+
+```typescript
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// Process events as they arrive
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// Get the final result
+const result = await output.result;
+```
+
+## Parameters
+
+All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/timeTravel#parameters). See the [timeTravel reference](../../workflows/run-methods/timeTravel#parameters) for detailed parameter documentation.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "An object containing both the stream and result promise",
+    },
+    {
+      name: "output.fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
+      description:
+        "A readable stream that emits workflow events as execution progresses",
+    },
+    {
+      name: "output.result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "A promise that resolves to the final workflow execution result",
+    },
+    {
+      name: "output.traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "The trace ID associated with this execution when Tracing is enabled",
+    },
+  ]}
+/>
+
+## Stream events
+
+The stream emits various workflow events during execution:
+
+- `workflow-step-start`: Emitted when a step begins execution
+- `workflow-step-finish`: Emitted when a step completes successfully
+- `workflow-step-error`: Emitted when a step encounters an error
+- `workflow-step-suspended`: Emitted when a step suspends
+- Additional events depending on step types (agents, tools, etc.)
+
+## Extended usage examples
+
+### Processing events during time travel
+
+```typescript
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+for await (const event of output.fullStream) {
+  switch (event.type) {
+    case "workflow-step-start":
+      console.log(`Starting step: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-finish":
+      console.log(`Completed step: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-error":
+      console.error(`Error in step: ${event.payload.stepName}`, event.payload.error);
+      break;
+  }
+}
+
+const result = await output.result;
+console.log("Time travel completed:", result);
+```
+
+### Time travel stream with context
+
+```typescript
+const output = run.timeTravelStream({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  // Handle events
+  console.log(event);
+}
+
+const result = await output.result;
+```
+
+### Time travel stream with nested workflows
+
+```typescript
+const output = run.timeTravelStream({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+const result = await output.result;
+```
+
+## Notes
+
+- The stream closes automatically when time travel execution completes or encounters an error
+- You can process events from the stream while the workflow is still executing
+- The `result` promise resolves only after all steps have completed
+- Stream events follow the same format as regular workflow streaming
+- Time travel streaming requires storage to be configured since it relies on persisted workflow snapshots
+
+## Related
+
+- [Run.timeTravel()](../../workflows/run-methods/timeTravel)
+- [Time Travel](/docs/v1/workflows/time-travel)
+- [Workflow Streaming](/docs/v1/streaming/workflow-streaming)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)
+

@@ -1,6 +1,10 @@
 ---
 title: "Arize Exporter | Tracing | Observability"
 description: "Send traces to Arize Phoenix or Arize AX using OpenTelemetry and OpenInference"
+packages:
+  - "@mastra/arize"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Arize Exporter
@@ -27,12 +31,38 @@ Phoenix is an open-source observability platform that can be self-hosted or used
 4. **Environment Variables**: Set your configuration
 
 ```bash title=".env"
+# Required
 PHOENIX_ENDPOINT=http://localhost:6006/v1/traces  # Or your Phoenix Cloud URL
-PHOENIX_API_KEY=your-api-key  # Optional for local instances
-PHOENIX_PROJECT_NAME=mastra-service  # Optional, defaults to 'mastra-service'
+
+# Optional
+PHOENIX_API_KEY=your-api-key  # For authenticated Phoenix instances
+PHOENIX_PROJECT_NAME=mastra-service  # Defaults to 'mastra-service'
 ```
 
-#### Basic Setup
+#### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: "mastra-service",
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
+```
+
+#### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -85,12 +115,38 @@ Arize AX is an enterprise observability platform with advanced features for prod
 4. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
+# Required
 ARIZE_SPACE_ID=your-space-id
 ARIZE_API_KEY=your-api-key
-ARIZE_PROJECT_NAME=mastra-service  # Optional
+
+# Optional
+ARIZE_PROJECT_NAME=mastra-service
 ```
 
-#### Basic Setup
+#### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: "mastra-service",
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
+```
+
+#### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";

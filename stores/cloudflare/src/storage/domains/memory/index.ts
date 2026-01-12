@@ -10,7 +10,9 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
+  createStorageErrorId,
   ensureDate,
+  filterByDateRange,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -19,13 +21,25 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { StoreOperationsCloudflare } from '../operations';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
 export class MemoryStorageCloudflare extends MemoryStorage {
-  operations: StoreOperationsCloudflare;
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+  #db: CloudflareKVDB;
+
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV is schemaless, no table creation needed
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {
@@ -46,7 +60,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const thread = await this.operations.load<StorageThreadType>({ tableName: TABLE_THREADS, keys: { id: threadId } });
+    const thread = await this.#db.load<StorageThreadType>({ tableName: TABLE_THREADS, keys: { id: threadId } });
     if (!thread) return null;
 
     try {
@@ -59,7 +73,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -84,7 +98,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -98,13 +112,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy);
 
       // List all keys in the threads table
-      const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
-      const keyObjs = await this.operations.listKV(TABLE_THREADS, { prefix: `${prefix}${TABLE_THREADS}` });
+      const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
+      const keyObjs = await this.#db.listKV(TABLE_THREADS, { prefix: `${prefix}${TABLE_THREADS}` });
 
       const threads: StorageThreadType[] = [];
 
       for (const { name: key } of keyObjs) {
-        const data = await this.operations.getKV(TABLE_THREADS, key);
+        const data = await this.#db.getKV(TABLE_THREADS, key);
         if (!data) continue;
 
         // Filter by resourceId
@@ -134,7 +148,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get threads by resource ID with pagination',
@@ -146,12 +160,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.operations.insert({ tableName: TABLE_THREADS, record: thread });
+      await this.#db.insert({ tableName: TABLE_THREADS, record: thread });
       return thread;
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -188,12 +202,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       };
 
       // Insert with proper metadata handling
-      await this.operations.insert({ tableName: TABLE_THREADS, record: updatedThread });
+      await this.#db.insert({ tableName: TABLE_THREADS, record: updatedThread });
       return updatedThread;
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -208,7 +222,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
   private getMessageKey(threadId: string, messageId: string): string {
     try {
-      return this.operations.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+      return this.#db.getKey(TABLE_MESSAGES, { threadId, id: messageId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger?.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
@@ -218,7 +232,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
   private getThreadMessagesKey(threadId: string): string {
     try {
-      return this.operations.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
+      return this.#db.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger?.error(`Error getting thread messages key for thread ${threadId}:`, { message });
@@ -235,22 +249,22 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Get all message keys for this thread first
-      const messageKeys = await this.operations.listKV(TABLE_MESSAGES);
+      const messageKeys = await this.#db.listKV(TABLE_MESSAGES);
       const threadMessageKeys = messageKeys.filter(key => key.name.includes(`${TABLE_MESSAGES}:${threadId}:`));
 
       // Delete all messages and their order atomically
       await Promise.all([
         // Delete message order
-        this.operations.deleteKV(TABLE_MESSAGES, this.getThreadMessagesKey(threadId)),
+        this.#db.deleteKV(TABLE_MESSAGES, this.getThreadMessagesKey(threadId)),
         // Delete all messages
-        ...threadMessageKeys.map(key => this.operations.deleteKV(TABLE_MESSAGES, key.name)),
+        ...threadMessageKeys.map(key => this.#db.deleteKV(TABLE_MESSAGES, key.name)),
         // Delete thread
-        this.operations.deleteKV(TABLE_THREADS, this.operations.getKey(TABLE_THREADS, { id: threadId })),
+        this.#db.deleteKV(TABLE_THREADS, this.#db.getKey(TABLE_THREADS, { id: threadId })),
       ]);
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -276,15 +290,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   private async findMessageInAnyThread(messageId: string): Promise<MastraMessageV1 | null> {
     try {
       // List all threads to search for the message
-      const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
-      const threadKeys = await this.operations.listKV(TABLE_THREADS, { prefix: `${prefix}${TABLE_THREADS}` });
+      const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
+      const threadKeys = await this.#db.listKV(TABLE_THREADS, { prefix: `${prefix}${TABLE_THREADS}` });
 
       for (const { name: threadKey } of threadKeys) {
         const threadId = threadKey.split(':').pop();
         if (!threadId || threadId === 'messages') continue;
 
         const messageKey = this.getMessageKey(threadId, messageId);
-        const message = await this.operations.getKV(TABLE_MESSAGES, messageKey);
+        const message = await this.#db.getKV(TABLE_MESSAGES, messageKey);
         if (message) {
           // Ensure the message has the correct threadId
           return { ...message, threadId };
@@ -347,7 +361,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const updatedOrder = Array.from(orderMap.values()).sort((a, b) => a.score - b.score);
 
         // Use putKV for consistent serialization across both APIs
-        await this.operations.putKV({
+        await this.#db.putKV({
           tableName: TABLE_MESSAGES,
           key: orderKey,
           value: JSON.stringify(updatedOrder),
@@ -372,7 +386,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   private async getSortedMessages(orderKey: string): Promise<Array<{ id: string; score: number }>> {
-    const raw = await this.operations.getKV(TABLE_MESSAGES, orderKey);
+    const raw = await this.#db.getKV(TABLE_MESSAGES, orderKey);
     if (!raw) return [];
     try {
       const arr = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
@@ -387,7 +401,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     try {
       // Get the message from the old thread
       const oldMessageKey = this.getMessageKey(fromThreadId, messageId);
-      const message = await this.operations.getKV(TABLE_MESSAGES, oldMessageKey);
+      const message = await this.#db.getKV(TABLE_MESSAGES, oldMessageKey);
       if (!message) return;
 
       // Update the message's threadId
@@ -398,7 +412,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Save to new thread
       const newMessageKey = this.getMessageKey(toThreadId, messageId);
-      await this.operations.putKV({ tableName: TABLE_MESSAGES, key: newMessageKey, value: updatedMessage });
+      await this.#db.putKV({ tableName: TABLE_MESSAGES, key: newMessageKey, value: updatedMessage });
 
       // Remove from old thread's sorted list
       const oldOrderKey = this.getThreadMessagesKey(fromThreadId);
@@ -414,7 +428,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       await this.updateSortedMessages(newOrderKey, newEntries);
 
       // Delete from old thread
-      await this.operations.deleteKV(TABLE_MESSAGES, oldMessageKey);
+      await this.#db.deleteKV(TABLE_MESSAGES, oldMessageKey);
     } catch (error) {
       this.logger?.error(`Error migrating message ${messageId} from ${fromThreadId} to ${toThreadId}:`, error);
       throw error;
@@ -503,7 +517,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
                 this.logger?.debug(`Saving message ${message.id}`, {
                   contentSummary: this.summarizeMessageContent(serializedMessage.content),
                 });
-                await this.operations.putKV({ tableName: TABLE_MESSAGES, key, value: serializedMessage });
+                await this.#db.putKV({ tableName: TABLE_MESSAGES, key, value: serializedMessage });
               }),
             );
 
@@ -517,15 +531,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               ...thread,
               updatedAt: new Date(),
             };
-            await this.operations.putKV({
+            await this.#db.putKV({
               tableName: TABLE_THREADS,
-              key: this.operations.getKey(TABLE_THREADS, { id: threadId }),
+              key: this.#db.getKey(TABLE_THREADS, { id: threadId }),
               value: updatedThread,
             });
           } catch (error) {
             throw new MastraError(
               {
-                id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+                id: createStorageErrorId('CLOUDFLARE', 'SAVE_MESSAGES', 'FAILED'),
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.THIRD_PARTY,
                 details: {
@@ -548,7 +562,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -692,7 +706,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           if (!threadId) return null;
 
           const key = this.getMessageKey(threadId, id);
-          const data = await this.operations.getKV(TABLE_MESSAGES, key);
+          const data = await this.#db.getKV(TABLE_MESSAGES, key);
           if (!data) return null;
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
           this.logger?.debug(`Retrieved message ${id} from thread ${threadId}`, {
@@ -737,7 +751,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error retrieving messages by ID`,
@@ -765,7 +779,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !isValidThreadId(id))) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
@@ -782,7 +796,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_CLOUDFLARE_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -820,15 +834,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Filter thread messages by dateRange if specified
-      const dateRange = filter?.dateRange;
-      if (dateRange) {
-        filteredThreadMessages = filteredThreadMessages.filter(msg => {
-          const messageDate = new Date(msg.createdAt);
-          if (dateRange.start && messageDate < new Date(dateRange.start)) return false;
-          if (dateRange.end && messageDate > new Date(dateRange.end)) return false;
-          return true;
-        });
-      }
+      filteredThreadMessages = filterByDateRange(
+        filteredThreadMessages,
+        msg => new Date(msg.createdAt),
+        filter?.dateRange,
+      );
 
       // Get total count for pagination
       const total = filteredThreadMessages.length;
@@ -984,7 +994,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
@@ -1028,14 +1038,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
         // Get the existing message by searching through all threads
         // This is a simplified approach - in a real implementation you'd want to store threadId with the message
-        const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
-        const keyObjs = await this.operations.listKV(TABLE_MESSAGES, { prefix: `${prefix}${TABLE_MESSAGES}` });
+        const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
+        const keyObjs = await this.#db.listKV(TABLE_MESSAGES, { prefix: `${prefix}${TABLE_MESSAGES}` });
 
         let existingMessage: MastraDBMessage | null = null;
         let messageKey = '';
 
         for (const { name: key } of keyObjs) {
-          const data = await this.operations.getKV(TABLE_MESSAGES, key);
+          const data = await this.#db.getKV(TABLE_MESSAGES, key);
           if (data && data.id === id) {
             existingMessage = data as MastraDBMessage;
             messageKey = key;
@@ -1081,14 +1091,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           messageUpdate.threadId !== existingMessage.threadId
         ) {
           // Delete the message from the old thread
-          await this.operations.deleteKV(TABLE_MESSAGES, messageKey);
+          await this.#db.deleteKV(TABLE_MESSAGES, messageKey);
 
           // Update the message's threadId to the new thread
           updatedMessage.threadId = messageUpdate.threadId;
 
           // Save the message to the new thread with a new key
           const newMessageKey = this.getMessageKey(messageUpdate.threadId, id);
-          await this.operations.putKV({
+          await this.#db.putKV({
             tableName: TABLE_MESSAGES,
             key: newMessageKey,
             value: updatedMessage,
@@ -1111,7 +1121,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           await this.updateSortedMessages(destOrderKey, destEntries);
         } else {
           // Save the updated message in place
-          await this.operations.putKV({
+          await this.#db.putKV({
             tableName: TABLE_MESSAGES,
             key: messageKey,
             value: updatedMessage,
@@ -1148,9 +1158,9 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               ...thread,
               updatedAt: new Date(),
             };
-            await this.operations.putKV({
+            await this.#db.putKV({
               tableName: TABLE_THREADS,
-              key: this.operations.getKey(TABLE_THREADS, { id: threadId }),
+              key: this.#db.getKey(TABLE_THREADS, { id: threadId }),
               value: updatedThread,
             });
           }
@@ -1163,7 +1173,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to update messages',
@@ -1175,7 +1185,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const data = await this.operations.getKV(TABLE_RESOURCES, resourceId);
+      const data = await this.#db.getKV(TABLE_RESOURCES, resourceId);
       if (!data) return null;
 
       const resource = typeof data === 'string' ? JSON.parse(data) : data;
@@ -1188,7 +1198,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1210,7 +1220,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         metadata: resource.metadata ? JSON.stringify(resource.metadata) : null,
       };
 
-      await this.operations.putKV({
+      await this.#db.putKV({
         tableName: TABLE_RESOURCES,
         key: resource.id,
         value: resourceToSave,
@@ -1220,7 +1230,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1267,5 +1277,66 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     };
 
     return this.saveResource({ resource: updatedResource });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    try {
+      // Get unique thread IDs from messages before deleting
+      const threadIds = new Set<string>();
+
+      // Find messages and their threads
+      for (const messageId of messageIds) {
+        const message = await this.findMessageInAnyThread(messageId);
+        if (message?.threadId) {
+          threadIds.add(message.threadId);
+
+          // Delete the message from KV
+          const messageKey = this.getMessageKey(message.threadId, messageId);
+          await this.#db.deleteKV(TABLE_MESSAGES, messageKey);
+
+          // Remove from the thread's sorted messages order
+          const orderKey = this.getThreadMessagesKey(message.threadId);
+          const entries = await this.getSortedMessages(orderKey);
+          const filteredEntries = entries.filter(entry => entry.id !== messageId);
+          if (filteredEntries.length > 0) {
+            await this.#db.putKV({
+              tableName: TABLE_MESSAGES,
+              key: orderKey,
+              value: JSON.stringify(filteredEntries),
+            });
+          } else {
+            await this.#db.deleteKV(TABLE_MESSAGES, orderKey);
+          }
+        }
+      }
+
+      // Update thread timestamps for affected threads
+      for (const threadId of threadIds) {
+        const thread = await this.getThreadById({ threadId });
+        if (thread) {
+          const updatedThread = {
+            ...thread,
+            updatedAt: new Date(),
+          };
+          await this.#db.putKV({
+            tableName: TABLE_THREADS,
+            key: this.#db.getKey(TABLE_THREADS, { id: threadId }),
+            value: updatedThread,
+          });
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
+        },
+        error,
+      );
+    }
   }
 }

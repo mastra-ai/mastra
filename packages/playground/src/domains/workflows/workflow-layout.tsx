@@ -9,10 +9,11 @@ import {
   useWorkflow,
   WorkflowRunList,
   WorkflowInformation,
-  useWorkflowRunExecutionResult,
+  useWorkflowRun,
   Skeleton,
   Txt,
   TracingSettingsProvider,
+  WorkflowLayout as WorkflowLayoutUI,
 } from '@mastra/playground-ui';
 
 import { WorkflowHeader } from './workflow-header';
@@ -21,7 +22,7 @@ import { WorkflowRunState } from '@mastra/core/workflows';
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId ?? '', runId ?? '');
+  const { data: runExecutionResult } = useWorkflowRun(workflowId ?? '', runId ?? '');
 
   if (!workflowId) {
     return (
@@ -74,13 +75,13 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
         <MainContentLayout>
           <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
-          <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
-            <WorkflowRunList workflowId={workflowId} runId={runId} />
-
+          <WorkflowLayoutUI
+            workflowId={workflowId!}
+            leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
+            rightSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+          >
             {children}
-
-            <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
-          </MainContentContent>
+          </WorkflowLayoutUI>
         </MainContentLayout>
       </WorkflowRunProvider>
     </TracingSettingsProvider>

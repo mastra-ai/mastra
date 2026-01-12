@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langfuse",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.11",
   "description": "Langfuse observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -38,13 +38,12 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

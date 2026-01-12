@@ -1,37 +1,85 @@
 ---
-title: "Reference: LibSQL Storage | Storage"
-description: Documentation for the LibSQL storage implementation in Mastra.
+title: "Reference: libSQL Storage | Storage"
+description: Documentation for the libSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
-# LibSQL Storage
+# libSQL Storage
 
-The LibSQL storage implementation provides a SQLite-compatible storage solution that can run both in-memory and as a persistent database.
+[libSQL](https://docs.turso.tech/libsql) is an open-source, SQLite-compatible database that supports both local and remote deployments. It can be used to store message history, workflow snapshots, traces, and eval scores.
+
+For vectors like semantic recall or traditional RAG, use [libSQL Vector](/reference/v1/vectors/libsql) which covers embeddings and vector search.
 
 ## Installation
 
-```bash copy
+Storage providers must be installed as separate packages:
+
+```bash
 npm install @mastra/libsql@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
 
-// File database (development)
-const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: "file:./storage.db",
-});
-
-// Persistent database (production)
-const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: process.env.DATABASE_URL,
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: "file:./storage.db",
+  }),
 });
 ```
 
-## Parameters
+Agent-level file storage:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const agent = new Agent({
+  id: "example-agent",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-storage',
+      url: "file:./agent.db",
+    }),
+  }),
+});
+```
+
+:::warning
+File storage doesn't work with serverless platforms that have ephemeral file systems. For serverless deployments, use [Turso](https://turso.tech) or a different database engine.
+:::
+
+Production with remote database:
+
+```typescript 
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: "libsql://your-db-name.aws-ap-northeast-1.turso.io",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+```
+
+For local development and testing, you can store data in memory:
+
+```typescript 
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: ":memory:",
+})
+```
+:::warning
+In-memory storage resets when the process changes. Only suitable for development.
+:::
+
+## Options
 
 <PropertiesTable
   content={[
@@ -39,75 +87,49 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
+        "Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.",
       isOptional: false,
     },
     {
       name: "authToken",
       type: "string",
-      description: "Authentication token for remote LibSQL databases.",
+      description: "Authentication token for remote libSQL databases.",
       isOptional: true,
     },
   ]}
 />
 
-## Additional Notes
+## Initialization
 
-### In-Memory vs Persistent Storage
+When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/v1/storage/overview#core-schema):
 
-The file configuration (`file:storage.db`) is useful for:
-
-- Development and testing
-- Temporary storage
-- Quick prototyping
-
-For production use cases, use a persistent database URL: `libsql://your-database.turso.io`
-
-### Schema Management
-
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
-
-- `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata
-- `mastra_threads`: Stores conversation threads
-- `mastra_messages`: Stores individual messages
-- `mastra_traces`: Stores telemetry and tracing data
-- `mastra_scorers`: Stores scoring and evaluation data
-- `mastra_resources`: Stores resource working memory data
-
-### Initialization
-
-When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
-
-```typescript copy
+```typescript 
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
 const mastra = new Mastra({
-  storage, // init() is called automatically
+  storage, // init() called automatically
 });
 ```
 
-If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+If using storage directly without Mastra, call `init()` explicitly:
 
-```typescript copy
+```typescript
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
-// Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
-
-:::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
-:::

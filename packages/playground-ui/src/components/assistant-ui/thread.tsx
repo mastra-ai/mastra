@@ -8,8 +8,7 @@ import {
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
@@ -41,7 +40,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
         <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
+        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -74,25 +73,10 @@ export interface ThreadWelcomeProps {
 }
 
 const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
-  const safeAgentName = agentName ?? '';
-  const words = safeAgentName.split(' ') ?? [];
-
-  let initials = 'A';
-
-  if (words.length === 2) {
-    initials = `${words[0][0]}${words[1][0]}`;
-  } else if (safeAgentName.length > 0) {
-    initials = `${safeAgentName[0]}`;
-  } else {
-    initials = 'A';
-  }
-
   return (
     <ThreadPrimitive.Empty>
       <div className="flex w-full flex-grow flex-col items-center justify-center">
-        <Avatar>
-          <AvatarFallback>{initials}</AvatarFallback>
-        </Avatar>
+        <Avatar name={agentName || 'Agent'} size="lg" />
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>
     </ThreadPrimitive.Empty>
@@ -106,23 +90,30 @@ interface ComposerProps {
 
 const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
-        <div className="max-w-[568px] w-full mx-auto pb-2">
+        <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
+        <div
+          className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
+          onClick={() => {
+            textareaRef.current?.focus();
+          }}
+        >
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
+              ref={textareaRef}
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
-            ></textarea>
+            />
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
             <SpeechInput agentId={agentId} />
@@ -148,7 +139,6 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
     <TooltipIconButton
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      variant="ghost"
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
@@ -165,7 +155,6 @@ const ComposerAction = () => {
       <TooltipIconButton
         type="button"
         tooltip="Add attachment"
-        variant="ghost"
         className="rounded-full"
         onClick={() => setIsAddAttachmentDialogOpen(true)}
       >
@@ -203,10 +192,14 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <Button variant="ghost">Cancel</Button>
+          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">
+            Cancel
+          </button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <Button>Send</Button>
+          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">
+            Send
+          </button>
         </ComposerPrimitive.Send>
       </div>
     </ComposerPrimitive.Root>

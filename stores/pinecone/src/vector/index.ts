@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -14,6 +15,7 @@ import type {
 import { Pinecone } from '@pinecone-database/pinecone';
 import type {
   IndexStatsDescription,
+  PineconeConfiguration,
   QueryOptions,
   RecordSparseValues,
   ServerlessSpecCloudEnum,
@@ -22,6 +24,46 @@ import type {
 
 import { PineconeFilterTranslator } from './filter';
 import type { PineconeVectorFilter } from './filter';
+
+/**
+ * Configuration for PineconeVector.
+ *
+ * Extends the Pinecone client configuration with Mastra-specific fields.
+ * All Pinecone configuration options are supported (apiKey, controllerHostUrl,
+ * fetchApi, additionalHeaders, sourceTag).
+ *
+ * @example
+ * ```typescript
+ * // Simple API key config
+ * const vector = new PineconeVector({
+ *   id: 'my-pinecone',
+ *   apiKey: 'your-api-key',
+ * });
+ *
+ * // With custom controller host
+ * const vector = new PineconeVector({
+ *   id: 'my-pinecone',
+ *   apiKey: 'your-api-key',
+ *   controllerHostUrl: 'https://api.pinecone.io',
+ * });
+ *
+ * // With index creation defaults
+ * const vector = new PineconeVector({
+ *   id: 'my-pinecone',
+ *   apiKey: 'your-api-key',
+ *   cloud: 'gcp',
+ *   region: 'us-central1',
+ * });
+ * ```
+ */
+export type PineconeVectorConfig = PineconeConfiguration & {
+  /** The unique identifier for this vector store instance. */
+  id: string;
+  /** The cloud provider for new index creation. Defaults to 'aws'. */
+  cloud?: ServerlessSpecCloudEnum;
+  /** The region for new index creation. Defaults to 'us-east-1'. */
+  region?: string;
+};
 
 interface PineconeIndexStats extends IndexStats {
   namespaces?: IndexStatsDescription['namespaces'];
@@ -69,31 +111,13 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
   /**
    * Creates a new PineconeVector client.
-   * @param id - The unique identifier for this vector store instance.
-   * @param apiKey - The API key for Pinecone.
-   * @param environment - The environment for Pinecone.
-   * @param cloud - The cloud provider for Pinecone.
-   * @param region - The region for Pinecone.
+   *
+   * @param config - Configuration options for the Pinecone client.
+   * @see {@link PineconeVectorConfig} for all available options.
    */
-  constructor({
-    id,
-    apiKey,
-    environment,
-    cloud,
-    region,
-  }: {
-    id: string;
-    apiKey: string;
-    environment?: string;
-    region?: string;
-    cloud?: ServerlessSpecCloudEnum;
-  }) {
+  constructor({ id, cloud, region, ...pineconeConfig }: PineconeVectorConfig) {
     super({ id });
-    const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
-    if (environment) {
-      opts['controllerHostUrl'] = environment;
-    }
-    this.client = new Pinecone(opts);
+    this.client = new Pinecone(pineconeConfig);
     this.cloud = cloud || 'aws';
     this.region = region || 'us-east-1';
   }
@@ -113,7 +137,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (validationError) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('PINECONE', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, dimension, metric },
@@ -149,7 +173,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
       // For any other errors, wrap in MastraError
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('PINECONE', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -191,7 +215,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('PINECONE', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors.length },
@@ -244,7 +268,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('PINECONE', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, topK },
@@ -261,7 +285,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('PINECONE', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -291,7 +315,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('PINECONE', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -307,7 +331,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('PINECONE', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -334,7 +358,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate mutually exclusive parameters
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both id and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -344,7 +368,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!('id' in params && params.id) && !('filter' in params && params.filter)) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_UPDATE_NO_TARGET',
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'NO_TARGET'),
         text: 'Either id or filter must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -354,7 +378,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
@@ -387,7 +411,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         // Validate filter is not empty
         if (Object.keys(params.filter).length === 0) {
           throw new MastraError({
-            id: 'STORAGE_PINECONE_VECTOR_UPDATE_EMPTY_FILTER',
+            id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
             text: 'Filter cannot be an empty filter object',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
@@ -434,7 +458,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -463,7 +487,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('PINECONE', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -492,7 +516,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both ids and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -502,7 +526,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_NO_TARGET',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'NO_TARGET'),
         text: 'Either filter or ids must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -513,7 +537,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate ids array is not empty
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_EMPTY_IDS',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'EMPTY_IDS'),
         text: 'Cannot delete with empty ids array',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -524,7 +548,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate filter is not empty
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_EMPTY_FILTER',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         text: 'Cannot delete with empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -570,7 +594,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

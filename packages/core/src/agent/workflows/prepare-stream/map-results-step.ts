@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
@@ -9,14 +10,12 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
+import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-interface MapResultsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface MapResultsStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
@@ -27,10 +26,7 @@ interface MapResultsStepOptions<
   methodType: AgentMethodType;
 }
 
-export function createMapResultsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   options,
   resourceId,
@@ -41,7 +37,7 @@ export function createMapResultsStep<
   agentSpan,
   agentId,
   methodType,
-}: MapResultsStepOptions<OUTPUT, FORMAT>) {
+}: MapResultsStepOptions<OUTPUT>) {
   return async ({
     inputData,
     bail,
@@ -70,7 +66,7 @@ export function createMapResultsStep<
       requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep) {
+        if (options.savePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -94,7 +90,6 @@ export function createMapResultsStep<
       },
       ...(memoryData.tripwire && {
         tripwire: memoryData.tripwire,
-        tripwireReason: memoryData.tripwireReason,
       }),
     };
 
@@ -102,8 +97,17 @@ export function createMapResultsStep<
     if (result.tripwire) {
       const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
+      if (!isSupportedLanguageModel(agentModel)) {
+        throw new MastraError({
+          id: 'MAP_RESULTS_STEP_UNSUPPORTED_MODEL',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Tripwire handling requires a v2/v3 model',
+        });
+      }
+
       const modelOutput = await getModelOutputForTripwire({
-        tripwireReason: result.tripwireReason!,
+        tripwire: memoryData.tripwire!,
         runId,
         tracingContext,
         options,
@@ -127,11 +131,25 @@ export function createMapResultsStep<
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
     if (options.structuredOutput?.model) {
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+      const structuredProcessor = new StructuredOutputProcessor({
+        ...options.structuredOutput,
+        logger: capabilities.logger,
+      });
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
     }
+
+    // Resolve input processors from options override or agent capability
+    const effectiveInputProcessors =
+      options.inputProcessors ||
+      (capabilities.inputProcessors
+        ? typeof capabilities.inputProcessors === 'function'
+          ? await capabilities.inputProcessors({
+              requestContext: result.requestContext!,
+            })
+          : capabilities.inputProcessors
+        : []);
 
     const messageList = memoryData.messageList!;
 
@@ -173,7 +191,7 @@ export function createMapResultsStep<
               outputText,
               thread: result.thread,
               threadId: result.threadId,
-              readOnlyMemory: options.memory?.readOnly,
+              readOnlyMemory: memoryConfig?.readOnly,
               resourceId,
               memoryConfig,
               requestContext,
@@ -203,16 +221,18 @@ export function createMapResultsStep<
         onChunk: options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
-        activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
+      activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
+      inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      maxProcessorRetries: options.maxProcessorRetries,
     };
 
     return loopOptions;

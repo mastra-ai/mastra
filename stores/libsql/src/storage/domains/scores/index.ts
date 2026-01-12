@@ -1,24 +1,43 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   TABLE_SCORERS,
+  SCORERS_SCHEMA,
   ScoresStorage,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsLibSQL } from '../operations';
+import type { StoragePagination } from '@mastra/core/storage';
+import { LibSQLDB, resolveClient } from '../../db';
+import type { LibSQLDomainConfig } from '../../db';
 
 export class ScoresLibSQL extends ScoresStorage {
-  private operations: StoreOperationsLibSQL;
-  private client: Client;
-  constructor({ client, operations }: { client: Client; operations: StoreOperationsLibSQL }) {
+  #db: LibSQLDB;
+  #client: Client;
+
+  constructor(config: LibSQLDomainConfig) {
     super();
-    this.operations = operations;
-    this.client = client;
+    const client = resolveClient(config);
+    this.#client = client;
+    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: SCORERS_SCHEMA });
+    // Add columns for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: SCORERS_SCHEMA,
+      ifNotExists: ['spanId', 'requestContext'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_SCORERS });
   }
 
   async listScoresByRunId({
@@ -27,12 +46,12 @@ export class ScoresLibSQL extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = ?`,
         args: [runId],
       });
@@ -55,7 +74,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [runId, limitValue, start],
       });
@@ -74,7 +93,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -95,7 +114,7 @@ export class ScoresLibSQL extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
@@ -125,7 +144,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
         args: queryParams,
       });
@@ -148,7 +167,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
@@ -167,7 +186,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -187,29 +206,29 @@ export class ScoresLibSQL extends ScoresStorage {
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    const result = await this.client.execute({
+    const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_SCORERS} WHERE id = ?`,
       args: [id],
     });
     return result.rows?.[0] ? this.transformScoreRow(result.rows[0]) : null;
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.id,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -218,23 +237,23 @@ export class ScoresLibSQL extends ScoresStorage {
 
     try {
       const id = crypto.randomUUID();
+      const now = new Date();
 
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_SCORERS,
         record: {
-          id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
           ...parsedScore,
+          id,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -251,12 +270,12 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ?`,
         args: [entityId, entityType],
       });
@@ -279,7 +298,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [entityId, entityType, limitValue, start],
       });
@@ -298,7 +317,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -315,13 +334,13 @@ export class ScoresLibSQL extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const countSQLResult = await this.client.execute({
+      const countSQLResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
         args: [traceId, spanId],
       });
@@ -331,7 +350,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [traceId, spanId, limitValue, start],
       });
@@ -350,7 +369,7 @@ export class ScoresLibSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

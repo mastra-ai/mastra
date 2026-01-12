@@ -1,11 +1,18 @@
+import { Busboy } from '@fastify/busboy';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import type { ServerRoute } from '@mastra/server/server-adapter';
-import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
+import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
@@ -16,11 +23,9 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      tools: Record<string, Tool>;
+      tools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
-      playground?: boolean;
-      isDev?: boolean;
     }
   }
 }
@@ -74,12 +79,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       if (this.taskStore) {
         res.locals.taskStore = this.taskStore;
       }
-      res.locals.playground = this.playground === true;
-      res.locals.isDev = this.isDev === true;
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
-      req.on('close', () => {
-        controller.abort();
+      // Use res.on('close') instead of req.on('close') because the request's 'close' event
+      // fires when the request body is fully consumed (e.g., after express.json() parses it),
+      // NOT when the client disconnects. The response's 'close' event fires when the underlying
+      // connection is actually closed, which is the correct signal for client disconnection.
+      res.on('close', () => {
+        // Only abort if the response wasn't successfully completed
+        if (!res.writableFinished) {
+          controller.abort();
+        }
       });
       res.locals.abortSignal = controller.signal;
       next();
@@ -117,14 +127,91 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async getParams(
-    route: ServerRoute,
-    request: Request,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+  async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
     const urlParams = request.params;
-    const queryParams = request.query;
-    const body = await request.body;
-    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+    // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
+    const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
+    let body: unknown;
+
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+      const contentType = request.headers['content-type'] || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+          body = await this.parseMultipartFormData(request, maxFileSize);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
+        }
+      } else {
+        body = request.body;
+      }
+    }
+
+    return { urlParams, queryParams, body };
+  }
+
+  /**
+   * Parse multipart/form-data using @fastify/busboy.
+   * Converts file uploads to Buffers and parses JSON field values.
+   *
+   * @param request - The Express request object
+   * @param maxFileSize - Optional maximum file size in bytes
+   */
+  private parseMultipartFormData(request: Request, maxFileSize?: number): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const result: Record<string, unknown> = {};
+
+      const busboy = new Busboy({
+        headers: {
+          'content-type': request.headers['content-type'] as string,
+        },
+        limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
+      });
+
+      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
+        const chunks: Buffer[] = [];
+        let limitExceeded = false;
+
+        file.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        file.on('limit', () => {
+          limitExceeded = true;
+          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+        });
+
+        file.on('end', () => {
+          if (!limitExceeded) {
+            result[fieldname] = Buffer.concat(chunks);
+          }
+        });
+      });
+
+      busboy.on('field', (fieldname: string, value: string) => {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[fieldname] = JSON.parse(value);
+        } catch {
+          result[fieldname] = value;
+        }
+      });
+
+      busboy.on('finish', () => {
+        resolve(result);
+      });
+
+      busboy.on('error', (error: Error) => {
+        reject(error);
+      });
+
+      request.pipe(busboy);
+    });
   }
 
   async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {
@@ -240,13 +327,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         if (params.queryParams) {
           try {
-            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+            params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
             console.error('Error parsing query params', error);
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return res.status(400).json(formatZodError(error, 'query parameters'));
+            }
             return res.status(400).json({
               error: 'Invalid query parameters',
-              details: error instanceof Error ? error.message : 'Unknown error',
+              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
             });
           }
         }
@@ -256,10 +346,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
             console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return res.status(400).json(formatZodError(error, 'request body'));
+            }
             return res.status(400).json({
               error: 'Invalid request body',
-              details: error instanceof Error ? error.message : 'Unknown error',
+              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
             });
           }
         }

@@ -1,6 +1,7 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
-import { parseMemoryRuntimeContext } from '../../memory';
+import { parseMemoryRequestContext } from '../../memory';
+import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -42,7 +43,7 @@ export class MessageHistory implements Processor {
     const { messageList } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
+    const memoryContext = parseMemoryRequestContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
@@ -87,32 +88,60 @@ export class MessageHistory implements Processor {
     return messageList;
   }
 
-  private filterIncompleteToolCalls(messages: MastraDBMessage[]): MastraDBMessage[] {
+  /**
+   * Filters messages before persisting to storage:
+   * 1. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
+   * 2. Removes updateWorkingMemory tool invocations (hide args from message history)
+   * 3. Strips <working_memory> tags from text content
+   *
+   * Note: We preserve 'call' state tool invocations because:
+   * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
+   * - For client-side tools (no execute function), 'call' is the final state from the server's perspective
+   */
+  private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
       .map(m => {
-        if (m.role === `assistant`) {
-          const assistant = {
-            ...m,
-            content: {
-              ...m.content,
-              parts: m.content.parts
-                .map(p => {
-                  if (
-                    p.type === `tool-invocation` &&
-                    (p.toolInvocation.state === `call` || p.toolInvocation.state === `partial-call`)
-                  ) {
-                    return null;
-                  }
-                  return p;
-                })
-                .filter((p): p is NonNullable<typeof p> => Boolean(p)),
-            },
-          };
-
-          if (assistant.content.parts.length === 0) return null;
-          return assistant;
+        const newMessage = { ...m };
+        // Only spread content if it's a proper V2 object
+        if (m.content && typeof m.content === 'object' && !Array.isArray(m.content)) {
+          newMessage.content = { ...m.content };
         }
-        return m;
+
+        // Strip working memory tags from string content
+        if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
+          newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+        }
+
+        if (Array.isArray(newMessage.content?.parts)) {
+          newMessage.content.parts = newMessage.content.parts
+            .map(p => {
+              // Filter out streaming tool calls (partial-call is an intermediate state during streaming)
+              if (p.type === `tool-invocation` && p.toolInvocation.state === `partial-call`) {
+                return null;
+              }
+              // Filter out updateWorkingMemory tool invocations (hide args from message history)
+              if (p.type === `tool-invocation` && p.toolInvocation.toolName === `updateWorkingMemory`) {
+                return null;
+              }
+              // Strip working memory tags from text parts
+              if (p.type === `text`) {
+                const text = typeof p.text === 'string' ? p.text : '';
+                return {
+                  ...p,
+                  text: removeWorkingMemoryTags(text).trim(),
+                };
+              }
+              return p;
+            })
+            .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+          // If all parts were filtered out, skip the whole message
+          if (newMessage.content.parts.length === 0) {
+            return null;
+          }
+        }
+
+        return newMessage;
       })
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
   }
@@ -127,7 +156,7 @@ export class MessageHistory implements Processor {
     const { messageList } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
+    const memoryContext = parseMemoryRequestContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
@@ -143,7 +172,7 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    const filtered = this.filterIncompleteToolCalls(messagesToSave);
+    const filtered = this.filterMessagesForPersistence(messagesToSave);
 
     // Persist messages directly to storage
     await this.storage.saveMessages({ messages: filtered });

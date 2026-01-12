@@ -11,9 +11,11 @@ import { useLocation } from "@docusaurus/router";
 import { cn } from "../lib/utils";
 import { BetaIcon, StableIcon, TriggerIcon, VersionLabel } from "./icons/icon";
 
+import FeatureVersioning from "../../feature-versioning.json";
+
 const versions = [
-  { value: "stable", label: "Stable" },
-  { value: "beta", label: "Beta" },
+  { value: "stable", label: "Stable (v0)" },
+  { value: "beta", label: "Beta (v1)" },
 ];
 
 type Version = "beta" | "stable";
@@ -80,32 +82,44 @@ export default function VersionControl({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         side="bottom"
+        className="z-300"
         style={{ width: "var(--radix-dropdown-menu-trigger-width)" }}
       >
         {versions.map((version) => {
           const isActive = version.value === currentVersion;
           const href = getPathForVersion(pathname, version.value as Version);
+          const exists = !Object.keys(FeatureVersioning).includes(href);
+
           return (
             <DropdownMenuItem
               key={version.value}
               asChild
               className={cn(
                 "flex items-center text-(--mastra-text-secondary) justify-between w-full",
-                isActive && " font-medium",
+                isActive && "font-medium",
               )}
             >
-              <a
-                href={href}
-                className="flex w-full items-center no-underline! justify-between"
-              >
-                <span className="inline-flex dark:text-white text-black items-center gap-2">
-                  {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
-                  <span>{version.label}</span>
-                </span>
-                {isActive && (
-                  <Check className="size-4 text-(--mastra-green-accent-2)" />
-                )}
-              </a>
+              {exists ? (
+                <a
+                  href={href}
+                  className="flex w-full items-center no-underline! justify-between"
+                >
+                  <div className="inline-flex dark:text-white text-black gap-2">
+                    {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                    <span>{version.label}</span>
+                  </div>
+                  {isActive && (
+                    <Check className="size-4 text-(--mastra-green-accent-2)" />
+                  )}
+                </a>
+              ) : (
+                <div>
+                  <div className="inline-flex dark:text-white text-black gap-2">
+                    {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                    <span>Not available in {version.label}</span>
+                  </div>
+                </div>
+              )}
             </DropdownMenuItem>
           );
         })}

@@ -1,6 +1,9 @@
 ---
 title: "Reference: Faithfulness Scorer | Evals"
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Faithfulness Scorer
@@ -126,7 +129,7 @@ A faithfulness score between 0 and 1:
 
 Evaluate agent responses for faithfulness to provided context:
 
-```typescript title="src/example-faithfulness.ts" showLineNumbers copy
+```typescript title="src/example-faithfulness.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";

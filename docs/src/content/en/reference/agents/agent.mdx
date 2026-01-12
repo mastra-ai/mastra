@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent Class | Agents"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent Class
@@ -11,7 +13,7 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 
 ### Basic string instructions
 
-```typescript title="src/mastra/agents/string-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/string-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 // String instructions
@@ -49,7 +51,7 @@ export const agent3 = new Agent({
 
 Use CoreSystemMessage format to access additional properties like `providerOptions` for provider-specific configurations:
 
-```typescript title="src/mastra/agents/core-message-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/core-message-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const agent = new Agent({
@@ -71,7 +73,7 @@ export const agent = new Agent({
 
 ### Multiple CoreSystemMessages
 
-```typescript title="src/mastra/agents/multi-message-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/multi-message-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 // This could be customizable based on the user
@@ -212,17 +214,24 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
       isOptional: true,
       description:
-        "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+        "Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.",
     },
     {
       name: "outputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
       isOptional: true,
       description:
-        "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+        "Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.",
+    },
+    {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times a processor can request retrying the LLM step.",
     },
   ]}
 />

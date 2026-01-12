@@ -5,6 +5,12 @@ description: "Overview of breaking changes when upgrading to Mastra v1."
 
 # Upgrade to Mastra v1
 
+:::info[First update to latest 0.x version]
+Before upgrading to v1, make sure you've updated to the latest 0.x version of Mastra. Follow the [upgrade to latest 0.x guide](https://mastra.ai/guides/migrations/upgrade-to-latest-0x) first, then return here to complete the v1 migration.
+:::
+
+Mastra v1 is coming in January 2026. We recommend starting any new projects with the beta, or upgrading your existing project today to get ahead.
+
 This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
 
 :::tip[Need help?]
@@ -52,6 +58,7 @@ npx @mastra/codemod@beta v1
 - **[Memory](/guides/v1/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
 - **[Storage](/guides/v1/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
 - **[Vectors](/guides/v1/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
+- **[RAG](/guides/v1/migrations/upgrade-to-v1/rag)** - Parameter naming updated for clarity.
 - **[MCP](/guides/v1/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
 - **[Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
 - **[Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
@@ -96,6 +103,7 @@ npx @mastra/codemod@beta v1
 
 ### Low Impact Changes
 
+- Rename `keepSeparator` to `separatorPosition` in chunk options - [RAG](/guides/v1/migrations/upgrade-to-v1/rag)
 - Rename `createRunAsync` to `createRun` - [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
 - Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)
 - Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)

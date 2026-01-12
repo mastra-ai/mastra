@@ -2,11 +2,13 @@ import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import { useMemoryConfig, useMemorySearch } from '@/domains/memory/hooks';
+import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/components/assistant-ui/memory-search';
+import { Button } from '@/ds/components/Button/Button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -19,7 +21,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { paths, navigate } = useLinkComponent();
 
   // Get memory config to check if semantic recall is enabled
-  const { data } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
 
   // Check if semantic recall is enabled
   const config = data?.config;
@@ -31,6 +33,20 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
     resourceId: agentId || '', // In playground, agentId is the resourceId
     threadId,
   });
+
+  // Get clone thread hook
+  const { mutateAsync: cloneThread, isPending: isCloning } = useCloneThread();
+
+  // Handle cloning the current thread
+  const handleCloneThread = useCallback(async () => {
+    if (!threadId || !agentId) return;
+
+    const result = await cloneThread({ threadId, agentId });
+    // Navigate to the cloned thread
+    if (result?.thread?.id) {
+      navigate(paths.agentThreadLink(agentId, result.thread.id));
+    }
+  }, [threadId, agentId, cloneThread, navigate, paths]);
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback(
@@ -56,8 +72,34 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
 
   const searchScope = searchMemoryData?.searchScope;
 
+  if (isConfigLoading) {
+    return (
+      <div className="flex flex-col h-full p-4 gap-4">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
+      {/* Clone Thread Section */}
+      {threadId && (
+        <div className="p-4 border-b border-border1">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-icon5">Clone Thread</h3>
+              <p className="text-xs text-icon3 mt-1">Create a copy of this conversation</p>
+            </div>
+            <Button onClick={handleCloneThread} disabled={isCloning}>
+              <Copy className="w-4 h-4 mr-2" />
+              {isCloning ? 'Cloning...' : 'Clone'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Memory Search Section */}
       <div className="p-4 border-b border-border1">
         <div className="mb-2">

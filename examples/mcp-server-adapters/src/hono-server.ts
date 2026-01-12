@@ -13,9 +13,8 @@ const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 app.get('/', c => c.json({ status: 'ok', server: 'hono', message: 'Hono MCP Server is running' }));
 
 // Create Mastra server adapter
-// Note: Type assertion needed due to Hono version differences between example and @mastra/hono
 const adapter = new MastraServer({
-  app: app as any,
+  app,
   mastra,
 });
 

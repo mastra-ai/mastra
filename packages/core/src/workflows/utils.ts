@@ -1,5 +1,6 @@
 import { isEmpty } from 'radash';
 import type z from 'zod';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
@@ -39,8 +40,16 @@ export async function validateStepInput({
     if (!validatedInput.success) {
       const errors = getZodErrors(validatedInput.error);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-
-      validationError = new Error('Step input validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step input validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedInput.error,
+      );
     } else {
       const isEmptyData = isEmpty(validatedInput.data);
       inputData = isEmptyData ? prevOutput : validatedInput.data;
@@ -64,7 +73,16 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
     if (!validatedResumeData.success) {
       const errors = getZodErrors(validatedResumeData.error);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new Error('Step resume data validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step resume data validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedResumeData.error,
+      );
     } else {
       resumeData = validatedResumeData.data;
     }
@@ -75,9 +93,11 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
 export async function validateStepSuspendData({
   suspendData,
   step,
+  validateInputs,
 }: {
   suspendData?: any;
   step: Step<string, any, any>;
+  validateInputs: boolean;
 }) {
   if (!suspendData) {
     return { suspendData: undefined, validationError: undefined };
@@ -87,17 +107,56 @@ export async function validateStepSuspendData({
 
   const suspendSchema = step.suspendSchema;
 
-  if (suspendSchema) {
+  if (suspendSchema && validateInputs) {
     const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
     if (!validatedSuspendData.success) {
       const errors = getZodErrors(validatedSuspendData.error!);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new Error('Step suspend data validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_SUSPEND_DATA_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step suspend data validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedSuspendData.error,
+      );
     } else {
       suspendData = validatedSuspendData.data;
     }
   }
   return { suspendData, validationError };
+}
+
+export async function validateStepStateData({
+  stateData,
+  step,
+  validateInputs,
+}: {
+  stateData?: any;
+  step: Step<string, any, any>;
+  validateInputs: boolean;
+}) {
+  if (!stateData) {
+    return { stateData: undefined, validationError: undefined };
+  }
+
+  let validationError: Error | undefined;
+
+  const stateSchema = step.stateSchema;
+
+  if (stateSchema && validateInputs) {
+    const validatedStateData = await stateSchema.safeParseAsync(stateData);
+    if (!validatedStateData.success) {
+      const errors = getZodErrors(validatedStateData.error!);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new Error('Step state data validation failed: \n' + errorMessages);
+    } else {
+      stateData = validatedStateData.data;
+    }
+  }
+  return { stateData, validationError };
 }
 
 export function getResumeLabelsByStepId(
@@ -179,8 +238,9 @@ export const createTimeTravelExecutionParams = (params: {
   snapshot: WorkflowRunState;
   initialState?: any;
   graph: ExecutionGraph;
+  perStep?: boolean;
 }) => {
-  const { steps, inputData, resumeData, context, nestedStepsContext, snapshot, initialState, graph } = params;
+  const { steps, inputData, resumeData, context, nestedStepsContext, snapshot, initialState, graph, perStep } = params;
   const firstStepId = steps[0]!;
 
   let executionPath: number[] = [];
@@ -193,16 +253,12 @@ export const createTimeTravelExecutionParams = (params: {
     if (currentExecPathLength > 0 && !resumeData) {
       break;
     }
-    // let stepFound = false;
-    // let stepInParallel = false;
     const stepIds = getStepIds(entry);
     if (stepIds.includes(firstStepId)) {
       const innerExecutionPath = stepIds?.length > 1 ? [stepIds?.findIndex(s => s === firstStepId)] : [];
       //parallel and loop steps will have more than one step id,
       // and if the step is one of those, we need the index for the execution path
       executionPath = [index, ...innerExecutionPath];
-      // stepFound = true;
-      // stepInParallel = stepIds?.length > 1;
     }
 
     const prevStep = graph.steps[index - 1]!;
@@ -275,14 +331,19 @@ export const createTimeTravelExecutionParams = (params: {
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
       };
+      const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (
-        currentExecPathLength > 0 &&
+        execPathLengthToUse > 0 &&
+        !steps?.includes(stepId) &&
+        !context?.[stepId] &&
         (!snapshotContext[stepId] || (snapshotContext[stepId] && snapshotContext[stepId].status !== 'suspended'))
       ) {
         // if the step is after the timeTravelled step in the graph
         // and it doesn't exist in the snapshot,
         // OR it exists in snapshot and is not suspended,
         // we don't need to set stepResult for it
+        // if perStep is true, and the step is a parallel step,
+        // we want to construct result for only the timetraveled step and any step context is passed for
         result = undefined;
       }
       if (result) {
@@ -310,3 +371,22 @@ export const createTimeTravelExecutionParams = (params: {
 
   return timeTravelData;
 };
+
+/**
+ * Re-hydrates serialized errors in step results back into proper Error instances.
+ * This is useful when errors have been serialized through an event system (e.g., evented engine, Inngest)
+ * and need to be converted back to Error instances with their custom properties preserved.
+ *
+ * @param steps - The workflow step results (context) that may contain serialized errors
+ * @returns The same steps object with errors hydrated as Error instances
+ */
+export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
+  if (steps) {
+    for (const step of Object.values(steps)) {
+      if (step.status === 'failed' && 'error' in step && step.error) {
+        step.error = getErrorFromUnknown(step.error, { serializeStack: false });
+      }
+    }
+  }
+  return steps;
+}

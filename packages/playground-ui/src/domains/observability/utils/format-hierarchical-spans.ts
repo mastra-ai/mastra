@@ -31,6 +31,7 @@ export const formatHierarchicalSpans = (spans: SpanRecord[]): UISpan[] => {
       startTime: startDate.toISOString(),
       endTime: endDate ? endDate.toISOString() : undefined,
       spans: [],
+      parentSpanId: spanRecord.parentSpanId,
     };
 
     spanMap.set(spanRecord.spanId, uiSpan);
@@ -40,8 +41,8 @@ export const formatHierarchicalSpans = (spans: SpanRecord[]): UISpan[] => {
   spans.forEach(spanRecord => {
     const uiSpan = spanMap.get(spanRecord.spanId)!;
 
-    if (spanRecord?.parentSpanId === null) {
-      // This is a root span
+    if (spanRecord?.parentSpanId == null) {
+      // This is a root span (parentSpanId is null or undefined)
       if (overallEndDate && uiSpan.endTime && overallEndDate > new Date(uiSpan.endTime)) {
         // A client patch to set the endTime and latency of the root span in api provide inconsistent data, an inner span has endTime later than the root span
         uiSpan.endTime = overallEndDate.toISOString();

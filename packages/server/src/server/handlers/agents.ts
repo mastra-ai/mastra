@@ -1,8 +1,14 @@
-import type { Agent, AgentModelManagerConfig } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { SystemMessage } from '@mastra/core/llm';
-import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -25,6 +31,10 @@ import {
   updateAgentModelInModelListBodySchema,
   modelManagementResponseSchema,
   modelConfigIdPathParams,
+  enhanceInstructionsBodySchema,
+  enhanceInstructionsResponseSchema,
+  approveNetworkToolCallBodySchema,
+  declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -32,6 +42,22 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
+
+/**
+ * Checks if a provider has its required API key environment variable(s) configured.
+ * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
+ * @param providerId - The provider identifier (may include a suffix like ".chat")
+ * @returns true if all required environment variables are set, false otherwise
+ */
+function isProviderConnected(providerId: string): boolean {
+  // Clean provider ID (e.g., "openai.chat" -> "openai")
+  const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
+  const provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+  if (!provider) return false;
+
+  const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+  return envVars.every(envVar => !!process.env[envVar]);
+}
 
 export interface SerializedProcessor {
   id: string;
@@ -91,6 +117,7 @@ export interface SerializedAgentWithId extends SerializedAgent {
 
 export async function getSerializedAgentTools(
   tools: Record<string, SerializedToolInput>,
+  partial: boolean = false,
 ): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
     const toolId = tool.id ?? `tool-${key}`;
@@ -98,39 +125,44 @@ export async function getSerializedAgentTools(
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
 
-    try {
-      if (tool.inputSchema) {
-        if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
-          inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
-        } else if (typeof tool.inputSchema === 'function') {
-          const inputSchema = tool.inputSchema();
-          if (inputSchema && inputSchema.jsonSchema) {
-            inputSchemaForReturn = stringify(inputSchema.jsonSchema);
+    // Only process schemas if not in partial mode
+    if (!partial) {
+      try {
+        if (tool.inputSchema) {
+          if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
+            inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
+          } else if (typeof tool.inputSchema === 'function') {
+            const inputSchema = tool.inputSchema();
+            if (inputSchema && inputSchema.jsonSchema) {
+              inputSchemaForReturn = stringify(inputSchema.jsonSchema);
+            }
+          } else if (tool.inputSchema) {
+            inputSchemaForReturn = stringify(
+              zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
           }
-        } else if (tool.inputSchema) {
-          inputSchemaForReturn = stringify(zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]));
         }
-      }
 
-      if (tool.outputSchema) {
-        if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
-          outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
-        } else if (typeof tool.outputSchema === 'function') {
-          const outputSchema = tool.outputSchema();
-          if (outputSchema && outputSchema.jsonSchema) {
-            outputSchemaForReturn = stringify(outputSchema.jsonSchema);
+        if (tool.outputSchema) {
+          if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
+            outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
+          } else if (typeof tool.outputSchema === 'function') {
+            const outputSchema = tool.outputSchema();
+            if (outputSchema && outputSchema.jsonSchema) {
+              outputSchemaForReturn = stringify(outputSchema.jsonSchema);
+            }
+          } else if (tool.outputSchema) {
+            outputSchemaForReturn = stringify(
+              zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
           }
-        } else if (tool.outputSchema) {
-          outputSchemaForReturn = stringify(
-            zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
-          );
         }
+      } catch (error) {
+        console.error(`Error getting serialized tool`, {
+          toolId: tool.id,
+          error,
+        });
       }
-    } catch (error) {
-      console.error(`Error getting serialized tool`, {
-        toolId: tool.id,
-        error,
-      });
     }
 
     acc[key] = {
@@ -143,7 +175,9 @@ export async function getSerializedAgentTools(
   }, {});
 }
 
-export function getSerializedProcessors(processors: (InputProcessor | OutputProcessor)[]): SerializedProcessor[] {
+export function getSerializedProcessors(
+  processors: (InputProcessor | OutputProcessor | InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[],
+): SerializedProcessor[] {
   return processors.map(processor => {
     // Processors are class instances or objects with a name property
     // Use the name property if available, otherwise fall back to constructor name
@@ -188,11 +222,13 @@ async function formatAgentList({
   mastra,
   agent,
   requestContext,
+  partial = false,
 }: {
   id: string;
   mastra: Context['mastra'];
   agent: Agent;
   requestContext: RequestContext;
+  partial?: boolean;
 }): Promise<SerializedAgentWithId> {
   const description = agent.getDescription();
   const instructions = await agent.getInstructions({ requestContext });
@@ -201,7 +237,7 @@ async function formatAgentList({
   const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
   const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
   const defaultOptions = await agent.getDefaultOptions({ requestContext });
-  const serializedAgentTools = await getSerializedAgentTools(tools);
+  const serializedAgentTools = await getSerializedAgentTools(tools, partial);
 
   let serializedAgentWorkflows: Record<
     string,
@@ -311,12 +347,12 @@ async function formatAgent({
   mastra,
   agent,
   requestContext,
-  isPlayground,
+  isStudio,
 }: {
   mastra: Context['mastra'];
   agent: Agent;
   requestContext: RequestContext;
-  isPlayground: boolean;
+  isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
   const tools = await agent.listTools({ requestContext });
@@ -361,7 +397,7 @@ async function formatAgent({
   }
 
   let proxyRequestContext = requestContext;
-  if (isPlayground) {
+  if (isStudio) {
     proxyRequestContext = new Proxy(requestContext, {
       get(target, prop) {
         if (prop === 'get') {
@@ -429,17 +465,21 @@ export const LIST_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents',
   responseType: 'json',
+  queryParamSchema: z.object({
+    partial: z.string().optional(),
+  }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system',
   tags: ['Agents'],
-  handler: async ({ mastra, requestContext }) => {
+  handler: async ({ mastra, requestContext, partial }) => {
     try {
       const agents = mastra.listAgents();
 
+      const isPartial = partial === 'true';
       const serializedAgentsMap = await Promise.all(
         Object.entries(agents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext });
+          return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
@@ -470,12 +510,12 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   handler: async ({ agentId, mastra, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const isPlayground = false; // TODO: Get from context if needed
+      const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,
         agent,
         requestContext,
-        isPlayground,
+        isStudio,
       });
       return result;
     } catch (error) {
@@ -634,17 +674,13 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   handler: async () => {
     try {
       const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
-        // Check if the provider is connected by checking for its API key env var(s)
-        const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-        const connected = envVars.every(envVar => !!process.env[envVar]);
-
         return {
           id,
           name: provider.name,
           label: (provider as any).label || provider.name,
           description: (provider as any).description || '',
           envVar: provider.apiKeyEnvVar,
-          connected,
+          connected: isProviderConnected(id),
           docUrl: provider.docUrl,
           models: [...provider.models], // Convert readonly array to regular array
         };
@@ -835,6 +871,74 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   },
 });
 
+export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/approve-network-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveNetworkToolCallBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Approve network tool call',
+  description: 'Approves a pending network tool call and continues network agent execution',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.approveNetworkToolCall({
+        ...params,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error approving network tool call');
+    }
+  },
+});
+
+export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/decline-network-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineNetworkToolCallBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Decline network tool call',
+  description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.declineNetworkToolCall({
+        ...params,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error declining network tool call');
+    }
+  },
+});
+
 export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/model',
@@ -950,6 +1054,132 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
       return { message: 'Model updated in model list' };
     } catch (error) {
       return handleError(error, 'error updating model in model list');
+    }
+  },
+});
+
+const ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS = `You are an expert system prompt engineer, specialized in analyzing and enhancing instructions to create clear, effective, and comprehensive system prompts. Your goal is to help users transform their basic instructions into well-structured system prompts that will guide AI behavior effectively.
+
+Follow these steps to analyze and enhance the instructions:
+
+1. ANALYSIS PHASE
+- Identify the core purpose and goals
+- Extract key constraints and requirements
+- Recognize domain-specific terminology and concepts
+- Note any implicit assumptions that should be made explicit
+
+2. PROMPT STRUCTURE
+Create a system prompt with these components:
+a) ROLE DEFINITION
+    - Clear statement of the AI's role and purpose
+    - Key responsibilities and scope
+    - Primary stakeholders and users
+b) CORE CAPABILITIES
+    - Main functions and abilities
+    - Specific domain knowledge required
+    - Tools and resources available
+c) BEHAVIORAL GUIDELINES
+    - Communication style and tone
+    - Decision-making framework
+    - Error handling approach
+    - Ethical considerations
+d) CONSTRAINTS & BOUNDARIES
+    - Explicit limitations
+    - Out-of-scope activities
+    - Security and privacy considerations
+e) SUCCESS CRITERIA
+    - Quality standards
+    - Expected outcomes
+    - Performance metrics
+
+3. QUALITY CHECKS
+Ensure the prompt is:
+- Clear and unambiguous
+- Comprehensive yet concise
+- Properly scoped
+- Technically accurate
+- Ethically sound
+
+4. OUTPUT FORMAT
+Return a structured response with:
+- Enhanced system prompt
+- Analysis of key components
+- Identified goals and constraints
+- Core domain concepts
+
+Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
+
+// Helper to find the first model with a connected provider
+async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+  const modelList = await agent.getModelList();
+
+  if (modelList && modelList.length > 0) {
+    // Find the first enabled model with a connected provider
+    for (const modelConfig of modelList) {
+      if (modelConfig.enabled !== false) {
+        const model = modelConfig.model;
+        if (isProviderConnected(model.provider)) {
+          return model;
+        }
+      }
+    }
+    return null;
+  }
+
+  // No model list, check the default model
+  const defaultModel = await agent.getModel();
+  if (isProviderConnected(defaultModel.provider)) {
+    return defaultModel;
+  }
+  return null;
+}
+
+type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSchema>;
+
+export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/instructions/enhance',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: enhanceInstructionsBodySchema,
+  responseSchema: enhanceInstructionsResponseSchema,
+  summary: 'Enhance agent instructions',
+  description: 'Uses AI to enhance or modify agent instructions based on user feedback',
+  tags: ['Agents'],
+  handler: async ({ mastra, agentId, instructions, comment }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // Find the first model with a connected provider (similar to how chat works)
+      const model = await findConnectedModel(agent);
+      if (!model) {
+        throw new HTTPException(400, {
+          message:
+            'No model with a configured API key found. Please set the required environment variable for your model provider.',
+        });
+      }
+
+      const systemPromptAgent = new Agent({
+        id: 'system-prompt-enhancer',
+        name: 'system-prompt-enhancer',
+        instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
+        model,
+      });
+
+      const result = await systemPromptAgent.generate(
+        `We need to improve the system prompt.
+Current: ${instructions}
+${comment ? `User feedback: ${comment}` : ''}`,
+        {
+          structuredOutput: {
+            schema: enhanceInstructionsResponseSchema,
+          },
+        },
+      );
+
+      return (await result.object) as unknown as EnhanceInstructionsResponse;
+    } catch (error) {
+      return handleError(error, 'Error enhancing instructions');
     }
   },
 });

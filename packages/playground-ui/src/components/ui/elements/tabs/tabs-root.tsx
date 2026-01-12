@@ -10,13 +10,7 @@ type TabsRootProps<T extends string> = {
   className?: string;
 };
 
-export const TabsRoot = <T extends string>({
-  children,
-  defaultTab,
-  value,
-  onValueChange,
-  className,
-}: TabsRootProps<T>) => {
+export const Tabs = <T extends string>({ children, defaultTab, value, onValueChange, className }: TabsRootProps<T>) => {
   const [internalTab, setInternalTab] = useState<T>(defaultTab);
 
   // Use controlled mode if value and onValueChange are provided
@@ -32,11 +26,7 @@ export const TabsRoot = <T extends string>({
   };
 
   return (
-    <RadixTabs.Root
-      value={currentTab}
-      onValueChange={handleTabChange}
-      className={cn('grid gap-[3rem] overflow-y-auto', className)}
-    >
+    <RadixTabs.Root value={currentTab} onValueChange={handleTabChange} className={cn('overflow-y-auto', className)}>
       {children}
     </RadixTabs.Root>
   );

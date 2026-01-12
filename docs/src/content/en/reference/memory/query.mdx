@@ -1,6 +1,8 @@
 ---
 title: "Reference: Memory.query() | Memory"
 description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Memory.query()
@@ -13,7 +15,7 @@ the `.query()` method retrieves messages from a specific thread, with support fo
 
 ## Usage Example
 
-```typescript copy
+```typescript
 await memory?.query({ threadId: "user-123" });
 ```
 
@@ -142,7 +144,7 @@ await memory?.query({ threadId: "user-123" });
 
 ## Extended usage example
 
-```typescript title="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts"
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");

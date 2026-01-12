@@ -1,0 +1,74 @@
+---
+title: "Reference: Mastra.listMemory() | Core"
+description: "Documentation for the `Mastra.listMemory()` method in Mastra, which returns all registered memory instances."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# Mastra.listMemory()
+
+The `.listMemory()` method returns all memory instances registered with the Mastra instance.
+
+## Usage example
+
+```typescript
+const memoryInstances = mastra.listMemory();
+
+for (const [key, memory] of Object.entries(memoryInstances)) {
+  console.log(`Memory "${key}": ${memory.id}`);
+}
+```
+
+## Parameters
+
+This method takes no parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "An object containing all registered memory instances, keyed by their registry keys.",
+    },
+  ]}
+/>
+
+## Example: Checking Registered Memory
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const conversationMemory = new Memory({
+  id: "conversation-memory",
+  storage: new LibSQLStore({ url: ":memory:" }),
+});
+
+const analyticsMemory = new Memory({
+  id: "analytics-memory",
+  storage: new LibSQLStore({ url: ":memory:" }),
+});
+
+const mastra = new Mastra({
+  memory: {
+    conversationMemory,
+    analyticsMemory,
+  },
+});
+
+// List all registered memory instances
+const allMemory = mastra.listMemory();
+console.log(Object.keys(allMemory)); // ["conversationMemory", "analyticsMemory"]
+```
+
+## Related
+
+- [Mastra.getMemory()](/reference/v1/core/getMemory)
+- [Memory overview](/docs/v1/memory/overview)
+- [Agent Memory](/docs/v1/agents/agent-memory)

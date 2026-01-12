@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureDir, writeFile, readFile } from 'fs-extra';
+import { copy } from 'fs-extra/esm';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CloudDeployer } from './index.js';
@@ -15,6 +16,15 @@ vi.mock('./utils/logger.js', () => ({
     debug: vi.fn(),
   },
 }));
+
+// Mock fs-extra/esm copy for studio tests
+vi.mock('fs-extra/esm', async () => {
+  const actual = await vi.importActual('fs-extra/esm');
+  return {
+    ...actual,
+    copy: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 describe('CloudDeployer Integration Tests', () => {
   let deployer: CloudDeployer;
@@ -205,6 +215,49 @@ describe('CloudDeployer Integration Tests', () => {
       expect(capturedToolsPaths).toHaveLength(1);
       expect(Array.isArray(capturedToolsPaths[0])).toBe(true);
       expect(capturedToolsPaths[0][0]).toContain('tools');
+    });
+  });
+
+  describe('Studio Bundling', () => {
+    beforeEach(() => {
+      vi.mocked(copy).mockClear();
+    });
+
+    it('should copy studio assets when studio is true', async () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
+        overwrite: true,
+      });
+    });
+
+    it('should not copy studio assets when studio is false', async () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('should not copy studio assets when studio is not provided', async () => {
+      const studioDeployer = new CloudDeployer();
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('should copy studio to correct output path', async () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'studio'), {
+        overwrite: true,
+      });
     });
   });
 });

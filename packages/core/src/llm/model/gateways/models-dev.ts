@@ -4,6 +4,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createMistral } from '@ai-sdk/mistral-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createPerplexity } from '@ai-sdk/perplexity-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { createXai } from '@ai-sdk/xai-v5';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
@@ -47,9 +48,6 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
   deepinfra: {
     url: 'https://api.deepinfra.com/v1/openai',
-  },
-  perplexity: {
-    url: 'https://api.perplexity.ai',
   },
   vercel: {
     url: 'https://ai-gateway.vercel.sh/v1',
@@ -101,7 +99,11 @@ export class ModelsDevGateway extends MastraModelGateway {
 
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
-        const modelIds = Object.keys(providerInfo.models).sort();
+        // Filter out deprecated models before collecting model IDs
+        const modelIds = Object.entries(providerInfo.models)
+          .filter(([, modelInfo]) => modelInfo?.status !== 'deprecated')
+          .map(([modelId]) => modelId)
+          .sort();
 
         // Get the API URL from the provider info or overrides
         const url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
@@ -209,6 +211,8 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createDeepSeek({
           apiKey,
         })(modelId);
+      case 'perplexity':
+        return createPerplexity({ apiKey })(modelId);
       default:
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
         return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(

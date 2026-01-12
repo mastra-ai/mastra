@@ -1,20 +1,43 @@
 import z from 'zod';
+import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
+import type { InferSchemaOutput } from '../../stream/base/schema';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
+import type { Step, SuspendOptions } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
+import type { CompletionConfig, CompletionContext } from './validation';
+import {
+  runValidation,
+  formatCompletionFeedback,
+  runDefaultCompletionCheck,
+  generateFinalResult,
+  generateStructuredFinalResult,
+} from './validation';
 
-async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
+async function getRoutingAgent({
+  requestContext,
+  agent,
+  routingConfig,
+}: {
+  agent: Agent;
+  requestContext: RequestContext;
+  routingConfig?: {
+    additionalInstructions?: string;
+  };
+}) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
   const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
@@ -46,6 +69,10 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
     })
     .join('\n');
 
+  const additionalInstructionsSection = routingConfig?.additionalInstructions
+    ? `\n## Additional Instructions\n${routingConfig.additionalInstructions}`
+    : '';
+
   const instructions = `
           You are a router in a network of specialized AI agents.
           Your job is to decide which agent should handle each step of a task.
@@ -67,6 +94,7 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
           When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
           When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
+          ${additionalInstructionsSection}
         `;
 
   return new Agent({
@@ -227,6 +255,46 @@ export async function prepareMemoryStep({
   return { thread };
 }
 
+/**
+ * Saves the finalResult to memory if the LLM provided one.
+ * The LLM is instructed to omit finalResult when the primitive result is already sufficient,
+ * so we only need to check if finalResult is defined.
+ *
+ * @internal
+ */
+async function saveFinalResultIfProvided({
+  memory,
+  finalResult,
+  threadId,
+  resourceId,
+  generateId,
+}: {
+  memory: Awaited<ReturnType<Agent['getMemory']>>;
+  finalResult: string | undefined;
+  threadId: string;
+  resourceId: string;
+  generateId: () => string;
+}) {
+  if (memory && finalResult) {
+    await memory.saveMessages({
+      messages: [
+        {
+          id: generateId(),
+          type: 'text',
+          role: 'assistant',
+          content: {
+            parts: [{ type: 'text', text: finalResult }],
+            format: 2,
+          },
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        },
+      ] as MastraDBMessage[],
+    });
+  }
+}
+
 export async function createNetworkLoop({
   networkName,
   requestContext,
@@ -234,6 +302,7 @@ export async function createNetworkLoop({
   agent,
   generateId,
   routingAgentOptions,
+  routing,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -241,6 +310,10 @@ export async function createNetworkLoop({
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: () => string;
+  routing?: {
+    additionalInstructions?: string;
+    verboseIntrospection?: boolean;
+  };
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -268,15 +341,7 @@ export async function createNetworkLoop({
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
 
-      const completionSchema = z.object({
-        isComplete: z.boolean(),
-        finalResult: z.string(),
-        completionReason: z.string(),
-      });
-
-      const routingAgent = await getRoutingAgent({ requestContext, agent });
-
-      let completionResult;
+      const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
       // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
       // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
@@ -298,170 +363,8 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
       });
 
-      if (inputData.primitiveType !== 'none' && inputData?.result) {
-        const completionPrompt = `
-                          The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
-                          This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
-
-                          You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
-                          Original task: ${inputData.task}.
-
-                          When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
-
-                          You must return this JSON shape.
-
-                          {
-                              "isComplete": boolean,
-                              "completionReason": string,
-                              "finalResult": string
-                          }
-                      `;
-
-        const streamOptions = {
-          structuredOutput: {
-            schema: completionSchema,
-          },
-          requestContext: requestContext,
-          maxSteps: 1,
-          memory: {
-            thread: initData?.threadId ?? runId,
-            resource: initData?.threadResourceId ?? networkName,
-            options: {
-              readOnly: true,
-              workingMemory: {
-                enabled: false,
-              },
-            },
-          },
-          ...routingAgentOptions,
-        } satisfies AgentExecutionOptions<any>;
-
-        // Try streaming with structured output
-        let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
-
-        let currentText = '';
-        let currentTextIdx = 0;
-        await writer.write({
-          type: 'routing-agent-text-start',
-          payload: {
-            runId: stepId,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-
-        // Stream and check for errors
-        for await (const chunk of completionStream.objectStream) {
-          if (chunk?.finalResult) {
-            currentText = chunk.finalResult;
-          }
-
-          const currentSlice = currentText.slice(currentTextIdx);
-          if (chunk?.isComplete && currentSlice.length) {
-            await writer.write({
-              type: 'routing-agent-text-delta',
-              payload: {
-                runId: stepId,
-                text: currentSlice,
-              },
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
-            currentTextIdx = currentText.length;
-          }
-        }
-
-        // If error detected, retry with JSON prompt injection fallback
-        // TODO ujpdate tryStreamWithJsonFallback to not await the result so we can re-use it here
-        if (completionStream.error) {
-          console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
-
-          // Reset text tracking for fallback
-          currentText = '';
-          currentTextIdx = 0;
-
-          // Create fallback stream with jsonPromptInjection
-          completionStream = await routingAgent.stream(completionPrompt, {
-            ...streamOptions,
-            structuredOutput: {
-              ...streamOptions.structuredOutput,
-              jsonPromptInjection: true,
-            },
-          });
-
-          // Stream from fallback
-          for await (const chunk of completionStream.objectStream) {
-            if (chunk?.finalResult) {
-              currentText = chunk.finalResult;
-            }
-
-            const currentSlice = currentText.slice(currentTextIdx);
-            if (chunk?.isComplete && currentSlice.length) {
-              await writer.write({
-                type: 'routing-agent-text-delta',
-                payload: {
-                  runId: stepId,
-                  text: currentSlice,
-                },
-                from: ChunkFrom.NETWORK,
-                runId,
-              });
-              currentTextIdx = currentText.length;
-            }
-          }
-        }
-
-        completionResult = await completionStream.getFullOutput();
-
-        if (completionResult?.object?.isComplete) {
-          const endPayload = {
-            task: inputData.task,
-            primitiveId: '',
-            primitiveType: 'none' as const,
-            prompt: '',
-            result: completionResult.object.finalResult,
-            isComplete: true,
-            selectionReason: completionResult.object.completionReason || '',
-            iteration: iterationCount,
-            runId: stepId,
-          };
-
-          await writer.write({
-            type: 'routing-agent-end',
-            payload: {
-              ...endPayload,
-              usage: await completionStream.usage,
-            },
-            from: ChunkFrom.NETWORK,
-            runId,
-          });
-
-          const memory = await agent.getMemory({ requestContext: requestContext });
-          await memory?.saveMessages({
-            messages: [
-              {
-                id: generateId(),
-                type: 'text',
-                role: 'assistant',
-                content: {
-                  parts: [
-                    {
-                      type: 'text',
-                      text: completionResult?.object?.finalResult || '',
-                    },
-                  ],
-                  format: 2,
-                },
-                createdAt: new Date(),
-                threadId: initData?.threadId || runId,
-                resourceId: initData?.threadResourceId || networkName,
-              },
-            ] as MastraDBMessage[],
-          });
-
-          return endPayload;
-        }
-      }
+      // Completion is now always handled by scorers in the validation step
+      // The routing step only handles primitive selection
 
       const prompt: MessageListInput = [
         {
@@ -471,7 +374,6 @@ export async function createNetworkLoop({
 
                     The user has given you the following task:
                     ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult?.object?.finalResult}` : ''}
 
                     # Rules:
 
@@ -527,13 +429,31 @@ export async function createNetworkLoop({
 
       const object = result.object;
 
+      const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
+
+      // When routing agent handles request itself (no delegation), emit text events
+      if (isComplete && object.selectionReason) {
+        await writer.write({
+          type: 'routing-agent-text-start',
+          payload: { runId: stepId },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+        await writer.write({
+          type: 'routing-agent-text-delta',
+          payload: { runId: stepId, text: object.selectionReason },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+      }
+
       const endPayload = {
         task: inputData.task,
-        result: '',
+        result: isComplete ? object.selectionReason : '',
         primitiveId: object.primitiveId,
         primitiveType: object.primitiveType,
         prompt: object.prompt,
-        isComplete: object.primitiveId === 'none' && object.primitiveType === 'none',
+        isComplete,
         selectionReason: object.selectionReason,
         iteration: iterationCount,
         runId: stepId,
@@ -573,7 +493,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, writer, getInitData }) => {
+    execute: async ({ inputData, writer, getInitData, suspend, resumeData }) => {
       const agentsMap = await agent.listAgents({ requestContext });
 
       const agentForStep = agentsMap[inputData.primitiveId];
@@ -612,18 +532,36 @@ export async function createNetworkLoop({
 
       const agentHasOwnMemory = agentForStep.hasOwnMemory();
 
-      const result = await agentForStep.stream(inputData.prompt, {
-        requestContext: requestContext,
-        runId,
-        ...(agentHasOwnMemory
-          ? {
-              memory: {
-                thread: threadId,
-                resource: resourceId,
-              },
-            }
-          : {}),
-      });
+      const result = await (resumeData
+        ? agentForStep.resumeStream(resumeData, {
+            requestContext: requestContext,
+            runId,
+            ...(agentHasOwnMemory
+              ? {
+                  memory: {
+                    thread: threadId,
+                    resource: resourceId,
+                  },
+                }
+              : {}),
+          })
+        : agentForStep.stream(inputData.prompt, {
+            requestContext: requestContext,
+            runId,
+            ...(agentHasOwnMemory
+              ? {
+                  memory: {
+                    thread: threadId,
+                    resource: resourceId,
+                  },
+                }
+              : {}),
+          }));
+
+      let requireApprovalMetadata: Record<string, any> | undefined;
+      let suspendedTools: Record<string, any> | undefined;
+
+      let toolCallDeclined = false;
 
       for await (const chunk of result.fullStream) {
         await writer.write({
@@ -635,11 +573,53 @@ export async function createNetworkLoop({
           from: ChunkFrom.NETWORK,
           runId,
         });
+        if (chunk.type === 'tool-call-approval') {
+          requireApprovalMetadata = {
+            ...(requireApprovalMetadata ?? {}),
+            [inputData.primitiveId]: {
+              resumeSchema: chunk.payload.resumeSchema,
+              args: { prompt: inputData.prompt },
+              toolName: inputData.primitiveId,
+              toolCallId: inputData.primitiveId,
+              runId,
+              type: 'approval',
+              primitiveType: 'agent',
+              primitiveId: inputData.primitiveId,
+            },
+          };
+        }
+        if (chunk.type === 'tool-call-suspended') {
+          suspendedTools = {
+            ...(suspendedTools ?? {}),
+            [inputData.primitiveId]: {
+              suspendPayload: chunk.payload.suspendPayload,
+              resumeSchema: chunk.payload.resumeSchema,
+              toolName: inputData.primitiveId,
+              toolCallId: inputData.primitiveId,
+              args: { prompt: inputData.prompt },
+              runId,
+              type: 'suspension',
+              primitiveType: 'agent',
+              primitiveId: inputData.primitiveId,
+            },
+          };
+        }
+
+        if (chunk.type === 'tool-result') {
+          if (chunk.payload.result === 'Tool call was not approved by the user') {
+            toolCallDeclined = true;
+          }
+        }
       }
 
       const memory = await agent.getMemory({ requestContext: requestContext });
 
       const messages = result.messageList.get.all.v1();
+
+      let finalText = await result.text;
+      if (toolCallDeclined) {
+        finalText = finalText + '\n\nTool call was not approved by the user';
+      }
 
       await memory?.saveMessages({
         messages: [
@@ -657,11 +637,25 @@ export async function createNetworkLoop({
                     primitiveType: inputData.primitiveType,
                     primitiveId: inputData.primitiveId,
                     input: inputData.prompt,
-                    finalResult: { text: await result.text, toolCalls: await result.toolCalls, messages },
+                    finalResult: { text: finalText, messages },
                   }),
                 },
               ],
               format: 2,
+              ...(requireApprovalMetadata
+                ? {
+                    metadata: {
+                      requireApprovalMetadata,
+                    },
+                  }
+                : {}),
+              ...(suspendedTools
+                ? {
+                    metadata: {
+                      suspendedTools,
+                    },
+                  }
+                : {}),
             },
             createdAt: new Date(),
             threadId: initData?.threadId || runId,
@@ -670,33 +664,72 @@ export async function createNetworkLoop({
         ] as MastraDBMessage[],
       });
 
-      const endPayload = {
-        task: inputData.task,
-        agentId,
-        result: await result.text,
-        isComplete: false,
-        iteration: inputData.iteration,
-        runId: stepId,
-      };
+      if (requireApprovalMetadata || suspendedTools) {
+        await writer.write({
+          type: requireApprovalMetadata ? 'agent-execution-approval' : 'agent-execution-suspended',
+          payload: {
+            args: { prompt: inputData.prompt },
+            agentId,
+            runId: stepId,
+            toolName: inputData.primitiveId,
+            toolCallId: inputData.primitiveId,
+            usage: await result.usage,
+            selectionReason: inputData.selectionReason,
+            ...(requireApprovalMetadata
+              ? {
+                  resumeSchema: requireApprovalMetadata[inputData.primitiveId].resumeSchema,
+                }
+              : {}),
+            ...(suspendedTools
+              ? {
+                  resumeSchema: suspendedTools[inputData.primitiveId].resumeSchema,
+                  suspendPayload: suspendedTools[inputData.primitiveId].suspendPayload,
+                }
+              : {}),
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+        return await suspend({
+          ...(requireApprovalMetadata ? { requireToolApproval: requireApprovalMetadata[inputData.primitiveId] } : {}),
+          ...(suspendedTools
+            ? {
+                toolCallSuspended: suspendedTools[inputData.primitiveId].suspendPayload,
+                args: inputData.prompt,
+                agentId,
+              }
+            : {}),
+          runId: stepId,
+        });
+      } else {
+        const endPayload = {
+          task: inputData.task,
+          agentId,
+          result: finalText,
+          isComplete: false,
+          iteration: inputData.iteration,
+          runId: stepId,
+        };
 
-      await writer.write({
-        type: 'agent-execution-end',
-        payload: {
-          ...endPayload,
-          usage: await result.usage,
-        },
-        from: ChunkFrom.NETWORK,
-        runId,
-      });
+        await writer.write({
+          type: 'agent-execution-end',
+          payload: {
+            ...endPayload,
+            usage: await result.usage,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
 
-      return {
-        task: inputData.task,
-        primitiveId: inputData.primitiveId,
-        primitiveType: inputData.primitiveType,
-        result: await result.text,
-        isComplete: false,
-        iteration: inputData.iteration,
-      };
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: finalText,
+          isComplete: false,
+          iteration: inputData.iteration,
+        };
+      }
     },
   });
 
@@ -720,7 +753,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, writer, getInitData }) => {
+    execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra }) => {
       const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
       const workflowId = inputData.primitiveId;
       const wf = workflowsMap[workflowId];
@@ -773,10 +806,15 @@ export async function createNetworkLoop({
         runId,
       });
 
-      const stream = run.streamVNext({
-        inputData: input,
-        requestContext: requestContext,
-      });
+      const stream = resumeData
+        ? run.resumeStream({
+            resumeData,
+            requestContext: requestContext,
+          })
+        : run.stream({
+            inputData: input,
+            requestContext: requestContext,
+          });
 
       // let result: any;
       // let stepResults: Record<string, any> = {};
@@ -802,6 +840,34 @@ export async function createNetworkLoop({
         runSuccess = false;
       }
 
+      let resumeSchema;
+      let suspendPayload;
+      if (workflowState?.status === 'suspended') {
+        const suspendedStep = workflowState?.suspended?.[0]?.[0]!;
+        suspendPayload = workflowState?.steps?.[suspendedStep]?.suspendPayload;
+        if (suspendPayload?.__workflow_meta) {
+          delete suspendPayload.__workflow_meta;
+        }
+        const firstSuspendedStepPath = [...(workflowState?.suspended?.[0] ?? [])];
+        let wflowStep = wf;
+        while (firstSuspendedStepPath.length > 0) {
+          const key = firstSuspendedStepPath.shift();
+          if (key) {
+            if (!wflowStep.steps[key]) {
+              mastra?.getLogger()?.warn(`Suspended step '${key}' not found in workflow '${workflowId}'`);
+              break;
+            }
+            wflowStep = wflowStep.steps[key] as any;
+          }
+        }
+        const wflowStepSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
+        if (wflowStepSchema) {
+          resumeSchema = JSON.stringify(zodToJsonSchema(wflowStepSchema));
+        } else {
+          resumeSchema = '';
+        }
+      }
+
       const finalResult = JSON.stringify({
         isNetwork: true,
         primitiveType: inputData.primitiveType,
@@ -824,7 +890,30 @@ export async function createNetworkLoop({
             id: generateId(),
             type: 'text',
             role: 'assistant',
-            content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+            content: {
+              parts: [{ type: 'text', text: finalResult }],
+              format: 2,
+              ...(suspendPayload
+                ? {
+                    metadata: {
+                      suspendedTools: {
+                        [inputData.primitiveId]: {
+                          args: input,
+                          suspendPayload,
+                          runId,
+                          type: 'suspension',
+                          resumeSchema,
+                          workflowId,
+                          primitiveType: 'workflow',
+                          primitiveId: inputData.primitiveId,
+                          toolName: inputData.primitiveId,
+                          toolCallId: inputData.primitiveId,
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            },
             createdAt: new Date(),
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
@@ -832,29 +921,50 @@ export async function createNetworkLoop({
         ] as MastraDBMessage[],
       });
 
-      const endPayload = {
-        task: inputData.task,
-        primitiveId: inputData.primitiveId,
-        primitiveType: inputData.primitiveType,
-        result: finalResult,
-        isComplete: false,
-        iteration: inputData.iteration,
-      };
+      if (suspendPayload) {
+        await writer?.write({
+          type: 'workflow-execution-suspended',
+          payload: {
+            args: input,
+            workflowId,
+            suspendPayload,
+            resumeSchema,
+            name: wf.name,
+            runId: stepId,
+            usage: await stream.usage,
+            selectionReason: inputData.selectionReason,
+            toolName: inputData.primitiveId,
+            toolCallId: inputData.primitiveId,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+        return suspend({ ...toolData, workflowSuspended: suspendPayload });
+      } else {
+        const endPayload = {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: finalResult,
+          isComplete: false,
+          iteration: inputData.iteration,
+        };
 
-      await writer?.write({
-        type: 'workflow-execution-end',
-        payload: {
-          ...endPayload,
-          result: workflowState,
-          name: wf.name,
-          runId: stepId,
-          usage: await stream.usage,
-        },
-        from: ChunkFrom.NETWORK,
-        runId,
-      });
+        await writer?.write({
+          type: 'workflow-execution-end',
+          payload: {
+            ...endPayload,
+            result: workflowState,
+            name: wf.name,
+            runId: stepId,
+            usage: await stream.usage,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
 
-      return endPayload;
+        return endPayload;
+      }
     },
   });
 
@@ -878,8 +988,9 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, getInitData, writer }) => {
+    execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData();
+      const logger = mastra?.getLogger();
 
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
@@ -950,6 +1061,157 @@ export async function createNetworkLoop({
         runId,
       });
 
+      // Check if approval is required
+      // requireApproval can be:
+      // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
+      // - undefined (no approval needed)
+      // If needsApprovalFn exists, evaluate it with the tool args
+      let toolRequiresApproval = (tool as any).requireApproval;
+      if ((tool as any).needsApprovalFn) {
+        // Evaluate the function with the parsed args
+        try {
+          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
+          toolRequiresApproval = needsApprovalResult;
+        } catch (error) {
+          // Log error to help developers debug faulty needsApprovalFn implementations
+          logger?.error(`Error evaluating needsApprovalFn for tool ${toolId}:`, error);
+          // On error, default to requiring approval to be safe
+          toolRequiresApproval = true;
+        }
+      }
+
+      if (toolRequiresApproval) {
+        if (!resumeData) {
+          const requireApprovalResumeSchema = JSON.stringify(
+            zodToJsonSchema(
+              z.object({
+                approved: z
+                  .boolean()
+                  .describe(
+                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                  ),
+              }),
+            ),
+          );
+          await memory?.saveMessages({
+            messages: [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'assistant',
+                content: {
+                  parts: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify({
+                        isNetwork: true,
+                        selectionReason: inputData.selectionReason,
+                        primitiveType: inputData.primitiveType,
+                        primitiveId: inputData.primitiveId,
+                        finalResult: { result: '', toolCallId },
+                        input: inputDataToUse,
+                      }),
+                    },
+                  ],
+                  format: 2,
+                  metadata: {
+                    mode: 'network',
+                    requireApprovalMetadata: {
+                      [inputData.primitiveId]: {
+                        toolCallId,
+                        toolName: inputData.primitiveId,
+                        args: inputDataToUse,
+                        type: 'approval',
+                        resumeSchema: requireApprovalResumeSchema,
+                        runId,
+                        primitiveType: 'tool',
+                        primitiveId: inputData.primitiveId,
+                      },
+                    },
+                  },
+                },
+                createdAt: new Date(),
+                threadId: initData.threadId || runId,
+                resourceId: initData.threadResourceId || networkName,
+              },
+            ] as MastraDBMessage[],
+          });
+          await writer?.write({
+            type: 'tool-execution-approval',
+            payload: {
+              toolName: inputData.primitiveId,
+              toolCallId,
+              args: inputDataToUse,
+              selectionReason: inputData.selectionReason,
+              resumeSchema: requireApprovalResumeSchema,
+              runId,
+            },
+          });
+
+          return suspend({
+            requireToolApproval: {
+              toolName: inputData.primitiveId,
+              args: inputDataToUse,
+              toolCallId,
+            },
+          });
+        } else {
+          if (!resumeData.approved) {
+            const rejectionResult = 'Tool call was not approved by the user';
+            await memory?.saveMessages({
+              messages: [
+                {
+                  id: generateId(),
+                  type: 'text',
+                  role: 'assistant',
+                  content: {
+                    parts: [
+                      {
+                        type: 'text',
+                        text: JSON.stringify({
+                          isNetwork: true,
+                          selectionReason: inputData.selectionReason,
+                          primitiveType: inputData.primitiveType,
+                          primitiveId: inputData.primitiveId,
+                          finalResult: { result: rejectionResult, toolCallId },
+                          input: inputDataToUse,
+                        }),
+                      },
+                    ],
+                    format: 2,
+                  },
+                  createdAt: new Date(),
+                  threadId: initData.threadId || runId,
+                  resourceId: initData.threadResourceId || networkName,
+                },
+              ] as MastraDBMessage[],
+            });
+
+            const endPayload = {
+              task: inputData.task,
+              primitiveId: inputData.primitiveId,
+              primitiveType: inputData.primitiveType,
+              result: rejectionResult,
+              isComplete: false,
+              iteration: inputData.iteration,
+              toolCallId,
+              toolName: toolId,
+            };
+
+            await writer?.write({
+              type: 'tool-execution-end',
+              payload: endPayload,
+              from: ChunkFrom.NETWORK,
+              runId,
+            });
+
+            return endPayload;
+          }
+        }
+      }
+
+      let toolSuspendPayload: any;
+
       const finalResult = await tool.execute(
         inputDataToUse,
         {
@@ -957,7 +1219,72 @@ export async function createNetworkLoop({
           mastra: agent.getMastraInstance(),
           agent: {
             resourceId: initData.threadResourceId || networkName,
+            toolCallId,
             threadId: initData.threadId,
+            suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+              await memory?.saveMessages({
+                messages: [
+                  {
+                    id: generateId(),
+                    type: 'text',
+                    role: 'assistant',
+                    content: {
+                      parts: [
+                        {
+                          type: 'text',
+                          text: JSON.stringify({
+                            isNetwork: true,
+                            selectionReason: inputData.selectionReason,
+                            primitiveType: inputData.primitiveType,
+                            primitiveId: toolId,
+                            finalResult: { result: '', toolCallId },
+                            input: inputDataToUse,
+                          }),
+                        },
+                      ],
+                      format: 2,
+                      metadata: {
+                        mode: 'network',
+                        suspendedTools: {
+                          [inputData.primitiveId]: {
+                            toolCallId,
+                            toolName: inputData.primitiveId,
+                            args: inputDataToUse,
+                            suspendPayload,
+                            type: 'suspension',
+                            resumeSchema:
+                              suspendOptions?.resumeSchema ??
+                              JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
+                            runId,
+                            primitiveType: 'tool',
+                            primitiveId: inputData.primitiveId,
+                          },
+                        },
+                      },
+                    },
+                    createdAt: new Date(),
+                    threadId: initData.threadId || runId,
+                    resourceId: initData.threadResourceId || networkName,
+                  },
+                ] as MastraDBMessage[],
+              });
+              await writer?.write({
+                type: 'tool-execution-suspended',
+                payload: {
+                  toolName: inputData.primitiveId,
+                  toolCallId,
+                  args: inputDataToUse,
+                  resumeSchema:
+                    suspendOptions?.resumeSchema ?? JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
+                  suspendPayload,
+                  runId,
+                  selectionReason: inputData.selectionReason,
+                },
+              });
+
+              toolSuspendPayload = suspendPayload;
+            },
+            resumeData,
           },
           runId,
           memory,
@@ -968,6 +1295,15 @@ export async function createNetworkLoop({
         },
         { toolCallId, messages: [] },
       );
+
+      if (toolSuspendPayload) {
+        return await suspend({
+          toolCallSuspended: toolSuspendPayload,
+          toolName: inputData.primitiveId,
+          args: inputDataToUse,
+          toolCallId,
+        });
+      }
 
       await memory?.saveMessages({
         messages: [
@@ -1000,7 +1336,7 @@ export async function createNetworkLoop({
 
       const endPayload = {
         task: inputData.task,
-        primitiveId: toolId,
+        primitiveId: inputData.primitiveId,
         primitiveType: inputData.primitiveType,
         result: finalResult,
         isComplete: false,
@@ -1151,10 +1487,7 @@ export async function createNetworkLoop({
   return { networkWorkflow };
 }
 
-export async function networkLoop<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   networkName,
   requestContext,
   runId,
@@ -1165,18 +1498,56 @@ export async function networkLoop<
   threadId,
   resourceId,
   messages,
+  validation,
+  routing,
+  onIterationComplete,
+  resumeData,
+  autoResumeSuspendedTools,
+  mastra,
+  structuredOutput,
 }: {
   networkName: string;
   requestContext: RequestContext;
   runId: string;
   routingAgent: Agent;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
+  routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
   generateId: () => string;
   maxIterations: number;
   threadId?: string;
   resourceId?: string;
   messages: MessageListInput;
-}) {
+  /**
+   * Completion checks configuration.
+   * When provided, runs checks to verify task completion.
+   */
+  validation?: CompletionConfig;
+  /**
+   * Optional routing configuration to customize primitive selection behavior.
+   */
+  routing?: {
+    additionalInstructions?: string;
+    verboseIntrospection?: boolean;
+  };
+  /**
+   * Optional callback fired after each iteration completes.
+   */
+  onIterationComplete?: (context: {
+    iteration: number;
+    primitiveId: string;
+    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
+    result: string;
+    isComplete: boolean;
+  }) => void | Promise<void>;
+  /**
+   * Structured output configuration for the network's final result.
+   * When provided, generates a structured response matching the schema.
+   */
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+
+  resumeData?: any;
+  autoResumeSuspendedTools?: boolean;
+  mastra?: Mastra;
+}): Promise<MastraAgentNetworkStream<OUTPUT>> {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
 
@@ -1192,24 +1563,383 @@ export async function networkLoop<
     });
   }
 
+  const task = getLastMessage(messages);
+
+  let resumeDataFromTask: any | undefined;
+  let runIdFromTask: string | undefined;
+  if (autoResumeSuspendedTools && threadId) {
+    let lastAssistantMessage: MastraDBMessage | undefined;
+    let requireApprovalMetadata: Record<string, any> | undefined;
+    let suspendedTools: Record<string, any> | undefined;
+    // get last assistant message from memory
+    const memory = await routingAgent.getMemory({ requestContext });
+
+    const threadExists = await memory?.getThreadById({ threadId });
+    if (threadExists) {
+      const recallResult = await memory?.recall({
+        threadId: threadId,
+        resourceId: resourceId || networkName,
+      });
+
+      if (recallResult && recallResult.messages?.length > 0) {
+        const messages = [...recallResult.messages]?.reverse()?.filter(message => message.role === 'assistant');
+        lastAssistantMessage = messages[0];
+      }
+      if (lastAssistantMessage) {
+        const { metadata } = lastAssistantMessage.content;
+        if (metadata?.requireApprovalMetadata) {
+          requireApprovalMetadata = metadata.requireApprovalMetadata;
+        }
+        if (metadata?.suspendedTools) {
+          suspendedTools = metadata.suspendedTools;
+        }
+
+        if (requireApprovalMetadata || suspendedTools) {
+          const suspendedToolsArr = Object.values({ ...suspendedTools, ...requireApprovalMetadata });
+          const firstSuspendedTool = suspendedToolsArr[0]; //only one primitive/tool gets suspended at a time, so there'll only be one item
+          if (firstSuspendedTool.resumeSchema) {
+            try {
+              const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
+              const systemInstructions = `
+            You are an assistant used to resume a suspended tool call.
+            Your job is to construct the resumeData for the tool call using the messages available to you and the schema passed.
+            You will generate an object that matches this schema: ${firstSuspendedTool.resumeSchema}.
+            The resumeData generated should be a JSON value that is constructed from the messages, using the schema as guide. The JSON value is stringified.
+
+            {
+              "resumeData": "string"
+            }
+          `;
+              const messageList = new MessageList();
+
+              messageList.addSystem(systemInstructions);
+              messageList.add(task, 'user');
+
+              const result = llm.stream({
+                methodType: 'generate',
+                requestContext,
+                messageList,
+                agentId: routingAgent.id,
+                tracingContext: routingAgentOptions?.tracingContext!,
+                structuredOutput: {
+                  schema: z.object({
+                    resumeData: z.string(),
+                  }),
+                },
+              });
+
+              const object = await result.object;
+              const resumeDataFromLLM = JSON.parse(object.resumeData);
+              if (Object.keys(resumeDataFromLLM).length > 0) {
+                resumeDataFromTask = resumeDataFromLLM;
+                runIdFromTask = firstSuspendedTool.runId;
+              }
+            } catch (error) {
+              mastra?.getLogger()?.error(`Error generating resume data for network agent ${routingAgent.id}`, error);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const runIdToUse = runIdFromTask ?? runId;
+  const resumeDataToUse = resumeDataFromTask ?? resumeData;
+
   const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
 
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
     requestContext,
-    runId,
+    runId: runIdToUse,
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
+    routing,
+  });
+
+  // Validation step: runs external checks when LLM says task is complete
+  // If validation fails, marks isComplete=false and adds feedback for next iteration
+  const validationStep = createStep({
+    id: 'validation-step',
+    inputSchema: networkWorkflow.outputSchema,
+    outputSchema: z.object({
+      task: z.string(),
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
+      prompt: z.string(),
+      result: z.string(),
+      structuredObject: z.any().optional(),
+      isComplete: z.boolean().optional(),
+      completionReason: z.string().optional(),
+      iteration: z.number(),
+      validationPassed: z.boolean().optional(),
+      validationFeedback: z.string().optional(),
+    }),
+    execute: async ({ inputData, writer }) => {
+      const configuredScorers = validation?.scorers || [];
+
+      // Build completion context
+      const memory = await routingAgent.getMemory({ requestContext });
+      const recallResult = memory
+        ? await memory.recall({ threadId: inputData.threadId || runIdToUse })
+        : { messages: [] };
+
+      const completionContext: CompletionContext = {
+        iteration: inputData.iteration,
+        maxIterations,
+        messages: recallResult.messages,
+        originalTask: inputData.task,
+        selectedPrimitive: {
+          id: inputData.primitiveId,
+          type: inputData.primitiveType,
+        },
+        primitivePrompt: inputData.prompt,
+        primitiveResult: inputData.result,
+        networkName,
+        runId: runIdToUse,
+        threadId: inputData.threadId,
+        resourceId: inputData.threadResourceId,
+        customContext: requestContext?.toJSON?.() as Record<string, unknown> | undefined,
+      };
+
+      // Determine which scorers to run
+      const hasConfiguredScorers = configuredScorers.length > 0;
+
+      await writer?.write({
+        type: 'network-validation-start',
+        payload: {
+          runId: runIdToUse,
+          iteration: inputData.iteration,
+          checksCount: hasConfiguredScorers ? configuredScorers.length : 1,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      // Run either configured scorers or the default LLM completion check
+      let completionResult;
+      let generatedFinalResult: string | undefined;
+      let structuredObject: InferSchemaOutput<OUTPUT> | undefined;
+
+      if (hasConfiguredScorers) {
+        completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
+
+        // Generate and stream finalResult if validation passed
+        if (completionResult.complete) {
+          const routingAgentToUse = await getRoutingAgent({
+            requestContext,
+            agent: routingAgent,
+            routingConfig: routing,
+          });
+
+          // Use structured output generation if schema is provided
+          if (structuredOutput?.schema) {
+            const structuredResult = await generateStructuredFinalResult(
+              routingAgentToUse,
+              completionContext,
+              structuredOutput,
+              {
+                writer,
+                stepId: generateId(),
+                runId: runIdToUse,
+              },
+            );
+            generatedFinalResult = structuredResult.text;
+            structuredObject = structuredResult.object;
+          } else {
+            generatedFinalResult = await generateFinalResult(routingAgentToUse, completionContext, {
+              writer,
+              stepId: generateId(),
+              runId: runIdToUse,
+            });
+          }
+
+          // Save finalResult to memory if the LLM provided one
+          await saveFinalResultIfProvided({
+            memory: await routingAgent.getMemory({ requestContext }),
+            finalResult: generatedFinalResult,
+            threadId: inputData.threadId || runIdToUse,
+            resourceId: inputData.threadResourceId || networkName,
+            generateId,
+          });
+        }
+      } else {
+        const routingAgentToUse = await getRoutingAgent({
+          requestContext,
+          agent: routingAgent,
+          routingConfig: routing,
+        });
+        // Use the default LLM completion check
+        const defaultResult = await runDefaultCompletionCheck(routingAgentToUse, completionContext, {
+          writer,
+          stepId: generateId(),
+          runId: runIdToUse,
+        });
+        completionResult = {
+          complete: defaultResult.passed,
+          completionReason: defaultResult.reason,
+          scorers: [defaultResult],
+          totalDuration: defaultResult.duration,
+          timedOut: false,
+        };
+
+        // Capture finalResult from default check
+        generatedFinalResult = defaultResult.finalResult;
+
+        // If completed and structured output is requested, generate it
+        if (defaultResult.passed && structuredOutput?.schema) {
+          const structuredResult = await generateStructuredFinalResult(
+            routingAgentToUse,
+            completionContext,
+            structuredOutput,
+            {
+              writer,
+              stepId: generateId(),
+              runId,
+            },
+          );
+          if (structuredResult.text) {
+            generatedFinalResult = structuredResult.text;
+          }
+          structuredObject = structuredResult.object;
+        }
+
+        // Save finalResult to memory if the LLM provided one
+        if (defaultResult.passed) {
+          await saveFinalResultIfProvided({
+            memory: await routingAgent.getMemory({ requestContext }),
+            finalResult: generatedFinalResult || defaultResult.finalResult,
+            threadId: inputData.threadId || runIdToUse,
+            resourceId: inputData.threadResourceId || networkName,
+            generateId,
+          });
+        }
+      }
+
+      const maxIterationReached = maxIterations && inputData.iteration >= maxIterations;
+
+      await writer?.write({
+        type: 'network-validation-end',
+        payload: {
+          runId,
+          iteration: inputData.iteration,
+          passed: completionResult.complete,
+          results: completionResult.scorers,
+          duration: completionResult.totalDuration,
+          timedOut: completionResult.timedOut,
+          reason: completionResult.completionReason,
+          maxIterationReached: !!maxIterationReached,
+        },
+        from: ChunkFrom.NETWORK,
+        runId: runIdToUse,
+      });
+
+      // Determine if this iteration completes the task
+      const isComplete = completionResult.complete;
+
+      // Fire the onIterationComplete callback if provided
+      if (onIterationComplete) {
+        await onIterationComplete({
+          iteration: inputData.iteration,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: inputData.result,
+          isComplete,
+        });
+      }
+
+      // Not complete - inject feedback for next iteration
+      const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
+
+      // Save feedback to memory so the next iteration can see it
+      const memoryInstance = await routingAgent.getMemory({ requestContext });
+      if (memoryInstance) {
+        await memoryInstance.saveMessages({
+          messages: [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: feedback,
+                  },
+                ],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                  completionResult: {
+                    passed: completionResult.complete,
+                  },
+                },
+              },
+              createdAt: new Date(),
+              threadId: inputData.threadId || runIdToUse,
+              resourceId: inputData.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+        });
+      }
+
+      if (isComplete) {
+        // Task is complete - use generatedFinalResult if LLM provided one,
+        // otherwise keep the primitive's result
+        return {
+          ...inputData,
+          ...(generatedFinalResult ? { result: generatedFinalResult } : {}),
+          ...(structuredObject !== undefined ? { structuredObject } : {}),
+          isComplete: true,
+          validationPassed: true,
+          completionReason: completionResult.completionReason || 'Task complete',
+        };
+      } else {
+        return {
+          ...inputData,
+          isComplete: false,
+          validationPassed: false,
+          validationFeedback: feedback,
+        };
+      }
+    },
   });
 
   const finalStep = createStep({
     id: 'final-step',
-    inputSchema: networkWorkflow.outputSchema,
-    outputSchema: networkWorkflow.outputSchema,
+    inputSchema: z.object({
+      task: z.string(),
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
+      prompt: z.string(),
+      result: z.string(),
+      structuredObject: z.any().optional(),
+      isComplete: z.boolean().optional(),
+      completionReason: z.string().optional(),
+      iteration: z.number(),
+      validationPassed: z.boolean().optional(),
+      validationFeedback: z.string().optional(),
+    }),
+    outputSchema: z.object({
+      task: z.string(),
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
+      prompt: z.string(),
+      result: z.string(),
+      object: z.any().optional(),
+      isComplete: z.boolean().optional(),
+      completionReason: z.string().optional(),
+      iteration: z.number(),
+      validationPassed: z.boolean().optional(),
+    }),
     execute: async ({ inputData, writer }) => {
+      // Extract structuredObject and rename to object for the payload
+      const { structuredObject, ...restInputData } = inputData;
+
       const finalData = {
-        ...inputData,
+        ...restInputData,
+        ...(structuredObject !== undefined ? { object: structuredObject } : {}),
         ...(maxIterations && inputData.iteration >= maxIterations
           ? { completionReason: `Max iterations reached: ${maxIterations}` }
           : {}),
@@ -1218,12 +1948,26 @@ export async function networkLoop<
         type: 'network-execution-event-finish',
         payload: finalData,
         from: ChunkFrom.NETWORK,
-        runId,
+        runId: runIdToUse,
       });
 
       return finalData;
     },
   });
+
+  // Create a combined step that runs network iteration + validation
+  const iterationWithValidation = createWorkflow({
+    id: 'iteration-with-validation',
+    inputSchema: networkWorkflow.inputSchema,
+    outputSchema: validationStep.outputSchema,
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
+    },
+  })
+    .then(networkWorkflow)
+    .then(validationStep)
+    .commit();
 
   const mainWorkflow = createWorkflow({
     id: 'agent-loop-main-workflow',
@@ -1247,20 +1991,32 @@ export async function networkLoop<
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
+      validationPassed: z.boolean().optional(),
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
     },
   })
-    .dountil(networkWorkflow, async ({ inputData }) => {
-      return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
+    .dountil(iterationWithValidation, async ({ inputData }) => {
+      // Complete when: (LLM says complete AND validation passed) OR max iterations reached
+      const llmComplete = inputData.isComplete === true;
+      const validationOk = inputData.validationPassed !== false; // true or undefined (no validation)
+      const maxReached = Boolean(maxIterations && inputData.iteration >= maxIterations);
+
+      return (llmComplete && validationOk) || maxReached;
     })
     .then(finalStep)
     .commit();
 
+  const mastraInstance = routingAgent.getMastraInstance();
+  if (mastraInstance) {
+    mainWorkflow.__registerMastra(mastraInstance);
+    networkWorkflow.__registerMastra(mastraInstance);
+  }
+
   const run = await mainWorkflow.createRun({
-    runId,
+    runId: runIdToUse,
   });
 
   const { thread } = await prepareMemoryStep({
@@ -1274,12 +2030,15 @@ export async function networkLoop<
     memoryConfig: routingAgentMemoryOptions?.options,
   });
 
-  const task = getLastMessage(messages);
-
   return new MastraAgentNetworkStream({
     run,
     createStream: () => {
-      return run.streamVNext({
+      if (resumeDataToUse) {
+        return run.resumeStream({
+          resumeData: resumeDataToUse,
+        }).fullStream;
+      }
+      return run.stream({
         inputData: {
           task,
           primitiveId: '',

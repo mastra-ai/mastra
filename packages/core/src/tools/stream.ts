@@ -1,25 +1,13 @@
 import { WritableStream } from 'node:stream/web';
 import type { DataChunkType } from '../stream/types';
+import type { OutputWriter } from '../workflows';
 
-/**
- * ToolStream is a WritableStream that wraps chunks with metadata before writing to an underlying stream.
- *
- * It extends `WritableStream<unknown>` to allow piping from any ReadableStream type.
- * This is necessary because WritableStream is contravariant in its type parameter -
- * a WritableStream<unknown> can accept writes of any type, making it compatible
- * with ReadableStream<T> for any T.
- *
- * @example
- * ```typescript
- * // In a tool's execute function:
- * const stream = await agent.stream(prompt);
- * await stream.fullStream.pipeTo(context.writer);
- * ```
- *
- */
 export class ToolStream extends WritableStream<unknown> {
-  originalStream?: WritableStream;
-  private writeQueue: Promise<void> = Promise.resolve();
+  private prefix: string;
+  private callId: string;
+  private name: string;
+  private runId: string;
+  private writeFn?: OutputWriter;
 
   constructor(
     {
@@ -33,63 +21,55 @@ export class ToolStream extends WritableStream<unknown> {
       name: string;
       runId: string;
     },
-    originalStream?: WritableStream,
+    writeFn?: OutputWriter,
   ) {
     super({
       async write(chunk: any) {
-        const writer = originalStream?.getWriter();
-
-        try {
-          await writer?.write({
-            type: `${prefix}-output`,
-            runId,
-            from: 'USER',
-            payload: {
-              output: chunk,
-              ...(prefix === 'workflow-step'
-                ? {
-                    runId,
-                    stepName: name,
-                  }
-                : {
-                    [`${prefix}CallId`]: callId,
-                    [`${prefix}Name`]: name,
-                  }),
-            },
-          });
-        } finally {
-          writer?.releaseLock();
-        }
+        await getInstance()._write(chunk);
       },
     });
-    this.originalStream = originalStream;
+
+    const self = this;
+    function getInstance() {
+      return self;
+    }
+
+    this.prefix = prefix;
+    this.callId = callId;
+    this.name = name;
+    this.runId = runId;
+    this.writeFn = writeFn;
   }
 
-  async write(data: any) {
-    const writer = this.getWriter();
-
-    try {
-      await writer.write(data);
-    } finally {
-      writer.releaseLock();
+  private async _write(data: any) {
+    if (this.writeFn) {
+      await this.writeFn({
+        type: `${this.prefix}-output`,
+        runId: this.runId,
+        from: 'USER',
+        payload: {
+          output: data,
+          ...(this.prefix === 'workflow-step'
+            ? {
+                runId: this.runId,
+                stepName: this.name,
+              }
+            : {
+                [`${this.prefix}CallId`]: this.callId,
+                [`${this.prefix}Name`]: this.name,
+              }),
+        },
+      });
     }
   }
 
+  async write(data: any) {
+    await this._write(data);
+  }
+
   async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
-    // Queue the write operation to prevent concurrent access to the writer
-    this.writeQueue = this.writeQueue.then(async () => {
-      if (!this.originalStream) {
-        return;
-      }
-
-      const writer = this.originalStream.getWriter();
-      try {
-        await writer.write(data);
-      } finally {
-        writer.releaseLock();
-      }
-    });
-
-    return this.writeQueue;
+    if (this.writeFn) {
+      await this.writeFn(data);
+    }
   }
 }

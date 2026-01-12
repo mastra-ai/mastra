@@ -1,6 +1,6 @@
 {
   "name": "@mastra/couchbase",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.4",
   "description": "Couchbase vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/couchbase",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "lint": "eslint .",
     "coverage": "vitest run --coverage",
@@ -35,14 +36,12 @@
     "@internal/types-builder": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "axios": "^1.12.2",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

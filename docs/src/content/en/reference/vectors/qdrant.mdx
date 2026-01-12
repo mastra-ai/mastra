@@ -1,6 +1,8 @@
 ---
 title: "Reference: Qdrant Vector Store | Vectors"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+packages:
+  - "@mastra/qdrant"
 ---
 
 # Qdrant Vector Store
@@ -137,7 +139,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -239,7 +241,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -252,7 +254,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

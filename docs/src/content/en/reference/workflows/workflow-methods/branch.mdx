@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow.branch() | Workflows"
 description: Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.branch()
@@ -9,7 +11,7 @@ The `.branch()` method creates conditional branches between workflow steps, allo
 
 ## Usage example
 
-```typescript copy
+```typescript
 workflow.branch([
   [async ({ context }) => true, step1],
   [async ({ context }) => false, step2],

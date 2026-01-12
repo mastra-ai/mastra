@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
-import { experimental_generateSpeech } from 'ai-v5';
-import type { SpeechModel } from 'ai-v5';
+import { experimental_generateSpeech } from '@internal/ai-sdk-v5';
+import type { SpeechModel } from '@internal/ai-sdk-v5';
 import { MastraVoice } from '../voice';
 
 export class AISDKSpeech extends MastraVoice {

@@ -1,18 +1,18 @@
-import type { WritableStream } from 'node:stream/web';
-
 import type { RequestContext } from '../../di';
+import type { SerializedError } from '../../error';
+import type { PubSub } from '../../events/pubsub';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import type { DefaultExecutionEngine } from '../default';
 import type {
-  Emitter,
   EntryExecutionResult,
   ExecutionContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFlowEntry,
   StepResult,
   TimeTravelExecutionParams,
+  WorkflowRunStatus,
 } from '../types';
 
 export interface PersistStepUpdateParams {
@@ -22,9 +22,9 @@ export interface PersistStepUpdateParams {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
   executionContext: ExecutionContext;
-  workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
+  workflowStatus: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
   requestContext: RequestContext;
 }
 
@@ -59,7 +59,8 @@ export async function persistStepUpdate(
       requestContextObj[key] = value;
     });
 
-    await engine.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       resourceId,
@@ -102,11 +103,12 @@ export interface ExecuteEntryParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
+  perStep?: boolean;
 }
 
 export async function executeEntry(
@@ -126,11 +128,12 @@ export async function executeEntry(
     resume,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
+    perStep,
   } = params;
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
@@ -151,12 +154,13 @@ export async function executeEntry(
       resume,
       prevOutput,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
+      perStep,
     });
 
     // Extract result and apply context changes
@@ -186,11 +190,12 @@ export async function executeEntry(
         state: executionContext.state,
       },
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
+      perStep,
     });
 
     // After resuming one parallel step, check if ALL parallel steps are complete
@@ -269,11 +274,12 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
+      perStep,
     });
   } else if (entry.type === 'conditional') {
     execResults = await engine.executeConditional({
@@ -288,11 +294,12 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
+      perStep,
     });
   } else if (entry.type === 'loop') {
     execResults = await engine.executeLoop({
@@ -307,12 +314,13 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
+      perStep,
     });
   } else if (entry.type === 'foreach') {
     execResults = await engine.executeForeach({
@@ -327,24 +335,29 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
+      perStep,
     });
   } else if (entry.type === 'sleep') {
     const startedAt = Date.now();
     const sleepWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.waiting_ev`;
     await engine.wrapDurableOperation(sleepWaitingOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: entry.id,
-          payload: prevOutput,
-          startedAt,
-          status: 'waiting',
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-waiting',
+          payload: {
+            id: entry.id,
+            payload: prevOutput,
+            startedAt,
+            status: 'waiting',
+          },
         },
       });
     });
@@ -376,10 +389,10 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
     });
 
     delete executionContext.activeStepsPath[entry.id];
@@ -406,21 +419,29 @@ export async function executeEntry(
     stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
     const sleepResultOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`;
     await engine.wrapDurableOperation(sleepResultOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-result',
-        payload: {
-          id: entry.id,
-          endedAt,
-          status: 'success',
-          output: prevOutput,
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: {
+            id: entry.id,
+            endedAt,
+            status: 'success',
+            output: prevOutput,
+          },
         },
       });
 
-      await emitter.emit('watch', {
-        type: 'workflow-step-finish',
-        payload: {
-          id: entry.id,
-          metadata: {},
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: entry.id,
+            metadata: {},
+          },
         },
       });
     });
@@ -428,13 +449,17 @@ export async function executeEntry(
     const startedAt = Date.now();
     const sleepUntilWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.waiting_ev`;
     await engine.wrapDurableOperation(sleepUntilWaitingOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: entry.id,
-          payload: prevOutput,
-          startedAt,
-          status: 'waiting',
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-waiting',
+          payload: {
+            id: entry.id,
+            payload: prevOutput,
+            startedAt,
+            status: 'waiting',
+          },
         },
       });
     });
@@ -468,10 +493,10 @@ export async function executeEntry(
       resume,
       executionContext,
       tracingContext,
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
     });
 
     delete executionContext.activeStepsPath[entry.id];
@@ -499,21 +524,29 @@ export async function executeEntry(
 
     const sleepUntilResultOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`;
     await engine.wrapDurableOperation(sleepUntilResultOperationId, async () => {
-      await emitter.emit('watch', {
-        type: 'workflow-step-result',
-        payload: {
-          id: entry.id,
-          endedAt,
-          status: 'success',
-          output: prevOutput,
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: {
+            id: entry.id,
+            endedAt,
+            status: 'success',
+            output: prevOutput,
+          },
         },
       });
 
-      await emitter.emit('watch', {
-        type: 'workflow-step-finish',
-        payload: {
-          id: entry.id,
-          metadata: {},
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: entry.id,
+            metadata: {},
+          },
         },
       });
     });
@@ -539,9 +572,10 @@ export async function executeEntry(
   });
 
   if (execResults.status === 'canceled') {
-    await emitter.emit('watch', {
-      type: 'workflow-canceled',
-      payload: {},
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'workflow-canceled', payload: {} },
     });
   }
 

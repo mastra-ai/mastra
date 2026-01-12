@@ -1,4 +1,4 @@
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { createSimilarityPrompt } from '../relevance-score-provider';
 import type { RelevanceScoreProvider } from '../relevance-score-provider';
@@ -31,7 +31,7 @@ Always return just the number, no explanation.`,
     const model = await this.agent.getModel();
 
     let response: string;
-    if (model.specificationVersion === 'v2') {
+    if (isSupportedLanguageModel(model)) {
       const responseText = await this.agent.generate(prompt);
       response = responseText.text;
     } else {

@@ -1,6 +1,8 @@
 ---
 title: "Reference: LLM provider API keys (choose one or more) | Templates"
 description: "Complete guide to creating, using, and contributing Mastra templates"
+packages:
+  - "@mastra/core"
 ---
 
 # Overview
@@ -20,7 +22,7 @@ Mastra templates are pre-built project structures that demonstrate specific use 
 
 Install a template using the `create-mastra` command:
 
-```bash copy
+```bash
 npx create-mastra@beta --template template-name
 ```
 
@@ -123,7 +125,6 @@ const agent = new Agent({
   name: "example-agent",
   model: "openai/gpt-5.1", // or other provider strings
   instructions: "Your agent instructions here",
-  // ... other configuration
 });
 ```
 

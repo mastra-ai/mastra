@@ -1,6 +1,9 @@
 ---
 title: "Publishing an MCP Server | MCP"
 description: Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -32,7 +35,7 @@ Create a file for your stdio server, for example, `/src/mastra/stdio.ts`.
 
 Add the following code to the file. Remember to import your actual Mastra tools and name the server appropriately.
 
-```typescript title="src/mastra/stdio.ts" copy
+```typescript title="src/mastra/stdio.ts"
 #!/usr/bin/env node
 import { MCPServer } from "@mastra/mcp";
 import { weatherTool } from "./tools";
@@ -55,7 +58,7 @@ server.startStdio().catch((error) => {
 
 Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server with both ESM and CJS outputs.
 
-```json title="package.json" copy
+```json title="package.json"
 {
   "bin": "dist/stdio.mjs",
   "scripts": {
