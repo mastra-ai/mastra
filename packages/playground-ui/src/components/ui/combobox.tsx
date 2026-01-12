@@ -1,6 +1,4 @@
-'use client';
-
-import { Button } from '@/components/ui/button';
+import { Button as DSButton, ButtonProps as DSButtonProps } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
@@ -20,8 +18,7 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  contentClassName?: string;
+  variant?: DSButtonProps['variant'];
 };
 
 export function Combobox({
@@ -33,8 +30,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  buttonClassName,
-  contentClassName,
+  variant = 'default',
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -120,23 +116,19 @@ export function Combobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <DSButton
           ref={triggerRef}
-          variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn('w-full justify-between', buttonClassName, className)}
+          variant={variant}
+          className={cn('w-full justify-between', className)}
           disabled={disabled}
         >
           <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+        </DSButton>
       </PopoverTrigger>
-      <PopoverContent
-        className={cn('p-0', contentClassName)}
-        align="start"
-        style={{ width: triggerWidth ? `${triggerWidth}px` : undefined }}
-      >
+      <PopoverContent className="p-0 w-fit" align="start">
         <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
           <div className="flex items-center border-b px-3 py-2">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />

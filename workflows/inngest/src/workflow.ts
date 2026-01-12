@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { WritableStream } from 'node:stream/web';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
   Step,
@@ -16,8 +15,14 @@ import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import type { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
+import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
-import type { InngestEngineType, InngestFlowControlConfig, InngestWorkflowConfig } from './types';
+import type {
+  InngestEngineType,
+  InngestFlowControlConfig,
+  InngestFlowCronConfig,
+  InngestWorkflowConfig,
+} from './types';
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
@@ -32,10 +37,13 @@ export class InngestWorkflow<
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
+  private cronFunction: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
+  private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
 
   constructor(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>, inngest: Inngest) {
-    const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
+    const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
+      params;
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
@@ -49,6 +57,10 @@ export class InngestWorkflow<
 
     this.#mastra = params.mastra!;
     this.inngest = inngest;
+
+    if (cron) {
+      this.cronConfig = { cron, inputData, initialState };
+    }
   }
 
   async listWorkflowRuns(args?: {
@@ -64,27 +76,15 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
-  }
-
-  async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
-      //returning in memory run if no storage is initialized
-      return this.runs.get(runId)
-        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      return { runs: [], total: 0 };
     }
-    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
-
-    return (
-      run ??
-      (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
-    );
+    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   __registerMastra(mastra: Mastra) {
+    super.__registerMastra(mastra);
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
@@ -141,10 +141,16 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const existingRun = await this.getWorkflowRunById(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
-    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    // Check if run exists in persistent storage (not just in-memory)
+    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
+    if (!existsInStorage && shouldPersistSnapshot) {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -169,42 +175,52 @@ export class InngestWorkflow<
     return run;
   }
 
+  //createCronFunction is only called if cronConfig.cron is defined.
+  private createCronFunction() {
+    if (this.cronFunction) {
+      return this.cronFunction;
+    }
+    this.cronFunction = this.inngest.createFunction(
+      {
+        id: `workflow.${this.id}.cron`,
+        retries: 0,
+        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        ...this.flowControlConfig,
+      },
+      { cron: this.cronConfig?.cron ?? '' },
+      async () => {
+        const run = await this.createRun();
+        const result = await run.start({
+          inputData: this.cronConfig?.inputData,
+          initialState: this.cronConfig?.initialState,
+        });
+        return { result, runId: run.runId };
+      },
+    );
+    return this.cronFunction;
+  }
+
   getFunction() {
     if (this.function) {
       return this.function;
     }
+
+    // Always set function-level retries to 0, since retries are handled at the step level via executeStepWithRetry
+    // which uses either step.retries or retryConfig.attempts (step.retries takes precedence).
+    // step.retries is not accessible at function level, so we handle retries manually in executeStepWithRetry.
+    // This is why we set retries to 0 here.
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
-        retries: Math.min(this.retryConfig?.attempts ?? 0, 20) as
-          | 0
-          | 1
-          | 2
-          | 3
-          | 4
-          | 5
-          | 6
-          | 7
-          | 8
-          | 9
-          | 10
-          | 11
-          | 12
-          | 13
-          | 14
-          | 15
-          | 16
-          | 17
-          | 18
-          | 19
-          | 20,
+        retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel, perStep } =
+          event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -212,32 +228,11 @@ export class InngestWorkflow<
           });
         }
 
-        const emitter = {
-          emit: async (event: string, data: any) => {
-            if (!publish) {
-              return;
-            }
+        // Create InngestPubSub instance with the publish function from Inngest context
+        const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
-            try {
-              await publish({
-                channel: `workflow:${this.id}:${runId}`,
-                topic: event,
-                data,
-              });
-            } catch (err: any) {
-              this.logger.error('Error emitting event: ' + (err?.stack ?? err?.message ?? err));
-            }
-          },
-          on: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-          off: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-          once: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-        };
+        // Create requestContext before execute so we can reuse it in finalize
+        const requestContext = new RequestContext<Record<string, any>>(Object.entries(event.data.requestContext ?? {}));
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
@@ -252,25 +247,52 @@ export class InngestWorkflow<
           serializedStepGraph: this.serializedStepGraph,
           input: inputData,
           initialState,
-          emitter,
+          pubsub,
           retryConfig: this.retryConfig,
-          requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
+          requestContext,
           resume,
           timeTravel,
+          perStep,
           format,
           abortController: new AbortController(),
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              void emitter.emit('watch', chunk).catch(() => {});
-            },
-          }),
+          outputWriter: async (chunk: WorkflowStreamEvent) => {
+            try {
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: chunk,
+              });
+            } catch (err) {
+              this.logger.debug?.('Failed to publish watch event:', err);
+            }
+          },
         });
 
-        // Final step to check workflow status and throw NonRetriableError if failed
-        // This is needed to ensure that the Inngest workflow run is marked as failed instead of success
+        // Final step to invoke lifecycle callbacks and check workflow status
+        // Wrapped in step.run for durability - callbacks are memoized on replay
         await step.run(`workflow.${this.id}.finalize`, async () => {
+          if (result.status !== 'paused') {
+            // Invoke lifecycle callbacks (onFinish and onError)
+            // Use invokeLifecycleCallbacksInternal to call the real implementation
+            // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
+            await engine.invokeLifecycleCallbacksInternal({
+              status: result.status,
+              result: 'result' in result ? result.result : undefined,
+              error: 'error' in result ? result.error : undefined,
+              steps: result.steps,
+              tripwire: 'tripwire' in result ? result.tripwire : undefined,
+              runId,
+              workflowId: this.id,
+              resourceId,
+              input: inputData,
+              requestContext,
+              state: result.state ?? initialState ?? {},
+            });
+          }
+
+          // Throw NonRetriableError if failed to ensure Inngest marks the run as failed
           if (result.status === 'failed') {
             throw new NonRetriableError(`Workflow failed`, {
               cause: result,
@@ -301,6 +323,10 @@ export class InngestWorkflow<
   }
 
   getFunctions() {
-    return [this.getFunction(), ...this.getNestedFunctions(this.executionGraph.steps)];
+    return [
+      this.getFunction(),
+      ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
+      ...this.getNestedFunctions(this.executionGraph.steps),
+    ];
   }
 }

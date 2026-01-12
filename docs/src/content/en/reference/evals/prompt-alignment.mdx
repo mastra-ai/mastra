@@ -1,6 +1,8 @@
 ---
 title: "Reference: Prompt Alignment Scorer | Evals"
 description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
+packages:
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -107,7 +109,7 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 
 You can customize the Prompt Alignment Scorer by adjusting the scale parameter and evaluation mode to fit your scoring needs.
 
-```typescript showLineNumbers copy
+```typescript
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-5.1",
   options: {
@@ -417,7 +419,7 @@ const result = await scorer.run({
 
 In this example, the response fully addresses the user's prompt with all requirements met.
 
-```typescript title="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
+```typescript title="src/example-excellent-prompt-alignment.ts"
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
@@ -465,7 +467,7 @@ The output receives a high score because it perfectly addresses the intent, fulf
 
 In this example, the response addresses the core intent but misses some requirements or has format issues.
 
-```typescript title="src/example-partial-prompt-alignment.ts" showLineNumbers copy
+```typescript title="src/example-partial-prompt-alignment.ts"
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
@@ -506,7 +508,7 @@ The output receives a lower score because while the content is accurate, it does
 
 In this example, the response fails to address the user's specific requirements.
 
-```typescript title="src/example-poor-prompt-alignment.ts" showLineNumbers copy
+```typescript title="src/example-poor-prompt-alignment.ts"
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
@@ -552,7 +554,7 @@ The output receives a low score because it only partially fulfills the requireme
 
 Evaluates how well the response addresses the user's request, ignoring system instructions:
 
-```typescript title="src/example-user-mode.ts" showLineNumbers copy
+```typescript title="src/example-user-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-5.1",
   options: { evaluationMode: "user" },
@@ -584,7 +586,7 @@ const result = await scorer.run({
 
 Evaluates compliance with system behavioral guidelines and constraints:
 
-```typescript title="src/example-system-mode.ts" showLineNumbers copy
+```typescript title="src/example-system-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-5.1",
   options: { evaluationMode: "system" },
@@ -617,7 +619,7 @@ const result = await scorer.run({
 
 Evaluates both user intent fulfillment and system compliance with weighted scoring (70% user, 30% system):
 
-```typescript title="src/example-both-mode.ts" showLineNumbers copy
+```typescript title="src/example-both-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-5.1",
   options: { evaluationMode: "both" }, // This is the default

@@ -315,41 +315,10 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Streams agent builder action progress in real-time using VNext streaming.
-   * This calls `/api/agent-builder/:actionId/streamVNext`.
-   */
-  async streamVNext(params: AgentBuilderActionRequest, runId?: string) {
-    const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
-    }
-
-    const requestContext = parseClientRequestContext(params.requestContext);
-    const { requestContext: _, ...actionParams } = params;
-
-    const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      body: { ...actionParams, requestContext },
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to stream agent builder action VNext: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
    * Observes an existing agent builder action run stream.
    * Replays cached execution from the beginning, then continues with live stream.
    * This is the recommended method for recovery after page refresh/hot reload.
-   * This calls `/api/agent-builder/:actionId/observe` (which delegates to observeStreamVNext).
+   * This calls `/api/agent-builder/:actionId/observe`
    */
   async observeStream(params: { runId: string }) {
     const searchParams = new URLSearchParams();
@@ -363,32 +332,6 @@ export class AgentBuilder extends BaseResource {
 
     if (!response.ok) {
       throw new Error(`Failed to observe agent builder action stream: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
-   * Observes an existing agent builder action run stream using VNext streaming API.
-   * Replays cached execution from the beginning, then continues with live stream.
-   * This calls `/api/agent-builder/:actionId/observe-streamVNext`.
-   */
-  async observeStreamVNext(params: { runId: string }) {
-    const searchParams = new URLSearchParams();
-    searchParams.set('runId', params.runId);
-
-    const url = `/api/agent-builder/${this.actionId}/observe-streamVNext?${searchParams.toString()}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to observe agent builder action stream VNext: ${response.statusText}`);
     }
 
     if (!response.body) {
@@ -461,9 +404,31 @@ export class AgentBuilder extends BaseResource {
   /**
    * Gets a specific action run by its ID.
    * This calls `/api/agent-builder/:actionId/runs/:runId`.
+   * @param runId - The ID of the action run to retrieve
+   * @param options - Optional configuration
+   * @param options.fields - Optional array of fields to return (e.g., ['result', 'steps']). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
+   * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
+   * @returns Promise containing the action run details with metadata and processed execution state
    */
-  async runById(runId: string) {
-    const url = `/api/agent-builder/${this.actionId}/runs/${runId}`;
+  async runById(
+    runId: string,
+    options?: {
+      fields?: string[];
+      withNestedWorkflows?: boolean;
+    },
+  ) {
+    const searchParams = new URLSearchParams();
+
+    if (options?.fields && options.fields.length > 0) {
+      searchParams.set('fields', options.fields.join(','));
+    }
+
+    if (options?.withNestedWorkflows !== undefined) {
+      searchParams.set('withNestedWorkflows', String(options.withNestedWorkflows));
+    }
+
+    const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+    const url = `/api/agent-builder/${this.actionId}/runs/${runId}${queryString}`;
     return this.request(url, {
       method: 'GET',
     });
@@ -512,17 +477,6 @@ export class AgentBuilder extends BaseResource {
     }
 
     const url = `/api/agent-builder/${this.actionId}/runs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    return this.request(url, {
-      method: 'GET',
-    });
-  }
-
-  /**
-   * Gets the execution result of an agent builder action run.
-   * This calls `/api/agent-builder/:actionId/runs/:runId/execution-result`.
-   */
-  async runExecutionResult(runId: string) {
-    const url = `/api/agent-builder/${this.actionId}/runs/${runId}/execution-result`;
     return this.request(url, {
       method: 'GET',
     });

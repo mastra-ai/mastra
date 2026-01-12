@@ -1,11 +1,14 @@
 import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from '@internal/ai-sdk-v4';
-import { isToolUIPart } from 'ai-v5';
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
+import { isToolUIPart } from '@internal/ai-sdk-v5';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
+import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
-import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
-import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
+
+// Use TypeDetector's static methods for V4/V5 detection
+const hasAIV5CoreMessageCharacteristics = TypeDetector.hasAIV5CoreMessageCharacteristics;
+const hasAIV5UIMessageCharacteristics = TypeDetector.hasAIV5UIMessageCharacteristics;
 
 const threadId = 'test-thread';
 const resourceId = 'test-resource';
@@ -1520,6 +1523,145 @@ describe('MessageList V5 Support', () => {
         const v5ReasoningPart = v5Parts.find(p => p.type === 'reasoning');
         expect(v5ReasoningPart?.providerMetadata).toEqual(reasoningProviderMetadata);
       });
+    });
+  });
+
+  describe('data-* parts handling', () => {
+    it('should preserve data-* parts when message is detected as V4 (text + data-* only)', () => {
+      // This message has no V5-specific characteristics, so it's treated as V4
+      // and parts are passed through without filtering - this works correctly
+      const list = new MessageList({ threadId, resourceId });
+
+      const message: AIV5UIMessage = {
+        id: 'msg-v4-path',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Running task...' },
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 1, progress: 33 },
+          } as any,
+        ],
+      };
+
+      list.add(message, 'response');
+
+      const dbMessages = list.get.all.db();
+      const dataProgressParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
+
+      expect(dataProgressParts.length).toBe(1);
+      expect(dataProgressParts[0]).toMatchObject({
+        type: 'data-progress',
+        data: { taskName: 'first-task', step: 1, progress: 33 },
+      });
+    });
+
+    it('should preserve data-* parts when message has V5 tool parts', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const v5Message: AIV5UIMessage = {
+        id: 'msg-v5-with-data',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-test-tool', // V5 tool part format
+            toolCallId: 'call-1',
+            state: 'output-available',
+            input: { param: 'value' },
+            output: { result: 'success' },
+          } as any,
+          { type: 'text', text: 'Task running...' },
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 1, progress: 33, status: 'in-progress' },
+          } as any,
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 2, progress: 66, status: 'in-progress' },
+          } as any,
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 3, progress: 99, status: 'complete' },
+          } as any,
+          { type: 'text', text: 'Task completed!' },
+        ],
+      };
+
+      list.add(v5Message, 'response');
+
+      const dbMessages = list.get.all.db();
+      expect(dbMessages).toHaveLength(1);
+
+      const dataProgressParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
+
+      expect(dataProgressParts.length).toBe(3);
+      expect(dataProgressParts[0]).toMatchObject({
+        type: 'data-progress',
+        data: { taskName: 'first-task', step: 1, progress: 33, status: 'in-progress' },
+      });
+    });
+
+    it('should preserve custom data-* part types in V5 messages', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const v5Message: AIV5UIMessage = {
+        id: 'msg-custom-data-v5',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-analytics-tool',
+            toolCallId: 'call-2',
+            state: 'output-available',
+            input: {},
+            output: { tracked: true },
+          } as any,
+          { type: 'text', text: 'Hello' },
+          { type: 'data-custom', data: { foo: 'bar' } } as any,
+          { type: 'data-analytics', data: { event: 'click', count: 5 } } as any,
+        ],
+      };
+
+      list.add(v5Message, 'response');
+
+      const dbMessages = list.get.all.db();
+      const customParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
+
+      expect(customParts.length).toBe(2);
+      expect(customParts[0]).toMatchObject({ type: 'data-custom', data: { foo: 'bar' } });
+      expect(customParts[1]).toMatchObject({ type: 'data-analytics', data: { event: 'click', count: 5 } });
+    });
+
+    it('should roundtrip data-* parts through V5 UI -> V2 DB -> V5 UI conversion', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      // Add V5 message with tool part and data-* parts
+      const originalMessage: AIV5UIMessage = {
+        id: 'msg-roundtrip',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-progress-tool',
+            toolCallId: 'call-1',
+            state: 'output-available',
+            input: { task: 'test' },
+            output: { success: true },
+          } as any,
+          { type: 'text', text: 'Progress update' },
+          { type: 'data-progress', data: { step: 1, total: 3 } } as any,
+        ],
+      };
+
+      list.add(originalMessage, 'response');
+
+      // Convert back to V5 UI format
+      const v5Messages = list.get.all.aiV5.ui();
+      expect(v5Messages).toHaveLength(1);
+
+      // Find the data-progress part in the converted message
+      const dataProgressPart = v5Messages[0].parts.find((p: any) => p.type === 'data-progress');
+
+      expect(dataProgressPart).toBeDefined();
+      expect((dataProgressPart as any)?.data).toEqual({ step: 1, total: 3 });
     });
   });
 });

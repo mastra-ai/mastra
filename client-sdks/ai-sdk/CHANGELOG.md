@@ -1,5 +1,273 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.14
+
+### Patch Changes
+
+- Add structured output support to agent.network() method. Users can now pass a `structuredOutput` option with a Zod schema to get typed results from network execution. ([#11701](https://github.com/mastra-ai/mastra/pull/11701))
+
+  The stream exposes `.object` (Promise) and `.objectStream` (ReadableStream) getters, and emits `network-object` and `network-object-result` chunk types. The structured output is generated after task completion using the provided schema.
+
+  ```typescript
+  const stream = await agent.network('Research AI trends', {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+        recommendations: z.array(z.string()),
+      }),
+    },
+  });
+
+  const result = await stream.object;
+  // result is typed: { summary: string; recommendations: string[] }
+  ```
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Fixed agent network not returning text response when routing agent handles requests without delegation. ([#11497](https://github.com/mastra-ai/mastra/pull/11497))
+
+  **What changed:**
+  - Agent networks now correctly stream text responses when the routing agent decides to handle a request itself instead of delegating to sub-agents, workflows, or tools
+  - Added fallback in transformers to ensure text is always returned even if core events are missing
+
+  **Why this matters:**
+  Previously, when using `toAISdkV5Stream` or `networkRoute()` outside of the Mastra Studio UI, no text content was returned when the routing agent handled requests directly. This fix ensures consistent behavior across all API routes.
+
+  Fixes #11219
+
+- Refactor the MessageList class from ~4000 LOC monolith to ~850 LOC with focused, single-responsibility modules. This improves maintainability, testability, and makes the codebase easier to understand. ([#11658](https://github.com/mastra-ai/mastra/pull/11658))
+  - Extract message format adapters (AIV4Adapter, AIV5Adapter) for SDK conversions
+  - Extract TypeDetector for centralized message format identification
+  - Extract MessageStateManager for tracking message sources and persistence
+  - Extract MessageMerger for streaming message merge logic
+  - Extract StepContentExtractor for step content extraction
+  - Extract CacheKeyGenerator for message deduplication
+  - Consolidate provider compatibility utilities (Gemini, Anthropic, OpenAI)
+
+  ```
+  message-list/
+  ├── message-list.ts        # Main class (~850 LOC, down from ~4000)
+  ├── adapters/              # SDK format conversions
+  │   ├── AIV4Adapter.ts     # MastraDBMessage <-> AI SDK V4
+  │   └── AIV5Adapter.ts     # MastraDBMessage <-> AI SDK V5
+  ├── cache/
+  │   └── CacheKeyGenerator.ts  # Deduplication keys
+  ├── conversion/
+  │   ├── input-converter.ts    # Any format -> MastraDBMessage
+  │   ├── output-converter.ts   # MastraDBMessage -> SDK formats
+  │   ├── step-content.ts       # Step content extraction
+  │   └── to-prompt.ts          # LLM prompt formatting
+  ├── detection/
+  │   └── TypeDetector.ts       # Format identification
+  ├── merge/
+  │   └── MessageMerger.ts      # Streaming merge logic
+  ├── state/
+  │   └── MessageStateManager.ts # Source & persistence tracking
+  └── utils/
+      └── provider-compat.ts    # Provider-specific fixes
+  ```
+
+- Fix autoresume not working fine in useChat ([#11486](https://github.com/mastra-ai/mastra/pull/11486))
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- Fix data chunk property filtering to only include type, data, and id properties ([#11477](https://github.com/mastra-ai/mastra/pull/11477))
+
+  Previously, when `isDataChunkType` checks were performed, the entire chunk object was returned, potentially letting extra properties like `from`, `runId`, `metadata`, etc go through. This could cause issues with `useChat` and other UI components.
+
+  Now, all locations that handle `DataChunkType` properly destructure and return only the allowed properties:
+  - `type` (required): The chunk type identifier starting with "data-"
+  - `data` (required): The actual data payload
+  - `id` (optional): An optional identifier for the chunk
+
+- Updated dependencies [[`e54953e`](https://github.com/mastra-ai/mastra/commit/e54953ed8ce1b28c0d62a19950163039af7834b4), [`7d56d92`](https://github.com/mastra-ai/mastra/commit/7d56d9213886e8353956d7d40df10045fd12b299), [`fdac646`](https://github.com/mastra-ai/mastra/commit/fdac646033a0930a1a4e00d13aa64c40bb7f1e02), [`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`68ec97d`](https://github.com/mastra-ai/mastra/commit/68ec97d4c07c6393fcf95c2481fc5d73da99f8c8), [`4aa55b3`](https://github.com/mastra-ai/mastra/commit/4aa55b383cf06043943359ea316572fd969861a7)]:
+  - @mastra/core@1.0.0-beta.19
+
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Refactor storage architecture to use domain-specific stores via `getStore()` pattern ([#11361](https://github.com/mastra-ai/mastra/pull/11361))
+
+  ### Summary
+
+  This release introduces a new storage architecture that replaces passthrough methods on `MastraStorage` with domain-specific storage interfaces accessed via `getStore()`. This change reduces code duplication across storage adapters and provides a cleaner, more modular API.
+
+  ### Migration Guide
+
+  All direct method calls on storage instances should be updated to use `getStore()`:
+
+  ```typescript
+  // Before
+  const thread = await storage.getThreadById({ threadId });
+  await storage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+  await storage.createSpan(span);
+
+  // After
+  const memory = await storage.getStore('memory');
+  const thread = await memory?.getThreadById({ threadId });
+
+  const workflows = await storage.getStore('workflows');
+  await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+  const observability = await storage.getStore('observability');
+  await observability?.createSpan(span);
+  ```
+
+  ### Available Domains
+  - **`memory`**: Thread and message operations (`getThreadById`, `saveThread`, `saveMessages`, etc.)
+  - **`workflows`**: Workflow state persistence (`persistWorkflowSnapshot`, `loadWorkflowSnapshot`, `getWorkflowRunById`, etc.)
+  - **`scores`**: Evaluation scores (`saveScore`, `listScoresByScorerId`, etc.)
+  - **`observability`**: Tracing and spans (`createSpan`, `updateSpan`, `getTrace`, etc.)
+  - **`agents`**: Stored agent configurations (`createAgent`, `getAgentById`, `listAgents`, etc.)
+
+  ### Breaking Changes
+  - Passthrough methods have been removed from `MastraStorage` base class
+  - All storage adapters now require accessing domains via `getStore()`
+  - The `stores` property on storage instances is now the canonical way to access domain storage
+
+  ### Internal Changes
+  - Each storage adapter now initializes domain-specific stores in its constructor
+  - Domain stores share database connections and handle their own table initialization
+
+- Updated dependencies [[`33a4d2e`](https://github.com/mastra-ai/mastra/commit/33a4d2e4ed8af51f69256232f00c34d6b6b51d48), [`4aaa844`](https://github.com/mastra-ai/mastra/commit/4aaa844a4f19d054490f43638a990cc57bda8d2f), [`4a1a6cb`](https://github.com/mastra-ai/mastra/commit/4a1a6cb3facad54b2bb6780b00ce91d6de1edc08), [`31d13d5`](https://github.com/mastra-ai/mastra/commit/31d13d5fdc2e2380e2e3ee3ec9fb29d2a00f265d), [`4c62166`](https://github.com/mastra-ai/mastra/commit/4c621669f4a29b1f443eca3ba70b814afa286266), [`7bcbf10`](https://github.com/mastra-ai/mastra/commit/7bcbf10133516e03df964b941f9a34e9e4ab4177), [`4353600`](https://github.com/mastra-ai/mastra/commit/43536005a65988a8eede236f69122e7f5a284ba2), [`6986fb0`](https://github.com/mastra-ai/mastra/commit/6986fb064f5db6ecc24aa655e1d26529087b43b3), [`053e979`](https://github.com/mastra-ai/mastra/commit/053e9793b28e970086b0507f7f3b76ea32c1e838), [`e26dc9c`](https://github.com/mastra-ai/mastra/commit/e26dc9c3ccfec54ae3dc3e2b2589f741f9ae60a6), [`55edf73`](https://github.com/mastra-ai/mastra/commit/55edf7302149d6c964fbb7908b43babfc2b52145), [`27c0009`](https://github.com/mastra-ai/mastra/commit/27c0009777a6073d7631b0eb7b481d94e165b5ca), [`dee388d`](https://github.com/mastra-ai/mastra/commit/dee388dde02f2e63c53385ae69252a47ab6825cc), [`3f3fc30`](https://github.com/mastra-ai/mastra/commit/3f3fc3096f24c4a26cffeecfe73085928f72aa63), [`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`10c2735`](https://github.com/mastra-ai/mastra/commit/10c27355edfdad1ee2b826b897df74125eb81fb8), [`1924cf0`](https://github.com/mastra-ai/mastra/commit/1924cf06816e5e4d4d5333065ec0f4bb02a97799), [`b339816`](https://github.com/mastra-ai/mastra/commit/b339816df0984d0243d944ac2655d6ba5f809cde)]:
+  - @mastra/core@1.0.0-beta.15
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Add support for AI SDK v6 (LanguageModelV3) ([#11191](https://github.com/mastra-ai/mastra/pull/11191))
+
+  Agents can now use `LanguageModelV3` models from AI SDK v6 beta providers like `@ai-sdk/openai@^3.0.0-beta`.
+
+  **New features:**
+  - Usage normalization: V3's nested usage format is normalized to Mastra's flat format with `reasoningTokens`, `cachedInputTokens`, and raw data preserved in a `raw` field
+
+  **Backward compatible:** All existing V1 and V2 models continue to work unchanged.
+
+- Fix requestContext not being forwarded from middleware in chatRoute and networkRoute ([`b7b0930`](https://github.com/mastra-ai/mastra/commit/b7b0930dbe72eade8d3882992f2f2db53220e4eb))
+
+  Previously, when using middleware to set values in requestContext (e.g., extracting agentId and organizationId from the request body), those values were not properly forwarded to agents, tools, and workflows when using chatRoute and networkRoute from the AI SDK.
+
+  This fix ensures that requestContext set by middleware is correctly prioritized and forwarded with the following precedence:
+  1. Context from middleware (highest priority)
+  2. Context from defaultOptions
+  3. Context from request body (lowest priority)
+
+  Resolves #11192
+
+- Updated dependencies [[`4f94ed8`](https://github.com/mastra-ai/mastra/commit/4f94ed8177abfde3ec536e3574883e075423350c), [`ac3cc23`](https://github.com/mastra-ai/mastra/commit/ac3cc2397d1966bc0fc2736a223abc449d3c7719), [`a86f4df`](https://github.com/mastra-ai/mastra/commit/a86f4df0407311e0d2ea49b9a541f0938810d6a9), [`029540c`](https://github.com/mastra-ai/mastra/commit/029540ca1e582fc2dd8d288ecd4a9b0f31a954ef), [`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`01b20fe`](https://github.com/mastra-ai/mastra/commit/01b20fefb7c67c2b7d79417598ef4e60256d1225), [`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/core@1.0.0-beta.14
+
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
+- Improve JSDoc comments for `toAISdkV5Messages, toAISdkV4Messages` functions ([#11119](https://github.com/mastra-ai/mastra/pull/11119))
+
+- Fixed duplicate assistant messages appearing when using `useChat` with memory enabled. ([#11195](https://github.com/mastra-ai/mastra/pull/11195))
+
+  **What was happening:** When using `useChat` with `chatRoute` and memory, assistant messages were being duplicated in storage after multiple conversation turns. This occurred because the backend-generated message ID wasn't being sent back to `useChat`, causing ID mismatches during deduplication.
+
+  **What changed:**
+  - The backend now sends the assistant message ID in the stream's start event, so `useChat` uses the same ID as storage
+  - Custom `data-*` parts (from `writer.custom()`) are now preserved when messages contain V5 tool parts
+
+  Fixes #11091
+
+- add requestContext support to networkRoute ([#11164](https://github.com/mastra-ai/mastra/pull/11164))
+
+- Updated dependencies [[`d5ed981`](https://github.com/mastra-ai/mastra/commit/d5ed981c8701c1b8a27a5f35a9a2f7d9244e695f), [`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`932d63d`](https://github.com/mastra-ai/mastra/commit/932d63dd51be9c8bf1e00e3671fe65606c6fb9cd), [`b760b73`](https://github.com/mastra-ai/mastra/commit/b760b731aca7c8a3f041f61d57a7f125ae9cb215), [`695a621`](https://github.com/mastra-ai/mastra/commit/695a621528bdabeb87f83c2277cf2bb084c7f2b4), [`2b459f4`](https://github.com/mastra-ai/mastra/commit/2b459f466fd91688eeb2a44801dc23f7f8a887ab), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`24b76d8`](https://github.com/mastra-ai/mastra/commit/24b76d8e17656269c8ed09a0c038adb9cc2ae95a), [`243a823`](https://github.com/mastra-ai/mastra/commit/243a8239c5906f5c94e4f78b54676793f7510ae3), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`c61fac3`](https://github.com/mastra-ai/mastra/commit/c61fac3add96f0dcce0208c07415279e2537eb62), [`6f14f70`](https://github.com/mastra-ai/mastra/commit/6f14f706ccaaf81b69544b6c1b75ab66a41e5317), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f), [`2a53598`](https://github.com/mastra-ai/mastra/commit/2a53598c6d8cfeb904a7fc74e57e526d751c8fa6), [`c7cd3c7`](https://github.com/mastra-ai/mastra/commit/c7cd3c7a187d7aaf79e2ca139de328bf609a14b4), [`847c212`](https://github.com/mastra-ai/mastra/commit/847c212caba7df0d6f2fc756b494ac3c75c3720d), [`6f941c4`](https://github.com/mastra-ai/mastra/commit/6f941c438ca5f578619788acc7608fc2e23bd176)]:
+  - @mastra/core@1.0.0-beta.12
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Support new Workflow tripwire run status. Tripwires that are thrown from within a workflow will now bubble up and return a graceful state with information about tripwires. ([#10947](https://github.com/mastra-ai/mastra/pull/10947))
+
+  When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+  ```typescript showLineNumbers copy
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: { message: 'Hello' } });
+
+  if (result.status === 'tripwire') {
+    console.log('Workflow terminated by tripwire:', result.tripwire?.reason);
+    console.log('Processor ID:', result.tripwire?.processorId);
+    console.log('Retry requested:', result.tripwire?.retry);
+  }
+  ```
+
+  Adds new UI state for tripwire in agent chat and workflow UI.
+
+  This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
+
+- Updated dependencies [[`38380b6`](https://github.com/mastra-ai/mastra/commit/38380b60fca905824bdf6b43df307a58efb1aa15), [`798d0c7`](https://github.com/mastra-ai/mastra/commit/798d0c740232653b1d754870e6b43a55c364ffe2), [`ffe84d5`](https://github.com/mastra-ai/mastra/commit/ffe84d54f3b0f85167fe977efd027dba027eb998), [`2c212e7`](https://github.com/mastra-ai/mastra/commit/2c212e704c90e2db83d4109e62c03f0f6ebd2667), [`4ca4306`](https://github.com/mastra-ai/mastra/commit/4ca430614daa5fa04730205a302a43bf4accfe9f), [`3bf6c5f`](https://github.com/mastra-ai/mastra/commit/3bf6c5f104c25226cd84e0c77f9dec15f2cac2db)]:
+  - @mastra/core@1.0.0-beta.11
+
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Return NetworkDataPart on each agent-execution-event and workflow-execution-event in network streams ([#10982](https://github.com/mastra-ai/mastra/pull/10982))
+
+- Fixed tool-call-suspended chunks being dropped in workflow-step-output when using AI SDK. Previously, when an agent inside a workflow step called a tool that got suspended, the tool-call-suspended chunk was not received on the frontend even though tool-input-available chunks were correctly received. ([#10987](https://github.com/mastra-ai/mastra/pull/10987))
+
+  The issue occurred because tool-call-suspended was not included in the isMastraTextStreamChunk list, causing it to be filtered out in transformWorkflow. Now tool-call-suspended, tool-call-approval, object, and tripwire chunks are properly included in the text stream chunk list and will be transformed and passed through correctly.
+
+  Fixes #10978
+
+- Adds `withMastra()` for wrapping AI SDK models with Mastra processors and memory. ([#10911](https://github.com/mastra-ai/mastra/pull/10911))
+
+  ```typescript
+  import { openai } from '@ai-sdk/openai';
+  import { generateText } from 'ai';
+  import { withMastra } from '@mastra/ai-sdk';
+
+  const model = withMastra(openai('gpt-4o'), {
+    inputProcessors: [myGuardProcessor],
+    outputProcessors: [myLoggingProcessor],
+    memory: {
+      storage,
+      threadId: 'thread-123',
+      resourceId: 'user-123',
+      lastMessages: 10,
+    },
+  });
+
+  const { text } = await generateText({ model, prompt: 'Hello!' });
+  ```
+
+  Works with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
 ## 1.0.0-beta.6
 
 ### Patch Changes

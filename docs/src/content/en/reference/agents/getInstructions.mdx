@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.getInstructions() | Agents"
 description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getInstructions()
@@ -9,7 +11,7 @@ The `.getInstructions()` method retrieves the instructions configured for an age
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.getInstructions();
 ```
 
@@ -42,7 +44,7 @@ await agent.getInstructions();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 await agent.getInstructions({
   requestContext: new RequestContext(),
 });
@@ -66,4 +68,4 @@ await agent.getInstructions({
 ## Related
 
 - [Agents overview](/docs/v1/agents/overview)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)

@@ -441,6 +441,98 @@ describe('OpenAISchemaCompatLayer - Edge Cases', () => {
   });
 });
 
+describe('OpenAISchemaCompatLayer - Partial Nested Objects (GitHub #11457)', () => {
+  // This test suite verifies the behavior related to GitHub issue #11457
+  // When a nested object has .partial() applied, all its properties become optional.
+  // For OpenAI strict mode, .optional() is converted to .nullable() so fields remain
+  // in the JSON schema's required array. The validation layer (validateToolInput in @mastra/core)
+  // handles converting undefined → null before validation so the full flow works correctly.
+
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should validate partial nested objects when null is provided for optional fields', () => {
+    // This is the schema from the bug report
+    const inputSchema = z.object({
+      eventId: z.string(),
+      request: z
+        .object({
+          City: z.string(),
+          Name: z.string(),
+          Slug: z.string(),
+        })
+        .partial()
+        .passthrough(),
+      eventImageFile: z.any().optional(),
+    });
+
+    // Process through OpenAI compat layer
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processedSchema = layer.processZodType(inputSchema);
+
+    // For OpenAI strict mode, optional fields are converted to nullable.
+    // When null is provided (as the LLM should do), validation passes and
+    // the transform converts null → undefined.
+    const testDataWithNull = {
+      eventId: '123',
+      request: { Name: 'Test', City: null, Slug: null },
+      eventImageFile: null,
+    };
+
+    const result = processedSchema.safeParse(testDataWithNull);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // Verify the transform converted null → undefined
+      expect(result.data.request.City).toBeUndefined();
+      expect(result.data.request.Slug).toBeUndefined();
+      expect(result.data.eventImageFile).toBeUndefined();
+    }
+  });
+
+  it('should convert null to undefined via transform for optional properties', () => {
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // When null is provided (as the LLM should do for optional fields), validation
+    // passes and the transform converts null → undefined
+    const result = processed.safeParse({ name: 'John', age: null });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('John');
+      expect(result.data.age).toBeUndefined(); // null was transformed to undefined
+    }
+  });
+
+  it('should keep fields in required array for OpenAI strict mode compliance', () => {
+    // This test verifies that .optional() fields remain in the required array
+    // by checking that the schema rejects omitted fields (undefined) at the schema level.
+    // The validation layer (validateToolInput) handles this by converting undefined → null.
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // At the schema level, undefined is NOT accepted (this is correct for strict mode)
+    // The validation layer (validateToolInput in @mastra/core) converts undefined → null
+    const result = processed.safeParse({ name: 'John' }); // age is undefined/omitted
+
+    // Schema expects null, not undefined - this is intentional for OpenAI strict mode
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('OpenAISchemaCompatLayer - JSON Serialization', () => {
   const modelInfo: ModelInformation = {
     provider: 'openai',
@@ -468,6 +560,294 @@ describe('OpenAISchemaCompatLayer - JSON Serialization', () => {
 
     const json = JSON.stringify(result);
     expect(json).toBe('{"name":"John","deletedAt":null}');
+  });
+});
+
+describe('OpenAISchemaCompatLayer - Default Values', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should convert default to nullable with transform that returns default value', () => {
+    const schema = z.object({
+      name: z.string(),
+      confidence: z.number().default(1),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // When null is passed, should get the default value
+    const result = processed.parse({ name: 'John', confidence: null });
+    expect(result).toEqual({ name: 'John', confidence: 1 });
+  });
+
+  it('should preserve provided values for default fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      confidence: z.number().default(1),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // When actual value is passed, should keep it
+    const result = processed.parse({ name: 'John', confidence: 0.5 });
+    expect(result).toEqual({ name: 'John', confidence: 0.5 });
+  });
+
+  it('should handle string defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      explanation: z.string().default(''),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', explanation: null });
+    expect(result).toEqual({ name: 'John', explanation: '' });
+  });
+
+  it('should handle default with function', () => {
+    const schema = z.object({
+      name: z.string(),
+      createdAt: z.string().default(() => 'default-timestamp'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', createdAt: null });
+    expect(result).toEqual({ name: 'John', createdAt: 'default-timestamp' });
+  });
+
+  it('should handle multiple default fields', () => {
+    const schema = z.object({
+      nonEnglish: z.boolean(),
+      translated: z.boolean(),
+      confidence: z.number().min(0).max(1).default(1),
+      explanation: z.string().default(''),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      nonEnglish: true,
+      translated: true,
+      confidence: null,
+      explanation: null,
+    });
+
+    expect(result).toEqual({
+      nonEnglish: true,
+      translated: true,
+      confidence: 1,
+      explanation: '',
+    });
+  });
+
+  it('should handle mix of optional and default fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+      score: z.number().default(0),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      name: 'John',
+      age: null,
+      score: null,
+    });
+
+    expect(result).toEqual({
+      name: 'John',
+      age: undefined,
+      score: 0,
+    });
+  });
+
+  it('should handle default with nested objects', () => {
+    const schema = z.object({
+      user: z.object({
+        name: z.string(),
+        settings: z.object({
+          theme: z.string().default('light'),
+        }),
+      }),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      user: {
+        name: 'John',
+        settings: { theme: null },
+      },
+    });
+
+    expect(result).toEqual({
+      user: {
+        name: 'John',
+        settings: { theme: 'light' },
+      },
+    });
+  });
+
+  it('should handle boolean defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      enabled: z.boolean().default(false),
+      active: z.boolean().default(true),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', enabled: null, active: null });
+    expect(result).toEqual({ name: 'John', enabled: false, active: true });
+  });
+
+  it('should handle array defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      tags: z.array(z.string()).default([]),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', tags: null });
+    expect(result).toEqual({ name: 'John', tags: [] });
+  });
+
+  it('should handle object defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      config: z
+        .object({
+          theme: z.string(),
+          size: z.number(),
+        })
+        .default({ theme: 'dark', size: 12 }),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', config: null });
+    expect(result).toEqual({ name: 'John', config: { theme: 'dark', size: 12 } });
+  });
+
+  it('should preserve 0 value and not replace with default', () => {
+    const schema = z.object({
+      score: z.number().default(100),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ score: 0 });
+    expect(result).toEqual({ score: 0 });
+  });
+
+  it('should preserve false value and not replace with default', () => {
+    const schema = z.object({
+      enabled: z.boolean().default(true),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ enabled: false });
+    expect(result).toEqual({ enabled: false });
+  });
+
+  it('should preserve empty string value and not replace with default', () => {
+    const schema = z.object({
+      bio: z.string().default('No bio provided'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ bio: '' });
+    expect(result).toEqual({ bio: '' });
+  });
+
+  it('should handle default in arrays of objects', () => {
+    const schema = z.object({
+      items: z.array(
+        z.object({
+          name: z.string(),
+          quantity: z.number().default(1),
+        }),
+      ),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      items: [
+        { name: 'Apple', quantity: null },
+        { name: 'Banana', quantity: 5 },
+      ],
+    });
+
+    expect(result).toEqual({
+      items: [
+        { name: 'Apple', quantity: 1 },
+        { name: 'Banana', quantity: 5 },
+      ],
+    });
+  });
+
+  it('should handle default with nullable inner type', () => {
+    const schema = z.object({
+      name: z.string(),
+      deletedAt: z.string().nullable().default(null),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // When null is passed, should get the default (which is null)
+    const result = processed.parse({ name: 'John', deletedAt: null });
+    expect(result).toEqual({ name: 'John', deletedAt: null });
+  });
+
+  it('should handle mix of default, optional, and nullable in same schema', () => {
+    const schema = z.object({
+      required: z.string(),
+      optional: z.string().optional(),
+      nullable: z.string().nullable(),
+      withDefault: z.string().default('default'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      required: 'value',
+      optional: null,
+      nullable: null,
+      withDefault: null,
+    });
+
+    expect(result).toEqual({
+      required: 'value',
+      optional: undefined,
+      nullable: null,
+      withDefault: 'default',
+    });
   });
 });
 

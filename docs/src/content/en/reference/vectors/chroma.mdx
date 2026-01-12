@@ -1,6 +1,8 @@
 ---
 title: "Reference: Chroma Vector Store | Vectors"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+packages:
+  - "@mastra/chroma"
 ---
 
 # Chroma Vector Store
@@ -313,7 +315,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -475,7 +477,7 @@ await vectorStore.deleteVectors({
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -489,7 +491,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

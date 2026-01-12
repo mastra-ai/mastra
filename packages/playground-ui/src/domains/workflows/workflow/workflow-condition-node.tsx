@@ -41,6 +41,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const previousStep = steps[previousStepId];
   const nextStep = steps[nextStepId];
 
+  // Check if previous step is a tripwire (failed step with tripwire property)
+  const isPreviousTripwire = previousStep?.status === 'failed' && previousStep?.tripwire !== undefined;
+  const previousDisplayStatus = isPreviousTripwire ? 'tripwire' : previousStep?.status;
+
   const { icon: IconComponent, color } = getConditionIconAndColor(type);
 
   return (
@@ -49,12 +53,13 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
 
       <div
         data-workflow-node
-        data-workflow-step-status={previousStep?.status}
+        data-workflow-step-status={previousDisplayStatus}
         data-testid="workflow-condition-node"
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
-          previousStep?.status === 'success' && nextStep && 'bg-accent1Darker',
-          previousStep?.status === 'failed' && nextStep && 'bg-accent2Darker',
+          previousDisplayStatus === 'success' && nextStep && 'bg-accent1Darker',
+          previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Darker',
+          previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-950/40 border-amber-500/30',
           !previousStep && Boolean(nextStep?.status) && 'bg-accent1Darker',
         )}
       >
@@ -115,10 +120,11 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
                           className={cn(
-                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll',
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 whitespace-pre-wrap break-words',
                             className,
-                            previousStep?.status === 'success' && nextStep && '!bg-accent1Dark',
-                            previousStep?.status === 'failed' && nextStep && '!bg-accent2Dark',
+                            previousDisplayStatus === 'success' && nextStep && '!bg-accent1Dark',
+                            previousDisplayStatus === 'failed' && nextStep && '!bg-accent2Dark',
+                            previousDisplayStatus === 'tripwire' && nextStep && '!bg-amber-900/40',
                           )}
                           onClick={() => setOpenDialog(true)}
                           style={style}
@@ -191,7 +197,8 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           stepName={nextStepId}
           input={previousStep?.output}
           mapConfig={data.mapConfig}
-          status={nextStep ? previousStep?.status : undefined}
+          tripwire={isPreviousTripwire ? previousStep?.tripwire : undefined}
+          status={nextStep ? previousDisplayStatus : undefined}
         />
       </div>
 

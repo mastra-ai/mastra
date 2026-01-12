@@ -45,7 +45,7 @@ async function executeToolCallAndRespond({
   respondFn,
 }: {
   params: StreamParams<any>;
-  response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+  response: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>>;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -855,7 +855,7 @@ export class Agent extends BaseResource {
           case 'tripwire': {
             message.parts.push({
               type: 'text',
-              text: chunk.payload.tripwireReason,
+              text: chunk.payload.reason,
             });
 
             execUpdate();
@@ -1321,6 +1321,97 @@ export class Agent extends BaseResource {
 
     return streamResponse;
   }
+
+  async approveNetworkToolCall(params: { runId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/approve-network-tool-call`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+    }) => {
+      await processMastraNetworkStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async declineNetworkToolCall(params: { runId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/decline-network-tool-call`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+    }) => {
+      await processMastraNetworkStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
   async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
@@ -1708,6 +1799,7 @@ export class Agent extends BaseResource {
   resetModel(): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model/reset`, {
       method: 'POST',
+      body: {},
     });
   }
 

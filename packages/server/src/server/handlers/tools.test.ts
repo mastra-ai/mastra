@@ -6,7 +6,7 @@ import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 import {
   LIST_TOOLS_ROUTE,
   GET_TOOL_BY_ID_ROUTE,
@@ -41,13 +41,13 @@ describe('Tools Handlers', () => {
   describe('listToolsHandler', () => {
     it('should return empty object when no tools are provided', async () => {
       const mastra = new Mastra({ logger: false });
-      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }), tools: undefined });
+      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestServerContext({ mastra }), tools: undefined });
       expect(result).toEqual({});
     });
 
     it('should return serialized tools when tools are provided', async () => {
       const mastra = new Mastra({ logger: false });
-      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }), tools: mockTools });
+      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestServerContext({ mastra }), tools: mockTools });
       expect(result).toHaveProperty(mockTool.id);
       // expect(result).toHaveProperty(mockVercelTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
@@ -60,7 +60,7 @@ describe('Tools Handlers', () => {
       const mastra = new Mastra({ logger: false });
       await expect(
         GET_TOOL_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           tools: mockTools,
           toolId: 'non-existent',
         }),
@@ -70,7 +70,7 @@ describe('Tools Handlers', () => {
     it('should return serialized tool when found', async () => {
       const mastra = new Mastra({ logger: false });
       const result = await GET_TOOL_BY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         tools: mockTools,
         toolId: mockTool.id,
       });
@@ -83,7 +83,7 @@ describe('Tools Handlers', () => {
     it('should throw error when toolId is not provided', async () => {
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: new Mastra({ logger: false }) }),
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
           tools: mockTools,
           toolId: undefined as any,
           data: {},
@@ -94,7 +94,7 @@ describe('Tools Handlers', () => {
     it('should throw 404 when tool is not found', async () => {
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: new Mastra({ logger: false }) }),
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
           tools: mockTools,
           toolId: 'non-existent',
           data: {},
@@ -108,7 +108,7 @@ describe('Tools Handlers', () => {
 
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: new Mastra() }),
+          ...createTestServerContext({ mastra: new Mastra() }),
           tools,
           toolId: nonExecutableTool.id,
           data: {},
@@ -119,7 +119,7 @@ describe('Tools Handlers', () => {
     it('should throw error when data is not provided', async () => {
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: new Mastra() }),
+          ...createTestServerContext({ mastra: new Mastra() }),
           tools: mockTools,
           toolId: mockTool.id,
           data: null as any,
@@ -134,7 +134,7 @@ describe('Tools Handlers', () => {
       const context = { test: 'data' };
 
       const result = await EXECUTE_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         tools: mockTools,
         toolId: mockTool.id,
         runId: 'test-run',
@@ -161,7 +161,7 @@ describe('Tools Handlers', () => {
       (mockVercelTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
 
       const result = await EXECUTE_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         tools: mockTools,
         toolId: `tool`,
         data: { test: 'data' },
@@ -184,7 +184,7 @@ describe('Tools Handlers', () => {
     it('should throw 404 when agent is not found', async () => {
       await expect(
         EXECUTE_AGENT_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: new Mastra({ logger: false }) }),
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
           agentId: 'non-existent',
           toolId: mockTool.id,
           data: {},
@@ -195,7 +195,7 @@ describe('Tools Handlers', () => {
     it('should throw 404 when tool is not found in agent', async () => {
       await expect(
         EXECUTE_AGENT_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({
+          ...createTestServerContext({
             mastra: new Mastra({
               logger: false,
               agents: { 'test-agent': mockAgent as any },
@@ -220,7 +220,7 @@ describe('Tools Handlers', () => {
 
       await expect(
         EXECUTE_AGENT_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({
+          ...createTestServerContext({
             mastra: new Mastra({
               logger: false,
               agents: { 'test-agent': agent as any },
@@ -247,7 +247,7 @@ describe('Tools Handlers', () => {
         test: 'data',
       };
       const result = await EXECUTE_AGENT_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
@@ -274,7 +274,7 @@ describe('Tools Handlers', () => {
       });
 
       const result = await EXECUTE_AGENT_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         toolId: `tool`,
         data: {},
@@ -297,7 +297,7 @@ describe('Tools Handlers', () => {
     it('should throw 404 when agent is not found', async () => {
       await expect(
         GET_AGENT_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: new Mastra({ logger: false }) }),
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
           agentId: 'non-existent',
           toolId: mockTool.id,
         }),
@@ -311,7 +311,7 @@ describe('Tools Handlers', () => {
     it('should throw 404 when tool is not found in agent', async () => {
       await expect(
         GET_AGENT_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({
+          ...createTestServerContext({
             mastra: new Mastra({
               logger: false,
               agents: { 'test-agent': mockAgent as any },
@@ -329,7 +329,7 @@ describe('Tools Handlers', () => {
 
     it('should return serialized tool when found', async () => {
       const result = await GET_AGENT_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({
+        ...createTestServerContext({
           mastra: new Mastra({
             logger: false,
             agents: { 'test-agent': mockAgent as any },

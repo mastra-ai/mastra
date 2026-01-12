@@ -1,6 +1,10 @@
 ---
 title: "OpenTelemetry Bridge | Tracing | Observability"
 description: "Integrate Mastra tracing with existing OpenTelemetry infrastructure"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/otel-bridge"
 ---
 
 # OpenTelemetry Bridge
@@ -70,7 +74,7 @@ Using the OtelBridge requires two steps:
 
 Create an instrumentation file that initializes OTEL. This must run before your application code:
 
-```typescript title="instrumentation.ts" showLineNumbers copy
+```typescript title="instrumentation.ts"
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
@@ -99,7 +103,7 @@ export { sdk };
 
 Add the OtelBridge to your Mastra observability config:
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { OtelBridge } from "@mastra/otel-bridge";

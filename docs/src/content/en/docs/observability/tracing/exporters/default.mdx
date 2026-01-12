@@ -1,6 +1,10 @@
 ---
 title: "Default Exporter | Tracing | Observability"
 description: "Store traces locally for development and debugging"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/observability"
 ---
 
 # Default Exporter
@@ -11,7 +15,7 @@ The `DefaultExporter` persists traces to your configured storage backend, making
 
 ### Prerequisites
 
-1. **Storage Backend**: Configure a storage provider (LibSQL, PostgreSQL, etc.)
+1. **Storage Backend**: Configure a storage provider (libSQL, PostgreSQL, etc.)
 2. **Studio**: Install for viewing traces locally
 
 ### Basic Setup
@@ -37,21 +41,38 @@ export const mastra = new Mastra({
 });
 ```
 
-### Automatic Configuration
+### Recommended Configuration
 
-When using the default observability configuration, DefaultExporter is automatically included:
+Include DefaultExporter in your observability configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 import { LibSQLStore } from "@mastra/libsql";
+
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes DefaultExporter
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
   }),
 });
 ```
@@ -102,7 +123,7 @@ If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects
 
 | Storage Provider                                | Preferred Strategy | Supported Strategies                      | Notes                                 |
 | ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
-| **[LibSQL](/reference/v1/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
+| **[libSQL](/reference/v1/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
 | **[PostgreSQL](/reference/v1/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Recommended for production            |
 
 ### Strategy Benefits
@@ -160,4 +181,4 @@ new DefaultExporter({
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [CloudExporter](/docs/v1/observability/tracing/exporters/cloud)
-- [Storage Configuration](/docs/v1/server-db/storage)
+- [Storage Configuration](/docs/v1/memory/storage)

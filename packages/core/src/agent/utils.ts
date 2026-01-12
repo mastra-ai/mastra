@@ -1,9 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import type { MastraLegacyLanguageModel, MastraLanguageModel } from '../llm/model/shared.types';
 import type { StorageThreadType } from '../memory';
 import type { OutputSchema } from '../stream';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
+
+export const supportedLanguageModelSpecifications = ['v2', 'v3'];
+export const isSupportedLanguageModel = (
+  model: MastraLanguageModel | MastraLegacyLanguageModel,
+): model is MastraLanguageModel => {
+  return supportedLanguageModelSpecifications.includes(model.specificationVersion);
+};
 
 export async function tryGenerateWithJsonFallback<OUTPUT extends OutputSchema = undefined>(
   agent: Agent,

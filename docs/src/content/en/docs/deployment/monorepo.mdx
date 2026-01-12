@@ -1,15 +1,34 @@
 ---
-title: "Monorepo Deployment | Deployment"
+title: "Deploy in a Monorepo | Deployment"
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
+packages:
+  - "@mastra/deployer"
 ---
 
-# Monorepo Deployment
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
-Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./cloud-providers/) providers may introduce extra requirements, the core setup is the same.
+# Deploy in a Monorepo
 
-## Example monorepo
+Deploying Mastra in a monorepo follows the same process as a standalone application. This guide covers monorepo-specific considerations. For the core build and deployment steps, see [Deploy a Mastra Server](/docs/v1/deployment/mastra-server).
 
-In this example, the Mastra application is located at `apps/api`.
+## Supported monorepos
+
+Mastra works with:
+
+- npm workspaces
+- pnpm workspaces
+- Yarn workspaces
+- Turborepo
+
+Known limitations:
+
+- Bun workspaces - partial support; known issues
+- Nx - You can use Nx's [supported dependency strategies](https://nx.dev/concepts/decisions/dependency-management) but you need to have `package.json` files inside your workspace packages
+
+## Example structure
+
+In this example, the Mastra application is located at `apps/api`:
 
 ```
 apps/
@@ -29,69 +48,114 @@ packages/
 package.json
 ```
 
+## Building from a monorepo
+
+Use your monorepo tool to run the build command from the correct package. There's no need for special flags.
+
+Examples:
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash
+npm run build --workspace=apps/api
+```
+
+</TabItem>
+
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm --filter api run build
+```
+
+</TabItem>
+
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn workspace api build
+```
+
+</TabItem>
+
+<TabItem value="turborepo" label="Turborepo">
+
+```bash
+turbo run build --filter=api
+```
+
+</TabItem>
+
+</Tabs>
+
+Your package's `build` script should run `mastra build`:
+
+```json title="apps/api/package.json"
+{
+  "scripts": {
+    "build": "mastra build"
+  }
+}
+```
+
+## Workspace packages
+
+When your Mastra application imports from other workspace packages, Mastra handles this automatically:
+
+- If the package is pre-compiled (e.g., built with `tsc` or `tsdown`), Mastra imports the compiled JavaScript
+- If the package contains uncompiled TypeScript, Mastra transpiles it during the build
+
+For most setups, this works without configuration. If you encounter issues with workspace package imports, add the package to [`transpilePackages`](/reference/v1/configuration#bundlertranspilepackages):
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    transpilePackages: ["@my-org/utils"],
+  },
+});
+```
+
 ## Environment variables
 
-Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file at the root of the Mastra application `(apps/api)`, for example:
-
-```
-api/
-├── src/
-│   └── mastra/
-├── .env
-├── package.json
-└── tsconfig.json
-```
+Store `.env` files in the Mastra application directory (e.g., `apps/api/.env`), not the monorepo root.
 
 ## Deployment configuration
 
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](./mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
+When deploying to cloud providers, ensure the correct package is selected as the deploy target. Selecting the monorepo root instead of the application directory (e.g., `apps/api`) is a common mistake.
+
+Most providers let you specify the root directory in their dashboard or configuration file.
+
+### Mastra Cloud
+
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/v1/mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
 
 ![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
 
 ## Dependency management
 
-In a monorepo, keep dependencies consistent to avoid version conflicts and build errors.
+Keep dependencies consistent to avoid version conflicts and build errors:
 
-- Use a **single lockfile** at the project root so all packages resolve the same versions.
-- Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates.
+- Use a **single lockfile** at the monorepo root so all packages resolve the same versions
+- Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates
 
-## Deployment pitfalls
+## Troubleshooting
 
-Common issues to watch for when deploying Mastra in a monorepo:
+### Workspace package not found
 
-- **Wrong project root**: make sure the correct package (e.g. `apps/api`) is selected as the deploy target.
+If Mastra can't resolve a workspace package, ensure:
+- The package is listed in your `package.json` dependencies
+- Your lockfile is up to date (`pnpm install`, `npm install`, etc.)
+- The package has a valid `main` or `exports` field in its `package.json`
 
-## Bundler options
+### TypeScript errors from workspace packages
 
-Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
+If you see type errors from uncompiled workspace packages, either:
+- Build the package first (recommended for faster Mastra builds)
+- Add the package to [`transpilePackages`](/reference/v1/configuration#bundlertranspilepackages) in your Mastra config
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+## Related
 
-export const mastra = new Mastra({
-  // ...
-  bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true,
-  },
-});
-```
-
-> See [Mastra Class](/reference/v1/core/mastra-class) for more configuration options.
-
-## Supported monorepos
-
-Mastra works with:
-
-- npm workspaces
-- pnpm workspaces
-- Yarn workspaces
-- Turborepo
-
-Known limitations:
-
-- Bun workspaces — partial support; known issues
-- Nx — You can use Nx's [supported dependency strategies](https://nx.dev/concepts/decisions/dependency-management) but you need to have `package.json` files inside your workspace packages
-
-> If you are experiencing issues with monorepos see our: [Monorepos Support mega issue](https://github.com/mastra-ai/mastra/issues/6852).
+- [Deploy a Mastra Server](/docs/v1/deployment/mastra-server) - Core build and deployment guide
+- [Configuration Reference](/reference/v1/configuration) - `bundler.transpilePackages` and other options
+- [CLI Reference](/reference/v1/cli/mastra) - Build command flags

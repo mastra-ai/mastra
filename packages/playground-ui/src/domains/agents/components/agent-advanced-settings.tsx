@@ -11,7 +11,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import CodeMirror from '@uiw/react-codemirror';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { jsonLanguage } from '@codemirror/lang-json';
 
 export const AgentAdvancedSettings = () => {
@@ -76,7 +76,7 @@ export const AgentAdvancedSettings = () => {
   const collapsibleClassName = 'rounded-lg border-sm border-border1 bg-surface3 overflow-clip';
   const collapsibleTriggerClassName =
     'text-icon3 text-ui-lg font-medium flex items-center gap-2 w-full p-[10px] justify-between';
-  const collapsibleContentClassName = 'bg-surface2 p-[10px] grid grid-cols-2 gap-[10px]';
+  const collapsibleContentClassName = 'bg-surface2 p-[10px] @container/collapsible';
   const buttonClass = 'text-icon3 hover:text-icon6';
 
   return (
@@ -89,127 +89,155 @@ export const AgentAdvancedSettings = () => {
           </Icon>
         </CollapsibleTrigger>
         <CollapsibleContent className={collapsibleContentClassName}>
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="top-k">
-              Top K
-            </Txt>
-            <Input
-              id="top-k"
-              type="number"
-              value={settings?.modelSettings?.topK || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    topK: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
+          <div className="grid grid-cols-1 gap-2 pb-2 @xs/collapsible:grid-cols-2">
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="frequency-penalty">
+                Frequency Penalty
+              </Txt>
+              <Input
+                id="frequency-penalty"
+                type="number"
+                step="0.1"
+                min="-1"
+                max="1"
+                value={settings?.modelSettings?.frequencyPenalty ?? ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="presence-penalty">
+                Presence Penalty
+              </Txt>
+              <Input
+                id="presence-penalty"
+                type="number"
+                step="0.1"
+                min="-1"
+                max="1"
+                value={settings?.modelSettings?.presencePenalty ?? ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="top-k">
+                Top K
+              </Txt>
+              <Input
+                id="top-k"
+                type="number"
+                value={settings?.modelSettings?.topK || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      topK: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-tokens">
+                Max Tokens
+              </Txt>
+              <Input
+                id="max-tokens"
+                type="number"
+                value={settings?.modelSettings?.maxTokens || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-steps">
+                Max Steps
+              </Txt>
+              <Input
+                id="max-steps"
+                type="number"
+                value={settings?.modelSettings?.maxSteps || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-retries">
+                Max Retries
+              </Txt>
+              <Input
+                id="max-retries"
+                type="number"
+                value={settings?.modelSettings?.maxRetries || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="seed">
+                Seed
+              </Txt>
+              <Input
+                id="seed"
+                type="number"
+                value={settings?.modelSettings?.seed || ''}
+                onChange={e =>
+                  setSettings({
+                    ...settings,
+                    modelSettings: {
+                      ...settings?.modelSettings,
+                      seed: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="frequency-penalty">
-              Frequency Penalty
-            </Txt>
-            <Input
-              id="frequency-penalty"
-              type="number"
-              value={settings?.modelSettings?.frequencyPenalty || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="presence-penalty">
-              Presence Penalty
-            </Txt>
-            <Input
-              id="presence-penalty"
-              type="number"
-              value={settings?.modelSettings?.presencePenalty || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    presencePenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-tokens">
-              Max Tokens
-            </Txt>
-            <Input
-              id="max-tokens"
-              type="number"
-              value={settings?.modelSettings?.maxTokens || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxTokens: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-steps">
-              Max Steps
-            </Txt>
-            <Input
-              id="max-steps"
-              type="number"
-              value={settings?.modelSettings?.maxSteps || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxSteps: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-retries">
-              Max Retries
-            </Txt>
-            <Input
-              id="max-retries"
-              type="number"
-              value={settings?.modelSettings?.maxRetries || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxRetries: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1 col-span-2">
             <div className="flex justify-between items-center">
               <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="provider-options">
                 Provider Options

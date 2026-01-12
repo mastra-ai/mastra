@@ -1,5 +1,5 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
@@ -23,6 +23,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   requireToolApproval,
   agentId,
+  toolCallConcurrency,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -100,6 +101,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     messageId: messageId!,
     agentId,
     requireToolApproval,
+    toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,

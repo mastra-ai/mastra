@@ -1,5 +1,7 @@
 ---
 title: "Custom Scorers | Evals"
+packages:
+  - "@mastra/core"
 ---
 
 # Custom scorers
@@ -65,7 +67,6 @@ For type safety and compatibility with both live agent scoring and trace scoring
 
 ```typescript
 const myScorer = createScorer({
-  // ...
   type: "agent", // Automatically handles agent input/output types
 }).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
@@ -241,9 +242,13 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 
 Together, these components allow you to define custom evaluation logic using LLMs as judges.
 
-> See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+:::info
 
-```typescript title="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
+Visit [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+
+:::
+
+```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from "@mastra/core/evals";
 import { z } from "zod";
 
@@ -399,7 +404,7 @@ The reason generation step creates explanations that help users understand why a
 
 ## High gluten-free example
 
-```typescript title="src/example-high-gluten-free.ts" showLineNumbers copy
+```typescript title="src/example-high-gluten-free.ts"
 const result = await glutenCheckerScorer.run({
   input: [{ role: 'user', content: 'Mix rice, beans, and vegetables' }],
   output: { text: 'Mix rice, beans, and vegetables' },
@@ -425,7 +430,7 @@ console.log('Reason:', result.reason);
 
 ## Partial gluten example
 
-```typescript title="src/example-partial-gluten.ts" showLineNumbers copy
+```typescript title="src/example-partial-gluten.ts"
 const result = await glutenCheckerScorer.run({
   input: [{ role: "user", content: "Mix flour and water to make dough" }],
   output: { text: "Mix flour and water to make dough" },
@@ -451,7 +456,7 @@ console.log("Reason:", result.reason);
 
 ## Low gluten-free example
 
-```typescript title="src/example-low-gluten-free.ts" showLineNumbers copy
+```typescript title="src/example-low-gluten-free.ts"
 const result = await glutenCheckerScorer.run({
   input: [{ role: "user", content: "Add soy sauce and noodles" }],
   output: { text: "Add soy sauce and noodles" },

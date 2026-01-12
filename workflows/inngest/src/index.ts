@@ -1,10 +1,12 @@
 import type { ReadableStream } from 'node:stream/web';
-import type { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { MastraScorers } from '@mastra/core/evals';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool } from '@mastra/core/tools';
+import type { DynamicArgument } from '@mastra/core/types';
 import type { Step, AgentStepOptions, StepParams, ToolStep } from '@mastra/core/workflows';
 import { Workflow } from '@mastra/core/workflows';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';
 import type { InngestEngineType, InngestWorkflowConfig } from './types';
@@ -12,21 +14,10 @@ import { InngestWorkflow } from './workflow';
 
 export * from './workflow';
 export * from './execution-engine';
+export * from './pubsub';
 export * from './run';
 export * from './serve';
 export * from './types';
-
-function isAgent(params: any): params is Agent<any, any> {
-  return params?.component === 'AGENT';
-}
-
-function isTool(params: any): params is Tool<any, any, any> {
-  return params instanceof Tool;
-}
-
-function isInngestWorkflow(params: any): params is InngestWorkflow {
-  return params instanceof InngestWorkflow;
-}
 
 export function createStep<
   TStepId extends string,
@@ -39,6 +30,25 @@ export function createStep<
   params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
+// Overload for agent WITH structured output schema
+export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
+  agent: Agent<TStepId, any>,
+  agentOptions: AgentStepOptions<TStepOutput> & {
+    structuredOutput: { schema: TStepOutput };
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
+): Step<
+  TStepId,
+  any,
+  z.ZodObject<{ prompt: z.ZodString }>,
+  TStepOutput,
+  z.ZodType<any>,
+  z.ZodType<any>,
+  InngestEngineType
+>;
+
+// Overload for agent WITHOUT structured output (default { text: string })
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
@@ -47,7 +57,10 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions,
+  agentOptions?: AgentStepOptions & {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
@@ -58,6 +71,10 @@ export function createStep<
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
   TStepId extends string,
@@ -71,11 +88,19 @@ export function createStep<
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
-  agentOptions?: AgentStepOptions,
+  agentOrToolOptions?:
+    | (AgentStepOptions & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      })
+    | {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   // Issue #9965: Preserve InngestWorkflow identity when passed to createStep
   // This ensures nested workflows in foreach are properly detected by isNestedWorkflowStep()
-  if (isInngestWorkflow(params)) {
+  if (params instanceof InngestWorkflow) {
     return params as unknown as Step<
       TStepId,
       TState,
@@ -87,7 +112,13 @@ export function createStep<
     >;
   }
 
-  if (isAgent(params)) {
+  if (params instanceof Agent) {
+    const options = agentOrToolOptions as
+      | (AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+      | undefined;
+    // Determine output schema based on structuredOutput option
+    const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
+    const { retries, scorers, ...agentOptions } = options ?? {};
     return {
       id: params.name as TStepId,
       description: params.getDescription(),
@@ -96,12 +127,13 @@ export function createStep<
         // resourceId: z.string().optional(),
         // threadId: z.string().optional(),
       }) as unknown as TStepInput,
-      outputSchema: z.object({
-        text: z.string(),
-      }) as unknown as TStepOutput,
+      outputSchema: outputSchema as unknown as TStepOutput,
+      retries,
+      scorers,
       execute: async ({
         inputData,
-        [EMITTER_SYMBOL]: emitter,
+        runId,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
         requestContext,
         tracingContext,
@@ -119,6 +151,10 @@ export function createStep<
           streamPromise.resolve = resolve;
           streamPromise.reject = reject;
         });
+
+        // Track structured output result
+        let structuredResult: any = null;
+
         const toolData = {
           name: params.name,
           args: inputData,
@@ -134,6 +170,11 @@ export function createStep<
             requestContext,
             tracingContext,
             onFinish: result => {
+              // Capture structured output if available
+              const resultWithObject = result as typeof result & { object?: unknown };
+              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+                structuredResult = resultWithObject.object;
+              }
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
@@ -146,6 +187,11 @@ export function createStep<
             requestContext,
             tracingContext,
             onFinish: result => {
+              // Capture structured output if available
+              const resultWithObject = result as typeof result & { object?: unknown };
+              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+                structuredResult = resultWithObject.object;
+              }
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
@@ -156,22 +202,24 @@ export function createStep<
         }
 
         if (streamFormat === 'legacy') {
-          await emitter.emit('watch', {
-            type: 'tool-call-streaming-start',
-            ...(toolData ?? {}),
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
           });
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') {
-              await emitter.emit('watch', {
-                type: 'tool-call-delta',
-                ...(toolData ?? {}),
-                argsTextDelta: chunk.textDelta,
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
               });
             }
           }
-          await emitter.emit('watch', {
-            type: 'tool-call-streaming-finish',
-            ...(toolData ?? {}),
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
           });
         } else {
           for await (const chunk of stream) {
@@ -183,6 +231,10 @@ export function createStep<
           return abort();
         }
 
+        // Return structured output if available, otherwise default text
+        if (structuredResult !== null) {
+          return structuredResult;
+        }
         return {
           text: await streamPromise.promise,
         };
@@ -191,7 +243,8 @@ export function createStep<
     };
   }
 
-  if (isTool(params)) {
+  if (params instanceof Tool) {
+    const toolOpts = agentOrToolOptions as { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
@@ -204,6 +257,8 @@ export function createStep<
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
       resumeSchema: params.resumeSchema,
+      retries: toolOpts?.retries,
+      scorers: toolOpts?.scorers,
       execute: async ({
         inputData,
         mastra,
@@ -243,6 +298,8 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    retries: params.retries,
+    scorers: params.scorers,
     execute: params.execute,
   };
 }

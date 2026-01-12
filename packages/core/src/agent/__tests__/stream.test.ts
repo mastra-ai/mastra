@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -22,13 +24,15 @@ import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } f
 
 config();
 
-function runStreamTest(version: 'v1' | 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+function runStreamTest(version: 'v1' | 'v2' | 'v3') {
+  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;
 
   if (version === 'v1') {
     openaiModel = openai('gpt-4o-mini');
-  } else {
+  } else if (version === 'v2') {
     openaiModel = openai_v5('gpt-4o-mini');
+  } else {
+    openaiModel = openai_v6('gpt-4o-mini');
   }
 
   const dummyResponseModel = getDummyResponseModel(version);
@@ -347,7 +351,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       ).toBe(true);
     });
 
-    it.skipIf(version === 'v2')(
+    it.skipIf(version === 'v2' || version === 'v3')(
       'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
       async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
@@ -834,7 +838,8 @@ function runStreamTest(version: 'v1' | 'v2') {
         id: 'mock-message-history',
         processInput: async ({ messages }) => {
           // Fetch historical messages from the storage
-          const historicalMessagesResult = await mockMemory.storage.listMessages({
+          const memoryStore = await mockMemory.storage.getStore('memory');
+          const historicalMessagesResult = await memoryStore!.listMessages({
             threadId,
             resourceId,
             perPage: 10,
@@ -905,7 +910,7 @@ function runStreamTest(version: 'v1' | 'v2') {
           }),
           expect.objectContaining({
             role: 'assistant',
-            content: expect.any(String),
+            content: [expect.objectContaining({ type: 'text' })],
           }),
         ]);
       } else {
@@ -972,7 +977,7 @@ function runStreamTest(version: 'v1' | 'v2') {
             type: 'function_call_output',
             output: expect.stringContaining(`It is currently 70 degrees and feels like 65 degrees.`),
           }),
-          expect.objectContaining({ role: 'assistant' }),
+          expect.objectContaining({ type: 'item_reference' }),
           expect.objectContaining({ role: 'user' }),
         ]);
       }
@@ -1057,3 +1062,4 @@ function runStreamTest(version: 'v1' | 'v2') {
 
 runStreamTest('v1');
 runStreamTest('v2');
+runStreamTest('v3');

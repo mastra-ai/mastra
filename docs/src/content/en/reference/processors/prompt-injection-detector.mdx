@@ -1,6 +1,8 @@
 ---
 title: "Reference: Prompt Injection Detector | Processors"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
+packages:
+  - "@mastra/core"
 ---
 
 # PromptInjectionDetector
@@ -9,7 +11,7 @@ The `PromptInjectionDetector` is an **input processor** that detects and prevent
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 const processor = new PromptInjectionDetector({
@@ -115,7 +117,7 @@ const processor = new PromptInjectionDetector({
 
 ## Extended usage example
 
-```typescript title="src/mastra/agents/secure-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/secure-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { PromptInjectionDetector } from "@mastra/core/processors";
 

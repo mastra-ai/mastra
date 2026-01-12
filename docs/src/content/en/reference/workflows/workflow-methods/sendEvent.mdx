@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow.sendEvent() | Workflows"
 description: Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.sendEvent()
@@ -9,7 +11,7 @@ The `.sendEvent()` resumes execution when an event is sent.
 
 ## Usage example
 
-```typescript copy
+```typescript
 run.sendEvent("event-name", { value: "data" });
 ```
 
@@ -46,7 +48,7 @@ run.sendEvent("event-name", { value: "data" });
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRun();

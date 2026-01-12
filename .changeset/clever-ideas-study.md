@@ -17,7 +17,7 @@
 '@mastra/longmemeval': major
 ---
 
-**BREAKING:** Remove `getMessagesPaginated()` and add `perPage: false` support
+Remove `getMessagesPaginated()` and add `perPage: false` support
 
 Removes deprecated `getMessagesPaginated()` method. The `listMessages()` API and score handlers now support `perPage: false` to fetch all records without pagination limits.
 

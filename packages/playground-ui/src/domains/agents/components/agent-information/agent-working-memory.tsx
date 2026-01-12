@@ -1,6 +1,6 @@
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,6 +10,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from './code-display';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
@@ -20,10 +21,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
   const config = data?.config;
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
+
+  if (isLoading || isConfigLoading) {
+    return <Skeleton className="h-32 w-full" />;
+  }
 
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',
@@ -35,10 +40,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   React.useEffect(() => {
     setEditValue(workingMemoryData ?? '');
   }, [workingMemoryData]);
-
-  if (isLoading) {
-    return <Skeleton className="h-32 w-full" />;
-  }
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -122,21 +123,28 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           <div className="flex gap-2">
             {!isEditing ? (
               <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                  disabled={!threadExists || isUpdating}
-                  className="text-xs"
-                >
-                  Edit Working Memory
-                </Button>
+                {!threadExists ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Button disabled className="text-xs pointer-events-none">
+                          Edit Working Memory
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Working memory will be available after the agent calls updateWorkingMemory</p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button onClick={() => setIsEditing(true)} disabled={isUpdating} className="text-xs">
+                    Edit Working Memory
+                  </Button>
+                )}
               </>
             ) : (
               <>
                 <Button
-                  variant="default"
-                  size="sm"
                   onClick={async () => {
                     try {
                       await updateWorkingMemory(editValue);
@@ -152,8 +160,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   {isUpdating ? <RefreshCcwIcon className="w-3 h-3 animate-spin" /> : 'Save Changes'}
                 </Button>
                 <Button
-                  variant="secondary"
-                  size="sm"
                   onClick={() => {
                     setEditValue(workingMemoryData ?? '');
                     setIsEditing(false);

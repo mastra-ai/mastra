@@ -1,6 +1,11 @@
 ---
 title: "Reference: MongoDB Vector Store | Vectors"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
 ---
 
 # MongoDB Vector Store
@@ -9,19 +14,19 @@ The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Sea
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/mongodb@beta
 ```
 
 ## Usage Example
 
-```typescript copy showLineNumbers
+```typescript
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   id: 'mongodb-vector',
-  url: process.env.MONGODB_URL,
-  database: process.env.MONGODB_DATABASE,
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
 });
 ```
 
@@ -35,12 +40,12 @@ const store = new MongoDBVector({
       description: "Unique identifier for this vector store instance",
     },
     {
-      name: "url",
+      name: "uri",
       type: "string",
-      description: "MongoDB connection string (URI)",
+      description: "MongoDB connection string",
     },
     {
-      name: "database",
+      name: "dbName",
       type: "string",
       description: "Name of the MongoDB database to use",
     },
@@ -180,7 +185,7 @@ Returns information about the index (collection).
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -304,7 +309,7 @@ Closes the MongoDB client connection. Should be called when done using the store
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -317,7 +322,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my_collection",
@@ -342,6 +347,60 @@ try {
 - Index metadata fields used in filters for optimal query performance.
 - Use consistent field naming in metadata to avoid unexpected query results.
 - Regularly monitor index and collection statistics to ensure efficient search.
+
+## Usage Example
+
+### Vector embeddings with MongoDB
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
+To use this, install `@mastra/fastembed`:
+
+```bash 
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
+});
+```
 
 ## Related
 

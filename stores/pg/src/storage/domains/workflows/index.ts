@@ -2,53 +2,118 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
 } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  UpdateWorkflowStateOptions,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  CreateIndexOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
-import { getTableName } from '../utils';
+import { PgDB, resolvePgConfig } from '../../db';
+import type { PgDomainConfig } from '../../db';
 
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
-    updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
-  };
+function getSchemaName(schema?: string) {
+  return schema ? `"${schema}"` : '"public"';
+}
+
+function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+  const quotedIndexName = `"${indexName}"`;
+  return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema: string;
+  #db: PgDB;
+  #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  constructor(config: PgDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
+      updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
+    };
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   * Currently no default indexes are defined for workflows.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workflows.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for workflows domain
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -76,13 +141,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
@@ -93,20 +152,26 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const now = new Date().toISOString();
-      await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+      const now = new Date();
+      const createdAtValue = createdAt ? createdAt : now;
+      const updatedAtValue = updatedAt ? updatedAt : now;
+      await this.#db.client.none(
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [workflowName, runId, resourceId, JSON.stringify(snapshot), createdAtValue, updatedAtValue],
       );
     } catch (error) {
       throw new MastraError(
@@ -128,7 +193,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<{ snapshot: WorkflowRunState }>({
+      const result = await this.#db.load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: workflowName, run_id: runId },
       });
@@ -172,22 +237,21 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC LIMIT 1
         `;
 
       const queryValues = values;
 
-      const result = await this.client.oneOrNone(query, queryValues);
+      const result = await this.#db.client.oneOrNone(query, queryValues);
 
       if (!result) {
         return null;
       }
 
-      return parseWorkflowRun(result);
+      return this.parseWorkflowRun(result);
     } catch (error) {
       throw new MastraError(
         {
@@ -197,6 +261,28 @@ export class WorkflowsPG extends WorkflowsStorage {
           details: {
             runId,
             workflowName: workflowName || '',
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      await this.#db.client.none(
+        `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
+        [runId, workflowName],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
           },
         },
         error,
@@ -231,13 +317,13 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`"resourceId" = $${paramIndex}`);
           values.push(resourceId);
           paramIndex++;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -256,10 +342,9 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       let total = 0;
       const usePagination = typeof perPage === 'number' && typeof page === 'number';
-      // Only get total count when using pagination
       if (usePagination) {
-        const countResult = await this.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
+        const countResult = await this.#db.client.one(
+          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause}`,
           values,
         );
         total = Number(countResult.count);
@@ -268,9 +353,8 @@ export class WorkflowsPG extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
-      // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
@@ -278,13 +362,12 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
-      const result = await this.client.manyOrNone(query, queryValues);
+      const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return this.parseWorkflowRun(row);
       });
 
-      // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(

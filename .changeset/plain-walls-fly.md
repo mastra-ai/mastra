@@ -12,7 +12,7 @@
 
 This change simplifies the workflow watching API by removing the legacy v1 event system and promoting v2 as the standard (renamed to just `watch`).
 
-### What's Changed
+**What's Changed**
 
 - Removed legacy v1 watch event handlers and types
 - Renamed `watch-v2` to `watch` throughout the codebase

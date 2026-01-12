@@ -4,67 +4,121 @@ import {
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   WorkflowsStorage,
 } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { StoreOperationsClickhouse } from '../operations';
-import { TABLE_ENGINES } from '../utils';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
+import { TABLE_ENGINES } from '../../db/utils';
 
 export class WorkflowsStorageClickhouse extends WorkflowsStorage {
   protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+  #db: ClickhouseDB;
+  constructor(config: ClickhouseDomainConfig) {
     super();
-    this.operations = operations;
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
+    this.#db = new ClickhouseDB({ client, ttl });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new MastraError({
-      id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_RESULTS', 'NOT_IMPLEMENTED'),
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: 'Method not implemented.',
+  async init(): Promise<void> {
+    const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema,
+      ifNotExists: ['resourceId'],
     });
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new MastraError({
-      id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'NOT_IMPLEMENTED'),
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: 'Method not implemented.',
-    });
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    // Load existing snapshot
+    let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+    if (!snapshot) {
+      // Create new snapshot if none exists
+      snapshot = {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        status: 'pending',
+        value: {},
+        waitingPaths: {},
+        runId: runId,
+        requestContext: {},
+      } as WorkflowRunState;
+    }
+
+    // Merge the new step result and request context
+    snapshot.context[stepId] = result;
+    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+    // Persist updated snapshot
+    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+    return snapshot.context;
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    // Load existing snapshot
+    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+    if (!snapshot) {
+      return undefined;
+    }
+
+    if (!snapshot.context) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'CONTEXT_MISSING'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: `Snapshot context is missing for runId ${runId}`,
+      });
+    }
+
+    // Merge the new options with the existing snapshot
+    const updatedSnapshot = { ...snapshot, ...opts };
+
+    // Persist updated snapshot
+    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
+
+    return updatedSnapshot;
   }
 
   async persistWorkflowSnapshot({
@@ -72,14 +126,18 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const currentSnapshot = await this.operations.load({
+      const currentSnapshot = await this.#db.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: workflowName, run_id: runId },
       });
@@ -90,15 +148,15 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
             ...currentSnapshot,
             resourceId,
             snapshot: JSON.stringify(snapshot),
-            updatedAt: now.toISOString(),
+            updatedAt: (updatedAt ?? now).toISOString(),
           }
         : {
             workflow_name: workflowName,
             run_id: runId,
             resourceId,
             snapshot: JSON.stringify(snapshot),
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString(),
+            createdAt: (createdAt ?? now).toISOString(),
+            updatedAt: (updatedAt ?? now).toISOString(),
           };
 
       await this.client.insert({
@@ -133,7 +191,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load({
+      const result = await this.#db.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -166,7 +224,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
       } catch (e) {
         // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
       }
     }
 
@@ -204,12 +262,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`resourceId = {var_resourceId:String}`);
           values.var_resourceId = resourceId;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -336,6 +394,30 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: runId ?? '', workflowName: workflowName ?? '' },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const values: Record<string, any> = {
+        var_runId: runId,
+        var_workflow_name: workflowName,
+      };
+
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE run_id = {var_runId:String} AND workflow_name = {var_workflow_name:String}`,
+        query_params: values,
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
         },
         error,
       );

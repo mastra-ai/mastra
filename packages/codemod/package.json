@@ -1,7 +1,7 @@
 {
   "name": "@mastra/codemod",
   "type": "module",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.5",
   "license": "Apache-2.0",
   "description": "Codemod CLI for Mastra",
   "bin": {
@@ -42,7 +42,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

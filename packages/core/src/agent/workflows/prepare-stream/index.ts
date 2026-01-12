@@ -17,12 +17,9 @@ import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface CreatePrepareStreamWorkflowOptions<OUTPUT extends OutputSchema | undefined = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
@@ -35,18 +32,17 @@ interface CreatePrepareStreamWorkflowOptions<
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
 }
 
-export function createPrepareStreamWorkflow<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -61,10 +57,12 @@ export function createPrepareStreamWorkflow<
   returnScorerData,
   saveQueueManager,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
-}: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
+}: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -96,14 +94,17 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     requireToolApproval,
+    toolCallConcurrency,
     resumeContext,
     agentId,
+    agentName,
     toolCallId,
     methodType,
     saveQueueManager,
     memoryConfig,
     memory,
     resourceId,
+    autoResumeSuspendedTools: options.autoResumeSuspendedTools,
   });
 
   const mapResultsStep = createMapResultsStep({

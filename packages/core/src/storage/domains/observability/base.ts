@@ -1,21 +1,36 @@
-import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { TracingStorageStrategy } from '../../../observability';
+import { StorageDomain } from '../base';
 import type {
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
-  PaginationInfo,
-  UpdateSpanRecord,
-} from '../../types';
+  BatchCreateSpansArgs,
+  BatchDeleteTracesArgs,
+  BatchUpdateSpansArgs,
+  CreateSpanArgs,
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  GetSpanArgs,
+  GetSpanResponse,
+  GetTraceArgs,
+  GetTraceResponse,
+  ListTracesArgs,
+  ListTracesResponse,
+  TracingStorageStrategy,
+  UpdateSpanArgs,
+} from './types';
 
-export class ObservabilityStorage extends MastraBase {
+/**
+ * ObservabilityStorage is not abstract because it provides default implementations
+ * that throw errors - adapters override only the methods they support.
+ */
+export class ObservabilityStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',
       name: 'OBSERVABILITY',
     });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    // Default no-op - subclasses override
   }
 
   /**
@@ -35,7 +50,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Creates a single Span record in the storage provider.
    */
-  createSpan(_span: CreateSpanRecord): Promise<void> {
+  async createSpan(_args: CreateSpanArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_CREATE_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -47,7 +62,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Updates a single Span with partial data. Primarily used for realtime trace creation.
    */
-  updateSpan(_params: { spanId: string; traceId: string; updates: Partial<UpdateSpanRecord> }): Promise<void> {
+  async updateSpan(_args: UpdateSpanArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_UPDATE_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -57,9 +72,33 @@ export class ObservabilityStorage extends MastraBase {
   }
 
   /**
+   * Retrieves a single span.
+   */
+  async getSpan(_args: GetSpanArgs): Promise<GetSpanResponse | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SPAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support getting spans',
+    });
+  }
+
+  /**
+   * Retrieves a single root span.
+   */
+  async getRootSpan(_args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_ROOT_SPAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support getting root spans',
+    });
+  }
+
+  /**
    * Retrieves a single trace with all its associated spans.
    */
-  getTrace(_traceId: string): Promise<TraceRecord | null> {
+  async getTrace(_args: GetTraceArgs): Promise<GetTraceResponse | null> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_TRACE_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -69,21 +108,21 @@ export class ObservabilityStorage extends MastraBase {
   }
 
   /**
-   * Retrieves a paginated list of traces with optional filtering.
+   * Retrieves a list of traces with optional filtering.
    */
-  getTracesPaginated(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(_args: ListTracesArgs): Promise<ListTracesResponse> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_LIST_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support getting traces paginated',
+      text: 'This storage provider does not support listing traces',
     });
   }
 
   /**
    * Creates multiple Spans in a single batch.
    */
-  batchCreateSpans(_args: { records: CreateSpanRecord[] }): Promise<void> {
+  async batchCreateSpans(_args: BatchCreateSpansArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -95,13 +134,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Updates multiple Spans in a single batch.
    */
-  batchUpdateSpans(_args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
+  async batchUpdateSpans(_args: BatchUpdateSpansArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_UPDATE_SPANS_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -113,7 +146,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Deletes multiple traces and all their associated spans in a single batch operation.
    */
-  batchDeleteTraces(_args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(_args: BatchDeleteTracesArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

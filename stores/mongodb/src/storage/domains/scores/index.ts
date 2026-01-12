@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   createStorageErrorId,
@@ -10,8 +10,10 @@ import {
   safelyParseJSON,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { StoragePagination } from '@mastra/core/storage';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 /**
  * MongoDB-specific score row transformation.
@@ -24,16 +26,89 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 }
 
 export class ScoresStorageMongoDB extends ScoresStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_SCORERS] as const;
+
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (ScoresStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  /**
+   * Returns default index definitions for the scores domain collections.
+   * These indexes optimize common query patterns for score lookups.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_SCORERS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_SCORERS, keys: { scorerId: 1 } },
+      { collection: TABLE_SCORERS, keys: { runId: 1 } },
+      { collection: TABLE_SCORERS, keys: { entityId: 1, entityType: 1 } },
+      { collection: TABLE_SCORERS, keys: { traceId: 1, spanId: 1 } },
+      { collection: TABLE_SCORERS, keys: { createdAt: -1 } },
+      { collection: TABLE_SCORERS, keys: { source: 1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  async init(): Promise<void> {
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.getCollection(TABLE_SCORERS);
+    await collection.deleteMany({});
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const document = await collection.findOne({ id });
 
       if (!document) {
@@ -55,7 +130,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let validatedScore: ValidatedSaveScorePayload;
+    let validatedScore: SaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -65,7 +140,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',
@@ -116,7 +191,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         updatedAt,
       };
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       await collection.insertOne(dataToSave);
 
       return { score: dataToSave as ScoreRowData };
@@ -145,7 +220,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -165,7 +240,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         query.source = source;
       }
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
@@ -183,7 +258,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -220,13 +295,13 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ runId });
 
       if (total === 0) {
@@ -244,7 +319,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find({ runId }).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find({ runId }).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -283,13 +358,13 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ entityId, entityType });
 
       if (total === 0) {
@@ -307,7 +382,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -346,14 +421,14 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const query = { traceId, spanId };
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
@@ -371,7 +446,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);

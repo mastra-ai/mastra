@@ -4,7 +4,6 @@ import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
-import { useToolCall } from '@/services/tool-call-provider';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
@@ -27,12 +26,22 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
+  const isNetwork = metadata?.mode === 'network';
+
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
-  const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
+  const requireApprovalMetadata =
+    (metadata?.mode === 'stream' || metadata?.mode === 'network') && metadata?.requireApprovalMetadata;
+  const suspendedTools = (metadata?.mode === 'stream' || metadata?.mode === 'network') && metadata?.suspendedTools;
 
-  const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
+  const toolApprovalMetadata = requireApprovalMetadata
+    ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
+    : undefined;
+
+  const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
+
+  const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
 
   useWorkflowStream(result);
 
@@ -44,6 +53,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
+        toolName={toolName}
+        isNetwork={isNetwork}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        toolCalled={toolCalled}
       />
     );
   }
@@ -59,6 +72,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        toolName={toolName}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
       />
     );
   }
@@ -72,6 +89,9 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       metadata={metadata}
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
+      suspendPayload={suspendedToolMetadata?.suspendPayload}
+      isNetwork={isNetwork}
+      toolCalled={toolCalled}
     />
   );
 };

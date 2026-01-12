@@ -1,11 +1,36 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
+import type { Config } from '@mastra/core/mastra';
+import { copy } from 'fs-extra';
 
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class BuildBundler extends Bundler {
-  constructor() {
+  private studio: boolean;
+
+  constructor({ studio }: { studio?: boolean } = {}) {
     super('Build');
+    this.studio = studio ?? false;
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    if (!bundlerOptions?.[IS_DEFAULT]) {
+      return bundlerOptions;
+    }
+
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -30,6 +55,16 @@ export class BuildBundler extends Bundler {
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
+
+    if (this.studio) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+        overwrite: true,
+      });
+    }
   }
 
   async bundle(
@@ -48,7 +83,7 @@ export class BuildBundler extends Bundler {
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
     // @ts-ignore
-    await createNodeServer(mastra, { tools: getToolExports(tools) });
+    await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 
     if (mastra.getStorage()) {
       // start storage init in the background

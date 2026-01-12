@@ -1,5 +1,420 @@
 # @mastra/libsql
 
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Added `startExclusive` and `endExclusive` options to `dateRange` filter for message queries. ([#11479](https://github.com/mastra-ai/mastra/pull/11479))
+
+  **What changed:** The `filter.dateRange` parameter in `listMessages()` and `Memory.recall()` now supports `startExclusive` and `endExclusive` boolean options. When set to `true`, messages with timestamps exactly matching the boundary are excluded from results.
+
+  **Why this matters:** Enables cursor-based pagination for chat applications. When new messages arrive during a session, offset-based pagination can skip or duplicate messages. Using `endExclusive: true` with the oldest message's timestamp as a cursor ensures consistent pagination without gaps or duplicates.
+
+  **Example:**
+
+  ```typescript
+  // Get first page
+  const page1 = await memory.recall({
+    threadId: 'thread-123',
+    perPage: 10,
+    orderBy: { field: 'createdAt', direction: 'DESC' },
+  });
+
+  // Get next page using cursor-based pagination
+  const oldestMessage = page1.messages[page1.messages.length - 1];
+  const page2 = await memory.recall({
+    threadId: 'thread-123',
+    perPage: 10,
+    orderBy: { field: 'createdAt', direction: 'DESC' },
+    filter: {
+      dateRange: {
+        end: oldestMessage.createdAt,
+        endExclusive: true, // Excludes the cursor message
+      },
+    },
+  });
+  ```
+
+- Adds thread cloning to create independent copies of conversations that can diverge. ([#11517](https://github.com/mastra-ai/mastra/pull/11517))
+
+  ```typescript
+  // Clone a thread
+  const { thread, clonedMessages } = await memory.cloneThread({
+    sourceThreadId: 'thread-123',
+    title: 'My Clone',
+    options: {
+      messageLimit: 10, // optional: only copy last N messages
+    },
+  });
+
+  // Check if a thread is a clone
+  if (memory.isClone(thread)) {
+    const source = await memory.getSourceThread(thread.id);
+  }
+
+  // List all clones of a thread
+  const clones = await memory.listClones('thread-123');
+  ```
+
+  Includes:
+  - Storage implementations for InMemory, PostgreSQL, LibSQL, Upstash
+  - API endpoint: `POST /api/memory/threads/:threadId/clone`
+  - Embeddings created for cloned messages (semantic recall)
+  - Clone button in playground UI Memory tab
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Add storage composition to MastraStorage ([#11401](https://github.com/mastra-ai/mastra/pull/11401))
+
+  `MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a different database for observability.
+
+  ```typescript
+  import { MastraStorage } from '@mastra/core/storage';
+  import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg';
+  import { MemoryLibSQL } from '@mastra/libsql';
+
+  // Compose domains from different stores
+  const storage = new MastraStorage({
+    id: 'composite',
+    domains: {
+      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    },
+  });
+  ```
+
+  **Breaking changes:**
+  - `storage.supports` property no longer exists
+  - `StorageSupports` type is no longer exported from `@mastra/core/storage`
+
+  All stores now support the same features. For domain availability, use `getStore()`:
+
+  ```typescript
+  const store = await storage.getStore('memory');
+  if (store) {
+    // domain is available
+  }
+  ```
+
+- Updated dependencies [[`3d93a15`](https://github.com/mastra-ai/mastra/commit/3d93a15796b158c617461c8b98bede476ebb43e2), [`efe406a`](https://github.com/mastra-ai/mastra/commit/efe406a1353c24993280ebc2ed61dd9f65b84b26), [`119e5c6`](https://github.com/mastra-ai/mastra/commit/119e5c65008f3e5cfca954eefc2eb85e3bf40da4), [`74e504a`](https://github.com/mastra-ai/mastra/commit/74e504a3b584eafd2f198001c6a113bbec589fd3), [`e33fdbd`](https://github.com/mastra-ai/mastra/commit/e33fdbd07b33920d81e823122331b0c0bee0bb59), [`929f69c`](https://github.com/mastra-ai/mastra/commit/929f69c3436fa20dd0f0e2f7ebe8270bd82a1529), [`8a73529`](https://github.com/mastra-ai/mastra/commit/8a73529ca01187f604b1f3019d0a725ac63ae55f)]:
+  - @mastra/core@1.0.0-beta.16
+
+## 1.0.0-beta.9
+
+### Minor Changes
+
+- Introduce StorageDomain base class for composite storage support ([#11249](https://github.com/mastra-ai/mastra/pull/11249))
+
+  Storage adapters now use a domain-based architecture where each domain (memory, workflows, scores, observability, agents) extends a `StorageDomain` base class with `init()` and `dangerouslyClearAll()` methods.
+
+  **Key changes:**
+  - Add `StorageDomain` abstract base class that all domain storage classes extend
+  - Add `InMemoryDB` class for shared state across in-memory domain implementations
+  - All storage domains now implement `dangerouslyClearAll()` for test cleanup
+  - Remove `operations` from public `StorageDomains` type (now internal to each adapter)
+  - Add flexible client/config patterns - domains accept either an existing database client or config to create one internally
+
+  **Why this matters:**
+
+  This enables composite storage where you can use different database adapters per domain:
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { PostgresStore } from '@mastra/pg';
+  import { ClickhouseStore } from '@mastra/clickhouse';
+
+  // Use Postgres for most domains but Clickhouse for observability
+  const mastra = new Mastra({
+    storage: new PostgresStore({
+      connectionString: 'postgres://...',
+    }),
+    // Future: override specific domains
+    // observability: new ClickhouseStore({ ... }).getStore('observability'),
+  });
+  ```
+
+  **Standalone domain usage:**
+
+  Domains can now be used independently with flexible configuration:
+
+  ```typescript
+  import { MemoryLibSQL } from '@mastra/libsql/memory';
+
+  // Option 1: Pass config to create client internally
+  const memory = new MemoryLibSQL({
+    url: 'file:./local.db',
+  });
+
+  // Option 2: Pass existing client for shared connections
+  import { createClient } from '@libsql/client';
+  const client = createClient({ url: 'file:./local.db' });
+  const memory = new MemoryLibSQL({ client });
+  ```
+
+  **Breaking changes:**
+  - `StorageDomains` type no longer includes `operations` - access via `getStore()` instead
+  - Domain base classes now require implementing `dangerouslyClearAll()` method
+
+- Refactor storage architecture to use domain-specific stores via `getStore()` pattern ([#11361](https://github.com/mastra-ai/mastra/pull/11361))
+
+  ### Summary
+
+  This release introduces a new storage architecture that replaces passthrough methods on `MastraStorage` with domain-specific storage interfaces accessed via `getStore()`. This change reduces code duplication across storage adapters and provides a cleaner, more modular API.
+
+  ### Migration Guide
+
+  All direct method calls on storage instances should be updated to use `getStore()`:
+
+  ```typescript
+  // Before
+  const thread = await storage.getThreadById({ threadId });
+  await storage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+  await storage.createSpan(span);
+
+  // After
+  const memory = await storage.getStore('memory');
+  const thread = await memory?.getThreadById({ threadId });
+
+  const workflows = await storage.getStore('workflows');
+  await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+  const observability = await storage.getStore('observability');
+  await observability?.createSpan(span);
+  ```
+
+  ### Available Domains
+  - **`memory`**: Thread and message operations (`getThreadById`, `saveThread`, `saveMessages`, etc.)
+  - **`workflows`**: Workflow state persistence (`persistWorkflowSnapshot`, `loadWorkflowSnapshot`, `getWorkflowRunById`, etc.)
+  - **`scores`**: Evaluation scores (`saveScore`, `listScoresByScorerId`, etc.)
+  - **`observability`**: Tracing and spans (`createSpan`, `updateSpan`, `getTrace`, etc.)
+  - **`agents`**: Stored agent configurations (`createAgent`, `getAgentById`, `listAgents`, etc.)
+
+  ### Breaking Changes
+  - Passthrough methods have been removed from `MastraStorage` base class
+  - All storage adapters now require accessing domains via `getStore()`
+  - The `stores` property on storage instances is now the canonical way to access domain storage
+
+  ### Internal Changes
+  - Each storage adapter now initializes domain-specific stores in its constructor
+  - Domain stores share database connections and handle their own table initialization
+
+- Unified observability schema with entity-based span identification ([#11132](https://github.com/mastra-ai/mastra/pull/11132))
+
+  ## What changed
+
+  Spans now use a unified identification model with `entityId`, `entityType`, and `entityName` instead of separate `agentId`, `toolId`, `workflowId` fields.
+
+  **Before:**
+
+  ```typescript
+  // Old span structure
+  span.agentId; // 'my-agent'
+  span.toolId; // undefined
+  span.workflowId; // undefined
+  ```
+
+  **After:**
+
+  ```typescript
+  // New span structure
+  span.entityType; // EntityType.AGENT
+  span.entityId; // 'my-agent'
+  span.entityName; // 'My Agent'
+  ```
+
+  ## New `listTraces()` API
+
+  Query traces with filtering, pagination, and sorting:
+
+  ```typescript
+  const { spans, pagination } = await storage.listTraces({
+    filters: {
+      entityType: EntityType.AGENT,
+      entityId: 'my-agent',
+      userId: 'user-123',
+      environment: 'production',
+      status: TraceStatus.SUCCESS,
+      startedAt: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
+    },
+    pagination: { page: 0, perPage: 50 },
+    orderBy: { field: 'startedAt', direction: 'DESC' },
+  });
+  ```
+
+  **Available filters:** date ranges (`startedAt`, `endedAt`), entity (`entityType`, `entityId`, `entityName`), identity (`userId`, `organizationId`), correlation IDs (`runId`, `sessionId`, `threadId`), deployment (`environment`, `source`, `serviceName`), `tags`, `metadata`, and `status`.
+
+  ## New retrieval methods
+  - `getSpan({ traceId, spanId })` - Get a single span
+  - `getRootSpan({ traceId })` - Get the root span of a trace
+  - `getTrace({ traceId })` - Get all spans for a trace
+
+  ## Backward compatibility
+
+  The legacy `getTraces()` method continues to work. When you pass `name: "agent run: my-agent"`, it automatically transforms to `entityId: "my-agent", entityType: AGENT`.
+
+  ## Migration
+
+  **Automatic:** SQL-based stores (PostgreSQL, LibSQL, MSSQL) automatically add new columns to existing `spans` tables on initialization. Existing data is preserved with new columns set to `NULL`.
+
+  **No action required:** Your existing code continues to work. Adopt the new fields and `listTraces()` API at your convenience.
+
+### Patch Changes
+
+- Added pre-configured client support for all storage adapters. ([#11302](https://github.com/mastra-ai/mastra/pull/11302))
+
+  **What changed**
+
+  All storage adapters now accept pre-configured database clients in addition to connection credentials. This allows you to customize client settings (connection pools, timeouts, interceptors) before passing them to Mastra.
+
+  **Example**
+
+  ```typescript
+  import { createClient } from '@clickhouse/client';
+  import { ClickhouseStore } from '@mastra/clickhouse';
+
+  // Create and configure client with custom settings
+  const client = createClient({
+    url: 'http://localhost:8123',
+    username: 'default',
+    password: '',
+    request_timeout: 60000,
+  });
+
+  // Pass pre-configured client to store
+  const store = new ClickhouseStore({
+    id: 'my-store',
+    client,
+  });
+  ```
+
+  **Additional improvements**
+  - Added input validation for required connection parameters (URL, credentials) with clear error messages
+
+- Updated dependencies [[`33a4d2e`](https://github.com/mastra-ai/mastra/commit/33a4d2e4ed8af51f69256232f00c34d6b6b51d48), [`4aaa844`](https://github.com/mastra-ai/mastra/commit/4aaa844a4f19d054490f43638a990cc57bda8d2f), [`4a1a6cb`](https://github.com/mastra-ai/mastra/commit/4a1a6cb3facad54b2bb6780b00ce91d6de1edc08), [`31d13d5`](https://github.com/mastra-ai/mastra/commit/31d13d5fdc2e2380e2e3ee3ec9fb29d2a00f265d), [`4c62166`](https://github.com/mastra-ai/mastra/commit/4c621669f4a29b1f443eca3ba70b814afa286266), [`7bcbf10`](https://github.com/mastra-ai/mastra/commit/7bcbf10133516e03df964b941f9a34e9e4ab4177), [`4353600`](https://github.com/mastra-ai/mastra/commit/43536005a65988a8eede236f69122e7f5a284ba2), [`6986fb0`](https://github.com/mastra-ai/mastra/commit/6986fb064f5db6ecc24aa655e1d26529087b43b3), [`053e979`](https://github.com/mastra-ai/mastra/commit/053e9793b28e970086b0507f7f3b76ea32c1e838), [`e26dc9c`](https://github.com/mastra-ai/mastra/commit/e26dc9c3ccfec54ae3dc3e2b2589f741f9ae60a6), [`55edf73`](https://github.com/mastra-ai/mastra/commit/55edf7302149d6c964fbb7908b43babfc2b52145), [`27c0009`](https://github.com/mastra-ai/mastra/commit/27c0009777a6073d7631b0eb7b481d94e165b5ca), [`dee388d`](https://github.com/mastra-ai/mastra/commit/dee388dde02f2e63c53385ae69252a47ab6825cc), [`3f3fc30`](https://github.com/mastra-ai/mastra/commit/3f3fc3096f24c4a26cffeecfe73085928f72aa63), [`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`10c2735`](https://github.com/mastra-ai/mastra/commit/10c27355edfdad1ee2b826b897df74125eb81fb8), [`1924cf0`](https://github.com/mastra-ai/mastra/commit/1924cf06816e5e4d4d5333065ec0f4bb02a97799), [`b339816`](https://github.com/mastra-ai/mastra/commit/b339816df0984d0243d944ac2655d6ba5f809cde)]:
+  - @mastra/core@1.0.0-beta.15
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+
+  Workflow errors now retain custom properties like `statusCode`, `responseHeaders`, and `cause` chains. This enables error-specific recovery logic in your applications.
+
+  **Before:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom error properties were lost
+    console.log(result.error); // "Step execution failed" (just a string)
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom properties are preserved
+    console.log(result.error.message); // "Step execution failed"
+    console.log(result.error.statusCode); // 429
+    console.log(result.error.cause?.name); // "RateLimitError"
+  }
+  ```
+
+  **Type change:** `WorkflowState.error` and `WorkflowRunState.error` types changed from `string | Error` to `SerializedError`.
+
+  Other changes:
+  - Added `UpdateWorkflowStateOptions` type for workflow state updates
+
+- fix: make getSqlType consistent across storage adapters ([#11112](https://github.com/mastra-ai/mastra/pull/11112))
+  - PostgreSQL: use `getSqlType()` in `createTable` instead of `toUpperCase()`
+  - LibSQL: use `getSqlType()` in `createTable`, return `JSONB` for jsonb type (matches SQLite 3.45+ support)
+  - ClickHouse: use `getSqlType()` in `createTable` instead of `COLUMN_TYPES` constant, add missing types (uuid, float, boolean)
+  - Remove unused `getSqlType()` and `getDefaultValue()` from `MastraStorage` base class (all stores use `StoreOperations` versions)
+
+- Updated dependencies [[`d5ed981`](https://github.com/mastra-ai/mastra/commit/d5ed981c8701c1b8a27a5f35a9a2f7d9244e695f), [`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`932d63d`](https://github.com/mastra-ai/mastra/commit/932d63dd51be9c8bf1e00e3671fe65606c6fb9cd), [`b760b73`](https://github.com/mastra-ai/mastra/commit/b760b731aca7c8a3f041f61d57a7f125ae9cb215), [`695a621`](https://github.com/mastra-ai/mastra/commit/695a621528bdabeb87f83c2277cf2bb084c7f2b4), [`2b459f4`](https://github.com/mastra-ai/mastra/commit/2b459f466fd91688eeb2a44801dc23f7f8a887ab), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`24b76d8`](https://github.com/mastra-ai/mastra/commit/24b76d8e17656269c8ed09a0c038adb9cc2ae95a), [`243a823`](https://github.com/mastra-ai/mastra/commit/243a8239c5906f5c94e4f78b54676793f7510ae3), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`c61fac3`](https://github.com/mastra-ai/mastra/commit/c61fac3add96f0dcce0208c07415279e2537eb62), [`6f14f70`](https://github.com/mastra-ai/mastra/commit/6f14f706ccaaf81b69544b6c1b75ab66a41e5317), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f), [`2a53598`](https://github.com/mastra-ai/mastra/commit/2a53598c6d8cfeb904a7fc74e57e526d751c8fa6), [`c7cd3c7`](https://github.com/mastra-ai/mastra/commit/c7cd3c7a187d7aaf79e2ca139de328bf609a14b4), [`847c212`](https://github.com/mastra-ai/mastra/commit/847c212caba7df0d6f2fc756b494ac3c75c3720d), [`6f941c4`](https://github.com/mastra-ai/mastra/commit/6f941c438ca5f578619788acc7608fc2e23bd176)]:
+  - @mastra/core@1.0.0-beta.12
+
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+
+## 1.0.0-beta.6
+
+### Minor Changes
+
+- Add stored agents support ([#10953](https://github.com/mastra-ai/mastra/pull/10953))
+
+  Agents can now be stored in the database and loaded at runtime. This lets you persist agent configurations and dynamically create executable Agent instances from storage.
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { LibSQLStore } from '@mastra/libsql';
+
+  const mastra = new Mastra({
+    storage: new LibSQLStore({ url: ':memory:' }),
+    tools: { myTool },
+    scorers: { myScorer },
+  });
+
+  // Create agent in storage via API or directly
+  await mastra.getStorage().createAgent({
+    agent: {
+      id: 'my-agent',
+      name: 'My Agent',
+      instructions: 'You are helpful',
+      model: { provider: 'openai', name: 'gpt-4' },
+      tools: { myTool: {} },
+      scorers: { myScorer: { sampling: { type: 'ratio', rate: 0.5 } } },
+    },
+  });
+
+  // Load and use the agent
+  const agent = await mastra.getStoredAgentById('my-agent');
+  const response = await agent.generate({ messages: 'Hello!' });
+
+  // List all stored agents with pagination
+  const { agents, total, hasMore } = await mastra.listStoredAgents({
+    page: 0,
+    perPage: 10,
+  });
+  ```
+
+  Also adds a memory registry to Mastra so stored agents can reference memory instances by key.
+
+### Patch Changes
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
 ## 1.0.0-beta.5
 
 ### Patch Changes

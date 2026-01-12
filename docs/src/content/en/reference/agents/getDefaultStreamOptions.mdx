@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents"
 description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDefaultStreamOptionsLegacy()
@@ -15,7 +17,7 @@ Agents can be configured with default streaming options for memory usage, output
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.getDefaultStreamOptionsLegacy();
 ```
 
@@ -48,7 +50,7 @@ await agent.getDefaultStreamOptionsLegacy();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 await agent.getDefaultStreamOptionsLegacy({
   requestContext: new RequestContext(),
 });
@@ -72,4 +74,4 @@ await agent.getDefaultStreamOptionsLegacy({
 ## Related
 
 - [Streaming with agents](/docs/v1/streaming/overview#streaming-with-agents)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)

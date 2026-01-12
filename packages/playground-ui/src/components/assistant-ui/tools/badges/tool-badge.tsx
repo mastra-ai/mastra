@@ -2,7 +2,7 @@ import { ToolsIcon } from '@/ds/icons';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
 import { Check, X } from 'lucide-react';
-import { SyntaxHighlighter } from '../../../ui/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import { MastraUIMessage } from '@mastra/react';
@@ -14,6 +14,8 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   result: any;
   metadata?: MastraUIMessage['metadata'];
   toolOutput: Array<{ toolId: string }>;
+  suspendPayload?: any;
+  toolCalled?: boolean;
 }
 
 export const ToolBadge = ({
@@ -24,12 +26,15 @@ export const ToolBadge = ({
   toolOutput,
   toolCallId,
   toolApprovalMetadata,
+  suspendPayload,
+  isNetwork,
+  toolCalled: toolCalledProp,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
   try {
     const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = <SyntaxHighlighter data={formattedArgs} data-testid="tool-args" />;
+    argSlot = <CodeEditor data={formattedArgs} data-testid="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
@@ -38,13 +43,20 @@ export const ToolBadge = ({
     typeof result === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
-      <SyntaxHighlighter data={result} data-testid="tool-result" />
+      <CodeEditor data={result} data-testid="tool-result" />
+    );
+
+  let suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+    ) : (
+      <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
 
-  const toolCalled = result || toolOutput.length > 0;
+  const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
 
   return (
     <BadgeWrapper
@@ -59,13 +71,20 @@ export const ToolBadge = ({
           />
         )
       }
-      initialCollapsed={!!!toolApprovalMetadata}
+      initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
       <div className="space-y-4">
         <div>
           <p className="font-medium pb-2">Tool arguments</p>
           {argSlot}
         </div>
+
+        {suspendPayloadSlot !== undefined && suspendPayload && (
+          <div>
+            <p className="font-medium pb-2">Tool suspend payload</p>
+            {suspendPayloadSlot}
+          </div>
+        )}
 
         {resultSlot !== undefined && result && (
           <div>
@@ -79,7 +98,7 @@ export const ToolBadge = ({
             <p className="font-medium pb-2">Tool output</p>
 
             <div className="h-40 overflow-y-auto">
-              <SyntaxHighlighter data={toolOutput} data-testid="tool-output" />
+              <CodeEditor data={toolOutput} data-testid="tool-output" />
             </div>
           </div>
         )}
@@ -88,6 +107,8 @@ export const ToolBadge = ({
           toolCalled={toolCalled}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
+          toolName={toolName}
+          isNetwork={isNetwork}
         />
       </div>
     </BadgeWrapper>

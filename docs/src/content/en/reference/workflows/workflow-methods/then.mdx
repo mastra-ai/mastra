@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow.then() | Workflows"
 description: Documentation for the `Workflow.then()` method in workflows, which creates sequential dependencies between steps.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.then()
@@ -9,7 +11,7 @@ The `.then()` method creates a sequential dependency between workflow steps, ens
 
 ## Usage example
 
-```typescript copy
+```typescript
 workflow.then(step1).then(step2);
 ```
 

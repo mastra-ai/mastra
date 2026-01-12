@@ -2,67 +2,12 @@
   "redirects": [
     {
       "source": "/examples/v1/memory/memory-with-mongodb",
-      "destination": "/docs/v1/memory/storage/memory-with-mongodb",
+      "destination": "/reference/v1/storage/mongodb",
       "permanent": true
     },
     {
       "source": "/docs/v1/workflows/agents-and-tools",
       "destination": "/docs/v1/workflows/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/server-deployment",
-      "destination": "/docs/deployment/building-mastra",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/cloudflare-deployer",
-      "destination": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/index",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms",
-      "destination": "/docs/deployment/cloud-providers",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/netlify-deployer",
-      "destination": "/docs/deployment/cloud-providers/netlify-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/deployment/serverless-platforms/vercel-deployer",
-      "destination": "/docs/deployment/cloud-providers/vercel-deployer",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/dashboard",
-      "destination": "/docs/deployment/mastra-cloud/dashboard",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/observability",
-      "destination": "/docs/deployment/mastra-cloud/observability",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/overview",
-      "destination": "/docs/deployment/mastra-cloud/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/mastra-cloud/setting-up",
-      "destination": "/docs/deployment/mastra-cloud/setting-up",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server-db/production-server",
-      "destination": "/docs/server-db/mastra-server",
       "permanent": true
     },
     {
@@ -297,7 +242,7 @@
     },
     {
       "source": "/examples/v1/agents/request-context",
-      "destination": "/docs/v1/server-db/request-context",
+      "destination": "/docs/v1/server/request-context",
       "permanent": true
     },
     {
@@ -318,6 +263,301 @@
     {
       "source": "/reference/v1/streaming/workflows/resumeStreamVNext",
       "destination": "/reference/v1/streaming/workflows/resumeStream",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/storage",
+      "destination": "/docs/v1/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/mastra-server",
+      "destination": "/docs/v1/server/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/server-adapters",
+      "destination": "/docs/v1/server/server-adapters",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/custom-adapters",
+      "destination": "/docs/v1/server/custom-adapters",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/middleware",
+      "destination": "/docs/v1/server/middleware",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/request-context",
+      "destination": "/docs/v1/server/request-context",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/custom-api-routes",
+      "destination": "/docs/v1/server/custom-api-routes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/server-db/mastra-client",
+      "destination": "/docs/v1/server/mastra-client",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth",
+      "destination": "/docs/v1/server/auth",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/index",
+      "destination": "/docs/v1/server/auth/index",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/jwt",
+      "destination": "/docs/v1/server/auth/jwt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/clerk",
+      "destination": "/docs/v1/server/auth/clerk",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/supabase",
+      "destination": "/docs/v1/server/auth/supabase",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/firebase",
+      "destination": "/docs/v1/server/auth/firebase",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/workos",
+      "destination": "/docs/v1/server/auth/workos",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/auth/auth0",
+      "destination": "/docs/v1/server/auth/auth0",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/database-specific-config",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/database-specific-config",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/cleanup-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cleanup-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/filter-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/cot-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/query/hybrid-vector-search",
+      "destination": "/docs/v1/rag/retrieval#metadata-filtering",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/usage/graph-rag",
+      "destination": "/docs/v1/rag/graph-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/rag/embedding/metadata-extraction",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/metadata-extraction",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/overview",
+      "destination": "/docs/v1/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setup",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/studio",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/mastra-cloud/observability",
+      "destination": "/docs/v1/mastra-cloud/observability",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/amazon-ec2",
+      "destination": "/guides/v1/deployment/amazon-ec2",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/aws-lambda",
+      "destination": "/guides/v1/deployment/aws-lambda",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/azure-app-services",
+      "destination": "/guides/v1/deployment/azure-app-services",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/cloudflare-deployer",
+      "destination": "/guides/v1/deployment/cloudflare-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/digital-ocean",
+      "destination": "/guides/v1/deployment/digital-ocean",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/netlify-deployer",
+      "destination": "/guides/v1/deployment/netlify-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/cloud-providers/vercel-deployer",
+      "destination": "/guides/v1/deployment/vercel-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/deployment/building-mastra",
+      "destination": "/docs/v1/deployment/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/workflows/inngest-workflow",
+      "destination": "/guides/v1/deployment/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/workflows/inngest-workflow",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/overview",
+      "destination": "/docs/v1/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-pg",
+      "destination": "/reference/v1/storage/postgresql",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-libsql",
+      "destination": "/reference/v1/storage/libsql",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-mongodb",
+      "destination": "/reference/v1/storage/mongodb",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-upstash",
+      "destination": "/reference/v1/storage/upstash",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/threads-and-resources",
+      "destination": "/docs/v1/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/conversation-history",
+      "destination": "/docs/v1/memory/message-history",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setup",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel-deployer",
+      "destination": "/guides/v1/deployment/vercel-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/netlify-deployer",
+      "destination": "/guides/v1/deployment/netlify-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/digital-ocean",
+      "destination": "/guides/v1/deployment/digital-ocean",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare-deployer",
+      "destination": "/guides/v1/deployment/cloudflare-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/azure-app-services",
+      "destination": "/guides/v1/deployment/azure-app-services",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/aws-lambda",
+      "destination": "/guides/v1/deployment/aws-lambda",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/amazon-ec2",
+      "destination": "/guides/v1/deployment/amazon-ec2",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment",
+      "destination": "/docs/v1/deployment/cloud-providers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/text-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/speech-to-text",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/speech-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/turn-taking",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1",
+      "destination": "/docs/v1/getting-started/start",
       "permanent": true
     }
   ]

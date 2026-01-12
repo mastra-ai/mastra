@@ -4,7 +4,7 @@ import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isUnion, isArr, isString, isNullable } from '../zodTypes';
+import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -68,6 +68,25 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         const processedInner = this.processZodType(innerType);
         return processedInner.nullable();
       }
+      return value;
+    } else if (isDefault(z)(value)) {
+      // For OpenAI strict mode, convert .default() to .nullable() with transform
+      // This ensures all fields are in the required array but can accept null values
+      // The transform converts null -> default value to match original .default() semantics
+      const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
+      const defaultValue = '_def' in value ? value._def.defaultValue : (value as any)._zod?.def?.defaultValue;
+
+      if (innerType) {
+        const processedInner = this.processZodType(innerType);
+        // Transform null -> default value (call defaultValue() if it's a function)
+        return processedInner.nullable().transform((val: any) => {
+          if (val === null) {
+            return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
+          }
+          return val;
+        });
+      }
+
       return value;
     } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);

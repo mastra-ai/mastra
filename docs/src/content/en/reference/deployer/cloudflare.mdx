@@ -1,6 +1,9 @@
 ---
 title: "Reference: CloudflareDeployer | Deployer"
 description: "Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers."
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-cloudflare"
 ---
 
 # CloudflareDeployer
@@ -9,12 +12,11 @@ The `CloudflareDeployer` class handles deployment of standalone Mastra applicati
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new CloudflareDeployer({
     projectName: "hello-mastra",
     routes: [

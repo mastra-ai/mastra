@@ -1,6 +1,8 @@
 ---
 title: "Reference: Turbopuffer Vector Store | Vectors"
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
+packages:
+  - "@mastra/turbopuffer"
 ---
 
 # Turbopuffer Vector Store
@@ -170,7 +172,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -268,7 +270,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -281,7 +283,7 @@ interface QueryResult {
 
 The `schemaConfigForIndex` option allows you to define explicit schemas for different indexes:
 
-```typescript copy
+```typescript
 schemaConfigForIndex: (indexName: string) => {
   // Mastra's default embedding model and index for memory messages:
   if (indexName === "memory_messages_384") {
@@ -304,7 +306,7 @@ schemaConfigForIndex: (indexName: string) => {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

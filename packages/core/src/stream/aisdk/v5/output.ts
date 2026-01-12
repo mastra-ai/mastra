@@ -1,18 +1,50 @@
 import type { ReadableStream } from 'node:stream/web';
 import { TransformStream } from 'node:stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
-import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import {
+  createTextStreamResponse,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  generateId,
+} from '@internal/ai-sdk-v5';
+import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from '@internal/ai-sdk-v5';
 import type { MessageList } from '../../../agent/message-list';
-import type { StructuredOutputOptions } from '../../../agent/types';
+import type { LLMStepResult, StructuredOutputOptions } from '../../../agent/types';
 import type { TracingContext } from '../../../observability';
 import type { MastraModelOutput } from '../../base/output';
 import type { InferSchemaOutput, OutputSchema } from '../../base/schema';
-import type { ChunkType } from '../../types';
+import type { ChunkType, StepTripwireData } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
+
+export type AISDKV5FullOutput<OUTPUT extends OutputSchema = undefined> = {
+  text: string;
+  usage: LLMStepResult['usage'];
+  steps: LLMStepResult<OUTPUT>[];
+  finishReason: LLMStepResult['finishReason'];
+  warnings: LLMStepResult['warnings'];
+  providerMetadata: LLMStepResult['providerMetadata'];
+  request: LLMStepResult['request'];
+  reasoning: {
+    providerMetadata: LLMStepResult['providerMetadata'];
+    text: string;
+    type: 'reasoning';
+  }[];
+  reasoningText: string | undefined;
+  toolCalls: ReturnType<typeof convertMastraChunkToAISDKv5>[];
+  toolResults: ReturnType<typeof convertMastraChunkToAISDKv5>[];
+  sources: ReturnType<typeof convertMastraChunkToAISDKv5>[];
+  files: unknown[];
+  response: LLMStepResult['response'];
+  content: LLMStepResult['content'];
+  totalUsage: LLMStepResult['usage'];
+  error: Error | string | { message: string; stack: string } | undefined;
+  tripwire: StepTripwireData | undefined;
+  traceId: string | undefined;
+  object?: InferSchemaOutput<OUTPUT>;
+};
 
 type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallStreaming?: boolean;
@@ -263,7 +295,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     return this.#modelOutput.steps.then(steps => steps);
   }
 
-  get content() {
+  get content(): LLMStepResult['content'] {
     return this.#messageList.get.response.aiV5.modelContent();
   }
 
@@ -341,14 +373,13 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   async getFullOutput() {
     await this.consumeStream({
       onError: (error: any) => {
-        console.error(error);
         throw error;
       },
     });
 
     const object = await this.object;
 
-    const fullOutput = {
+    const fullOutput: AISDKV5FullOutput<OUTPUT> = {
       text: await this.#modelOutput.text,
       usage: await this.#modelOutput.usage,
       steps: await this.steps,
@@ -367,7 +398,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       totalUsage: await this.#modelOutput.totalUsage,
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
-      tripwireReason: this.#modelOutput.tripwireReason,
       traceId: this.traceId,
       ...(object ? { object } : {}),
     };
@@ -379,10 +409,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
   get tripwire() {
     return this.#modelOutput.tripwire;
-  }
-
-  get tripwireReason() {
-    return this.#modelOutput.tripwireReason;
   }
 
   get error() {

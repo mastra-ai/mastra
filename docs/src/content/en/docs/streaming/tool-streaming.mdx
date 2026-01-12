@@ -1,6 +1,8 @@
 ---
 title: "Tool streaming | Streaming"
 description: "Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming."
+packages:
+  - "@mastra/core"
 ---
 
 # Tool streaming
@@ -18,7 +20,7 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
-```typescript {2,9} showLineNumbers copy
+```typescript {2,9}
 import { Agent } from "@mastra/core/agent";
 import { testTool } from "../tools/test-tool";
 
@@ -41,7 +43,7 @@ You must `await` the call to `writer.write()` or else you will lock the stream a
 
 :::
 
-```typescript {4,7,14} showLineNumbers copy
+```typescript {4,7,14}
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
@@ -70,7 +72,7 @@ export const testTool = createTool({
 You can also use `writer.custom()` if you want to emit top level stream chunks, This useful and relevant when
 integrating with UI Frameworks
 
-```typescript {4,7,14} showLineNumbers copy
+```typescript {4,7,14}
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
@@ -100,7 +102,7 @@ export const testTool = createTool({
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or tool-specific data.
 
-```typescript showLineNumbers copy
+```typescript
 const stream = await testAgent.stream([
   "What is the weather in London?",
   "Use the testTool",
@@ -119,7 +121,7 @@ Tools support lifecycle hooks that allow you to monitor different stages of tool
 
 ### Example: Using onInputAvailable and onOutput
 
-```typescript showLineNumbers copy
+```typescript
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -161,7 +163,7 @@ For detailed documentation on all lifecycle hooks, see the [createTool() referen
 
 Pipe an agent's `fullStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
 
-```typescript showLineNumbers copy
+```typescript
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 

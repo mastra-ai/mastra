@@ -22,6 +22,8 @@ import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
+import type { ToolLoopAgentLike } from '../tool-loop-agent';
+import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
@@ -102,8 +104,10 @@ export interface Config<
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
+   * Accepts both Mastra Agent instances and AI SDK v6 ToolLoopAgent instances.
+   * ToolLoopAgent instances are automatically converted to Mastra Agents.
    */
-  agents?: TAgents;
+  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike };
 
   /**
    * Storage provider for persisting data, conversation history, and workflow state.
@@ -140,11 +144,17 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability } from '@mastra/observability';
+   * import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
-   *     default: { enabled: true }
+   *     configs: {
+   *       default: {
+   *         serviceName: 'mastra',
+   *         exporters: [new DefaultExporter(), new CloudExporter()],
+   *         spanOutputProcessors: [new SensitiveDataFilter()],
+   *       },
+   *     },
    *   })
    * })
    * ```
@@ -408,7 +418,9 @@ export class Mastra<
    *     connectionString: process.env.DATABASE_URL
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
-   *   observability: { default: { enabled: true }},
+   *   observability: new Observability({
+   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *   }),
    * });
    * ```
    */
@@ -438,7 +450,7 @@ export class Mastra<
       try {
         await workflowEventProcessor.process(event, cb);
       } catch (e) {
-        console.error('Error processing event', e);
+        this.getLogger()?.error('Error processing event', e);
       }
     };
     if (this.#events.workflows) {
@@ -478,8 +490,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
@@ -771,19 +783,20 @@ export class Mastra<
       throw error;
     }
 
-    if (!storage.supports.agents) {
+    const agentsStore = await storage.getStore('agents');
+    if (!agentsStore) {
       const error = new MastraError({
         id: 'MASTRA_GET_STORED_AGENT_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Storage does not support agents',
+        text: 'Agents storage is not available',
         details: { status: 400 },
       });
       this.#logger?.trackException(error);
       throw error;
     }
 
-    const storedAgent = await storage.getAgentById({ id });
+    const storedAgent = await agentsStore.getAgentById({ id });
 
     if (!storedAgent) {
       return null;
@@ -886,19 +899,20 @@ export class Mastra<
       throw error;
     }
 
-    if (!storage.supports.agents) {
+    const agentsStore = await storage.getStore('agents');
+    if (!agentsStore) {
       const error = new MastraError({
         id: 'MASTRA_LIST_STORED_AGENTS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Storage does not support agents',
+        text: 'Agents storage is not available',
         details: { status: 400 },
       });
       this.#logger?.trackException(error);
       throw error;
     }
 
-    const result = await storage.listAgents({
+    const result = await agentsStore.listAgents({
       page: args?.page,
       perPage: args?.perPage,
       orderBy: args?.orderBy,
@@ -1153,11 +1167,18 @@ export class Mastra<
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
    * ```
    */
-  public addAgent<A extends Agent<any>>(agent: A, key?: string): void {
+  public addAgent<A extends Agent<any> | ToolLoopAgentLike>(agent: A, key?: string): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
-    const agentKey = key || agent.id;
+    let mastraAgent: Agent<any>;
+    if (isToolLoopAgentLike(agent)) {
+      // Pass the config key as the name if the ToolLoopAgent doesn't have an id
+      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
+    } else {
+      mastraAgent = agent;
+    }
+    const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
       const logger = this.getLogger();
@@ -1166,16 +1187,30 @@ export class Mastra<
     }
 
     // Initialize the agent
-    agent.__setLogger(this.#logger);
-    agent.__registerMastra(this);
-    agent.__registerPrimitives({
+    mastraAgent.__setLogger(this.#logger);
+    mastraAgent.__registerMastra(this);
+    mastraAgent.__registerPrimitives({
       logger: this.getLogger(),
       storage: this.getStorage(),
       agents: agents,
       tts: this.#tts,
       vectors: this.#vectors,
     });
-    agents[agentKey] = agent;
+    agents[agentKey] = mastraAgent;
+
+    // Register configured processor workflows from the agent
+    // Use .then() to handle async resolution without blocking the constructor
+    // This excludes memory-derived processors to avoid triggering memory factory functions
+    mastraAgent
+      .getConfiguredProcessorWorkflows()
+      .then(processorWorkflows => {
+        for (const workflow of processorWorkflows) {
+          this.addWorkflow(workflow, workflow.id);
+        }
+      })
+      .catch(err => {
+        this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
+      });
   }
 
   /**

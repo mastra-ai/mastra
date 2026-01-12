@@ -83,7 +83,7 @@ describe('create mastra', () => {
     });
 
     it(
-      'should open playground',
+      'should open studio',
       {
         timeout: 60 * 1000,
       },
@@ -112,8 +112,8 @@ describe('create mastra', () => {
               "id": "weather-agent",
               "inputProcessors": [
                 {
-                  "id": "message-history",
-                  "name": "MessageHistory",
+                  "id": "weather-agent-input-processor",
+                  "name": "weather-agent-input-processor",
                 },
               ],
               "instructions": "
@@ -135,8 +135,8 @@ describe('create mastra', () => {
               "name": "Weather Agent",
               "outputProcessors": [
                 {
-                  "id": "message-history",
-                  "name": "MessageHistory",
+                  "id": "weather-agent-output-processor",
+                  "name": "weather-agent-output-processor",
                 },
               ],
               "provider": "openai",
@@ -144,7 +144,7 @@ describe('create mastra', () => {
                 "weatherTool": {
                   "description": "Get current weather for a location",
                   "id": "get-weather",
-                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"description":"City name","type":"string"}},"required":["location"],"additionalProperties":false}}",
+                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false}}",
                   "outputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false}}",
                   "requireApproval": false,
                 },

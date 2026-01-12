@@ -1,13 +1,16 @@
 ---
 title: "Reference: chatRoute() | AI SDK"
 description: API reference for chatRoute(), a function to create chat route handlers for streaming agent conversations in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # chatRoute()
 
-Creates a chat route handler for streaming agent conversations using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/docs/v1/server-db/custom-api-routes).
+Creates a chat route handler for streaming agent conversations using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/docs/v1/server/custom-api-routes).
 
 Use [`handleChatStream()`](/reference/v1/ai-sdk/handle-chat-stream) if you need a framework-agnostic handler.
 
@@ -15,7 +18,7 @@ Use [`handleChatStream()`](/reference/v1/ai-sdk/handle-chat-stream) if you need 
 
 This example shows how to set up a chat route at the `/chat` endpoint that uses an agent with the ID `weatherAgent`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { chatRoute } from "@mastra/ai-sdk";
 
@@ -33,7 +36,7 @@ export const mastra = new Mastra({
 
 You can also use dynamic agent routing based on an `agentId`. The URL `/chat/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { chatRoute } from "@mastra/ai-sdk";
 

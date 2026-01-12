@@ -26,16 +26,19 @@ export interface StudioConfigProviderProps {
 const LOCAL_STORAGE_KEY = 'mastra-studio-config';
 
 export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:4111' }: StudioConfigProviderProps) => {
-  const { data: instanceStatus } = useMastraInstanceStatus(endpoint);
+  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: {},
     isLoading: true,
   });
 
-  console.log('instanceStatus', instanceStatus);
-
   useLayoutEffect(() => {
+    // Handle error case - stop loading but don't configure
+    if (error && !isStatusLoading) {
+      return setConfig({ baseUrl: '', headers: {}, isLoading: false });
+    }
+
     // Don't run the effect during the fetch request
     if (!instanceStatus?.status) return;
 
@@ -53,7 +56,7 @@ export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:41
     }
 
     return setConfig({ baseUrl: '', headers: {}, isLoading: false });
-  }, [instanceStatus, endpoint]);
+  }, [instanceStatus, endpoint, isStatusLoading, error]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {

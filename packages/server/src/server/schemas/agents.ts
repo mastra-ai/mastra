@@ -296,6 +296,11 @@ const toolCallActionBodySchema = z.object({
   toolCallId: z.string(),
   format: z.string().optional(),
 });
+const networkToolCallActionBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  format: z.string().optional(),
+});
 
 /**
  * Body schema for approving tool call
@@ -306,6 +311,16 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
  * Body schema for declining tool call
  */
 export const declineToolCallBodySchema = toolCallActionBodySchema;
+
+/**
+ * Body schema for approving network tool call
+ */
+export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+
+/**
+ * Body schema for declining network tool call
+ */
+export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
 
 /**
  * Response schema for tool approval/decline
@@ -368,7 +383,7 @@ export const generateSpeechBodySchema = z.object({
  * Body schema for transcribing speech
  */
 export const transcribeSpeechBodySchema = z.object({
-  audioData: z.any(), // Buffer
+  audio: z.any(), // Buffer
   options: z.record(z.string(), z.any()).optional(),
 });
 
@@ -392,3 +407,23 @@ export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
 export const streamResponseSchema = z.any(); // AI SDK StreamResult type
 export const speakResponseSchema = z.any(); // Voice synthesis result
 export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool
+
+// ============================================================================
+// Instruction Enhancement Schemas
+// ============================================================================
+
+/**
+ * Body schema for enhancing agent instructions
+ */
+export const enhanceInstructionsBodySchema = z.object({
+  instructions: z.string().describe('The current agent instructions to enhance'),
+  comment: z.string().describe('User comment describing how to enhance the instructions'),
+});
+
+/**
+ * Response schema for enhanced instructions
+ */
+export const enhanceInstructionsResponseSchema = z.object({
+  explanation: z.string().describe('Explanation of the changes made'),
+  new_prompt: z.string().describe('The enhanced instructions'),
+});

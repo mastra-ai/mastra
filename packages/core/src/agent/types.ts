@@ -26,7 +26,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors/index';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
@@ -36,7 +36,7 @@ import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
@@ -172,6 +172,31 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   /**
+   * Default options used when calling `network()`.
+   * These are merged with options passed to each network() call.
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   // ...
+   *   defaultNetworkOptions: {
+   *     maxSteps: 20,
+   *     routing: {
+   *       verboseIntrospection: true,
+   *     },
+   *     completion: {
+   *       scorers: [testsScorer, buildScorer],
+   *       strategy: 'all',
+   *     },
+   *     onIterationComplete: ({ iteration, isComplete }) => {
+   *       console.log(`Iteration ${iteration} complete: ${isComplete}`);
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  defaultNetworkOptions?: DynamicArgument<NetworkOptions>;
+  /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
   mastra?: Mastra;
@@ -193,13 +218,24 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   voice?: CompositeVoice;
   /**
-   * Input processors that can modify or validate messages before they are processed by the agent. These processors need to implement the `processInput` function.
+   * Input processors that can modify or validate messages before they are processed by the agent.
+   * These can be individual processors (implementing `processInput` or `processInputStep`) or
+   * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  inputProcessors?: DynamicArgument<InputProcessor[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   /**
-   * Output processors that can modify or validate messages from the agent, before it is sent to the client. These processors need to implement either (or both) of the `processOutputResult` and `processOutputStream` functions.
+   * Output processors that can modify or validate messages from the agent, before it is sent to the client.
+   * These can be individual processors (implementing `processOutputResult`, `processOutputStream`, or `processOutputStep`) or
+   * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  /**
+   * Maximum number of times processors can trigger a retry per generation.
+   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
+   * This limit prevents infinite retry loops.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
   /**
    * Options to pass to the agent upon creation.
    */
@@ -210,7 +246,6 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
   options?: MemoryConfig;
-  readOnly?: boolean;
 };
 
 /**
@@ -255,9 +290,15 @@ export type AgentGenerateOptions<
    */
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this generation call (overrides agent's default) */
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry for this generation.
+   * Overrides agent's default maxProcessorRetries.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
   /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
   /** tracing options for starting new traces */
@@ -334,7 +375,7 @@ export type AgentStreamOptions<
    */
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?: InputProcessorOrWorkflow[];
   /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
   /** tracing options for starting new traces */

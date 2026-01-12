@@ -1,6 +1,8 @@
 ---
 title: "Reference: OtelExporter | Observability"
 description: OpenTelemetry exporter for Tracing
+packages:
+  - "@mastra/otel-exporter"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -68,8 +70,8 @@ interface OtelExporterConfig {
 
 ```typescript
 interface Dash0Config {
-  apiKey: string;
-  endpoint: string;
+  apiKey?: string;
+  endpoint?: string;
   dataset?: string;
 }
 ```
@@ -79,20 +81,20 @@ interface Dash0Config {
     {
       name: "apiKey",
       type: "string",
-      description: "Dash0 API key",
-      required: true,
+      description: "Dash0 API key. Falls back to DASH0_API_KEY env var.",
+      required: false,
     },
     {
       name: "endpoint",
       type: "string",
       description:
-        "Dash0 ingress endpoint (e.g., ingress.us-west-2.aws.dash0.com:4317)",
-      required: true,
+        "Dash0 ingress endpoint. Falls back to DASH0_ENDPOINT env var.",
+      required: false,
     },
     {
       name: "dataset",
       type: "string",
-      description: "Optional dataset name for data organization",
+      description: "Dataset name. Falls back to DASH0_DATASET env var.",
       required: false,
     },
   ]}
@@ -102,7 +104,7 @@ interface Dash0Config {
 
 ```typescript
 interface SignozConfig {
-  apiKey: string;
+  apiKey?: string;
   region?: "us" | "eu" | "in";
   endpoint?: string;
 }
@@ -113,19 +115,19 @@ interface SignozConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "SigNoz ingestion key",
-      required: true,
+      description: "SigNoz ingestion key. Falls back to SIGNOZ_API_KEY env var.",
+      required: false,
     },
     {
       name: "region",
       type: "'us' | 'eu' | 'in'",
-      description: "SigNoz cloud region (default: 'us')",
+      description: "SigNoz cloud region. Falls back to SIGNOZ_REGION env var. (default: 'us')",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Custom endpoint for self-hosted SigNoz",
+      description: "Custom endpoint. Falls back to SIGNOZ_ENDPOINT env var.",
       required: false,
     },
   ]}
@@ -135,7 +137,7 @@ interface SignozConfig {
 
 ```typescript
 interface NewRelicConfig {
-  apiKey: string;
+  apiKey?: string;
   endpoint?: string;
 }
 ```
@@ -145,14 +147,14 @@ interface NewRelicConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "New Relic license key",
-      required: true,
+      description: "New Relic license key. Falls back to NEW_RELIC_LICENSE_KEY env var.",
+      required: false,
     },
     {
       name: "endpoint",
       type: "string",
       description:
-        "Custom endpoint (default: https://otlp.nr-data.net:443/v1/traces)",
+        "Custom endpoint. Falls back to NEW_RELIC_ENDPOINT env var. (default: https://otlp.nr-data.net:443/v1/traces)",
       required: false,
     },
   ]}
@@ -162,7 +164,7 @@ interface NewRelicConfig {
 
 ```typescript
 interface TraceloopConfig {
-  apiKey: string;
+  apiKey?: string;
   destinationId?: string;
   endpoint?: string;
 }
@@ -173,20 +175,20 @@ interface TraceloopConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "Traceloop API key",
-      required: true,
+      description: "Traceloop API key. Falls back to TRACELOOP_API_KEY env var.",
+      required: false,
     },
     {
       name: "destinationId",
       type: "string",
-      description: "Optional destination identifier",
+      description: "Destination identifier. Falls back to TRACELOOP_DESTINATION_ID env var.",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
       description:
-        "Custom endpoint (default: https://api.traceloop.com/v1/traces)",
+        "Custom endpoint. Falls back to TRACELOOP_ENDPOINT env var. (default: https://api.traceloop.com/v1/traces)",
       required: false,
     },
   ]}
@@ -196,7 +198,7 @@ interface TraceloopConfig {
 
 ```typescript
 interface LaminarConfig {
-  apiKey: string;
+  apiKey?: string;
   teamId?: string;
   endpoint?: string;
 }
@@ -207,19 +209,19 @@ interface LaminarConfig {
     {
       name: "apiKey",
       type: "string",
-      description: "Laminar project API key",
-      required: true,
+      description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
+      required: false,
     },
     {
       name: "teamId",
       type: "string",
-      description: "Optional team identifier (for backwards compatibility)",
+      description: "Team identifier. Falls back to LAMINAR_TEAM_ID env var.",
       required: false,
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Custom endpoint (default: https://api.lmnr.ai/v1/traces)",
+      description: "Custom endpoint. Falls back to LAMINAR_ENDPOINT env var. (default: https://api.lmnr.ai/v1/traces)",
       required: false,
     },
   ]}
@@ -278,7 +280,22 @@ Flushes pending traces and shuts down the exporter.
 
 ## Usage Examples
 
-### Basic Usage
+### Zero-Config (using environment variables)
+
+```typescript
+import { OtelExporter } from "@mastra/otel-exporter";
+
+// Set SIGNOZ_API_KEY, SIGNOZ_REGION environment variables
+const exporter = new OtelExporter({ provider: { signoz: {} } });
+
+// Or for other providers:
+// Set DASH0_API_KEY, DASH0_ENDPOINT for Dash0
+// Set NEW_RELIC_LICENSE_KEY for New Relic
+// Set TRACELOOP_API_KEY for Traceloop
+// Set LMNR_PROJECT_API_KEY for Laminar
+```
+
+### Explicit Configuration
 
 ```typescript
 import { OtelExporter } from "@mastra/otel-exporter";

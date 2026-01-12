@@ -4,15 +4,9 @@
  * This exporter sends observability data to Langfuse.
  * Root spans start traces in Langfuse.
  * MODEL_GENERATION spans become Langfuse generations, all others become spans.
- *
- * Compatible with both AI SDK v4 and v5:
- * - Handles both legacy token usage format (promptTokens/completionTokens)
- *   and v5 format (inputTokens/outputTokens)
- * - Supports v5 reasoning tokens and cache-related metrics
- * - Adapts to v5 streaming protocol changes
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
@@ -52,66 +46,54 @@ type TraceData = {
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
 
 /**
- * Normalized token usage format compatible with Langfuse.
- * This unified format supports both AI SDK v4 and v5 token structures.
- *
- * @example
- * ```typescript
- * // AI SDK v4 format normalizes to:
- * { input: 100, output: 50, total: 150 }
- *
- * // AI SDK v5 format normalizes to:
- * { input: 120, output: 60, total: 180, reasoning: 1000, cachedInput: 50 }
- * ```
+ * Token usage format compatible with Langfuse.
  */
-interface NormalizedUsage {
-  /**
-   * Input tokens sent to the model
-   * @source AI SDK v5: `inputTokens` | AI SDK v4: `promptTokens`
-   */
+export interface LangfuseUsageMetrics {
   input?: number;
-
-  /**
-   * Output tokens received from the model
-   * @source AI SDK v5: `outputTokens` | AI SDK v4: `completionTokens`
-   */
   output?: number;
-
-  /**
-   * Total tokens (input + output + reasoning if applicable)
-   * @source AI SDK v4 & v5: `totalTokens`
-   */
   total?: number;
-
-  /**
-   * Reasoning tokens used by reasoning models
-   * @source AI SDK v5: `reasoningTokens`
-   * @since AI SDK v5.0.0
-   * @example Models like o1-preview, o1-mini
-   */
   reasoning?: number;
+  cache_read_input_tokens?: number;
+  cache_write_input_tokens?: number;
+}
 
-  /**
-   * Cached input tokens (prompt cache hit)
-   * @source AI SDK v5: `cachedInputTokens`
-   * @since AI SDK v5.0.0
-   * @example Anthropic's prompt caching, OpenAI prompt caching
-   */
-  cachedInput?: number;
+/**
+ * Formats UsageStats to Langfuse's expected format.
+ */
+export function formatUsageMetrics(usage?: UsageStats): LangfuseUsageMetrics {
+  if (!usage) return {};
 
-  /**
-   * Prompt cache hit tokens (legacy format)
-   * @source AI SDK v4: `promptCacheHitTokens`
-   * @deprecated Prefer `cachedInput` from v5 format
-   */
-  promptCacheHit?: number;
+  const metrics: LangfuseUsageMetrics = {};
 
-  /**
-   * Prompt cache miss tokens (legacy format)
-   * @source AI SDK v4: `promptCacheMissTokens`
-   * @deprecated Prefer v5 format which uses `cachedInputTokens`
-   */
-  promptCacheMiss?: number;
+  if (usage.inputTokens !== undefined) {
+    metrics.input = usage.inputTokens;
+
+    if (usage.inputDetails?.cacheWrite !== undefined) {
+      metrics.cache_write_input_tokens = usage.inputDetails.cacheWrite;
+      metrics.input -= metrics.cache_write_input_tokens;
+    }
+  }
+
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    metrics.cache_read_input_tokens = usage.inputDetails.cacheRead;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    metrics.output = usage.outputTokens;
+  }
+
+  if (usage.outputDetails?.reasoning !== undefined) {
+    metrics.reasoning = usage.outputDetails.reasoning;
+  }
+
+  if (metrics.input && metrics.output) {
+    metrics.total = metrics.input + metrics.output;
+    if (metrics.cache_write_input_tokens) {
+      metrics.total += metrics.cache_write_input_tokens;
+    }
+  }
+
+  return metrics;
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -120,24 +102,40 @@ export class LangfuseExporter extends BaseExporter {
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
 
-  constructor(config: LangfuseExporterConfig) {
+  constructor(config: LangfuseExporterConfig = {}) {
     super(config);
 
     this.realtime = config.realtime ?? false;
 
-    if (!config.publicKey || !config.secretKey) {
+    // Read credentials from config or environment variables
+    const publicKey = config.publicKey ?? process.env.LANGFUSE_PUBLIC_KEY;
+    const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
+    const baseUrl = config.baseUrl ?? process.env.LANGFUSE_BASE_URL;
+
+    if (!publicKey || !secretKey) {
+      const publicKeySource = config.publicKey
+        ? 'from config'
+        : process.env.LANGFUSE_PUBLIC_KEY
+          ? 'from env'
+          : 'missing';
+      const secretKeySource = config.secretKey
+        ? 'from config'
+        : process.env.LANGFUSE_SECRET_KEY
+          ? 'from env'
+          : 'missing';
       this.setDisabled(
-        `Missing required credentials (publicKey: ${!!config.publicKey}, secretKey: ${!!config.secretKey})`,
+        `Missing required credentials (publicKey: ${publicKeySource}, secretKey: ${secretKeySource}). ` +
+          `Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables or pass them in config.`,
       );
-      // Create a no-op client to prevent runtime errors
+      // Set client to null - safety is ensured by the isDisabled flag set above
       this.client = null as any;
       return;
     }
 
     this.client = new Langfuse({
-      publicKey: config.publicKey,
-      secretKey: config.secretKey,
-      baseUrl: config.baseUrl,
+      publicKey,
+      secretKey,
+      baseUrl,
       ...config.options,
     });
   }
@@ -395,64 +393,6 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Normalize usage data to handle both AI SDK v4 and v5 formats.
-   *
-   * AI SDK v4 uses: promptTokens, completionTokens
-   * AI SDK v5 uses: inputTokens, outputTokens
-   *
-   * This function normalizes to a unified format that Langfuse can consume,
-   * prioritizing v5 format while maintaining backward compatibility.
-   *
-   * @param usage - Token usage data from AI SDK (v4 or v5 format)
-   * @returns Normalized usage object, or undefined if no usage data available
-   */
-  private normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
-    if (!usage) return undefined;
-
-    const normalized: NormalizedUsage = {};
-
-    // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
-    // Using ?? to prioritize v5 format while falling back to v4
-    const inputTokens = usage.inputTokens ?? usage.promptTokens;
-    if (inputTokens !== undefined) {
-      normalized.input = inputTokens;
-    }
-
-    // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
-    const outputTokens = usage.outputTokens ?? usage.completionTokens;
-    if (outputTokens !== undefined) {
-      normalized.output = outputTokens;
-    }
-
-    // Total tokens - calculate if not provided
-    if (usage.totalTokens !== undefined) {
-      normalized.total = usage.totalTokens;
-    } else if (normalized.input !== undefined && normalized.output !== undefined) {
-      normalized.total = normalized.input + normalized.output;
-    }
-
-    // AI SDK v5-specific: reasoning tokens
-    if (usage.reasoningTokens !== undefined) {
-      normalized.reasoning = usage.reasoningTokens;
-    }
-
-    // AI SDK v5-specific: cached tokens (cache hit)
-    if (usage.cachedInputTokens !== undefined) {
-      normalized.cachedInput = usage.cachedInputTokens;
-    }
-
-    // Legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)
-    if (usage.promptCacheHitTokens !== undefined) {
-      normalized.promptCacheHit = usage.promptCacheHitTokens;
-    }
-    if (usage.promptCacheMissTokens !== undefined) {
-      normalized.promptCacheMiss = usage.promptCacheMissTokens;
-    }
-
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
-  }
-
-  /**
    * Look up the Langfuse prompt from the closest parent span that has one.
    * This enables prompt inheritance for MODEL_GENERATION spans when the prompt
    * is set on a parent span (e.g., AGENT_RUN) rather than directly on the generation.
@@ -516,11 +456,7 @@ export class LangfuseExporter extends BaseExporter {
       }
 
       if (modelAttr.usage !== undefined) {
-        // Normalize usage to handle both v4 and v5 formats
-        const normalizedUsage = this.normalizeUsage(modelAttr.usage);
-        if (normalizedUsage) {
-          payload.usage = normalizedUsage;
-        }
+        payload.usageDetails = formatUsageMetrics(modelAttr.usage);
         attributesToOmit.push('usage');
       }
 

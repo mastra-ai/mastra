@@ -1,6 +1,7 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
@@ -8,17 +9,29 @@ import { logger } from '../../utils/logger';
 interface StudioOptions {
   env?: string;
   port?: string | number;
+  serverHost?: string;
+  serverPort?: string | number;
+  serverProtocol?: string;
 }
 
-export async function studio(options: StudioOptions = {}) {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export async function studio(
+  options: StudioOptions = {
+    serverHost: 'localhost',
+    serverPort: 4111,
+    serverProtocol: 'http',
+  },
+) {
   // Load environment variables from .env files
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(process.cwd(), '.mastra', 'output', 'playground');
+    const distPath = join(__dirname, 'studio');
 
     if (!existsSync(distPath)) {
-      logger.error(`Studio distribution not found at ${distPath}. Please run 'mastra build' first.`);
+      logger.error(`Studio distribution not found at ${distPath}.`);
       process.exit(1);
     }
 
@@ -26,7 +39,7 @@ export async function studio(options: StudioOptions = {}) {
 
     // Start the server using the installed serve binary
     // Start the server using node
-    const server = createServer(distPath);
+    const server = createServer(distPath, options);
 
     server.listen(port, () => {
       logger.info(`Mastra Studio running on http://localhost:${port}`);
@@ -49,18 +62,34 @@ export async function studio(options: StudioOptions = {}) {
   }
 }
 
-const createServer = (builtStudioPath: string) => {
-  const server = http.createServer((request, response) => {
-    // You pass two more arguments for config and middleware
-    // More details here: https://github.com/vercel/serve-handler#options
-    return handler(request, response, {
+const createServer = (builtStudioPath: string, options: StudioOptions) => {
+  const indexHtmlPath = join(builtStudioPath, 'index.html');
+  const basePath = '';
+
+  let html = readFileSync(indexHtmlPath, 'utf8')
+    .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
+    .replace('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
+    .replace('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
+    .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http');
+
+  const server = http.createServer((req, res) => {
+    const url = req.url || basePath;
+
+    // Let static assets be served by serve-handler
+    const isStaticAsset =
+      url.includes('/assets/') ||
+      url.includes('/dist/assets/') ||
+      url.includes('/mastra.svg') ||
+      url.includes('/favicon.ico');
+
+    // For everything that's not a static asset, serve the SPA shell (index.html)
+    if (!isStaticAsset) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      return res.end(html);
+    }
+
+    return handler(req, res, {
       public: builtStudioPath,
-      rewrites: [
-        {
-          source: '**',
-          destination: '/index.html',
-        },
-      ],
     });
   });
 

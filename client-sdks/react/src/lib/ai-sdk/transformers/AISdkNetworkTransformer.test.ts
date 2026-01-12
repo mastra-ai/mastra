@@ -372,6 +372,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Weather is sunny',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -415,6 +417,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Final result',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -457,6 +461,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Result',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -478,6 +484,8 @@ describe('AISdkNetworkTransformer', () => {
           result: 'Result',
           isComplete: true,
           iteration: 0,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          runId: 'run-123',
         },
         runId: 'run-123',
         from: ChunkFrom.NETWORK,
@@ -1051,6 +1059,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'data-workflow',
+          workflowId: 'data-workflow',
           runId: 'wf-run-1',
           args: {
             task: 'Process data',
@@ -1097,6 +1106,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'workflow',
+          workflowId: 'workflow',
           runId: 'wf-run-1',
           args: {
             task: 'Task',
@@ -1123,6 +1133,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'workflow',
+          workflowId: 'workflow',
           runId: 'wf-run-1',
           args: {
             task: 'Task',
@@ -1145,6 +1156,7 @@ describe('AISdkNetworkTransformer', () => {
         type: 'workflow-execution-start',
         payload: {
           name: 'workflow',
+          workflowId: 'workflow',
           runId: '',
           args: {
             task: 'Task',
@@ -1683,6 +1695,77 @@ describe('AISdkNetworkTransformer', () => {
       const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
 
       expect(result).toEqual(conversation);
+    });
+  });
+
+  describe('transform - network-execution-event-step-finish text fallback', () => {
+    it('should extract text from result when no text part exists', () => {
+      const chunk: NetworkChunkType = {
+        type: 'network-execution-event-step-finish',
+        payload: {
+          result: 'I am a helpful assistant.',
+          task: 'Who are you?',
+          primitiveId: 'none',
+          primitiveType: 'none',
+          isComplete: true,
+        } as any,
+        runId: 'run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toEqual({
+        type: 'text',
+        text: 'I am a helpful assistant.',
+        state: 'done',
+      });
+    });
+
+    it('should preserve existing text and not overwrite with result', () => {
+      const chunk: NetworkChunkType = {
+        type: 'network-execution-event-step-finish',
+        payload: {
+          result: 'This should not overwrite',
+          task: 'Who are you?',
+          primitiveId: 'none',
+          primitiveType: 'none',
+          isComplete: true,
+        } as any,
+        runId: 'run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Streamed text',
+              state: 'streaming',
+            },
+          ],
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'text',
+        text: 'Streamed text',
+        state: 'done',
+      });
     });
   });
 

@@ -14,7 +14,7 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
-import { normalizeUsageMetrics } from './metrics';
+import { formatUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
@@ -38,7 +38,6 @@ const DEFAULT_SPAN_TYPE = 'chain';
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, 'llm' | 'tool' | 'chain'>> = {
   [SpanType.MODEL_GENERATION]: 'llm',
-  [SpanType.MODEL_CHUNK]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
@@ -183,6 +182,17 @@ export class LangSmithExporter extends BaseExporter {
       langsmithRunTree.error = updatePayload.error;
     }
 
+    // Add new_token event for TTFT tracking on MODEL_GENERATION spans
+    if (span.type === SpanType.MODEL_GENERATION) {
+      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes;
+      if (modelAttr.completionStartTime !== undefined) {
+        langsmithRunTree.addEvent({
+          name: 'new_token',
+          time: modelAttr.completionStartTime.toISOString(),
+        });
+      }
+    }
+
     if (isEnd) {
       // End the span with the correct endTime (convert milliseconds to seconds)
       if (span.endTime) {
@@ -306,6 +316,11 @@ export class LangSmithExporter extends BaseExporter {
       payload.project_name = this.config.projectName;
     }
 
+    // Add tags for root spans
+    if (span.isRootSpan && span.tags?.length) {
+      payload.tags = span.tags;
+    }
+
     // Core span data
     if (span.input !== undefined) {
       payload.inputs = isKVMap(span.input) ? span.input : { input: span.input };
@@ -335,7 +350,7 @@ export class LangSmithExporter extends BaseExporter {
       }
 
       // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = normalizeUsageMetrics(modelAttr);
+      payload.metadata.usage_metadata = formatUsageMetrics(modelAttr.usage);
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
@@ -343,7 +358,7 @@ export class LangSmithExporter extends BaseExporter {
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters']);
+      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

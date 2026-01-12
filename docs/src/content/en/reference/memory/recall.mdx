@@ -1,6 +1,8 @@
 ---
 title: "Reference: Memory.recall() | Memory"
 description: "Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Memory.recall()
@@ -9,7 +11,7 @@ the `.recall()` method retrieves messages from a specific thread, with support f
 
 ## Usage Example
 
-```typescript copy
+```typescript
 await memory?.recall({ threadId: "user-123" });
 ```
 
@@ -61,9 +63,9 @@ await memory?.recall({ threadId: "user-123" });
     },
     {
       name: "filter",
-      type: "{ dateRange?: { start?: Date; end?: Date } }",
+      type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }",
       description:
-        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
+        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).",
       isOptional: true,
     },
     {
@@ -138,7 +140,7 @@ await memory?.recall({ threadId: "user-123" });
 
 ## Extended usage example
 
-```typescript title="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts"
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");

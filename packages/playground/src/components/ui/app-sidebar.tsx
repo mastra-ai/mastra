@@ -1,5 +1,3 @@
-'use client';
-
 import {
   GaugeIcon,
   EyeIcon,
@@ -23,6 +21,7 @@ import {
   type NavSection,
   LogoWithoutText,
   SettingsIcon,
+  MastraVersionFooter,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -198,6 +197,12 @@ export function AppSidebar() {
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
+        {state !== 'collapsed' && (
+          <>
+            <MainSidebar.NavSeparator />
+            <MastraVersionFooter collapsed={false} />
+          </>
+        )}
       </MainSidebar.Bottom>
     </MainSidebar>
   );

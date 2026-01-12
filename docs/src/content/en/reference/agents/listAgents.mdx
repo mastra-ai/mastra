@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.listAgents() | Agents"
 description: "Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.listAgents()
@@ -9,7 +11,7 @@ The `.listAgents()` method retrieves the sub-agents configured for an agent, res
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.listAgents();
 ```
 
@@ -42,7 +44,7 @@ await agent.listAgents();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 import { RequestContext } from "@mastra/core/request-context";
 
 await agent.listAgents({
