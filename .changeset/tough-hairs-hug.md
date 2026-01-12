@@ -1,5 +1,5 @@
 ---
-"@mastra/core": patch
+'@mastra/core': patch
 ---
 
 Fixed sub-agents in `agent.network()` not receiving conversation history.
