@@ -443,7 +443,7 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     agentModel: 'openai/gpt-4o',
     evalModel: 'openai/gpt-4o',
     baseConfig: 'observational-memory',
-    readOnlyConfig: true,  // Just enables recall tool, doesn't modify data
+    readOnlyConfig: true, // Just enables recall tool, doesn't modify data
     recallToolEnabled: true,
   },
 
@@ -461,14 +461,14 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     usesTailored: false,
     usesObservationalMemory: true,
     usesShortcutOM: false,
-    usesGlmModel: false,  // This is for Observer/Reflector, not the main agent
+    usesGlmModel: false, // This is for Observer/Reflector, not the main agent
     omModel: null,
     omMaxInputTokens: null,
     requiresSequential: true,
-    agentModel: CEREBRAS_GLM_MODEL,  // Main agent uses GLM-4.7
-    evalModel: 'openai/gpt-4o',      // Eval stays on GPT-4o
+    agentModel: CEREBRAS_GLM_MODEL, // Main agent uses GLM-4.7
+    evalModel: 'openai/gpt-4o', // Eval stays on GPT-4o
     baseConfig: 'observational-memory',
-    readOnlyConfig: true,  // Uses same prepared data as observational-memory
+    readOnlyConfig: true, // Uses same prepared data as observational-memory
   },
 
   'om-glm-patterns-observed': {
@@ -490,7 +490,7 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     requiresSequential: true,
     agentModel: CEREBRAS_GLM_MODEL,
     evalModel: 'openai/gpt-4o',
-    baseConfig: 'om-patterns-observed',  // Inherits from patterns-observed
+    baseConfig: 'om-patterns-observed', // Inherits from patterns-observed
     readOnlyConfig: true,
     recognizePatterns: true,
   },
@@ -514,7 +514,7 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     requiresSequential: true,
     agentModel: CEREBRAS_GLM_MODEL,
     evalModel: 'openai/gpt-4o',
-    baseConfig: 'observational-memory',  // Uses base OM data
+    baseConfig: 'observational-memory', // Uses base OM data
     readOnlyConfig: true,
     recallToolEnabled: true,
   },
