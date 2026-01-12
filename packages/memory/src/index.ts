@@ -1054,7 +1054,12 @@ ${
                 content.content.trim() !== ''
               ) {
                 textForEmbedding = content.content;
-              } else if ('parts' in content && content.parts && Array.isArray(content.parts) && content.parts.length > 0) {
+              } else if (
+                'parts' in content &&
+                content.parts &&
+                Array.isArray(content.parts) &&
+                content.parts.length > 0
+              ) {
                 // Extract text from all text parts, concatenate
                 const joined = (content.parts as any[])
                   .filter(part => part?.type === 'text')
@@ -1097,7 +1102,9 @@ ${
                 });
               } catch {
                 // Ignore errors if vectors don't exist for this message
-                this.logger.debug(`No existing vectors found for message ${message.id} in ${indexName}, skipping delete`);
+                this.logger.debug(
+                  `No existing vectors found for message ${message.id} in ${indexName}, skipping delete`,
+                );
               }
             }
           }

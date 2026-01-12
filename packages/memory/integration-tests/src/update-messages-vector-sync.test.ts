@@ -221,9 +221,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
       threadId,
       content: {
         format: 2 as const,
-        parts: [
-          { type: 'text' as const, text: 'Marine biology studies ocean ecosystems and underwater life forms.' },
-        ],
+        parts: [{ type: 'text' as const, text: 'Marine biology studies ocean ecosystems and underwater life forms.' }],
       },
       role: 'user' as const,
       createdAt: new Date(),
