@@ -58,7 +58,10 @@ export type MemoryConfigType =
   | 'observational-memory-shortcut'
   | 'observational-memory-shortcut-glm'
   | 'om-patterns-observed'
-  | 'om-patterns-tool';
+  | 'om-patterns-tool'
+  | 'om-glm'
+  | 'om-glm-patterns-observed'
+  | 'om-glm-patterns-tool';
 
 export interface MemoryConfigOptions {
   type: MemoryConfigType;
