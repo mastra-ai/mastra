@@ -45,9 +45,9 @@ export function MainSidebarNavLink({
           '[&_svg]:text-icon5': isActive,
           '[&>a]:justify-start ': !isCollapsed,
           '[&_svg]:text-icon3': isCollapsed,
-          '[&>a]:rounded-md [&>a]:my-[0.5rem] [&>a]:bg-accent1/75 [&>a:hover]:bg-accent1/85 [&>a]:text-black [&>a:hover]:text-black':
+          '[&>a]:rounded-md [&>a]:my-[0.5rem] [&>a]:bg-gradient-to-r [&>a]:from-pink-500 [&>a]:to-orange-500 [&>a:hover]:from-pink-600 [&>a:hover]:to-orange-600 [&>a]:text-white [&>a:hover]:text-white':
             isFeatured,
-          '[&_svg]:text-black/75 [&>a:hover_svg]:text-black': isFeatured,
+          '[&_svg]:text-white/90 [&>a:hover_svg]:text-white': isFeatured,
         },
         className,
       )}

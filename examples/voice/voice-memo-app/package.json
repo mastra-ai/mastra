@@ -11,7 +11,7 @@
     "@ai-sdk/openai": "1.3.24",
     "@mastra/core": "latest",
     "@mastra/voice-openai": "latest",
-    "next": "^15.5.7",
+    "next": "^15.5.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zod": "^3.25.76"
@@ -19,7 +19,8 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../../packages/core",
-      "@mastra/voice-openai": "link:../../../voice/openai"
+      "@mastra/voice-openai": "link:../../../voice/openai",
+      "next": "^15.5.8"
     }
   },
   "devDependencies": {
