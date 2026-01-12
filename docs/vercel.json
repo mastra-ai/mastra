@@ -266,6 +266,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/v1/memory/listThreadsByResourceId",
+      "destination": "/reference/v1/memory/listThreads",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/server-db/storage",
       "destination": "/docs/v1/memory/storage",
       "permanent": true
