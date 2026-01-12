@@ -145,6 +145,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Agent Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/agent): Learn how to migrate Agent class changes when upgrading to v1.
 - [CLI | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/cli): Learn how to migrate CLI changes when upgrading to v1.
 - [Client SDK | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/client): Learn how to migrate client SDK changes when upgrading to v1.
+- [Deployment | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/deployment): Learn how to migrate deployment configuration when upgrading to v1.
 - [Evals & Scorers | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/evals): Learn how to migrate evals and scorers changes when upgrading to v1.
 - [Mastra Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/mastra): Learn how to migrate Mastra class changes when upgrading to v1.
 - [MCP | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/mcp): Learn how to migrate MCP-related changes when upgrading to v1.
