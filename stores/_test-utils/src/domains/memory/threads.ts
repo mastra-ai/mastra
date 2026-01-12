@@ -1,6 +1,6 @@
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'node:crypto';
 
@@ -748,6 +748,12 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       let filterThread1: StorageThreadType;
       let filterThread2: StorageThreadType;
 
+      // Clean up after each test to prevent contamination
+      afterEach(async () => {
+        if (filterThread1?.id) await memoryStorage.deleteThread({ threadId: filterThread1.id }).catch(() => {});
+        if (filterThread2?.id) await memoryStorage.deleteThread({ threadId: filterThread2.id }).catch(() => {});
+      });
+
       beforeEach(async () => {
         filterResourceId1 = randomUUID();
 
@@ -817,6 +823,20 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     let thread2: StorageThreadType;
     let thread3: StorageThreadType;
     let thread4: StorageThreadType;
+
+    // Clear all thread data before this test block to ensure isolation
+    beforeAll(async () => {
+      await memoryStorage.dangerouslyClearAll();
+    });
+
+    // Clean up after each test to prevent data contamination
+    afterEach(async () => {
+      // Delete the test threads to avoid contaminating subsequent tests
+      if (thread1?.id) await memoryStorage.deleteThread({ threadId: thread1.id }).catch(() => {});
+      if (thread2?.id) await memoryStorage.deleteThread({ threadId: thread2.id }).catch(() => {});
+      if (thread3?.id) await memoryStorage.deleteThread({ threadId: thread3.id }).catch(() => {});
+      if (thread4?.id) await memoryStorage.deleteThread({ threadId: thread4.id }).catch(() => {});
+    });
 
     beforeEach(async () => {
       resourceId1 = randomUUID();
