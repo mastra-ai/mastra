@@ -280,11 +280,10 @@ requestContext.set("databaseConfig", {
   },
 });
 
-await pineconeQueryTool.execute({
-  context: { queryText: "search query" },
-  mastra,
-  requestContext,
-});
+await pineConeQueryTool.execute(
+  { queryText: "search query" },
+  { mastra, requestContext }
+);
 ```
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/v1/tools/vector-query-tool).
