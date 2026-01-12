@@ -158,20 +158,16 @@ export class DatadogExporter extends BaseExporter {
 
     // Validate required configuration
     if (!mlApp) {
-      const mlAppSource = config.mlApp ? 'from config' : process.env.DD_LLMOBS_ML_APP ? 'from env' : 'missing';
       this.setDisabled(
-        `Missing required mlApp (mlApp: ${mlAppSource}). ` +
-          `Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`,
+        `Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`,
       );
       this.config = config as any;
       return;
     }
 
     if (agentless && !apiKey) {
-      const apiKeySource = config.apiKey ? 'from config' : process.env.DD_API_KEY ? 'from env' : 'missing';
       this.setDisabled(
-        `Missing required apiKey for agentless mode (apiKey: ${apiKeySource}). ` +
-          `Set DD_API_KEY environment variable or pass apiKey in config.`,
+        `Missing required apiKey for agentless mode. Set DD_API_KEY environment variable or pass apiKey in config.`,
       );
       this.config = config as any;
       return;
