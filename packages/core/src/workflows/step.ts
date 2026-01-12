@@ -3,8 +3,7 @@ import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { InferSchema } from '../schema/type';
-import type { OutputSchema } from '../stream';
+import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
@@ -28,11 +27,11 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   suspendData?: TSuspend;
   retryCount: number;
   tracingContext: TracingContext;
-  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any> ? InferSchema<T['inputSchema']> : T;
+  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['inputSchema']> : T;
   getStepResult<TOutput>(step: string): TOutput;
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
-  ): InferSchema<TStep['outputSchema']>;
+  ): InferZodLikeSchema<TStep['outputSchema']>;
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
@@ -71,14 +70,22 @@ export type LoopConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema
 ) => Promise<boolean>;
 
 // Define a Step interface
-export interface Step<TStepId extends string, TState, TInput, TOutput, TResume, TSuspend, TEngineType = any> {
+export interface Step<
+  TStepId extends string = string,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
+  TResume = unknown,
+  TSuspend = unknown,
+  TEngineType = any,
+> {
   id: TStepId;
   description?: string;
-  inputSchema: OutputSchema<TInput>;
-  outputSchema: OutputSchema<TOutput>;
-  resumeSchema?: OutputSchema<TResume>;
-  suspendSchema?: OutputSchema<TSuspend>;
-  stateSchema?: OutputSchema<TState>;
+  inputSchema: SchemaWithValidation<TInput>;
+  outputSchema: SchemaWithValidation<TOutput>;
+  resumeSchema?: SchemaWithValidation<TResume>;
+  suspendSchema?: SchemaWithValidation<TSuspend>;
+  stateSchema?: SchemaWithValidation<TState>;
   execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;

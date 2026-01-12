@@ -562,6 +562,7 @@ export const mastra = new Mastra({
           message: z.string(),
         }),
         execute: async inputData => {
+          // @ts-ignore TODO enum gives false optional value
           return await AgentBuilderDefaults.manageTaskList(inputData);
         },
       }),

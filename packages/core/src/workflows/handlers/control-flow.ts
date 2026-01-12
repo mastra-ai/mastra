@@ -222,7 +222,7 @@ export interface ExecuteConditionalParams {
   entry: {
     type: 'conditional';
     steps: { type: 'step'; step: Step }[];
-    conditions: ConditionFunction<any, any, any, any, DefaultEngineType>[];
+    conditions: ConditionFunction<any, any, any, any, any, DefaultEngineType>[];
   };
   prevOutput: any;
   stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -497,7 +497,7 @@ export interface ExecuteLoopParams {
   entry: {
     type: 'loop';
     step: Step;
-    condition: LoopConditionFunction<any, any, any, any, DefaultEngineType>;
+    condition: LoopConditionFunction<any, any, any, any, any, DefaultEngineType>;
     loopType: 'dowhile' | 'dountil';
   };
   prevStep: StepFlowEntry;

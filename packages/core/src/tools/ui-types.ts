@@ -12,14 +12,12 @@ export type UITool = {
 /**
  * Infer the input type of a Mastra tool
  */
-export type InferToolInput<T> =
-  T extends Tool<infer I, any, any> ? (I extends z.ZodSchema ? z.infer<I> : never) : never;
+export type InferToolInput<T> = T extends Tool<infer I, unknown, unknown, unknown> ? I : never;
 
 /**
  * Infer the output type of a Mastra tool
  */
-export type InferToolOutput<T> =
-  T extends Tool<any, infer O, any> ? (O extends z.ZodSchema ? z.infer<O> : never) : never;
+export type InferToolOutput<T> = T extends Tool<unknown, infer O, unknown, unknown> ? O : never;
 
 /**
  * Infer the input and output types of a tool so it can be used as a UI tool.
@@ -32,7 +30,7 @@ export type InferUITool<TOOL> = {
 /**
  * A set of tools (object with tool instances)
  */
-export type ToolSet = Record<string, Tool<any, any, any>>;
+export type ToolSet = Record<string, Tool<unknown, unknown, unknown, unknown, any, string>>;
 
 /**
  * Infer the input and output types of a tool set so it can be used as a UI tool set.
