@@ -181,20 +181,36 @@ describe('Memory Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
-    it('should throw error when resourceId is not provided', async () => {
+    it('should list all threads when no filters are provided', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: { 'test-agent': mockAgent },
       });
-      await expect(
-        LIST_THREADS_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          agentId: 'test-agent',
-          page: 0,
-          perPage: 10,
-          resourceId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
+
+      // Create threads with different resourceIds
+      await mockMemory.createThread({ resourceId: 'resource-1' });
+      await mockMemory.createThread({ resourceId: 'resource-2' });
+
+      const spy = vi.spyOn(mockMemory, 'listThreads');
+
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        resourceId: undefined,
+        metadata: undefined,
+      });
+
+      // Should return all threads when no filter is provided
+      expect(result.total).toEqual(2);
+      expect(result.threads).toHaveLength(2);
+      expect(spy).toHaveBeenCalledWith({
+        filter: undefined,
+        page: 0,
+        perPage: 10,
+        orderBy: undefined,
+      });
     });
 
     it('should return paginated threads with default parameters', async () => {
@@ -222,7 +238,7 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(1);
 
       expect(spy).toBeCalledWith({
-        resourceId: 'test-resource',
+        filter: { resourceId: 'test-resource' },
         page: 0,
         perPage: 10,
         orderBy: undefined,
@@ -251,7 +267,7 @@ describe('Memory Handlers', () => {
 
       expect(result.threads).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith({
-        resourceId: 'test-resource',
+        filter: { resourceId: 'test-resource' },
         page: 0,
         perPage: 20,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
@@ -282,7 +298,7 @@ describe('Memory Handlers', () => {
 
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
-        resourceId: 'test-resource',
+        filter: { resourceId: 'test-resource' },
         page: 0,
         perPage: 10,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
