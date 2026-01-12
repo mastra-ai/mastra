@@ -379,16 +379,24 @@ describe('Lance vector store tests', () => {
         expect(updatedIds).toEqual(ids);
       });
 
-      it('should throw error when upserting to non-existent table', async () => {
+      it('should auto-create table when upserting to non-existent table', async () => {
         const nonExistentTable = 'non-existent-table-' + Date.now();
 
-        await expect(
-          vectorDB.upsert({
-            indexName: testTableIndexColumn,
-            tableName: nonExistentTable,
-            vectors: [[0.1, 0.2, 0.3]],
-          }),
-        ).rejects.toThrow('does not exist');
+        // Upsert should auto-create the table
+        const ids = await vectorDB.upsert({
+          indexName: testTableIndexColumn,
+          tableName: nonExistentTable,
+          vectors: [[0.1, 0.2, 0.3]],
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Verify table was created
+        const tables = await vectorDB.listTables();
+        expect(tables).toContain(nonExistentTable);
+
+        // Cleanup
+        await vectorDB.deleteTable(nonExistentTable);
       });
     });
 
@@ -460,17 +468,18 @@ describe('Lance vector store tests', () => {
         expect(results[2].metadata?.text).toBe('Third vector');
       });
 
-      it('should throw error when querying from non-existent table', async () => {
+      it('should return empty array when querying from non-existent table', async () => {
         const nonExistentTable = 'non-existent-table-' + Date.now();
 
-        await expect(
-          vectorDB.query({
-            indexName: testTableIndexColumn,
-            tableName: nonExistentTable,
-            columns: ['id', 'vector', 'metadata'],
-            queryVector: [0.1, 0.2, 0.3],
-          }),
-        ).rejects.toThrowError(new RegExp(`Table '${nonExistentTable}'`));
+        // Query should return empty array, not throw
+        const results = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: nonExistentTable,
+          columns: ['id', 'vector', 'metadata'],
+          queryVector: [0.1, 0.2, 0.3],
+        });
+
+        expect(results).toEqual([]);
       });
     });
 
@@ -1523,6 +1532,205 @@ describe('Lance vector store tests', () => {
           const isMatch = item.metadata?.status === 'active' || item.metadata?.tags === null;
           expect(isMatch).toBe(true);
         });
+      });
+    });
+  });
+
+  describe('Memory integration compatibility', () => {
+    // These tests verify that LanceVectorStore works with Memory's calling pattern:
+    // 1. createIndex (without tableName, only indexName)
+    // 2. upsert (without tableName, only indexName)
+    // 3. query (without tableName, only indexName)
+
+    describe('createIndex without tableName', () => {
+      it('should create table and index when table does not exist', async () => {
+        const indexName = 'memory_compat_create_' + Date.now();
+
+        // Call createIndex without tableName (like Memory does)
+        // Should create the table automatically
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        } as any);
+
+        // Verify table was created
+        const tables = await vectorDB.listTables();
+        expect(tables).toContain(indexName);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      it('should work when table already exists', async () => {
+        const tableName = 'memory_compat_existing_' + Date.now();
+
+        // Create table with data first
+        const generateTableData = (numRows: number) => {
+          return Array.from({ length: numRows }, (_, i) => ({
+            id: String(i + 1),
+            vector: Array.from({ length: 3 }, () => Math.random()),
+          }));
+        };
+        await vectorDB.createTable(tableName, generateTableData(300));
+
+        // Call createIndex with tableName explicitly (for existing tables)
+        await vectorDB.createIndex({
+          tableName,
+          indexName: 'vector',
+          dimension: 3,
+          metric: 'cosine',
+          indexConfig: { type: 'ivfflat', numPartitions: 1, numSubVectors: 1 },
+        } as any);
+
+        // Should not throw - index created on existing table
+        const tables = await vectorDB.listTables();
+        expect(tables).toContain(tableName);
+
+        // Cleanup
+        await vectorDB.deleteTable(tableName);
+      });
+    });
+
+    describe('query without tableName', () => {
+      it('should return empty array when table does not exist', async () => {
+        const indexName = 'memory_compat_query_nonexistent_' + Date.now();
+
+        // Query without tableName on non-existent table
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        } as any);
+
+        // Should return empty array, not throw
+        expect(results).toEqual([]);
+      });
+
+      it('should return results when table exists with data', async () => {
+        const indexName = 'memory_compat_query_existing_' + Date.now();
+
+        // Create table with data
+        const generateTableData = (numRows: number) => {
+          return Array.from({ length: numRows }, (_, i) => ({
+            id: String(i + 1),
+            vector: Array.from({ length: 3 }, () => Math.random()),
+          }));
+        };
+        await vectorDB.createTable(indexName, generateTableData(10));
+
+        // Query without tableName - should default to indexName
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        } as any);
+
+        expect(results.length).toBeGreaterThan(0);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+    });
+
+    describe('upsert without tableName', () => {
+      it('should add vectors to existing table', async () => {
+        const indexName = 'memory_compat_upsert_' + Date.now();
+
+        // First create table via createIndex (like Memory does)
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        } as any);
+
+        // Then upsert without tableName
+        const ids = await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+          ],
+          metadata: [{ message_id: 'msg1' }, { message_id: 'msg2' }],
+        } as any);
+
+        expect(ids).toHaveLength(2);
+
+        // Verify data was added by querying
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        } as any);
+
+        expect(results.length).toBe(2);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+    });
+
+    describe('full Memory-like flow', () => {
+      it('should handle empty recall (query before any upsert)', async () => {
+        const indexName = 'memory_flow_empty_' + Date.now();
+
+        // Memory flow: createIndex first
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        } as any);
+
+        // Then query (recall) - should return empty, not throw
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        } as any);
+
+        expect(results).toEqual([]);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      it('should handle save then recall flow', async () => {
+        const indexName = 'memory_flow_save_recall_' + Date.now();
+
+        // 1. createIndex (Memory does this first)
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        } as any);
+
+        // 2. upsert (Memory saves messages)
+        await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9],
+          ],
+          metadata: [
+            { message_id: 'msg1', thread_id: 'thread1' },
+            { message_id: 'msg2', thread_id: 'thread1' },
+            { message_id: 'msg3', thread_id: 'thread1' },
+          ],
+        } as any);
+
+        // 3. query (Memory recalls similar messages)
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 2,
+        } as any);
+
+        expect(results.length).toBe(2);
+        expect(results[0].id).toBeDefined();
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
       });
     });
   });
