@@ -608,14 +608,25 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       // Validate pagination parameters (throws on invalid input)
-      this.validatePagination(page, perPage);
+      // For unbounded requests (perPage: false), validate page must be 0 and use dummy value for perPage
+      if (perPageInput === false) {
+        if (page !== 0) {
+          throw new Error('page must be 0 when perPage is false');
+        }
+        // Skip validation for unbounded requests (don't validate against MAX_SAFE_INTEGER)
+      } else {
+        this.validatePagination(page, perPage);
+      }
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page, perPage },
+          details: {
+            page,
+            ...(perPageInput !== undefined && { perPage: perPageInput }),
+          },
         },
         error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
@@ -624,8 +635,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
+    // Log only safe fields to avoid leaking PII/secrets in metadata values
     this.logger.debug('Listing threads with filters', {
-      filter,
+      resourceId: filter?.resourceId,
+      metadataKeys: filter?.metadata ? Object.keys(filter.metadata) : [],
       page,
       perPage,
       field,
@@ -633,29 +646,42 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     });
 
     try {
-      let results;
-
-      // If resourceId filter is provided, use the GSI for efficient querying
-      if (filter?.resourceId) {
-        const query = this.service.entities.thread.query.byResource({
-          entity: 'thread',
-          resourceId: filter.resourceId,
-        });
-        results = await query.go();
-      } else {
-        // Otherwise, scan all threads
-        const scan = this.service.entities.thread.scan.where({}, {});
-        results = await scan.go();
-      }
+      // Fetch threads from DynamoDB
+      // Use query with GSI for resourceId filtering (efficient), otherwise scan all threads
+      const rawThreads = filter?.resourceId
+        ? (
+            await this.service.entities.thread.query
+              .byResource({
+                entity: 'thread',
+                resourceId: filter.resourceId,
+              })
+              .go({ pages: 'all' })
+          ).data
+        : (await this.service.entities.thread.scan.go({ pages: 'all' })).data;
 
       // Transform threads
-      let allThreads = this.transformAndSortThreads(results.data, field, direction);
+      let allThreads = this.transformAndSortThreads(rawThreads, field, direction);
 
       // Apply metadata filters if provided (AND logic)
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         allThreads = allThreads.filter(thread => {
-          if (!thread.metadata) return false;
-          return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+          // Handle both object and stringified JSON metadata
+          let threadMeta: Record<string, unknown> | null = null;
+
+          if (typeof thread.metadata === 'string') {
+            try {
+              threadMeta = JSON.parse(thread.metadata);
+            } catch {
+              return false; // Invalid JSON, exclude thread
+            }
+          } else if (thread.metadata && typeof thread.metadata === 'object') {
+            threadMeta = thread.metadata as Record<string, unknown>;
+          }
+
+          if (!threadMeta) return false;
+
+          // Compare metadata values using strict equality
+          return Object.entries(filter.metadata!).every(([key, value]) => threadMeta![key] === value);
         });
       }
 
@@ -682,9 +708,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             ...(filter?.resourceId && { resourceId: filter.resourceId }),
-            hasMetadataFilter: !!filter?.metadata,
+            hasMetadataFilter: !!(filter?.metadata && Object.keys(filter.metadata).length),
             page,
-            perPage,
+            perPage: perPageForResponse,
           },
         },
         error,

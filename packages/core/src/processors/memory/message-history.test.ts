@@ -4,6 +4,7 @@ import { MessageList } from '../../agent';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
+import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../storage/types';
 
 import { MessageHistory } from './message-history.js';
 
@@ -82,8 +83,14 @@ class MockStorage extends MemoryStorage {
   async updateMessages(args: any) {
     return args.messages || [];
   }
-  async listThreads(_args: any): Promise<any> {
-    return { threads: [], total: 0, page: 1, perPage: false, hasMore: false };
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return {
+      threads: [],
+      total: 0,
+      page: args.page ?? 0,
+      perPage: args.perPage ?? 100,
+      hasMore: false,
+    };
   }
 }
 
