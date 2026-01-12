@@ -1350,8 +1350,8 @@ export class Workflow<
         id:
           stepOptions?.id ||
           `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
+        inputSchema: z.any(),
+        outputSchema: z.any(),
         execute: mappingConfig as any,
       });
 
