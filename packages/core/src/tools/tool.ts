@@ -2,7 +2,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
 import type { SuspendOptions } from '../workflows';
-import type { ToolAction, ToolExecutionContext } from './types';
+import type { ToolAction, ToolAnnotations, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
@@ -122,6 +122,35 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * MCP tool annotations for describing tool behavior and UI presentation.
+   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
+   * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+   * @example
+   * ```typescript
+   * annotations: {
+   *   title: 'Weather Lookup',
+   *   readOnlyHint: true,
+   *   destructiveHint: false
+   * }
+   * ```
+   */
+  annotations?: ToolAnnotations;
+
+  /**
+   * Arbitrary metadata that will be passed through to MCP clients.
+   * This field allows custom metadata to be attached to tools for
+   * client-specific functionality.
+   * @example
+   * ```typescript
+   * _meta: {
+   *   version: '1.0.0',
+   *   author: 'team@example.com'
+   * }
+   * ```
+   */
+  _meta?: Record<string, unknown>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -145,6 +174,8 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.annotations = opts.annotations;
+    this._meta = opts._meta;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data

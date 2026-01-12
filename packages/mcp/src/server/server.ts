@@ -422,6 +422,14 @@ export class MCPServer extends MCPServerBase {
           if (tool.outputSchema) {
             toolSpec.outputSchema = tool.outputSchema.jsonSchema;
           }
+          // Include MCP tool annotations if present (Issue #9859)
+          if (tool.annotations) {
+            toolSpec.annotations = tool.annotations;
+          }
+          // Include _meta if present (Issue #9859)
+          if (tool._meta) {
+            toolSpec._meta = tool._meta;
+          }
           return toolSpec;
         }),
       };

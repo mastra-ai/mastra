@@ -105,6 +105,48 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
  */
 export type MCPToolType = 'agent' | 'workflow';
 
+/**
+ * MCP Tool Annotations for describing tool behavior and UI presentation.
+ * These annotations are part of the MCP protocol and are used by clients
+ * like OpenAI Apps SDK to control tool card display and permission hints.
+ *
+ * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+ */
+export interface ToolAnnotations {
+  /**
+   * A human-readable title for the tool.
+   * Used for display purposes in UI components.
+   */
+  title?: string;
+  /**
+   * If true, the tool does not modify its environment.
+   * This hint indicates the tool only reads data and has no side effects.
+   * @default false
+   */
+  readOnlyHint?: boolean;
+  /**
+   * If true, the tool may perform destructive updates to its environment.
+   * If false, the tool performs only additive updates.
+   * This hint helps clients determine if confirmation should be required.
+   * @default true
+   */
+  destructiveHint?: boolean;
+  /**
+   * If true, calling the tool repeatedly with the same arguments
+   * will have no additional effect on its environment.
+   * This hint indicates idempotent behavior.
+   * @default false
+   */
+  idempotentHint?: boolean;
+  /**
+   * If true, this tool may interact with an "open world" of external
+   * entities (e.g., web search, external APIs).
+   * If false, the tool's domain is closed and fully defined.
+   * @default true
+   */
+  openWorldHint?: boolean;
+}
+
 // MCP-specific properties for tools
 export interface MCPToolProperties {
   /**
@@ -141,6 +183,15 @@ export type CoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * MCP tool annotations for describing tool behavior and UI presentation.
+   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
+   */
+  annotations?: ToolAnnotations;
+  /**
+   * Arbitrary metadata that will be passed through to MCP clients.
+   */
+  _meta?: Record<string, unknown>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -173,6 +224,15 @@ export type InternalCoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * MCP tool annotations for describing tool behavior and UI presentation.
+   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
+   */
+  annotations?: ToolAnnotations;
+  /**
+   * Arbitrary metadata that will be passed through to MCP clients.
+   */
+  _meta?: Record<string, unknown>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -229,6 +289,18 @@ export interface ToolAction<
   outputSchema?: TSchemaOut;
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
+  /**
+   * MCP tool annotations for describing tool behavior and UI presentation.
+   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
+   * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+   */
+  annotations?: ToolAnnotations;
+  /**
+   * Arbitrary metadata that will be passed through to MCP clients.
+   * This field allows custom metadata to be attached to tools for
+   * client-specific functionality.
+   */
+  _meta?: Record<string, unknown>;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
