@@ -190,19 +190,18 @@ export class TokensCommand {
     let compressionRatio: number | undefined;
 
     const preparedDir = options.preparedDataDir || this.preparedDataDir;
-    // Check both observational-memory and observational-memory-shortcut directories
-    let omJsonPath = join(preparedDir, options.dataset, 'observational-memory', question.question_id, 'om.json');
-    if (!existsSync(omJsonPath)) {
-      omJsonPath = join(
-        preparedDir,
-        options.dataset,
-        'observational-memory-shortcut',
-        question.question_id,
-        'om.json',
-      );
+    // Check all observational-memory config directories
+    const omConfigs = ['observational-memory', 'observational-memory-shortcut', 'observational-memory-shortcut-glm'];
+    let omJsonPath = '';
+    for (const config of omConfigs) {
+      const candidatePath = join(preparedDir, options.dataset, config, question.question_id, 'om.json');
+      if (existsSync(candidatePath)) {
+        omJsonPath = candidatePath;
+        break;
+      }
     }
 
-    if (existsSync(omJsonPath)) {
+    if (omJsonPath && existsSync(omJsonPath)) {
       try {
         const omData = JSON.parse(await readFile(omJsonPath, 'utf-8'));
         // The structure is: observationalMemory[0] = [resourceKey, [records...]]

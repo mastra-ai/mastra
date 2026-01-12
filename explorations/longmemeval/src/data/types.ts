@@ -55,7 +55,8 @@ export type MemoryConfigType =
   | 'combined'
   | 'combined-tailored'
   | 'observational-memory'
-  | 'observational-memory-shortcut';
+  | 'observational-memory-shortcut'
+  | 'observational-memory-shortcut-glm';
 
 export interface MemoryConfigOptions {
   type: MemoryConfigType;

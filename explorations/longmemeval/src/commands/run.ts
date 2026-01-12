@@ -514,7 +514,9 @@ Active evaluations:`;
 
     const memoryOptions = getMemoryOptions(options.memoryConfig);
     const usesObservationalMemory =
-      options.memoryConfig === 'observational-memory' || options.memoryConfig === 'observational-memory-shortcut';
+      options.memoryConfig === 'observational-memory' ||
+      options.memoryConfig === 'observational-memory-shortcut' ||
+      options.memoryConfig === 'observational-memory-shortcut-glm';
 
     // Only load BenchmarkStore for non-OM configs (OM uses PersistableInMemoryMemory)
     let benchmarkStore: BenchmarkStore | undefined;
@@ -599,9 +601,9 @@ When answering questions, carefully review the conversation history to identify 
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
-      // model: modelProvider,
+      model: modelProvider,
       // model: 'anthropic/claude-haiku-4-5',
-      model: 'cerebras/zai-glm-4.7',
+      // model: 'cerebras/zai-glm-4.7',
       // model: 'cerebras/gpt-oss-120b',
       instructions: [
         { role: 'system', content: agentInstructions },
@@ -689,8 +691,8 @@ When answering questions, carefully review the conversation history to identify 
     const evalAgent = new Agent({
       id: 'longmemeval-metric-agent',
       name: 'LongMemEval Metric Agent',
-      model: 'cerebras/gpt-oss-120b',
-      // model: retry4o.model,
+      // model: 'cerebras/gpt-oss-120b',
+      model: retry4o.model,
       instructions:
         'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct.',
     });
@@ -885,7 +887,10 @@ When answering questions, carefully review the conversation history to identify 
 
     // Save metrics
     const metricsPath = join(runDir, 'metrics.json');
-    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
+    const usesObservationalMemoryForMetrics =
+      options.memoryConfig === 'observational-memory' ||
+      options.memoryConfig === 'observational-memory-shortcut' ||
+      options.memoryConfig === 'observational-memory-shortcut-glm';
     const metricsData = {
       ...metrics,
       config: {
@@ -894,7 +899,7 @@ When answering questions, carefully review the conversation history to identify 
         memoryConfig: options.memoryConfig,
         subset: options.subset,
         // Store OM config for reproducibility (actual values used, with defaults as fallback)
-        ...(usesObservationalMemory && {
+        ...(usesObservationalMemoryForMetrics && {
           observationalMemoryConfig: {
             scope: observationalMemoryConfig.scope,
             focus: observationalMemoryConfig.focus,

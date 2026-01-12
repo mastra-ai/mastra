@@ -686,6 +686,36 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Retry wrapper for LLM calls with exponential backoff.
+   * Handles 429 rate limit errors by waiting and retrying.
+   */
+  private async withRetry<T>(fn: () => Promise<T>, maxRetries = 3, context = 'LLM call'): Promise<T> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        const is429 = error?.statusCode === 429 || error?.message?.includes('Too Many Requests');
+
+        if (is429 && attempt < maxRetries) {
+          // Extract retry-after header or use exponential backoff
+          const retryAfter = parseInt(error?.responseHeaders?.['retry-after'] || '0', 10);
+          const waitSeconds = retryAfter > 0 ? retryAfter : Math.pow(2, attempt + 1) * 15; // 30s, 60s, 120s
+
+          console.warn(
+            `[OM] ${context} rate limited (429). Attempt ${attempt + 1}/${maxRetries + 1}. Waiting ${waitSeconds}s...`,
+          );
+
+          await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+          continue;
+        }
+
+        throw error;
+      }
+    }
+    throw new Error(`[OM] ${context} failed after ${maxRetries + 1} attempts`);
+  }
+
+  /**
    * Call the Observer agent to extract observations.
    */
   private async callObserver(
@@ -717,13 +747,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const prompt = buildObserverPrompt(observationsWithPatterns, messagesToObserve);
 
-    const result = await agent.generate(prompt, {
-      modelSettings: {
-        temperature: this.observerConfig.modelSettings.temperature,
-        maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
-      },
-      providerOptions: this.observerConfig.providerOptions as any,
-    });
+    const result = await this.withRetry(
+      () =>
+        agent.generate(prompt, {
+          modelSettings: {
+            temperature: this.observerConfig.modelSettings.temperature,
+            maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
+          },
+          providerOptions: this.observerConfig.providerOptions as any,
+        }),
+      3,
+      'Observer',
+    );
 
     const parsed = parseObserverOutput(result.text);
 
@@ -766,13 +801,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // First attempt
     let prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, false);
-    let result = await agent.generate(prompt, {
-      modelSettings: {
-        temperature: this.reflectorConfig.modelSettings.temperature,
-        maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
-      },
-      providerOptions: this.reflectorConfig.providerOptions as any,
-    });
+    let result = await this.withRetry(
+      () =>
+        agent.generate(prompt, {
+          modelSettings: {
+            temperature: this.reflectorConfig.modelSettings.temperature,
+            maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
+          },
+          providerOptions: this.reflectorConfig.providerOptions as any,
+        }),
+      3,
+      'Reflector',
+    );
 
     let parsed = parseReflectorOutput(result.text);
     let reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
@@ -785,13 +825,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
       // Retry with compression prompt
       prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, true);
-      result = await agent.generate(prompt, {
-        modelSettings: {
-          temperature: this.reflectorConfig.modelSettings.temperature,
-          maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
-        },
-        providerOptions: this.reflectorConfig.providerOptions as any,
-      });
+      result = await this.withRetry(
+        () =>
+          agent.generate(prompt, {
+            modelSettings: {
+              temperature: this.reflectorConfig.modelSettings.temperature,
+              maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
+            },
+            providerOptions: this.reflectorConfig.providerOptions as any,
+          }),
+        3,
+        'Reflector (compression retry)',
+      );
 
       parsed = parseReflectorOutput(result.text);
       reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
@@ -1549,7 +1594,7 @@ ${formattedMessages}
       // ════════════════════════════════════════════════════════════
 
       // Prepare observation tasks for each thread
-      const observationTasks = threadOrder.map(async threadId => {
+      const observationTasks = threadOrder.map(threadId => async () => {
         const threadMessages = messagesByThread.get(threadId) ?? [];
         if (threadMessages.length === 0) return null;
 
@@ -1587,7 +1632,21 @@ ${formattedMessages}
 
       // Execute all observations in parallel
       console.info(`[OM] Starting parallel observation of ${observationTasks.length} threads`);
-      const observationResults = await Promise.all(observationTasks);
+      const observationResults: Array<{
+        threadId: string;
+        threadMessages: MastraDBMessage[];
+        result: {
+          observations: string;
+          currentTask?: string;
+          suggestedContinuation?: string;
+          patterns?: Record<string, string[]>;
+        };
+      }> = [];
+      for (const runTask of observationTasks) {
+        const result = await runTask();
+        if (result) observationResults.push(result);
+      }
+      // const observationResults = await Promise.all(observationTasks);
       console.info(`[OM] All parallel observations complete`);
 
       // Combine results: wrap each thread's observations and append to existing
@@ -1807,14 +1866,20 @@ ${formattedMessages}
     options?: {
       reflect?: boolean;
       reflectionThreshold?: number;
+      /**
+       * Maximum input tokens for the Observer/Reflector model.
+       * If set, finalize() will trigger reflection mid-observation when approaching this limit.
+       * This prevents exceeding model context limits for large datasets.
+       */
+      maxInputTokens?: number;
     },
-  ): Promise<{ observed: boolean; reflected: boolean; observationTokens: number }> {
-    const { reflect = true, reflectionThreshold } = options ?? {};
+  ): Promise<{ observed: boolean; reflected: boolean; observationTokens: number; reflectionCount: number }> {
+    const { reflect = true, reflectionThreshold, maxInputTokens } = options ?? {};
     const ids = this.getStorageIds(threadId, resourceId);
 
     // Get or create the record
     // For resource scope, threadId is null but we pass the original threadId for record creation
-    const record = await this.getOrCreateRecord(ids.threadId ?? threadId, ids.resourceId);
+    let record = await this.getOrCreateRecord(ids.threadId ?? threadId, ids.resourceId);
 
     // Load ALL unobserved messages (no threshold check)
     // For resource scope, pass null threadId to load from all threads
@@ -1826,6 +1891,7 @@ ${formattedMessages}
 
     let observed = false;
     let reflected = false;
+    let reflectionCount = 0;
     let observationTokens = record.observationTokenCount;
 
     // Run observation if there are unobserved messages
@@ -1833,8 +1899,20 @@ ${formattedMessages}
       console.info(`[OM Finalize] Running observation on ${unobservedMessages.length} messages`);
 
       if (this.scope === 'resource') {
-        // Resource scope: group by thread and observe each
-        await this.doResourceScopedObservation(record, threadId, ids.resourceId, unobservedMessages);
+        // Resource scope: group by thread and observe each, with optional mid-loop reflection
+        const result = await this.doResourceScopedObservationWithTokenLimit(
+          record,
+          threadId,
+          ids.resourceId,
+          unobservedMessages,
+          {
+            maxInputTokens,
+            reflectionThreshold,
+            reflect,
+          },
+        );
+        reflectionCount = result.reflectionCount;
+        reflected = result.reflected;
       } else {
         // Thread scope: observe all messages together
         await this.doSynchronousObservation(record, threadId, unobservedMessages);
@@ -1851,12 +1929,12 @@ ${formattedMessages}
       console.info(`[OM Finalize] No unobserved messages, skipping observation`);
     }
 
-    // Run reflection if requested and threshold is met
+    // Run final reflection if requested and threshold is met (and we haven't already reflected enough)
     if (reflect && observationTokens > 0) {
       const threshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
 
       if (observationTokens >= threshold) {
-        console.info(`[OM Finalize] Running reflection (${observationTokens} >= ${threshold} tokens)`);
+        console.info(`[OM Finalize] Running final reflection (${observationTokens} >= ${threshold} tokens)`);
 
         // Get fresh record for reflection
         const recordForReflection = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
@@ -1880,18 +1958,186 @@ ${formattedMessages}
             });
 
             reflected = true;
+            reflectionCount++;
             observationTokens = reflectionTokenCount;
-            console.info(`[OM Finalize] Reflection complete: ${reflectionTokenCount} tokens`);
+            console.info(`[OM Finalize] Final reflection complete: ${reflectionTokenCount} tokens`);
           } finally {
             await this.storage.setReflectingFlag(recordForReflection.id, false);
           }
         }
       } else {
-        console.info(`[OM Finalize] Skipping reflection (${observationTokens} < ${threshold} tokens)`);
+        console.info(`[OM Finalize] Skipping final reflection (${observationTokens} < ${threshold} tokens)`);
       }
     }
 
-    return { observed, reflected, observationTokens };
+    return { observed, reflected, observationTokens, reflectionCount };
+  }
+
+  /**
+   * Resource-scoped observation with token limit awareness.
+   * Triggers mid-loop reflection when approaching maxInputTokens to stay within model limits.
+   */
+  private async doResourceScopedObservationWithTokenLimit(
+    record: ObservationalMemoryRecord,
+    currentThreadId: string,
+    resourceId: string,
+    allUnobservedMessages: MastraDBMessage[],
+    options: {
+      maxInputTokens?: number;
+      reflectionThreshold?: number;
+      reflect?: boolean;
+    },
+  ): Promise<{ reflected: boolean; reflectionCount: number }> {
+    const { maxInputTokens, reflectionThreshold, reflect = true } = options;
+
+    // If no maxInputTokens, use the standard parallel observation
+    if (!maxInputTokens) {
+      await this.doResourceScopedObservation(record, currentThreadId, resourceId, allUnobservedMessages);
+      return { reflected: false, reflectionCount: 0 };
+    }
+
+    console.info(`[OM Finalize] Token-limited observation for resource ${resourceId} (max: ${maxInputTokens} tokens)`);
+
+    // Group by thread
+    const messagesByThread = this.groupMessagesByThread(allUnobservedMessages);
+    console.info(`[OM Finalize] Found ${messagesByThread.size} threads with unobserved messages`);
+
+    // Sort threads by oldest message (oldest first)
+    const threadOrder = this.sortThreadsByOldestMessage(messagesByThread);
+
+    // Calculate threshold for triggering mid-loop reflection
+    // Leave buffer for the Observer prompt overhead (~5k tokens) and safety margin
+    const reflectAtTokens = Math.floor(maxInputTokens * 0.7); // Reflect at 70% of max
+    console.info(`[OM Finalize] Will trigger reflection when observations reach ${reflectAtTokens} tokens`);
+
+    let currentRecord = record;
+    let reflectionCount = 0;
+    let reflected = false;
+
+    // Process threads sequentially (not parallel) to track token growth
+    for (let i = 0; i < threadOrder.length; i++) {
+      const threadId = threadOrder[i]!;
+      const threadMessages = messagesByThread.get(threadId) ?? [];
+      if (threadMessages.length === 0) continue;
+
+      console.info(
+        `[OM Finalize] Observing thread ${i + 1}/${threadOrder.length}: ${threadId} (${threadMessages.length} messages)`,
+      );
+
+      // Get current observations
+      const existingObservations = currentRecord.activeObservations ?? '';
+      const existingPatterns = currentRecord.patterns;
+
+      // Call observer for this thread
+      const result = await this.callObserver(existingObservations, threadMessages, existingPatterns);
+
+      // Wrap with thread tag and update observations
+      const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+      const updatedObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+
+      // Merge patterns
+      let allPatterns: Record<string, string[]> = { ...(existingPatterns ?? {}) };
+      if (result.patterns) {
+        allPatterns = this.mergePatterns(allPatterns, result.patterns);
+      }
+
+      // Calculate new token count
+      let totalTokenCount = this.tokenCounter.countObservations(updatedObservations);
+      if (Object.keys(allPatterns).length > 0) {
+        const patternsString = this.formatPatternsForTokenCount(allPatterns);
+        totalTokenCount += this.tokenCounter.countObservations(patternsString);
+      }
+
+      // Update thread metadata
+      if (result.suggestedContinuation || result.currentTask) {
+        const thread = await this.storage.getThreadById({ threadId });
+        if (thread) {
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            suggestedResponse: result.suggestedContinuation,
+            currentTask: result.currentTask,
+          });
+          await this.storage.updateThread({
+            id: threadId,
+            title: thread.title ?? '',
+            metadata: newMetadata,
+          });
+        }
+      }
+
+      // Use the max message timestamp as cursor
+      const lastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+
+      // Save observations after each thread
+      await this.storage.updateActiveObservations({
+        id: currentRecord.id,
+        observations: updatedObservations,
+        tokenCount: totalTokenCount,
+        lastObservedAt,
+        patterns: Object.keys(allPatterns).length > 0 ? allPatterns : undefined,
+      });
+
+      console.info(`[OM Finalize] Thread ${threadId} complete: ${totalTokenCount} tokens total`);
+
+      // Check if we need to reflect mid-loop
+      const effectiveReflectionThreshold =
+        reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+      const shouldReflectMidLoop =
+        reflect && totalTokenCount >= reflectAtTokens && totalTokenCount >= effectiveReflectionThreshold;
+
+      if (shouldReflectMidLoop && i < threadOrder.length - 1) {
+        // Not the last thread, so reflect to compress before continuing
+        console.info(`[OM Finalize] Mid-loop reflection triggered (${totalTokenCount} >= ${reflectAtTokens} tokens)`);
+
+        // Get fresh record for reflection
+        const recordForReflection = await this.storage.getObservationalMemory(null, resourceId);
+        if (recordForReflection?.activeObservations) {
+          await this.storage.setReflectingFlag(recordForReflection.id, true);
+
+          try {
+            const patternsToReflect = this.reflectorRecognizePatterns ? recordForReflection.patterns : undefined;
+            const reflectResult = await this.callReflector(
+              recordForReflection.activeObservations,
+              undefined,
+              patternsToReflect,
+            );
+            const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+
+            await this.storage.createReflectionGeneration({
+              currentRecord: recordForReflection,
+              reflection: reflectResult.observations,
+              tokenCount: reflectionTokenCount,
+              patterns: reflectResult.patterns,
+            });
+
+            reflectionCount++;
+            reflected = true;
+            console.info(
+              `[OM Finalize] Mid-loop reflection complete: ${totalTokenCount} -> ${reflectionTokenCount} tokens`,
+            );
+
+            // Reload record to continue with compressed observations
+            const newRecord = await this.storage.getObservationalMemory(null, resourceId);
+            if (newRecord) {
+              currentRecord = newRecord;
+            }
+          } finally {
+            await this.storage.setReflectingFlag(recordForReflection.id, false);
+          }
+        }
+      } else {
+        // Update currentRecord for next iteration
+        currentRecord = {
+          ...currentRecord,
+          activeObservations: updatedObservations,
+          observationTokenCount: totalTokenCount,
+          patterns: allPatterns,
+          lastObservedAt,
+        };
+      }
+    }
+
+    console.info(`[OM Finalize] Token-limited observation complete. Reflections: ${reflectionCount}`);
+    return { reflected, reflectionCount };
   }
 
   /**
@@ -2103,15 +2349,20 @@ ${formattedMessages}
           }
 
           const patternSlug = slugify(pattern);
-          // Call the recall agent
-          const result = await recallAgent.generate(
-            `Another agent has called on you to extract a pattern from the memory system the two of you share. Extract the following pattern using the information you're aware of. Your complete response will be shown directly to the agent that called on you.
+          // Call the recall agent with retry for rate limits
+          const result = await this.withRetry(
+            () =>
+              recallAgent!.generate(
+                `Another agent has called on you to extract a pattern from the memory system the two of you share. Extract the following pattern using the information you're aware of. Your complete response will be shown directly to the agent that called on you.
 <${patternSlug}>
 - A (original date)
 - B (original date)
 - etc ...
 </${patternSlug}>`,
-            { instructions: systemPrompt },
+                { instructions: systemPrompt },
+              ),
+            3,
+            'Recall',
           );
 
           return {

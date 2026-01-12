@@ -22,6 +22,9 @@ import { google } from '@ai-sdk/google';
 import { makeDeterministicIds } from './deterministic-ids';
 
 const geminiFlash = makeRetryModel(google('gemini-2.5-flash'));
+// Cerebras GLM-4.7 model for GLM shortcut config (200k context window)
+const CEREBRAS_GLM_MODEL = 'cerebras/zai-glm-4.7';
+const CEREBRAS_GLM_MAX_TOKENS = 200000;
 
 export interface PrepareOptions {
   dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
@@ -109,12 +112,20 @@ export class PrepareCommand {
       options.memoryConfig === 'combined' ||
       options.memoryConfig === 'combined-tailored' ||
       options.memoryConfig === 'observational-memory' ||
-      options.memoryConfig === 'observational-memory-shortcut';
+      options.memoryConfig === 'observational-memory-shortcut' ||
+      options.memoryConfig === 'observational-memory-shortcut-glm';
 
-    if (needsRealModel && !process.env.OPENAI_API_KEY) {
+    // GLM config uses Cerebras, others use Gemini (which needs OPENAI_API_KEY for embeddings)
+    const usesGlm = options.memoryConfig === 'observational-memory-shortcut-glm';
+    if (needsRealModel && !usesGlm && !process.env.OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is required for working memory or observational memory preparation');
     }
+    if (usesGlm && !process.env.CEREBRAS_API_KEY) {
+      throw new Error('CEREBRAS_API_KEY is required for GLM-based observational memory preparation');
+    }
 
+    // For GLM config, we'll use Mastra model string format in ObservationalMemory config
+    // For others, use the geminiFlash model
     const model = needsRealModel
       ? geminiFlash.model
       : new MockLanguageModelV1({
@@ -454,8 +465,13 @@ export class PrepareCommand {
       options.memoryConfig === 'combined' ||
       options.memoryConfig === 'combined-tailored';
     const usesObservationalMemory =
-      options.memoryConfig === 'observational-memory' || options.memoryConfig === 'observational-memory-shortcut';
-    const usesShortcutOM = options.memoryConfig === 'observational-memory-shortcut';
+      options.memoryConfig === 'observational-memory' ||
+      options.memoryConfig === 'observational-memory-shortcut' ||
+      options.memoryConfig === 'observational-memory-shortcut-glm';
+    const usesShortcutOM =
+      options.memoryConfig === 'observational-memory-shortcut' ||
+      options.memoryConfig === 'observational-memory-shortcut-glm';
+    const usesGlmShortcut = options.memoryConfig === 'observational-memory-shortcut-glm';
     const usesTailoredTemplate =
       options.memoryConfig === 'working-memory-tailored' || options.memoryConfig === 'combined-tailored';
 
@@ -510,18 +526,20 @@ export class PrepareCommand {
       // For shortcut mode: use Infinity thresholds to skip observation during processing
       // (finalize() will be called at the end to do a single observation pass)
       const isShortcut = usesShortcutOM;
+      // GLM shortcut uses Cerebras model (200k context), others use Gemini
+      const omModel = usesGlmShortcut ? CEREBRAS_GLM_MODEL : model;
       observationalMemory = new ObservationalMemory({
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         observeFutureOnly: false,
         storage: omStorage,
         observer: {
-          model: model, // Real model for Observer
+          model: omModel, // Real model for Observer
           // Shortcut: use Infinity to skip observation during processing
           observationThreshold: isShortcut ? Infinity : 30000,
           recognizePatterns: false,
         },
         reflector: {
-          model: model, // Real model for Reflector
+          model: omModel, // Real model for Reflector
           // Shortcut: use Infinity to skip reflection during processing
           reflectionThreshold: isShortcut ? Infinity : 20000,
           recognizePatterns: false,
@@ -897,6 +915,8 @@ export class PrepareCommand {
       await observationalMemory.finalize(lastSessionId, resourceId, {
         reflect: true,
         reflectionThreshold: 20000, // Reflect if observations exceed 20k tokens
+        // For GLM config: use maxInputTokens to trigger mid-loop reflection within 200k limit
+        maxInputTokens: usesGlmShortcut ? CEREBRAS_GLM_MAX_TOKENS : undefined,
       });
     }
 
