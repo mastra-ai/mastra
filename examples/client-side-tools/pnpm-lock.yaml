@@ -22,10 +22,10 @@ importers:
         specifier: link:../../packages/core
         version: link:../../packages/core
       react:
-        specifier: ^19.1.1
+        specifier: ^19.2.3
         version: 19.2.3
       react-dom:
-        specifier: ^19.1.1
+        specifier: ^19.2.3
         version: 19.2.3(react@19.2.3)
       zod:
         specifier: ^3.25.76
@@ -35,10 +35,10 @@ importers:
         specifier: ^9.21.0
         version: 9.39.2
       '@types/react':
-        specifier: ^19.1.9
+        specifier: ^19.2.7
         version: 19.2.7
       '@types/react-dom':
-        specifier: ^19.1.7
+        specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.7)
       '@vitejs/plugin-react':
         specifier: ^5.0.4
