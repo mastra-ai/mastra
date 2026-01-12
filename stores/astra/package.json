@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

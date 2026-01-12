@@ -214,7 +214,7 @@ export class MDocument {
         const textSplitter = new RecursiveCharacterTransformer({
           maxSize: options.maxSize,
           overlap: options.overlap,
-          keepSeparator: options.keepSeparator,
+          separatorPosition: options.separatorPosition,
           addStartIndex: options.addStartIndex,
           stripWhitespace: options.stripWhitespace,
         });
@@ -235,7 +235,7 @@ export class MDocument {
         const textSplitter = new RecursiveCharacterTransformer({
           maxSize: options.maxSize,
           overlap: options.overlap,
-          keepSeparator: options.keepSeparator,
+          separatorPosition: options.separatorPosition,
           addStartIndex: options.addStartIndex,
           stripWhitespace: options.stripWhitespace,
         });
@@ -310,7 +310,7 @@ export class MDocument {
       sentenceEnders: options?.sentenceEnders,
       fallbackToWords: options?.fallbackToWords,
       fallbackToCharacters: options?.fallbackToCharacters,
-      keepSeparator: options?.keepSeparator,
+      separatorPosition: options?.separatorPosition,
       lengthFunction: options?.lengthFunction,
       addStartIndex: options?.addStartIndex,
       stripWhitespace: options?.stripWhitespace,

@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -264,12 +265,36 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         : never
     : never;
 
+/**
+ * Unified workflow state that combines metadata with processed execution state.
+ */
 export interface WorkflowState {
+  // Metadata
+  runId: string;
+  workflowName: string;
+  resourceId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+
+  /**
+   * Indicates whether this result came from in-memory storage rather than persistent storage.
+   * When true, the data is approximate:
+   * - createdAt/updatedAt are set to current time
+   * - steps is empty {} (step data only available from persisted snapshots)
+   *
+   * This flag is useful for callers that need to distinguish between persisted and in-memory runs,
+   * e.g., to decide whether to persist an initial snapshot.
+   */
+  isFromInMemory?: boolean;
+
+  // Execution State
   status: WorkflowRunStatus;
   initialState?: Record<string, any>;
-  activeStepsPath: Record<string, number[]>;
-  serializedStepGraph: SerializedStepFlowEntry[];
-  steps: Record<
+  // Optional detailed fields (can be excluded for performance)
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: SerializedStepFlowEntry[];
+  // Step Information (processed) - optional when using field filtering
+  steps?: Record<
     string,
     {
       status: WorkflowRunStatus;
@@ -287,6 +312,13 @@ export interface WorkflowState {
   payload?: Record<string, any>;
   error?: SerializedError;
 }
+
+/**
+ * Valid field names for filtering WorkflowState responses.
+ * Use with getWorkflowRunById to reduce payload size.
+ * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
+ */
+export type WorkflowStateField = 'result' | 'error' | 'payload' | 'steps' | 'activeStepsPath' | 'serializedStepGraph';
 
 export interface WorkflowRunState {
   // Core state info
@@ -318,21 +350,62 @@ export interface WorkflowRunState {
  * Result object passed to the onFinish callback when a workflow completes.
  */
 export interface WorkflowFinishCallbackResult {
+  /** The final status of the workflow */
   status: WorkflowRunStatus;
+  /** The workflow result (only for successful workflows) */
   result?: any;
+  /** Error details (only for failed workflows) */
   error?: SerializedError;
+  /** All step results */
   steps: Record<string, StepResult<any, any, any, any>>;
+  /** Tripwire info (only if failure was due to tripwire) */
   tripwire?: StepTripwireInfo;
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The final workflow state */
+  state: Record<string, any>;
 }
 
 /**
  * Error info object passed to the onError callback when a workflow fails.
  */
 export interface WorkflowErrorCallbackInfo {
+  /** The failure status (either 'failed' or 'tripwire') */
   status: 'failed' | 'tripwire';
+  /** Error details */
   error?: SerializedError;
+  /** All step results */
   steps: Record<string, StepResult<any, any, any, any>>;
+  /** Tripwire info (only if status is 'tripwire') */
   tripwire?: StepTripwireInfo;
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The final workflow state */
+  state: Record<string, any>;
 }
 
 export interface WorkflowOptions {

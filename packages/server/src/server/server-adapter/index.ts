@@ -38,6 +38,44 @@ export interface StreamOptions {
 }
 
 /**
+ * Query parameter values parsed from HTTP requests.
+ * Supports both single values and arrays (for repeated query params like ?tag=a&tag=b).
+ */
+export type QueryParamValue = string | string[];
+
+/**
+ * Parsed request parameters returned by getParams().
+ */
+export interface ParsedRequestParams {
+  urlParams: Record<string, string>;
+  queryParams: Record<string, QueryParamValue>;
+  body: unknown;
+}
+
+/**
+ * Normalizes query parameters from various HTTP framework formats to a consistent structure.
+ * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
+ * Filters out non-string values that some frameworks may include.
+ *
+ * @param rawQuery - Raw query parameters from the HTTP framework (may contain strings, arrays, or nested objects)
+ * @returns Normalized query parameters as Record<string, string | string[]>
+ */
+export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<string, QueryParamValue> {
+  const queryParams: Record<string, QueryParamValue> = {};
+  for (const [key, value] of Object.entries(rawQuery)) {
+    if (typeof value === 'string') {
+      queryParams[key] = value;
+    } else if (Array.isArray(value)) {
+      // Filter to only string values (some frameworks include nested objects)
+      const stringValues = value.filter((v): v is string => typeof v === 'string');
+      // Convert single-value arrays back to strings for compatibility
+      queryParams[key] = stringValues.length === 1 ? stringValues[0]! : stringValues;
+    }
+  }
+  return queryParams;
+}
+
+/**
  * Abstract base class for server adapters that handle HTTP requests.
  *
  * This class extends `MastraServerBase` to inherit app storage functionality
@@ -118,10 +156,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
-  abstract getParams(
-    route: ServerRoute,
-    request: TRequest,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }>;
+  abstract getParams(route: ServerRoute, request: TRequest): Promise<ParsedRequestParams>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
   abstract registerContextMiddleware(): void;
@@ -183,7 +218,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     return pathParamSchema.parseAsync(params);
   }
 
-  async parseQueryParams(route: ServerRoute, params: Record<string, string>): Promise<Record<string, any>> {
+  async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
     const queryParamSchema = route.queryParamSchema;
     if (!queryParamSchema) {
       return params;

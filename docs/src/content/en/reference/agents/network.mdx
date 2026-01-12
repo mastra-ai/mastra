@@ -257,6 +257,48 @@ await agent.network(`
     },
     MODEL_SETTINGS_OBJECT,
     {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      isOptional: true,
+      description:
+        "Configuration for generating a typed structured output from the network result.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "schema",
+              type: "ZodSchema | JSONSchema7",
+              isOptional: false,
+              description:
+                "The schema to validate the output against. Can be a Zod schema or JSON Schema.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "model",
+              type: "MastraModelConfig",
+              isOptional: true,
+              description:
+                "Model to use for generating the structured output. Defaults to the agent's model.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "instructions",
+              type: "string",
+              isOptional: true,
+              description:
+                "Custom instructions for generating the structured output.",
+            },
+          ],
+        },
+      ],
+    },
+    {
       name: "runId",
       type: "string",
       isOptional: true,
@@ -305,5 +347,73 @@ await agent.network(`
       type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
       description: "A promise that resolves to token usage statistics",
     },
+    {
+      name: "object",
+      type: "Promise<InferSchemaOutput<OUTPUT> | undefined>",
+      description:
+        "A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
+    },
+    {
+      name: "objectStream",
+      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      description:
+        "A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
+    },
   ]}
 />
+
+## Structured Output
+
+When you need typed, validated results from your network, use the `structuredOutput` option. The network will generate a response matching your schema after task completion.
+
+```typescript
+import { z } from "zod";
+
+const resultSchema = z.object({
+  summary: z.string().describe("A brief summary of the findings"),
+  recommendations: z.array(z.string()).describe("List of recommendations"),
+  confidence: z.number().min(0).max(1).describe("Confidence score"),
+});
+
+const stream = await agent.network("Research AI trends and summarize", {
+  structuredOutput: {
+    schema: resultSchema,
+  },
+});
+
+// Consume the stream
+for await (const chunk of stream) {
+  // Handle streaming events
+}
+
+// Get the typed result
+const result = await stream.object;
+// result is typed as { summary: string; recommendations: string[]; confidence: number }
+console.log(result?.summary);
+console.log(result?.recommendations);
+```
+
+### Streaming Partial Objects
+
+You can also stream partial objects as they're being generated:
+
+```typescript
+const stream = await agent.network("Analyze data", {
+  structuredOutput: { schema: resultSchema },
+});
+
+// Stream partial objects
+for await (const partial of stream.objectStream) {
+  console.log("Partial result:", partial);
+}
+
+// Get final result
+const final = await stream.object;
+```
+
+### Chunk Types
+
+When using structured output, additional chunk types are emitted:
+
+- `network-object`: Emitted with partial objects during streaming
+- `network-object-result`: Emitted with the final structured object

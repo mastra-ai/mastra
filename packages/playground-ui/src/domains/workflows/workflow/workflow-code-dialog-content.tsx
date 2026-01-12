@@ -1,7 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { CopyButton } from '@/components/ui/copy-button';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { javascript } from '@codemirror/lang-javascript';
 

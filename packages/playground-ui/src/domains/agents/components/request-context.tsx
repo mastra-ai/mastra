@@ -4,7 +4,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { toast } from 'sonner';
 import { Txt } from '@/ds/components/Txt';
 import { usePlaygroundStore } from '@/store/playground-store';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 import CodeMirror from '@uiw/react-codemirror';

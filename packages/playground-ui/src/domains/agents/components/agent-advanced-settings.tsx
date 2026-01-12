@@ -11,7 +11,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import CodeMirror from '@uiw/react-codemirror';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { jsonLanguage } from '@codemirror/lang-json';
 
 export const AgentAdvancedSettings = () => {
