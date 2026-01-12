@@ -8,6 +8,7 @@ import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-di
 import Markdown from 'react-markdown';
 import { MastraUIMessage } from '@mastra/react';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 
 type TextMessage = {
   type: 'text';
@@ -29,11 +30,44 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   agentId: string;
   messages: AgentMessage[];
   metadata?: MastraUIMessage['metadata'];
+  suspendPayload?: any;
+  toolCalled?: boolean;
 }
 
-export const AgentBadge = ({ agentId, messages = [], metadata, toolCallId, toolApprovalMetadata }: AgentBadgeProps) => {
+export const AgentBadge = ({
+  agentId,
+  messages = [],
+  metadata,
+  toolCallId,
+  toolApprovalMetadata,
+  toolName,
+  isNetwork,
+  suspendPayload,
+  toolCalled: toolCalledProp,
+}: AgentBadgeProps) => {
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
+  let toolCalled = messages.length > 0;
+
+  if (isNetwork) {
+    toolCalled =
+      toolCalledProp ??
+      messages.every(message => {
+        if (message.type === 'text') {
+          return true;
+        }
+
+        return !!message.toolOutput;
+      });
+  }
+
+  let suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+    ) : (
+      <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+    );
 
   return (
     <BadgeWrapper
@@ -83,10 +117,19 @@ export const AgentBadge = ({ agentId, messages = [], metadata, toolCallId, toolA
         );
       })}
 
+      {suspendPayloadSlot !== undefined && suspendPayload && (
+        <div>
+          <p className="font-medium pb-2">Agent suspend payload</p>
+          {suspendPayloadSlot}
+        </div>
+      )}
+
       <ToolApprovalButtons
-        toolCalled={messages?.length > 0}
+        toolCalled={toolCalled}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
+        toolName={toolName}
+        isNetwork={isNetwork}
       />
     </BadgeWrapper>
   );

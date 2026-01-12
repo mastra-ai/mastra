@@ -18,7 +18,7 @@ import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
-import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
@@ -203,7 +203,7 @@ export function WorkflowTrigger({
   const zodSchemaToUse = zodStateSchema
     ? z.object({
         inputData: zodInputSchema,
-        initialState: zodStateSchema,
+        initialState: zodStateSchema.optional(),
       })
     : zodInputSchema;
 
@@ -408,7 +408,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
           <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-surface2">
             <DialogTitle>Workflow Execution (JSON)</DialogTitle>
             <div className="w-full h-full overflow-x-scroll">
-              <SyntaxHighlighter data={result} className="p-4" />
+              <CodeEditor data={result} className="p-4" />
             </div>
           </DialogContent>
         </DialogPortal>

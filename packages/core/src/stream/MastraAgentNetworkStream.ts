@@ -1,8 +1,9 @@
 import { ReadableStream } from 'node:stream/web';
 import type { Run } from '../workflows';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 import type { ChunkType } from './types';
 
-export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
+export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> extends ReadableStream<ChunkType> {
   #usageCount = {
     inputTokens: 0,
     outputTokens: 0,
@@ -15,7 +16,15 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
     resolve: (value: void) => void;
     reject: (reason?: any) => void;
   };
+  #objectPromise: {
+    promise: Promise<InferSchemaOutput<OUTPUT> | undefined>;
+    resolve: (value: InferSchemaOutput<OUTPUT> | undefined) => void;
+    reject: (reason?: any) => void;
+  };
+  #objectStreamController: ReadableStreamDefaultController<PartialSchemaOutput<OUTPUT>> | null = null;
+  #objectStream: ReadableStream<PartialSchemaOutput<OUTPUT>> | null = null;
   #run: Run;
+  runId: string;
 
   constructor({
     createStream,
@@ -37,6 +46,24 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
       deferredPromise.resolve = resolve;
       deferredPromise.reject = reject;
     });
+
+    // Object promise for structured output
+    const objectDeferredPromise = {
+      promise: null,
+      resolve: null,
+      reject: null,
+    } as unknown as {
+      promise: Promise<InferSchemaOutput<OUTPUT> | undefined>;
+      resolve: (value: InferSchemaOutput<OUTPUT> | undefined) => void;
+      reject: (reason?: any) => void;
+    };
+    objectDeferredPromise.promise = new Promise((resolve, reject) => {
+      objectDeferredPromise.resolve = resolve;
+      objectDeferredPromise.reject = reject;
+    });
+
+    // Object stream controller reference
+    let objectStreamController: ReadableStreamDefaultController<PartialSchemaOutput<OUTPUT>> | null = null;
 
     const updateUsageCount = (usage: {
       inputTokens?: `${number}` | number;
@@ -92,6 +119,8 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
             return chunk;
           };
 
+          let objectResolved = false;
+
           for await (const chunk of stream) {
             if (chunk.type === 'workflow-step-output') {
               const innerChunk = getInnerChunk(chunk);
@@ -104,7 +133,25 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
                   updateUsageCount(innerChunk.payload.usage);
                 }
               }
-              if (innerChunk.type === 'network-execution-event-finish') {
+
+              // Handle network-object chunks (partial objects during streaming)
+              if (innerChunk.type === 'network-object') {
+                if (objectStreamController) {
+                  objectStreamController.enqueue((innerChunk as any).payload?.object);
+                }
+                controller.enqueue(innerChunk);
+              }
+              // Handle network-object-result chunks (final structured object)
+              else if (innerChunk.type === 'network-object-result') {
+                if (!objectResolved) {
+                  objectResolved = true;
+                  objectDeferredPromise.resolve((innerChunk as any).payload?.object);
+                  if (objectStreamController) {
+                    objectStreamController.close();
+                  }
+                }
+                controller.enqueue(innerChunk);
+              } else if (innerChunk.type === 'network-execution-event-finish') {
                 const finishPayload = {
                   ...innerChunk.payload,
                   usage: this.#usageCount,
@@ -116,17 +163,40 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
             }
           }
 
+          // If no object was resolved, resolve with undefined
+          if (!objectResolved) {
+            objectDeferredPromise.resolve(undefined);
+            if (objectStreamController) {
+              objectStreamController.close();
+            }
+          }
+
           controller.close();
           deferredPromise.resolve();
         } catch (error) {
           controller.error(error);
           deferredPromise.reject(error);
+          objectDeferredPromise.reject(error);
+          if (objectStreamController) {
+            objectStreamController.error(error);
+          }
         }
       },
     });
 
     this.#run = run;
     this.#streamPromise = deferredPromise;
+
+    this.runId = run.runId;
+    this.#objectPromise = objectDeferredPromise;
+
+    // Create object stream
+    this.#objectStream = new ReadableStream<PartialSchemaOutput<OUTPUT>>({
+      start: ctrl => {
+        objectStreamController = ctrl;
+        this.#objectStreamController = ctrl;
+      },
+    });
   }
 
   get status() {
@@ -139,5 +209,22 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
 
   get usage() {
     return this.#streamPromise.promise.then(() => this.#usageCount);
+  }
+
+  /**
+   * Returns a promise that resolves to the structured output object.
+   * Only available when structuredOutput option is provided to network().
+   * Resolves to undefined if no structuredOutput was requested.
+   */
+  get object(): Promise<InferSchemaOutput<OUTPUT> | undefined> {
+    return this.#objectPromise.promise;
+  }
+
+  /**
+   * Returns a ReadableStream of partial objects during structured output generation.
+   * Useful for streaming partial results as they're being generated.
+   */
+  get objectStream(): ReadableStream<PartialSchemaOutput<OUTPUT>> {
+    return this.#objectStream!;
   }
 }

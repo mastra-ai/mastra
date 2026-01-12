@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
   Step,
@@ -83,29 +83,6 @@ export class InngestWorkflow<
     return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
-  async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
-      //returning in memory run if no storage is initialized
-      return this.runs.get(runId)
-        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
-    }
-    const workflowsStore = await storage.getStore('workflows');
-    if (!workflowsStore) {
-      return this.runs.get(runId)
-        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
-    }
-    const run = (await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
-
-    return (
-      run ??
-      (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
-    );
-  }
-
   __registerMastra(mastra: Mastra) {
     super.__registerMastra(mastra);
     this.#mastra = mastra;
@@ -164,11 +141,14 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+    const existingRun = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 
-    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
+    // Check if run exists in persistent storage (not just in-memory)
+    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
+    if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
@@ -251,6 +231,9 @@ export class InngestWorkflow<
         // Create InngestPubSub instance with the publish function from Inngest context
         const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
+        // Create requestContext before execute so we can reuse it in finalize
+        const requestContext = new RequestContext<Record<string, any>>(Object.entries(event.data.requestContext ?? {}));
+
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
           z.infer<TState>,
@@ -266,7 +249,7 @@ export class InngestWorkflow<
           initialState,
           pubsub,
           retryConfig: this.retryConfig,
-          requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
+          requestContext,
           resume,
           timeTravel,
           perStep,
@@ -294,7 +277,19 @@ export class InngestWorkflow<
             // Invoke lifecycle callbacks (onFinish and onError)
             // Use invokeLifecycleCallbacksInternal to call the real implementation
             // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
-            await engine.invokeLifecycleCallbacksInternal(result as any);
+            await engine.invokeLifecycleCallbacksInternal({
+              status: result.status,
+              result: 'result' in result ? result.result : undefined,
+              error: 'error' in result ? result.error : undefined,
+              steps: result.steps,
+              tripwire: 'tripwire' in result ? result.tripwire : undefined,
+              runId,
+              workflowId: this.id,
+              resourceId,
+              input: inputData,
+              requestContext,
+              state: result.state ?? initialState ?? {},
+            });
           }
 
           // Throw NonRetriableError if failed to ensure Inngest marks the run as failed

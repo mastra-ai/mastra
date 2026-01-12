@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'rollup';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -35,7 +35,7 @@ export function nodeModulesExtensionResolver(): Plugin {
     name: 'node-modules-extension-resolver',
     async resolveId(id, importer, options) {
       // Skip relative imports, absolute paths, no importer, or builtin modules
-      if (!importer || id.startsWith('.') || id.startsWith('/') || isBuiltinModule(id)) {
+      if (!importer || id.startsWith('.') || id.startsWith('/') || isBuiltinModule(id) || isAbsolute(id)) {
         return null;
       }
 
