@@ -273,7 +273,7 @@ const agent = new Agent({
 // If the guardrail aborts, nothing is saved to memory
 const result = await agent.generate("Hello");
 if (result.tripwire) {
-  console.log("Blocked:", result.tripwireReason);
+  console.log("Blocked:", result.tripwire.reason);
   // Memory is empty - no messages were persisted
 }
 ```
