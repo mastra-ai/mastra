@@ -6754,7 +6754,7 @@ const agent = new Agent({
     // this is the default vector db if omitted
     vector: new LibSQLVector({
       id: 'agent-vector',
-      connectionUrl: "file:./local.db",
+      url: "file:./local.db",
     }),
   }),
 });
@@ -7111,8 +7111,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: 'agent-vector',
       apiKey: process.env.PINECONE_API_KEY,
-      environment: process.env.PINECONE_ENVIRONMENT,
-      indexName: 'agent-embeddings',
     }),
     options: {
       semanticRecall: {
@@ -11670,7 +11668,7 @@ The Vector Query Tool supports database-specific configurations that enable you 
 These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
 
 
-Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
+Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ url: '...' })`).
 :::
 
 ```ts
@@ -12249,7 +12247,7 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
@@ -12317,7 +12315,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { OpenSearchVector } from "@mastra/opensearch";
 
-const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL });
+const store = new OpenSearchVector({ id: "opensearch", node: process.env.OPENSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",
@@ -28480,7 +28478,7 @@ import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
   id: 'research-vectors',
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
 export const mastra = new Mastra({
@@ -28488,7 +28486,7 @@ export const mastra = new Mastra({
 });
 ```
 
-For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+For the `url` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
 
 :::note
 
@@ -28511,7 +28509,7 @@ import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
   id: 'research-vectors',
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
 export const mastra = new Mastra({
@@ -32716,7 +32714,6 @@ To migrate, add an `id` field to your vector store constructor.
   const pineconeStore = new PineconeVector({
 +   id: 'pinecone-production',
     apiKey: process.env.PINECONE_API_KEY,
-    environment: process.env.PINECONE_ENVIRONMENT,
   });
 ```
 
@@ -32731,6 +32728,52 @@ To migrate, replace all calls to `getVectors()` with `listVectors()`.
 
 - const vectors = await vectorStore.getVectors({ ... });
 + const vectors = await vectorStore.listVectors({ ... });
+```
+
+### LibSQLVector: `connectionUrl` to `url`
+
+The `connectionUrl` parameter has been renamed to `url` to align with the `@libsql/client` API and match LibSQLStorage.
+
+```diff
+  const vectorStore = new LibSQLVector({
+    id: 'my-vector',
+-   connectionUrl: 'file:./db.sqlite',
++   url: 'file:./db.sqlite',
+  });
+```
+
+### OpenSearchVector: `url` to `node`
+
+The `url` parameter has been renamed to `node` to match the OpenSearch `ClientOptions` API. The constructor now accepts all OpenSearch client options including authentication, SSL, and compression.
+
+```diff
+  const vectorStore = new OpenSearchVector({
+    id: 'my-vector',
+-   url: 'http://localhost:9200',
++   node: 'http://localhost:9200',
+  });
+```
+
+### PineconeVector: `environment` removed
+
+The `environment` parameter has been removed. Use `controllerHostUrl` instead if you need to specify a custom controller host. The constructor now accepts all Pinecone configuration options.
+
+```diff
+  const vectorStore = new PineconeVector({
+    id: 'my-vector',
+    apiKey: process.env.PINECONE_API_KEY,
+-   environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
+
+If you need a custom controller host:
+
+```ts
+const vectorStore = new PineconeVector({
+  id: 'my-vector',
+  apiKey: process.env.PINECONE_API_KEY,
+  controllerHostUrl: 'https://api.pinecone.io',
+});
 ```
 
 
@@ -75108,7 +75151,7 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const memory = new Memory({
   storage: new LibSQLStore({ url: "file:./memory.db" }),
-  vector: new LibSQLVector({ connectionUrl: "file:./vector.db" }),
+  vector: new LibSQLVector({ url: "file:./vector.db" }),
   embedder: embeddingModel,
   options: {
     semanticRecall: true,
@@ -75650,7 +75693,7 @@ export const agent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'test-agent-vector',
-      connectionUrl: "file:./vector-memory.db",
+      url: "file:./vector-memory.db",
     }),
     options: {
       lastMessages: 10,
@@ -100144,7 +100187,7 @@ import { LibSQLVector } from "@mastra/libsql";
 // Create a new vector store instance
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,
 });
@@ -100182,7 +100225,7 @@ const results = await store.query({
 <PropertiesTable
   content={[
     {
-      name: "connectionUrl",
+      name: "url",
       type: "string",
       description:
         "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
@@ -100539,7 +100582,7 @@ export const libsqlAgent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'libsql-agent-vector',
-      connectionUrl: "file:libsql-agent.db",
+      url: "file:libsql-agent.db",
     }),
     embedder: fastembed,
     options: {
@@ -100981,16 +101024,41 @@ packages:
 # OpenSearch Vector Store
 [EN] Source: https://mastra.ai/en/reference/vectors/opensearch
 
-The OpenSearchVector class provides vector search using [OpenSearch](https://opensearch.org/), a powerful open-source search and analytics engine. It leverages OpenSearch's k-NN capabilities to perform efficient vector similarity search.
+The OpenSearchVector class provides vector search using [OpenSearch](https://opensearch.org/), an open-source search and analytics engine. It uses OpenSearch's k-NN capabilities to perform vector similarity search.
 
 ## Constructor Options
+
+The constructor accepts all [OpenSearch ClientOptions](https://opensearch.org/docs/latest/clients/javascript/index/) plus a required `id` field.
 
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "id",
       type: "string",
-      description: "OpenSearch connection URL (e.g., 'http://localhost:9200')",
+      description: "Unique identifier for this vector store instance",
+    },
+    {
+      name: "node",
+      type: "string | string[] | NodeOptions | NodeOptions[]",
+      description: "OpenSearch node URL(s) (e.g., 'http://localhost:9200')",
+    },
+    {
+      name: "auth",
+      type: "BasicAuth | BearerAuth | AwsSigv4Auth",
+      description: "Authentication configuration",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "ConnectionOptions",
+      description: "SSL/TLS configuration",
+      isOptional: true,
+    },
+    {
+      name: "compression",
+      type: "'gzip'",
+      description: "Enable gzip compression",
+      isOptional: true,
     },
   ]}
 />
@@ -101913,6 +101981,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
 
 ## Constructor Options
 
+The constructor accepts all [Pinecone configuration options](https://docs.pinecone.io/reference/typescript-sdk) plus Mastra-specific fields.
+
 <PropertiesTable
   content={[
     {
@@ -101926,24 +101996,36 @@ It provides real-time vector search, with features like hybrid search, metadata 
       description: "Pinecone API key",
     },
     {
-      name: "environment",
+      name: "controllerHostUrl",
       type: "string",
       isOptional: true,
-      description: "Pinecone environment controller host URL",
+      description: "Custom Pinecone controller host URL",
+    },
+    {
+      name: "additionalHeaders",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "Additional HTTP headers to include in requests",
+    },
+    {
+      name: "sourceTag",
+      type: "string",
+      isOptional: true,
+      description: "Source tag for request tracking",
     },
     {
       name: "cloud",
       type: "'aws' | 'gcp' | 'azure'",
       isOptional: true,
       defaultValue: "aws",
-      description: "Cloud provider for Pinecone serverless",
+      description: "Cloud provider for new index creation",
     },
     {
       name: "region",
       type: "string",
       isOptional: true,
       defaultValue: "us-east-1",
-      description: "Region for Pinecone serverless",
+      description: "Region for new index creation",
     },
   ]}
 />
@@ -102241,7 +102323,6 @@ try {
 Required environment variables:
 
 - `PINECONE_API_KEY`: Your Pinecone API key
-- `PINECONE_ENVIRONMENT`: Pinecone environment (e.g., 'us-west1-gcp')
 
 ## Hybrid Search
 
