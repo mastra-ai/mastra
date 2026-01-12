@@ -300,7 +300,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   get content(): LLMStepResult['content'] {
-    return this.#modelOutput.messageList.get.response.aiV5.modelContent();
+    return this.#messageList.get.response.aiV5.modelContent();
   }
 
   /**
