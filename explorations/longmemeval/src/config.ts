@@ -41,7 +41,7 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     description: 'Full benchmark run with all questions',
     dataset: 'longmemeval_s',
     subset: undefined,
-    prepareConcurrency: 4,
+    prepareConcurrency: 2,
     benchConcurrency: 10,
   },
   rip: {
