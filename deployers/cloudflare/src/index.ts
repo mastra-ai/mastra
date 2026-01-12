@@ -62,7 +62,6 @@ export class CloudflareDeployer extends Deployer {
 
   async writeFiles(outputDirectory: string): Promise<void> {
     const { env: userEnv, ...userConfig } = this.userConfig;
-    const server = this.mastra.getServer();
     const env = await this.loadEnvVars();
     const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), userEnv);
 
