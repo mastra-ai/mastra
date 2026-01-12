@@ -1,5 +1,17 @@
 # @mastra/mongodb
 
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- dependencies updates: ([#10114](https://github.com/mastra-ai/mastra/pull/10114))
+  - Updated dependency [`uuid@^13.0.0` ↗︎](https://www.npmjs.com/package/uuid/v/13.0.0) (from `^11.1.0`, in `dependencies`)
+
+- dependencies updates: ([#10196](https://github.com/mastra-ai/mastra/pull/10196))
+  - Updated dependency [`mongodb@^7.0.0` ↗︎](https://www.npmjs.com/package/mongodb/v/7.0.0) (from `^6.17.0`, in `dependencies`)
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
 ## 1.0.0-beta.10
 
 ### Patch Changes

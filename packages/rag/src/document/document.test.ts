@@ -197,7 +197,7 @@ describe('MDocument', () => {
         isSeparatorRegex: false,
         maxSize: 50,
         overlap: 5,
-        keepSeparator: 'end',
+        separatorPosition: 'end',
       });
       const chunks = doc.getText();
 
@@ -217,7 +217,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -238,7 +238,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'start',
+          separatorPosition: 'start',
         });
 
         const chunks = doc.getText();
@@ -260,7 +260,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -280,7 +280,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -300,7 +300,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'start',
+          separatorPosition: 'start',
         });
 
         const chunks = doc.getText();
@@ -1906,7 +1906,7 @@ describe('MDocument', () => {
         strategy: 'latex',
         maxSize: 100,
         overlap: 10,
-        keepSeparator: 'start',
+        separatorPosition: 'start',
       });
 
       const chunks = doc.getText();
@@ -1936,7 +1936,7 @@ describe('MDocument', () => {
         strategy: 'latex',
         maxSize: 100,
         overlap: 10,
-        keepSeparator: 'start',
+        separatorPosition: 'start',
       });
 
       const chunks = doc.getText();
@@ -1944,7 +1944,7 @@ describe('MDocument', () => {
       expect(chunks.some(chunk => chunk.includes('E = mc^2'))).toBe(true);
     });
 
-    it('should split with keepSeparator at end', async () => {
+    it('should split with separatorPosition at end', async () => {
       const text = `Intro text here.
         \\section{First}
         Content A.
@@ -1958,7 +1958,7 @@ describe('MDocument', () => {
         strategy: 'latex',
         maxSize: 50,
         overlap: 0,
-        keepSeparator: 'end',
+        separatorPosition: 'end',
       });
 
       const chunks = doc.getText();
@@ -2461,7 +2461,7 @@ describe('MDocument', () => {
         maxSize: 450,
         overlap: 0,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2498,7 +2498,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 100,
         sentenceEnders: ['.', '!', '?'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2520,7 +2520,7 @@ describe('MDocument', () => {
         maxSize: 120,
         overlap: 50,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2568,7 +2568,7 @@ describe('MDocument', () => {
         minSize: 5,
         maxSize: 100,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBe(1);
@@ -2586,7 +2586,7 @@ describe('MDocument', () => {
         maxSize: 100,
         targetSize: 40,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       // Should group multiple short sentences together
@@ -2609,7 +2609,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 100,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2629,7 +2629,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 200,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThanOrEqual(1);
@@ -2686,7 +2686,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 200,
         sentenceEnders: ['.', '?'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThanOrEqual(1);

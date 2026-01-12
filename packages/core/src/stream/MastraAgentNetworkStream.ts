@@ -24,6 +24,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
   #objectStreamController: ReadableStreamDefaultController<PartialSchemaOutput<OUTPUT>> | null = null;
   #objectStream: ReadableStream<PartialSchemaOutput<OUTPUT>> | null = null;
   #run: Run;
+  runId: string;
 
   constructor({
     createStream,
@@ -185,6 +186,8 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
 
     this.#run = run;
     this.#streamPromise = deferredPromise;
+
+    this.runId = run.runId;
     this.#objectPromise = objectDeferredPromise;
 
     // Create object stream

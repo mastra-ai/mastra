@@ -49,6 +49,9 @@ export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
+  /** Whether to automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+
   /** Unique identifier for this execution run */
   runId?: string;
 

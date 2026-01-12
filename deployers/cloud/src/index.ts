@@ -153,7 +153,7 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   })
   const vector = new LibSQLVector({
     id: 'mastra-cloud-storage-libsql-vector',
-    connectionUrl: process.env.MASTRA_STORAGE_URL,
+    url: process.env.MASTRA_STORAGE_URL,
     authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
   })
 
