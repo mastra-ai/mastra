@@ -6,7 +6,7 @@ import type {
   AnyExportedSpan,
 } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DefaultExporter } from './default';
+import { LocalExporter, DefaultExporter } from './default';
 
 // Mock Mastra and logger
 const mockMastra = {
@@ -20,10 +20,22 @@ const mockLogger = {
   error: vi.fn(),
 } as any;
 
-describe('DefaultExporter', () => {
+describe('LocalExporter', () => {
+  describe('DefaultExporter alias', () => {
+    it('should be an alias for LocalExporter', () => {
+      expect(DefaultExporter).toBe(LocalExporter);
+    });
+
+    it('should create equivalent instances', () => {
+      const localExporter = new LocalExporter({ logger: mockLogger });
+      const defaultExporter = new DefaultExporter({ logger: mockLogger });
+      expect(localExporter.name).toBe(defaultExporter.name);
+    });
+  });
+
   describe('serializeAttributes', () => {
     it('should serialize LLM generation attributes with dates', () => {
-      const exporter = new DefaultExporter({ logger: mockLogger });
+      const exporter = new LocalExporter({ logger: mockLogger });
 
       const mockSpan = {
         id: 'span-1',
@@ -61,7 +73,7 @@ describe('DefaultExporter', () => {
     });
 
     it('should serialize workflow step attributes', () => {
-      const exporter = new DefaultExporter({ logger: mockLogger });
+      const exporter = new LocalExporter({ logger: mockLogger });
 
       const mockSpan = {
         id: 'span-2',
@@ -81,7 +93,7 @@ describe('DefaultExporter', () => {
     });
 
     it('should handle Date objects in attributes', () => {
-      const exporter = new DefaultExporter({ logger: mockLogger });
+      const exporter = new LocalExporter({ logger: mockLogger });
       const testDate = new Date('2023-12-01T10:00:00Z');
 
       const mockSpan = {
@@ -102,7 +114,7 @@ describe('DefaultExporter', () => {
     });
 
     it('should return null for undefined attributes', () => {
-      const exporter = new DefaultExporter({ logger: mockLogger });
+      const exporter = new LocalExporter({ logger: mockLogger });
 
       const mockSpan = {
         id: 'span-4',
@@ -116,7 +128,7 @@ describe('DefaultExporter', () => {
     });
 
     it('should handle serialization errors gracefully', () => {
-      const exporter = new DefaultExporter({ logger: mockLogger });
+      const exporter = new LocalExporter({ logger: mockLogger });
 
       // Create an object that will cause JSON.stringify to throw
       const circularObj = {} as any;
@@ -198,7 +210,7 @@ describe('DefaultExporter', () => {
 
     describe('Strategy resolution', () => {
       it('should auto-select storage preferred strategy', async () => {
-        const exporter = new DefaultExporter({ logger: mockLogger });
+        const exporter = new LocalExporter({ logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -212,7 +224,7 @@ describe('DefaultExporter', () => {
       });
 
       it('should use user-specified strategy when supported', async () => {
-        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+        const exporter = new LocalExporter({ strategy: 'realtime', logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -227,7 +239,7 @@ describe('DefaultExporter', () => {
       it('should fallback to storage preferred when user strategy not supported', async () => {
         mockObservabilityStore.tracingStrategy.supported = ['batch-with-updates'];
 
-        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+        const exporter = new LocalExporter({ strategy: 'realtime', logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -244,7 +256,7 @@ describe('DefaultExporter', () => {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
 
-        const exporter = new DefaultExporter({ logger: mockLogger });
+        const exporter = new LocalExporter({ logger: mockLogger });
         // Should not throw, but log error instead
         await expect(exporter.init({ mastra: mockMastraWithoutStorage })).resolves.not.toThrow();
 
@@ -256,7 +268,7 @@ describe('DefaultExporter', () => {
 
     describe('Realtime strategy', () => {
       it('should process events immediately', async () => {
-        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+        const exporter = new LocalExporter({ strategy: 'realtime', logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
         const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
 
@@ -273,7 +285,7 @@ describe('DefaultExporter', () => {
 
     describe('Batch-with-updates strategy', () => {
       it('should buffer events and flush when batch size reached', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchSize: 2,
           logger: mockLogger,
@@ -302,7 +314,7 @@ describe('DefaultExporter', () => {
       });
 
       it('should handle span updates with sequence numbers', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchSize: 10,
           logger: mockLogger,
@@ -338,7 +350,7 @@ describe('DefaultExporter', () => {
       });
 
       it('should handle out-of-order updates', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           logger: mockLogger,
         });
@@ -359,7 +371,7 @@ describe('DefaultExporter', () => {
       });
 
       it('should handle event-type spans that only emit SPAN_ENDED', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchSize: 1, // Set to 1 to trigger immediate flush
           logger: mockLogger,
@@ -393,7 +405,7 @@ describe('DefaultExporter', () => {
 
     describe('Insert-only strategy', () => {
       it('should only process SPAN_ENDED events', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'insert-only',
           maxBatchSize: 1, // Set to 1 to trigger immediate flush
           logger: mockLogger,
@@ -421,7 +433,7 @@ describe('DefaultExporter', () => {
 
     describe('Timer-based flushing', () => {
       it('should schedule flush for first event', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchWaitMs: 1000,
           logger: mockLogger,
@@ -437,7 +449,7 @@ describe('DefaultExporter', () => {
       });
 
       it('should clear timer when flush triggered by size', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchSize: 2,
           maxBatchWaitMs: 1000,
@@ -469,7 +481,7 @@ describe('DefaultExporter', () => {
           return 123 as any;
         }) as any);
 
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxRetries: 2,
           retryDelayMs: 100,
@@ -506,7 +518,7 @@ describe('DefaultExporter', () => {
           return 123 as any;
         }) as any);
 
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxRetries: 1, // Test with 1 retry
           retryDelayMs: 1, // Very short delay for fast test
@@ -541,7 +553,7 @@ describe('DefaultExporter', () => {
 
     describe('Shutdown', () => {
       it('should flush remaining events on shutdown', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchSize: 10, // Ensure single event doesn't trigger auto-flush
           logger: mockLogger,
@@ -567,7 +579,7 @@ describe('DefaultExporter', () => {
 
     describe('Memory management', () => {
       it('should clean up completed spans from allCreatedSpans after successful flush', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchWaitMs: 100,
           maxBatchSize: 10,
@@ -614,7 +626,7 @@ describe('DefaultExporter', () => {
 
     describe('Out-of-order span handling with delayed ends', () => {
       it('should handle spans that end after buffer has been flushed', async () => {
-        const exporter = new DefaultExporter({
+        const exporter = new LocalExporter({
           strategy: 'batch-with-updates',
           maxBatchWaitMs: 100, // Short wait time for faster test
           maxBatchSize: 10, // High enough to not trigger size-based flush

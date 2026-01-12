@@ -1,37 +1,39 @@
 ---
-title: "Reference: DefaultExporter | Observability"
-description: API reference for the DefaultExporter
+title: "Reference: LocalExporter | Observability"
+description: API reference for the LocalExporter
 packages:
   - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# DefaultExporter
+# LocalExporter
 
 Persists traces to Mastra's configured storage with automatic batching and retry logic.
+
+> **Note:** `LocalExporter` was previously named `DefaultExporter`. The old name is still available as an alias for backward compatibility but is deprecated.
 
 ## Constructor
 
 ```typescript
-new DefaultExporter(config?: DefaultExporterConfig)
+new LocalExporter(config?: LocalExporterConfig)
 ```
 
 <PropertiesTable
   props={[
     {
       name: "config",
-      type: "DefaultExporterConfig",
+      type: "LocalExporterConfig",
       description: "Batching and configuration options",
       required: false,
     },
   ]}
 />
 
-## DefaultExporterConfig
+## LocalExporterConfig
 
 ```typescript
-interface DefaultExporterConfig extends BaseExporterConfig {
+interface LocalExporterConfig extends BaseExporterConfig {
   /** Maximum number of spans per batch. Default: 1000 */
   maxBatchSize?: number;
 
@@ -71,7 +73,7 @@ type TracingStorageStrategy = "realtime" | "batch-with-updates" | "insert-only";
 ## Properties
 
 ```typescript
-readonly name = 'mastra-default-observability-exporter';
+readonly name = 'mastra-local-observability-exporter';
 ```
 
 ## Methods
@@ -173,13 +175,13 @@ For `batch-with-updates` strategy:
 ## Usage
 
 ```typescript
-import { DefaultExporter } from "@mastra/observability";
+import { LocalExporter } from "@mastra/observability";
 
 // Default configuration
-const exporter = new DefaultExporter();
+const exporter = new LocalExporter();
 
 // Custom batching configuration
-const customExporter = new DefaultExporter({
+const customExporter = new LocalExporter({
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
   strategy: "batch-with-updates",

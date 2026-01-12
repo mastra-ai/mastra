@@ -1,5 +1,5 @@
 ---
-title: "Default Exporter | Tracing | Observability"
+title: "Local Exporter | Tracing | Observability"
 description: "Store traces locally for development and debugging"
 packages:
   - "@mastra/core"
@@ -7,9 +7,11 @@ packages:
   - "@mastra/observability"
 ---
 
-# Default Exporter
+# Local Exporter
 
-The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
+The `LocalExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
+
+> **Note:** `LocalExporter` was previously named `DefaultExporter`. The old name is still available as an alias for backward compatibility but is deprecated.
 
 ## Configuration
 
@@ -22,7 +24,7 @@ The `DefaultExporter` persists traces to your configured storage backend, making
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { Observability, DefaultExporter } from "@mastra/observability";
+import { Observability, LocalExporter } from "@mastra/observability";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
@@ -34,7 +36,7 @@ export const mastra = new Mastra({
     configs: {
       local: {
         serviceName: "my-service",
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
@@ -43,13 +45,13 @@ export const mastra = new Mastra({
 
 ### Recommended Configuration
 
-Include DefaultExporter in your observability configuration:
+Include LocalExporter in your observability configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core";
 import {
   Observability,
-  DefaultExporter,
+  LocalExporter,
   CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
@@ -65,7 +67,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: "mastra",
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new LocalExporter(), // Persists traces to storage for Mastra Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [
@@ -90,7 +92,7 @@ Access your traces through Studio:
 
 ## Tracing Strategies
 
-DefaultExporter automatically selects the optimal tracing strategy based on your storage provider. You can also override this selection if needed.
+LocalExporter automatically selects the optimal tracing strategy based on your storage provider. You can also override this selection if needed.
 
 ### Available Strategies
 
@@ -103,7 +105,7 @@ DefaultExporter automatically selects the optimal tracing strategy based on your
 ### Strategy Configuration
 
 ```typescript
-new DefaultExporter({
+new LocalExporter({
   strategy: "auto", // Default - let storage provider decide
   // or explicitly set:
   // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
@@ -119,7 +121,7 @@ new DefaultExporter({
 
 Different storage providers support different tracing strategies.
 
-If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects the optimal strategy for the storage provider. If you set the strategy to a mode that the storage provider doesn't support, you will get an error message.
+If you set the strategy to `'auto'`, the `LocalExporter` automatically selects the optimal strategy for the storage provider. If you set the strategy to a mode that the storage provider doesn't support, you will get an error message.
 
 | Storage Provider                                | Preferred Strategy | Supported Strategies                      | Notes                                 |
 | ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
@@ -145,7 +147,7 @@ For both batch strategies (`batch-with-updates` and `insert-only`), traces are f
 
 ### Error Handling
 
-The DefaultExporter includes robust error handling for production use:
+The LocalExporter includes robust error handling for production use:
 
 - **Retry Logic**: Exponential backoff (500ms, 1s, 2s, 4s)
 - **Transient Failures**: Automatic retry with backoff
@@ -156,22 +158,22 @@ The DefaultExporter includes robust error handling for production use:
 
 ```typescript
 // Zero config - recommended for most users
-new DefaultExporter();
+new LocalExporter();
 
 // Development override
-new DefaultExporter({
+new LocalExporter({
   strategy: "realtime", // Immediate visibility for debugging
 });
 
 // High-throughput production
-new DefaultExporter({
+new LocalExporter({
   maxBatchSize: 2000, // Larger batches
   maxBatchWaitMs: 10000, // Wait longer to fill batches
   maxBufferSize: 50000, // Handle longer outages
 });
 
 // Low-latency production
-new DefaultExporter({
+new LocalExporter({
   maxBatchSize: 100, // Smaller batches
   maxBatchWaitMs: 1000, // Flush quickly
 });

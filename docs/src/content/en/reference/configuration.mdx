@@ -213,7 +213,7 @@ Visit the [Observability documentation](/docs/v1/observability/overview) to lear
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
-import { Observability, DefaultExporter } from "@mastra/observability";
+import { Observability, LocalExporter } from "@mastra/observability";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
@@ -224,7 +224,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: "my-app",
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),

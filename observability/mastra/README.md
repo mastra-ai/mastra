@@ -12,7 +12,7 @@ npm install @mastra/observability
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, LocalExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
@@ -20,7 +20,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-app',
         exporters: [
-          new DefaultExporter(), // Persists traces for Mastra Studio
+          new LocalExporter(), // Persists traces for Mastra Studio
           new CloudExporter(), // Sends to Mastra Cloud
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
@@ -29,6 +29,8 @@ export const mastra = new Mastra({
   }),
 });
 ```
+
+> **Note:** `DefaultExporter` is still available as an alias for backward compatibility but is deprecated. Please use `LocalExporter` instead.
 
 ## Features
 

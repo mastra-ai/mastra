@@ -466,8 +466,8 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/default",
-                  label: "Default",
+                  id: "observability/tracing/exporters/local",
+                  label: "Local",
                 },
                 {
                   type: "doc",

@@ -9,5 +9,9 @@ export * from './base';
 export { CloudExporter } from './cloud';
 export type { CloudExporterConfig } from './cloud';
 export * from './console';
-export * from './default';
+
+// Local exporter (formerly DefaultExporter)
+export { LocalExporter, DefaultExporter } from './default';
+export type { LocalExporterConfig, DefaultExporterConfig } from './default';
+
 export * from './test';

@@ -391,8 +391,8 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/default-exporter",
-                  label: "DefaultExporter",
+                  id: "observability/tracing/exporters/local-exporter",
+                  label: "LocalExporter",
                 },
                 {
                   type: "doc",

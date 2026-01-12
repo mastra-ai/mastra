@@ -24,7 +24,7 @@ interface ObservabilityRegistryConfig {
     {
       name: "default",
       type: "{ enabled?: boolean }",
-      description: "Enable default configuration with DefaultExporter and CloudExporter",
+      description: "Enable default configuration with LocalExporter and CloudExporter",
       required: false,
     },
     {
@@ -285,7 +285,7 @@ Shuts down all observability instances and clears the registry.
 
 ### Exporters
 
-- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage configuration
+- [LocalExporter](/reference/v1/observability/tracing/exporters/local-exporter) - Storage configuration
 - [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Cloud setup
 - [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration

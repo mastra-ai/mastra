@@ -50,7 +50,7 @@ Include CloudExporter in your observability configuration:
 import { Mastra } from "@mastra/core";
 import {
   Observability,
-  DefaultExporter,
+  LocalExporter,
   CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
@@ -61,7 +61,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: "mastra",
         exporters: [
-          new DefaultExporter(),
+          new LocalExporter(),
           new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [
@@ -130,5 +130,5 @@ CloudExporter uses intelligent batching to optimize network usage. Traces are bu
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [DefaultExporter](/docs/v1/observability/tracing/exporters/default)
+- [LocalExporter](/docs/v1/observability/tracing/exporters/local)
 - [Mastra Cloud Documentation](/docs/v1/mastra-cloud/overview)

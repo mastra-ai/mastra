@@ -11,7 +11,7 @@ import type {
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 
-interface DefaultExporterConfig extends BaseExporterConfig {
+interface LocalExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBufferSize?: number; // Default: 10000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -21,6 +21,11 @@ interface DefaultExporterConfig extends BaseExporterConfig {
   // Strategy selection (optional)
   strategy?: TracingStorageStrategy | 'auto';
 }
+
+/**
+ * @deprecated Use `LocalExporterConfig` instead. This alias is provided for backward compatibility.
+ */
+type DefaultExporterConfig = LocalExporterConfig;
 
 interface BatchBuffer {
   // For batch-with-updates strategy
@@ -56,7 +61,7 @@ interface UpdateRecord {
  * Resolves the final tracing storage strategy based on config and observability store hints
  */
 function resolveTracingStorageStrategy(
-  config: DefaultExporterConfig,
+  config: LocalExporterConfig,
   observability: ObservabilityStorage,
   storageName: string,
   logger: IMastraLogger,
@@ -87,12 +92,12 @@ function getObjectOrNull(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
-export class DefaultExporter extends BaseExporter {
-  name = 'mastra-default-observability-exporter';
+export class LocalExporter extends BaseExporter {
+  name = 'mastra-local-observability-exporter';
 
   #storage?: MastraStorage;
   #observability?: ObservabilityStorage;
-  #config: DefaultExporterConfig;
+  #config: LocalExporterConfig;
   #resolvedStrategy: TracingStorageStrategy;
   private buffer: BatchBuffer;
   #flushTimer: NodeJS.Timeout | null = null;
@@ -100,7 +105,7 @@ export class DefaultExporter extends BaseExporter {
   // Track all spans that have been created, persists across flushes
   private allCreatedSpans: Set<string> = new Set();
 
-  constructor(config: DefaultExporterConfig = {}) {
+  constructor(config: LocalExporterConfig = {}) {
     super(config);
 
     if (config === undefined) {
@@ -142,13 +147,13 @@ export class DefaultExporter extends BaseExporter {
   async init(options: InitExporterOptions): Promise<void> {
     this.#storage = options.mastra?.getStorage();
     if (!this.#storage) {
-      this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
+      this.logger.warn('LocalExporter disabled: Storage not available. Traces will not be persisted.');
       return;
     }
 
     this.#observability = await this.#storage.getStore('observability');
     if (!this.#observability) {
-      this.logger.warn('DefaultExporter disabled: Observability storage not available. Traces will not be persisted.');
+      this.logger.warn('LocalExporter disabled: Observability storage not available. Traces will not be persisted.');
       return;
     }
 
@@ -707,6 +712,14 @@ export class DefaultExporter extends BaseExporter {
       }
     }
 
-    this.logger.info('DefaultExporter shutdown complete');
+    this.logger.info('LocalExporter shutdown complete');
   }
 }
+
+/**
+ * @deprecated Use `LocalExporter` instead. This alias is provided for backward compatibility.
+ */
+export const DefaultExporter = LocalExporter;
+
+// Export types
+export type { LocalExporterConfig, DefaultExporterConfig };

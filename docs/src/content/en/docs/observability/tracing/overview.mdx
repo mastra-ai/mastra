@@ -29,7 +29,7 @@ Traces are created by:
 import { Mastra } from "@mastra/core";
 import {
   Observability,
-  DefaultExporter,
+  LocalExporter,
   CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
@@ -40,7 +40,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: "mastra",
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new LocalExporter(), // Persists traces to storage for Mastra Studio
           new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
@@ -61,7 +61,7 @@ This configuration includes:
 - **Service Name**: `"mastra"` - identifies your service in traces
 - **Sampling**: `"always"` by default (100% of traces)
 - **Exporters**:
-  - `DefaultExporter` - Persists traces to your configured storage for Mastra Studio
+  - `LocalExporter` - Persists traces to your configured storage for Mastra Studio
   - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
 
@@ -73,7 +73,7 @@ Exporters determine where your trace data is sent and how it's stored. They inte
 
 Mastra provides two built-in exporters:
 
-- **[Default](/docs/v1/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
+- **[Local](/docs/v1/observability/tracing/exporters/local)** - Persists traces to local storage for viewing in Studio
 - **[Cloud](/docs/v1/observability/tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
 
 ### External Exporters
@@ -173,7 +173,7 @@ export const mastra = new Mastra({
           type: "ratio",
           probability: 0.1,
         },
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
@@ -217,7 +217,7 @@ export const mastra = new Mastra({
       debug: {
         serviceName: "debug-service",
         sampling: { type: "always" },
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
     configSelector: (context, availableTracers) => {
@@ -254,7 +254,7 @@ export const mastra = new Mastra({
       development: {
         serviceName: "my-service-dev",
         sampling: { type: "always" },
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
       staging: {
         serviceName: "my-service-staging",
@@ -279,12 +279,12 @@ export const mastra = new Mastra({
 
 #### Maintaining Studio and Cloud Access
 
-When adding external exporters, include `DefaultExporter` and `CloudExporter` to maintain access to Studio and Mastra Cloud:
+When adding external exporters, include `LocalExporter` and `CloudExporter` to maintain access to Studio and Mastra Cloud:
 
 ```ts title="src/mastra/index.ts"
 import {
   Observability,
-  DefaultExporter,
+  LocalExporter,
   CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
@@ -300,7 +300,7 @@ export const mastra = new Mastra({
             endpoint: process.env.PHOENIX_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
-          new DefaultExporter(), // Keep Studio access
+          new LocalExporter(), // Keep Studio access
           new CloudExporter(), // Keep Cloud access
         ],
         spanOutputProcessors: [
@@ -315,7 +315,7 @@ export const mastra = new Mastra({
 This configuration sends traces to all three destinations simultaneously:
 
 - **Arize Phoenix/AX** for external observability
-- **DefaultExporter** for Studio
+- **LocalExporter** for Studio
 - **CloudExporter** for Mastra Cloud dashboard
 
 :::info
@@ -367,7 +367,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: "my-service",
         requestContextKeys: ["userId", "environment", "tenantId"],
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
@@ -420,7 +420,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         requestContextKeys: ["user.id", "session.data.experimentId"],
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
@@ -596,7 +596,7 @@ export const mastra = new Mastra({
     configs: {
       development: {
         spanOutputProcessors: [new LowercaseInputProcessor(), new SensitiveDataFilter()],
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
@@ -631,7 +631,7 @@ export const mastra = new Mastra({
           maxArrayLength: 100,     // Maximum number of items in arrays (default: 50)
           maxObjectKeys: 75,       // Maximum number of keys in objects (default: 50)
         },
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
@@ -867,7 +867,7 @@ Mastra automatically creates spans for:
 
 ### Exporters
 
-- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage persistence
+- [LocalExporter](/reference/v1/observability/tracing/exporters/local-exporter) - Storage persistence
 - [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Mastra Cloud integration
 - [ConsoleExporter](/reference/v1/observability/tracing/exporters/console-exporter) - Debug output
 - [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration

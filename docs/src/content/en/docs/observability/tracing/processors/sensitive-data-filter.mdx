@@ -16,7 +16,7 @@ The Sensitive Data Filter is included in the recommended observability configura
 ```ts title="src/mastra/index.ts"
 import {
   Observability,
-  DefaultExporter,
+  LocalExporter,
   CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
@@ -27,7 +27,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: "mastra",
         exporters: [
-          new DefaultExporter(),
+          new LocalExporter(),
           new CloudExporter(),
         ],
         spanOutputProcessors: [
@@ -84,14 +84,14 @@ When a sensitive field is detected, its value is replaced with `[REDACTED]` by d
 You can customize which fields are redacted and how redaction appears:
 
 ```ts title="src/mastra/index.ts"
-import { SensitiveDataFilter, DefaultExporter, Observability } from "@mastra/observability";
+import { SensitiveDataFilter, LocalExporter, Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       production: {
         serviceName: "my-service",
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
         spanOutputProcessors: [
           new SensitiveDataFilter({
             // Add custom sensitive fields
@@ -237,7 +237,7 @@ export const mastra = new Mastra({
       debug: {
         serviceName: "debug-service",
         spanOutputProcessors: [], // No processors, including no SensitiveDataFilter
-        exporters: [new DefaultExporter()],
+        exporters: [new LocalExporter()],
       },
     },
   }),
