@@ -17,6 +17,7 @@ import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { addTtlToRecord } from '../../ttl';
+import type { WorkflowSnapshotEntityData } from '../../../entities/utils';
 import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
@@ -174,19 +175,19 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       const now = new Date();
-      // Prepare data including the 'entity' type
-      let data: Record<string, any> = {
-        entity: 'workflow_snapshot', // Add entity type
-        workflow_name: workflowName,
-        run_id: runId,
-        snapshot: JSON.stringify(snapshot),
-        createdAt: (createdAt ?? now).toISOString(),
-        updatedAt: (updatedAt ?? now).toISOString(),
-        resourceId,
-      };
-
-      // Add TTL if configured for workflow snapshots
-      data = addTtlToRecord(data, 'workflow_snapshot', this.ttlConfig);
+      const data: WorkflowSnapshotEntityData = addTtlToRecord(
+        {
+          entity: 'workflow_snapshot',
+          workflow_name: workflowName,
+          run_id: runId,
+          snapshot: JSON.stringify(snapshot),
+          createdAt: (createdAt ?? now).toISOString(),
+          updatedAt: (updatedAt ?? now).toISOString(),
+          resourceId,
+        },
+        'workflow_snapshot',
+        this.ttlConfig,
+      );
 
       // Use upsert instead of create to handle both create and update cases
       await this.service.entities.workflow_snapshot.upsert(data).go();
