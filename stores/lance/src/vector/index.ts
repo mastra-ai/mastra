@@ -148,12 +148,6 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       // Open the table
       const table = await this.lanceClient.openTable(resolvedTableName);
 
-      // Prepare the list of columns to select
-      const selectColumns = [...columns];
-      if (!selectColumns.includes('id')) {
-        selectColumns.push('id');
-      }
-
       // Create the query builder
       let query = table.search(queryVector);
 
@@ -164,8 +158,13 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         query = query.where(whereClause);
       }
 
-      // Apply column selection and limit
-      if (!includeAllColumns && selectColumns.length > 0) {
+      // Apply column selection only if specific columns were requested
+      // If columns is empty and includeAllColumns is false, return all columns by default
+      if (!includeAllColumns && columns.length > 0) {
+        const selectColumns = [...columns];
+        if (!selectColumns.includes('id')) {
+          selectColumns.push('id');
+        }
         query = query.select(selectColumns);
       }
       query = query.limit(topK);
@@ -368,10 +367,11 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
             }
             return normalized;
           });
-          await table.add(normalizedData);
+          // Use mergeInsert for true upsert behavior: update existing rows, insert new ones
+          await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(normalizedData);
         } else {
-          // Schema matches exactly - add data normally
-          await table.add(data, { mode: 'overwrite' });
+          // Schema matches exactly - use mergeInsert for true upsert behavior
+          await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(data);
         }
       } else {
         // Table doesn't exist, create it with the data
@@ -558,8 +558,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       let table: Table;
 
       if (!tables.includes(resolvedTableName)) {
-        // Table doesn't exist - create an empty table with the proper schema
-        // We create with a dummy row and then delete it to establish the schema
+        // Table doesn't exist - create an empty table with the proper schema.
+        // LanceDB requires at least one row to infer schema, so we create a dummy row
+        // and immediately delete it. This leaves an empty table with the correct schema.
+        // Note: There's a brief window where the '__init__' row is visible to concurrent queries.
         this.logger.debug(
           `Table ${resolvedTableName} does not exist. Creating empty table with dimension ${dimension}.`,
         );
@@ -979,8 +981,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
               return rowData;
             });
 
-            // Update all records
-            await table.add(updatedRecords, { mode: 'overwrite' });
+            // Use mergeInsert for true update behavior without replacing the entire table
+            await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(updatedRecords);
             return;
           }
         } catch (err) {
