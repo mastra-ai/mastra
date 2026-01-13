@@ -215,7 +215,7 @@ describe('Input and Output Processors', () => {
 
       expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
 
-      expect(await result.finishReason).toBe('other');
+      expect(result.finishReason).toBe('other');
     });
 
     it('should handle processor abort with custom message', async () => {
@@ -1229,7 +1229,7 @@ describe('Input and Output Processors', () => {
         expect(result.tripwire).toBeDefined();
         expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
 
-        expect(await result.finishReason).toBe('other');
+        expect(result.finishReason).toBe('other');
       });
     });
 
