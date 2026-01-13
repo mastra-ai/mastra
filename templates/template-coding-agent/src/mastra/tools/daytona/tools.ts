@@ -1,21 +1,22 @@
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
-import { FilesystemEventType, FileType, Sandbox } from '@e2b/code-interpreter';
+import { getDaytonaClient, getSandboxById, createFileUploadFormat, normalizeSandboxPath } from './utils';
+import { Sandbox, CreateSandboxBaseParams, CodeRunParams, DaytonaNotFoundError, CodeLanguage } from '@daytonaio/sdk';
 
 export const createSandbox = createTool({
   id: 'createSandbox',
   description: 'Create a sandbox',
   inputSchema: z.object({
-    metadata: z.record(z.string()).optional().describe('Custom metadata for the sandbox'),
-    envs: z.record(z.string()).optional().describe(`
+    name: z.string().optional().describe('Custom sandbox name'),
+    labels: z.record(z.string()).optional().describe('Custom sandbox labels'),
+    language: z
+      .nativeEnum(CodeLanguage)
+      .default(CodeLanguage.PYTHON)
+      .describe('Language used for code execution. If not provided, default python context is used'),
+    envVars: z.record(z.string()).optional().describe(`
       Custom environment variables for the sandbox.
       Used when executing commands and code in the sandbox.
       Can be overridden with the \`envs\` argument when executing commands or code.
-    `),
-    timeoutMS: z.number().optional().describe(`
-      Timeout for the sandbox in **milliseconds**.
-      Maximum time a sandbox can be kept alive is 24 hours (86_400_000 milliseconds) for Pro users and 1 hour (3_600_000 milliseconds) for Hobby users.
-      @default 300_000 // 5 minutes
     `),
   }),
   outputSchema: z
@@ -28,11 +29,18 @@ export const createSandbox = createTool({
       }),
     ),
   execute: async ({ context }) => {
+    const daytona = getDaytonaClient();
     try {
-      const sandbox = await Sandbox.create(context);
+      const sandboxParams: CreateSandboxBaseParams = {
+        name: context.name,
+        envVars: context.envVars,
+        labels: context.labels,
+        language: context.language,
+      };
+      const sandbox: Sandbox = await daytona.create(sandboxParams);
 
       return {
-        sandboxId: sandbox.sandboxId,
+        sandboxId: sandbox.id,
       };
     } catch (e) {
       return {
@@ -48,28 +56,16 @@ export const runCode = createTool({
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to run the code'),
     code: z.string().describe('The code to run in the sandbox'),
-    runCodeOpts: z
-      .object({
-        language: z
-          .enum(['ts', 'js', 'python'])
-          .default('python')
-          .describe('language used for code execution. If not provided, default python context is used'),
-        envs: z.record(z.string()).optional().describe('Custom environment variables for code execution.'),
-        timeoutMS: z.number().optional().describe(`
-        Timeout for the code execution in **milliseconds**.
-        @default 60_000 // 60 seconds
+    argv: z.array(z.string()).optional().describe('Command line arguments to pass to the code.'),
+    envs: z.record(z.string()).optional().describe('Custom environment variables for code execution.'),
+    timeoutSeconds: z.number().optional().describe(`
+          Maximum time in seconds to wait for execution to complete
       `),
-        requestTimeoutMs: z.number().optional().describe(`
-        Timeout for the request in **milliseconds**.
-        @default 30_000 // 30 seconds
-      `),
-      })
-      .optional()
-      .describe('Run code options'),
   }),
   outputSchema: z
     .object({
-      execution: z.string().describe('Serialized representation of the execution results'),
+      exitCode: z.number().describe('The exit code from the code execution'),
+      stdout: z.string().optional().describe('The standard output from the code execution'),
     })
     .or(
       z.object({
@@ -78,12 +74,17 @@ export const runCode = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await getSandboxById(context.sandboxId);
 
-      const execution = await sandbox.runCode(context.code, context.runCodeOpts);
+      const codeRunParams = new CodeRunParams();
+      codeRunParams.argv = context.argv ?? [];
+      codeRunParams.env = context.envs ?? {};
+
+      const execution = await sandbox.process.codeRun(context.code, codeRunParams, context.timeoutSeconds);
 
       return {
-        execution: JSON.stringify(execution.toJSON()),
+        exitCode: execution.exitCode,
+        stdout: execution.result,
       };
     } catch (e) {
       return {
@@ -112,12 +113,15 @@ export const readFile = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const fileContent = await sandbox.files.read(context.path);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
+
+      const fileBuffer = await sandbox.fs.downloadFile(normalizedPath);
+      const fileContent = fileBuffer.toString('utf-8');
 
       return {
         content: fileContent,
-        path: context.path,
+        path: normalizedPath,
       };
     } catch (e) {
       return {
@@ -147,12 +151,15 @@ export const writeFile = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.write(context.path, context.content);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
+
+      const fileToUpload = [createFileUploadFormat(context.content, normalizedPath)];
+      await sandbox.fs.uploadFiles(fileToUpload);
 
       return {
         success: true,
-        path: context.path,
+        path: normalizedPath,
       };
     } catch (e) {
       return {
@@ -188,12 +195,17 @@ export const writeFiles = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.write(context.files);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const files = context.files.map(file => ({
+        ...file,
+        path: normalizeSandboxPath(file.path),
+      }));
+
+      await sandbox.fs.uploadFiles(files.map(file => createFileUploadFormat(file.data, file.path)));
 
       return {
         success: true,
-        filesWritten: context.files.map(file => file.path),
+        filesWritten: files.map(file => file.path),
       };
     } catch (e) {
       return {
@@ -230,18 +242,20 @@ export const listFiles = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const fileList = await sandbox.files.list(context.path);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
 
-      fileList.map(f => f.type);
+      const fileList = await sandbox.fs.listFiles(normalizedPath);
+
+      const basePath = normalizedPath.endsWith('/') ? normalizedPath.slice(0, -1) : normalizedPath;
 
       return {
         files: fileList.map(file => ({
           name: file.name,
-          path: file.path,
-          isDirectory: file.type === FileType.DIR,
+          path: `${basePath}/${file.name}`,
+          isDirectory: file.isDir,
         })),
-        path: context.path,
+        path: normalizedPath,
       };
     } catch (e) {
       return {
@@ -270,12 +284,18 @@ export const deleteFile = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.remove(context.path);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
+
+      // Check if the path is a directory
+      const fileInfo = await sandbox.fs.getFileDetails(normalizedPath);
+      const isDirectory = fileInfo.isDir;
+
+      await sandbox.fs.deleteFile(normalizedPath, isDirectory);
 
       return {
         success: true,
-        path: context.path,
+        path: normalizedPath,
       };
     } catch (e) {
       return {
@@ -304,12 +324,14 @@ export const createDirectory = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.makeDir(context.path);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
+
+      await sandbox.fs.createFolder(normalizedPath, '755');
 
       return {
         success: true,
-        path: context.path,
+        path: normalizedPath,
       };
     } catch (e) {
       return {
@@ -328,16 +350,14 @@ export const getFileInfo = createTool({
   }),
   outputSchema: z
     .object({
+      group: z.string().describe(`The group ID of the file or directory (e.g., '1001')`),
+      isDir: z.boolean().describe('Whether this is a directory'),
+      modTime: z.string().describe(`The last modified time in UTC format (e.g., '2025-04-18 22:47:34 +0000 UTC')`),
+      mode: z.string().describe(`The file mode/permissions in symbolic format (e.g., '-rw-r--r--')`),
       name: z.string().describe('The name of the file or directory'),
-      type: z.nativeEnum(FileType).optional().describe('Whether this is a file or directory'),
-      path: z.string().describe('The full path of the file or directory'),
+      owner: z.string().describe(`The owner ID of the file or directory (e.g., '1001')`),
+      permissions: z.string().describe(`The file permissions in octal format (e.g., '0644')`),
       size: z.number().describe('The size of the file or directory in bytes'),
-      mode: z.number().describe('The file mode (permissions as octal number)'),
-      permissions: z.string().describe('Human-readable permissions string'),
-      owner: z.string().describe('The owner of the file or directory'),
-      group: z.string().describe('The group of the file or directory'),
-      modifiedTime: z.date().optional().describe('The last modified time in ISO string format'),
-      symlinkTarget: z.string().optional().describe('The target path if this is a symlink, null otherwise'),
     })
     .or(
       z.object({
@@ -346,20 +366,20 @@ export const getFileInfo = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const info = await sandbox.files.getInfo(context.path);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
+
+      const fileInfo = await sandbox.fs.getFileDetails(normalizedPath);
 
       return {
-        name: info.name,
-        type: info.type,
-        path: info.path,
-        size: info.size,
-        mode: info.mode,
-        permissions: info.permissions,
-        owner: info.owner,
-        group: info.group,
-        modifiedTime: info.modifiedTime,
-        symlinkTarget: info.symlinkTarget,
+        group: fileInfo.group,
+        isDir: fileInfo.isDir,
+        modTime: fileInfo.modTime,
+        mode: fileInfo.mode,
+        name: fileInfo.name,
+        owner: fileInfo.owner,
+        permissions: fileInfo.permissions,
+        size: fileInfo.size,
       };
     } catch (e) {
       return {
@@ -380,7 +400,7 @@ export const checkFileExists = createTool({
     .object({
       exists: z.boolean().describe('Whether the file or directory exists'),
       path: z.string().describe('The path that was checked'),
-      type: z.nativeEnum(FileType).optional().describe('The type if the path exists'),
+      isDirectory: z.boolean().optional().describe('If the path exists, whether it is a directory'),
     })
     .or(
       z.object({
@@ -389,21 +409,23 @@ export const checkFileExists = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
 
       try {
-        const info = await sandbox.files.getInfo(context.path);
+        const fileInfo = await sandbox.fs.getFileDetails(normalizedPath);
         return {
           exists: true,
-          path: context.path,
-          type: info.type,
+          path: normalizedPath,
+          isDirectory: fileInfo.isDir,
         };
       } catch (e) {
-        // If getInfo fails, the file doesn't exist
-        return {
-          exists: false,
-          path: context.path,
-        };
+        if (e instanceof DaytonaNotFoundError)
+          return {
+            exists: false,
+            path: normalizedPath,
+          };
+        else throw e;
       }
     } catch (e) {
       return {
@@ -422,14 +444,14 @@ export const getFileSize = createTool({
     humanReadable: z
       .boolean()
       .default(false)
-      .describe("Whether to return size in human-readable format (e.g., '1.5 KB', '2.3 MB')"),
+      .describe(`Whether to return size in human-readable format (e.g., '1.5 KB', '2.3 MB')`),
   }),
   outputSchema: z
     .object({
       size: z.number().describe('The size in bytes'),
       humanReadableSize: z.string().optional().describe('Human-readable size string if requested'),
       path: z.string().describe('The path that was checked'),
-      type: z.nativeEnum(FileType).optional().describe('Whether this is a file or directory'),
+      isDirectory: z.boolean().describe('Whether this is a directory'),
     })
     .or(
       z.object({
@@ -438,13 +460,15 @@ export const getFileSize = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const info = await sandbox.files.getInfo(context.path);
+      const sandbox = await getSandboxById(context.sandboxId);
+      const normalizedPath = normalizeSandboxPath(context.path);
+
+      const fileInfo = await sandbox.fs.getFileDetails(normalizedPath);
 
       let humanReadableSize: string | undefined;
 
       if (context.humanReadable) {
-        const bytes = info.size;
+        const bytes = fileInfo.size;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         if (bytes === 0) {
           humanReadableSize = '0 B';
@@ -456,10 +480,10 @@ export const getFileSize = createTool({
       }
 
       return {
-        size: info.size,
+        size: fileInfo.size,
         humanReadableSize,
-        path: context.path,
-        type: info.type,
+        path: normalizedPath,
+        isDirectory: fileInfo.isDir,
       };
     } catch (e) {
       return {
@@ -471,15 +495,13 @@ export const getFileSize = createTool({
 
 export const watchDirectory = createTool({
   id: 'watchDirectory',
-  description: 'Start watching a directory for file system changes in the sandbox',
+  description:
+    '⚠️ NOT SUPPORTED - This tool is currently not supported in the sandbox environment. Do not use this tool.',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to watch directory in'),
     path: z.string().describe('The directory path to watch for changes'),
     recursive: z.boolean().default(false).describe('Whether to watch subdirectories recursively'),
-    watchDuration: z
-      .number()
-      .default(30000)
-      .describe('How long to watch for changes in milliseconds (default 30 seconds)'),
+    watchDuration: z.number().describe('How long to watch for changes in milliseconds (default 30 seconds)'),
   }),
   outputSchema: z
     .object({
@@ -488,9 +510,7 @@ export const watchDirectory = createTool({
       events: z
         .array(
           z.object({
-            type: z
-              .nativeEnum(FilesystemEventType)
-              .describe('The type of filesystem event (WRITE, CREATE, DELETE, etc.)'),
+            type: z.string().describe('The type of filesystem event'),
             name: z.string().describe('The name of the file that changed'),
             timestamp: z.string().describe('When the event occurred'),
           }),
@@ -502,42 +522,10 @@ export const watchDirectory = createTool({
         error: z.string().describe('The error from a failed directory watch'),
       }),
     ),
-  execute: async ({ context }) => {
-    try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const events: Array<{ type: FilesystemEventType; name: string; timestamp: string }> = [];
-
-      // Start watching the directory
-      const handle = await sandbox.files.watchDir(
-        context.path,
-        async event => {
-          events.push({
-            type: event.type,
-            name: event.name,
-            timestamp: new Date().toISOString(),
-          });
-        },
-        {
-          recursive: context.recursive,
-        },
-      );
-
-      // Watch for the specified duration
-      await new Promise(resolve => setTimeout(resolve, context.watchDuration));
-
-      // Stop watching
-      await handle.stop();
-
-      return {
-        watchStarted: true,
-        path: context.path,
-        events,
-      };
-    } catch (e) {
-      return {
-        error: JSON.stringify(e),
-      };
-    }
+  execute: async () => {
+    return {
+      error: 'Directory watching is currently not supported in the sandbox environment.',
+    };
   },
 });
 
@@ -547,8 +535,15 @@ export const runCommand = createTool({
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to run the command in'),
     command: z.string().describe('The shell command to execute'),
-    workingDirectory: z.string().optional().describe('The working directory to run the command in'),
-    timeoutMs: z.number().default(30000).describe('Timeout for the command execution in milliseconds'),
+    envs: z.record(z.string()).optional().describe('Environment variables to set for the command'),
+    workingDirectory: z
+      .string()
+      .optional()
+      .describe('The working directory for command execution. If not specified, uses the sandbox working directory.'),
+    timeoutSeconds: z
+      .number()
+      .optional()
+      .describe('Maximum time in seconds to wait for the command to complete. 0 means wait indefinitely.'),
     captureOutput: z.boolean().default(true).describe('Whether to capture stdout and stderr output'),
   }),
   outputSchema: z
@@ -556,7 +551,6 @@ export const runCommand = createTool({
       success: z.boolean().describe('Whether the command executed successfully'),
       exitCode: z.number().describe('The exit code of the command'),
       stdout: z.string().describe('The standard output from the command'),
-      stderr: z.string().describe('The standard error from the command'),
       command: z.string().describe('The command that was executed'),
       executionTime: z.number().describe('How long the command took to execute in milliseconds'),
     })
@@ -567,21 +561,17 @@ export const runCommand = createTool({
     ),
   execute: async ({ context }) => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const startTime = Date.now();
+      const sandbox = await getSandboxById(context.sandboxId);
 
-      const result = await sandbox.commands.run(context.command, {
-        cwd: context.workingDirectory,
-        timeoutMs: context.timeoutMs,
-      });
+      const startTime = Date.now();
+      const response = await sandbox.process.executeCommand(context.command, context.workingDirectory, context.envs ?? {}, context.timeoutSeconds);
 
       const executionTime = Date.now() - startTime;
 
       return {
-        success: result.exitCode === 0,
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
+        success: response.exitCode === 0,
+        exitCode: response.exitCode,
+        stdout: context.captureOutput ? response.result : '',
         command: context.command,
         executionTime,
       };
