@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
@@ -89,10 +90,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
       return value;
     } else if (isObj(z)(value)) {
-      // OpenAI doesn't support additionalProperties: {} (empty object)
-      // which is what Zod v4's looseObject/passthrough produces.
-      // Setting passthrough: false converts these to strict objects instead.
-      return this.defaultZodObjectHandler(value, { passthrough: false });
+      return this.defaultZodObjectHandler(value);
     } else if (isUnion(z)(value)) {
       return this.defaultZodUnionHandler(value);
     } else if (isArr(z)(value)) {
@@ -113,5 +111,72 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       'ZodUndefined',
       'ZodTuple',
     ]);
+  }
+
+  /**
+   * Override to fix additionalProperties: {} which OpenAI doesn't support.
+   * Converts empty object {} to true to preserve passthrough intent.
+   */
+  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(zodSchema);
+    return this.fixAdditionalProperties(jsonSchema);
+  }
+
+  /**
+   * Recursively fixes additionalProperties: {} to additionalProperties: true.
+   * OpenAI requires additionalProperties to be either:
+   * - false (no additional properties allowed)
+   * - true (any additional properties allowed)
+   * - an object with a "type" key (typed additional properties)
+   * An empty object {} is NOT valid.
+   */
+  private fixAdditionalProperties(schema: JSONSchema7): JSONSchema7 {
+    if (typeof schema !== 'object' || schema === null) {
+      return schema;
+    }
+
+    const result = { ...schema };
+
+    // Fix additionalProperties if it's an empty object
+    if (
+      result.additionalProperties !== undefined &&
+      typeof result.additionalProperties === 'object' &&
+      result.additionalProperties !== null &&
+      !Array.isArray(result.additionalProperties) &&
+      Object.keys(result.additionalProperties).length === 0
+    ) {
+      result.additionalProperties = true;
+    }
+
+    // Recursively fix nested properties
+    if (result.properties) {
+      result.properties = Object.fromEntries(
+        Object.entries(result.properties).map(([key, value]) => [
+          key,
+          this.fixAdditionalProperties(value as JSONSchema7),
+        ]),
+      );
+    }
+
+    // Recursively fix items in arrays
+    if (result.items) {
+      if (Array.isArray(result.items)) {
+        result.items = result.items.map(item => this.fixAdditionalProperties(item as JSONSchema7));
+      } else {
+        result.items = this.fixAdditionalProperties(result.items as JSONSchema7);
+      }
+    }
+
+    // Recursively fix additionalProperties if it's an object schema (not empty)
+    if (
+      result.additionalProperties &&
+      typeof result.additionalProperties === 'object' &&
+      !Array.isArray(result.additionalProperties) &&
+      Object.keys(result.additionalProperties).length > 0
+    ) {
+      result.additionalProperties = this.fixAdditionalProperties(result.additionalProperties as JSONSchema7);
+    }
+
+    return result;
   }
 }

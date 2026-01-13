@@ -125,6 +125,8 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     const jsonSchema = layer.processToJSONSchema(schema);
 
     expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    // Passthrough should convert to true to preserve intent of allowing extra properties
+    expect(jsonSchema.additionalProperties).toBe(true);
   });
 
   it('should produce valid additionalProperties for looseObject schemas', () => {
@@ -138,6 +140,7 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     const jsonSchema = layer.processToJSONSchema(schema);
 
     expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    expect(jsonSchema.additionalProperties).toBe(true);
   });
 
   it('should handle partial().passthrough() pattern', () => {
@@ -155,6 +158,7 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     const jsonSchema = layer.processToJSONSchema(schema);
 
     expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    expect(jsonSchema.additionalProperties).toBe(true);
   });
 
   it('should preserve typed catchall with string type', () => {
