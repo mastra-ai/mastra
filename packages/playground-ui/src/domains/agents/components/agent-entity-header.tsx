@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { EntityHeader } from '@/components/ui/entity-header';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { CopyIcon, Pencil } from 'lucide-react';
+import { CopyIcon, Pencil, GitBranch } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
+import { useAgentVersion } from '../hooks/use-agent-versions';
 import { EditAgentDialog } from './create-agent';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
@@ -23,6 +24,13 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
 
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
+  const activeVersionId = agent?.activeVersionId;
+
+  // Fetch active version details for stored agents
+  const { data: activeVersion } = useAgentVersion({
+    agentId,
+    versionId: activeVersionId || '',
+  });
 
   const handleEditSuccess = () => {
     setIsEditDialogOpen(false);
@@ -48,6 +56,20 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
           </TooltipTrigger>
           <TooltipContent>Copy Agent ID for use in code</TooltipContent>
         </Tooltip>
+
+        {isStoredAgent && activeVersion && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="h-badge-default shrink-0">
+                <Badge icon={<GitBranch />} variant="default">
+                  v{activeVersion.versionNumber}
+                  {activeVersion.name && ` - ${activeVersion.name}`}
+                </Badge>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Active version</TooltipContent>
+          </Tooltip>
+        )}
 
         {isStoredAgent && (
           <Button variant="outline" size="md" onClick={() => setIsEditDialogOpen(true)}>
