@@ -84,22 +84,11 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await agentsStore.getAgentById({ id: storedAgentId });
+      // Use getAgentByIdResolved to automatically resolve from active version
+      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
-      }
-
-      // If an active version is set, resolve from that version's snapshot
-      if (agent.activeVersionId) {
-        const activeVersion = await agentsStore.getVersion(agent.activeVersionId);
-        if (activeVersion) {
-          // Return the snapshot with activeVersionId preserved
-          return {
-            ...activeVersion.snapshot,
-            activeVersionId: agent.activeVersionId,
-          };
-        }
       }
 
       return agent;

@@ -842,27 +842,11 @@ export class Mastra<
       return this.#createAgentFromStoredConfig(version.snapshot);
     }
 
-    // Default behavior: get the current agent config
-    const storedAgent = await agentsStore.getAgentById({ id });
+    // Default behavior: get the current agent config with version resolution
+    const storedAgent = await agentsStore.getAgentByIdResolved({ id });
 
     if (!storedAgent) {
       return null;
-    }
-
-    // If an active version is set, resolve from that version's snapshot
-    if (storedAgent.activeVersionId) {
-      const activeVersion = await agentsStore.getVersion(storedAgent.activeVersionId);
-      if (activeVersion) {
-        // Merge activeVersionId into the snapshot for consistency
-        const snapshotWithActiveVersion = {
-          ...activeVersion.snapshot,
-          activeVersionId: storedAgent.activeVersionId,
-        };
-        if (options?.raw) {
-          return snapshotWithActiveVersion;
-        }
-        return this.#createAgentFromStoredConfig(snapshotWithActiveVersion);
-      }
     }
 
     if (options?.raw) {

@@ -138,11 +138,41 @@ export abstract class AgentsStorage extends StorageDomain {
   // ==========================================================================
 
   /**
-   * Retrieves an agent by its unique identifier.
+   * Retrieves an agent by its unique identifier (raw, without version resolution).
    * @param id - The unique identifier of the agent
    * @returns The agent if found, null otherwise
    */
   abstract getAgentById({ id }: { id: string }): Promise<StorageAgentType | null>;
+
+  /**
+   * Retrieves an agent by its unique identifier, resolving from the active version if set.
+   * This is the preferred method for fetching stored agents as it ensures the returned
+   * configuration matches the active version.
+   *
+   * @param id - The unique identifier of the agent
+   * @returns The agent config (from active version snapshot if set), or null if not found
+   */
+  async getAgentByIdResolved({ id }: { id: string }): Promise<StorageAgentType | null> {
+    const agent = await this.getAgentById({ id });
+
+    if (!agent) {
+      return null;
+    }
+
+    // If an active version is set, resolve from that version's snapshot
+    if (agent.activeVersionId) {
+      const activeVersion = await this.getVersion(agent.activeVersionId);
+      if (activeVersion) {
+        // Return the snapshot with activeVersionId preserved
+        return {
+          ...activeVersion.snapshot,
+          activeVersionId: agent.activeVersionId,
+        };
+      }
+    }
+
+    return agent;
+  }
 
   /**
    * Creates a new agent in storage.
