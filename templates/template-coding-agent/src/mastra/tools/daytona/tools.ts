@@ -564,7 +564,12 @@ export const runCommand = createTool({
       const sandbox = await getSandboxById(context.sandboxId);
 
       const startTime = Date.now();
-      const response = await sandbox.process.executeCommand(context.command, context.workingDirectory, context.envs ?? {}, context.timeoutSeconds);
+      const response = await sandbox.process.executeCommand(
+        context.command,
+        context.workingDirectory,
+        context.envs ?? {},
+        context.timeoutSeconds,
+      );
 
       const executionTime = Date.now() - startTime;
 

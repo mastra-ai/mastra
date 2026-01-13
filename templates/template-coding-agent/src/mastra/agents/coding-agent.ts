@@ -204,7 +204,7 @@ Remember: You are not just a code executor, but a complete development environme
     runCommand,
   },
   memory: new Memory({
-    storage: new LibSQLStore({  url: 'file:../../mastra.db' }),
+    storage: new LibSQLStore({ url: 'file:../../mastra.db' }),
     options: {
       semanticRecall: true,
       workingMemory: { enabled: true },
