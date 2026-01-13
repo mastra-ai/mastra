@@ -178,6 +178,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/firmware",
+          label: "Firmware",
+        },
+        {
+          type: "doc",
           id: "providers/friendli",
           label: "Friendli",
         },
@@ -318,6 +323,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/privatemode-ai",
+          label: "Privatemode AI",
+        },
+        {
+          type: "doc",
           id: "providers/requesty",
           label: "Requesty",
         },
@@ -360,6 +370,11 @@ const sidebars = {
           type: "doc",
           id: "providers/venice",
           label: "Venice AI",
+        },
+        {
+          type: "doc",
+          id: "providers/vivgrid",
+          label: "Vivgrid",
         },
         {
           type: "doc",
