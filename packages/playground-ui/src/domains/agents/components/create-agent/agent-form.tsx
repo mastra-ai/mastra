@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { useAgents } from '../../hooks/use-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { useMemoryConfigs } from '@/domains/memory/hooks';
 
 import { ModelPicker } from './model-picker';
 import { MultiSelectPicker } from './multi-select-picker';
@@ -82,6 +83,7 @@ export function AgentForm({
   const { data: tools, isLoading: toolsLoading } = useTools();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: memoryConfigsData, isLoading: memoryConfigsLoading } = useMemoryConfigs();
 
   // Form setup
   const {
@@ -144,11 +146,21 @@ export function AgentForm({
     }));
   }, [availableAgents]);
 
+  // Transform memory configs data
+  const memoryOptions = React.useMemo(() => {
+    if (!memoryConfigsData?.configs) return [];
+    return memoryConfigsData.configs.map(config => ({
+      id: config.id,
+      name: config.name || config.id,
+      description: '',
+    }));
+  }, [memoryConfigsData]);
+
   const handleFormSubmit = async (values: AgentFormValues) => {
     await onSubmit(values);
   };
 
-  const isLoading = toolsLoading || workflowsLoading || agentsLoading;
+  const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading;
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-6">
@@ -310,19 +322,21 @@ export function AgentForm({
               name="memory"
               control={control}
               render={({ field }) => (
-                <div className="flex flex-col gap-2">
-                  <Label className="text-icon5">Memory</Label>
-                  <Input
-                    placeholder="Enter memory config ID (optional)"
-                    value={field.value || ''}
-                    onChange={e => field.onChange(e.target.value)}
-                    className={cn(errors.memory && 'border-accent2')}
-                  />
-                  <span className="text-xs text-icon3">
-                    Enter the ID of a memory configuration to enable memory for this agent
-                  </span>
-                  {errors.memory && <span className="text-xs text-accent2">{errors.memory.message}</span>}
-                </div>
+                <MultiSelectPicker
+                  label="Memory"
+                  options={memoryOptions}
+                  selected={field.value ? [field.value] : []}
+                  onChange={selected => field.onChange(selected[0] || '')}
+                  getOptionId={option => option.id}
+                  getOptionLabel={option => option.name}
+                  getOptionDescription={option => option.description}
+                  placeholder="Select memory configuration..."
+                  searchPlaceholder="Search memory configs..."
+                  emptyMessage="No memory configurations registered"
+                  disabled={memoryConfigsLoading}
+                  singleSelect={true}
+                  error={errors.memory?.message}
+                />
               )}
             />
           </div>
