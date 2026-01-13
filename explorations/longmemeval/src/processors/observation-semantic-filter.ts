@@ -145,6 +145,19 @@ export interface ObservationSemanticFilterConfig {
    * @default 0.35
    */
   preferenceBoostMinSimilarity?: number;
+
+  /**
+   * Enable query expansion for complex/multi-part questions.
+   * Extracts quoted text, sentences, and key phrases as separate queries.
+   * @default true
+   */
+  expandQueries?: boolean;
+
+  /**
+   * TopK for each expanded query (smaller than main query since results are merged)
+   * @default 20
+   */
+  queryExpansionTopK?: number;
 }
 
 /**
@@ -495,21 +508,27 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
   // Store all parsed observations for neighbor lookup during expansion
   private allParsedObservations: ParsedObservation[] = [];
 
+  // Query expansion settings
+  private expandQueries: boolean;
+  private queryExpansionTopK: number;
+
   constructor(config: ObservationSemanticFilterConfig) {
     this.embedder = config.embedder;
     this.vectorStore = new InMemoryVectorStore();
-    this.topK = config.topK ?? 50;
-    this.minSimilarity = config.minSimilarity ?? 0.3;
+    this.topK = config.topK ?? 30;
+    this.minSimilarity = config.minSimilarity ?? 0.4;
     this.includeCurrentTask = config.includeCurrentTask ?? false;
     this.includeSuggestedResponse = config.includeSuggestedResponse ?? false;
-    this.includePatterns = config.includePatterns ?? true;
+    this.includePatterns = config.includePatterns ?? false;
     this.cacheDir = config.cacheDir;
     this.expandContext = config.expandContext ?? true;
-    this.highScoreThreshold = config.highScoreThreshold ?? 0.6;
+    this.highScoreThreshold = config.highScoreThreshold ?? 0.8;
     this.mediumScoreThreshold = config.mediumScoreThreshold ?? 0.4;
     this.preferenceBoost = config.preferenceBoost ?? true;
-    this.preferenceBoostTopK = config.preferenceBoostTopK ?? 50;
-    this.preferenceBoostMinSimilarity = config.preferenceBoostMinSimilarity ?? 0.35;
+    this.preferenceBoostTopK = config.preferenceBoostTopK ?? 10;
+    this.preferenceBoostMinSimilarity = config.preferenceBoostMinSimilarity ?? 0.8;
+    this.expandQueries = config.expandQueries ?? false;
+    this.queryExpansionTopK = config.queryExpansionTopK ?? 5;
 
     // Ensure cache directory exists
     if (this.cacheDir && !existsSync(this.cacheDir)) {
@@ -582,6 +601,108 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
   }
 
   /**
+   * Expand a complex query into multiple sub-queries for better retrieval.
+   * Extracts:
+   * - Quoted text (e.g., "The Mountain Meditation")
+   * - Individual sentences
+   * - Key noun phrases
+   *
+   * @returns Array of query strings to embed and search
+   */
+  private expandQuery(userQuery: string): string[] {
+    const queries: string[] = [];
+    const seen = new Set<string>();
+
+    const addQuery = (q: string, clean = true) => {
+      // Clean up the query - remove trailing/leading punctuation and quotes
+      const cleaned = clean
+        ? q
+            .trim()
+            .replace(/^['".,]+|['".,]+$/g, '')
+            .trim()
+        : q;
+      const normalized = cleaned.toLowerCase();
+      // Skip very short queries (less than 10 chars) or duplicates
+      if (normalized.length >= 10 && !seen.has(normalized)) {
+        seen.add(normalized);
+        queries.push(cleaned);
+      }
+    };
+
+    // 1. Always include the full query (for overall context)
+    addQuery(userQuery, false);
+
+    // 2. Extract quoted text (single or double quotes)
+    const quotedMatches = userQuery.match(/["']([^"']+)["']/g);
+    if (quotedMatches) {
+      for (const match of quotedMatches) {
+        // Remove the quotes
+        const content = match.slice(1, -1);
+        addQuery(content);
+      }
+    }
+
+    // 3. Split by sentences and add each meaningful sentence
+    // Split on . ! ? but keep the delimiter for context
+    const sentences = userQuery.split(/(?<=[.!?])\s+/);
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      // Only add if it's a substantial sentence (not just "Thanks!" etc.)
+      if (trimmed.length >= 20) {
+        addQuery(trimmed);
+      }
+    }
+
+    // 4. Extract key noun phrases using simple heuristics
+    // Look for patterns like "the X", "my X", "a X" where X is a noun phrase
+    const nounPhrasePatterns = [
+      /(?:the|my|a|an|your)\s+([a-z]+(?:\s+[a-z]+){0,3})/gi,
+      /(?:about|for|with|from)\s+([a-z]+(?:\s+[a-z]+){0,3})/gi,
+    ];
+
+    for (const pattern of nounPhrasePatterns) {
+      let match;
+      while ((match = pattern.exec(userQuery)) !== null) {
+        const phrase = match[1];
+        // Only add substantial phrases
+        if (phrase && phrase.length >= 5) {
+          addQuery(phrase);
+        }
+      }
+    }
+
+    // 5. Extract specific terms that might be important
+    // Look for capitalized words (proper nouns) that aren't at sentence start
+    const words = userQuery.split(/\s+/);
+    const properNouns: string[] = [];
+    for (let i = 1; i < words.length; i++) {
+      const word = words[i];
+      // Strip leading quotes for the capital check
+      const cleanWord = word.replace(/^['"]/, '');
+      // Check if word starts with capital and isn't after sentence-ending punctuation
+      if (cleanWord.length > 2 && /^[A-Z]/.test(cleanWord) && !/[.!?]$/.test(words[i - 1] || '')) {
+        // Collect consecutive capitalized words, stripping punctuation and quotes
+        const phrase = [cleanWord.replace(/[.,!?'"]+$/g, '')];
+        let j = i + 1;
+        while (j < words.length && /^['"]?[A-Z]/.test(words[j])) {
+          phrase.push(words[j].replace(/^['"]/, '').replace(/[.,!?'"]+$/g, ''));
+          j++;
+        }
+        if (phrase.join(' ').length >= 5) {
+          properNouns.push(phrase.join(' '));
+        }
+      }
+    }
+    for (const noun of properNouns) {
+      addQuery(noun);
+    }
+
+    console.log('[RAG Filter] Expanded query into', queries.length, 'sub-queries:', queries.slice(0, 5));
+
+    return queries;
+  }
+
+  /**
    * Process input at each step - filter observations based on query similarity
    */
   async processInputStep(args: ProcessInputStepArgs) {
@@ -648,34 +769,75 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
       console.log('[RAG Filter] Indexed', this.vectorStore.size, 'chunks');
     }
 
-    // Embed the user query
-    const { embedding: queryEmbedding } = await embed({
-      model: this.embedder,
-      value: userQuery.endsWith(`?`) ? `User asked ${userQuery}` : `User stated ${userQuery}`,
-    });
-    console.log('[RAG Filter] Query embedded, searching...');
+    // Track all results and seen chunk IDs for deduplication
+    const seenChunkIds = new Set<string>();
+    let allResults: Array<{ chunk: ObservationChunk; similarity: number }> = [];
+    let mainQueryResultCount = 0;
+    let topSimilarity = 0;
 
-    // Query for relevant chunks
-    const results = this.vectorStore.query(queryEmbedding, {
-      topK: this.topK,
-      minSimilarity: this.minSimilarity,
-    });
-    console.log('[RAG Filter] Found', results.length, 'relevant chunks out of', this.vectorStore.size, 'total');
-    console.log(
-      '[RAG Filter] Top 3 similarities:',
-      results
-        .slice(0, 3)
-        .map(r => r.similarity.toFixed(3))
-        .join(', '),
-    );
+    // Determine queries to run
+    const queriesToRun = this.expandQueries ? this.expandQuery(userQuery) : [userQuery];
 
+    // Run each query and merge results
+    for (let i = 0; i < queriesToRun.length; i++) {
+      const query = queriesToRun[i];
+      const isMainQuery = i === 0;
+
+      const { embedding: queryEmbedding } = await embed({
+        model: this.embedder,
+        value: query,
+      });
+
+      // Use full topK for main query, smaller for expanded queries
+      const topK = isMainQuery ? this.topK : this.queryExpansionTopK;
+
+      const results = this.vectorStore.query(queryEmbedding, {
+        topK,
+        minSimilarity: isMainQuery ? this.minSimilarity : 0.8,
+      });
+
+      if (isMainQuery) {
+        mainQueryResultCount = results.length;
+        topSimilarity = results[0]?.similarity ?? 0;
+        console.log('[RAG Filter] Main query found', results.length, 'chunks');
+        console.log(
+          '[RAG Filter] Top 3 similarities:',
+          results
+            .slice(0, 3)
+            .map(r => r.similarity.toFixed(3))
+            .join(', '),
+        );
+      }
+
+      // Add unique results, keeping highest similarity for duplicates
+      for (const result of results) {
+        if (!seenChunkIds.has(result.chunk.id)) {
+          seenChunkIds.add(result.chunk.id);
+          allResults.push(result);
+        } else {
+          // Update similarity if this query found a higher score
+          const existing = allResults.find(r => r.chunk.id === result.chunk.id);
+          if (existing && result.similarity > existing.similarity) {
+            existing.similarity = result.similarity;
+          }
+        }
+      }
+    }
+
+    if (this.expandQueries && queriesToRun.length > 1) {
+      console.log(
+        '[RAG Filter] Query expansion added',
+        allResults.length - this.topK,
+        'additional unique chunks from',
+        queriesToRun.length - 1,
+        'sub-queries',
+      );
+    }
     // Preference boost: run additional queries for user preferences
     // This ensures critical user preferences are always included in context
-    let allResults = [...results];
     if (this.preferenceBoost) {
-      const preferenceQueries = ['user prefers', 'user preference', 'user likes', 'user wants', "user's favorite"];
-
-      const seenChunkIds = new Set(results.map(r => r.chunk.id));
+      const preferenceQueries = ['likes, prefers, wants, favourites'];
+      // const preferenceQueries = ['user prefers', 'user preference', 'user likes', 'user wants', "user's favorite"];
       let preferenceHits = 0;
 
       for (const prefQuery of preferenceQueries) {
@@ -689,9 +851,9 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
           minSimilarity: this.preferenceBoostMinSimilarity,
         });
 
-        // Add unique results (not already in main results)
+        // Add unique results (not already in main results or expanded queries)
         for (const result of prefResults) {
-          if (!seenChunkIds.has(result.chunk.id)) {
+          if (!seenChunkIds.has(result.chunk.id) && result.similarity > 0.9) {
             seenChunkIds.add(result.chunk.id);
             allResults.push(result);
             preferenceHits++;
@@ -759,11 +921,11 @@ ${filteredObservations}
     // Store stats in state for debugging
     state.ragStats = {
       originalLines: this.allParsedObservations.length,
-      matchedLines: results.length,
-      preferenceBoostHits: allResults.length - results.length,
+      matchedLines: mainQueryResultCount,
+      expandedQueryCount: queriesToRun.length,
       totalMatches: allResults.length,
       expandedLines: expandedChunks.length,
-      topSimilarity: results[0]?.similarity ?? 0,
+      topSimilarity,
       query: userQuery.slice(0, 100),
     };
 
