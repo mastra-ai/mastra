@@ -510,7 +510,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       }
 
       if (unindexedIds.length > 0) {
-        const threadKeys = await this.client.keys('thread:*');
+        const threadKeys = await this.db.scanKeys('thread:*:messages');
 
         const result = await Promise.all(
           threadKeys.map(async threadKey => {
@@ -561,6 +561,7 @@ export class StoreMemoryRedis extends MemoryStorage {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    const threadIdsSet = new Set(threadIds);
 
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
@@ -689,7 +690,13 @@ export class StoreMemoryRedis extends MemoryStorage {
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const returnedThreadMessageIds = new Set(
+        finalMessages
+          .filter(m => {
+            return m.threadId && threadIdsSet.has(m.threadId);
+          })
+          .map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore = perPageInput !== false && !allThreadMessagesReturned && end < total;
 
@@ -902,12 +909,15 @@ export class StoreMemoryRedis extends MemoryStorage {
 
           const newKey = getMessageKey(updatePayload.threadId, id);
           multi.set(newKey, JSON.stringify(updatedMessage));
+          multi.set(getMessageIndexKey(id), updatePayload.threadId);
 
           const score =
             (updatedMessage as Record<string, unknown>)._index !== undefined
               ? ((updatedMessage as Record<string, unknown>)._index as number)
               : new Date(updatedMessage.createdAt).getTime();
           multi.zAdd(getThreadMessagesKey(updatePayload.threadId), { score, value: id });
+
+          messageIdToKey[id] = newKey;
           continue;
         }
 
@@ -968,6 +978,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       const threadIds = new Set<string>();
       const messageKeys: string[] = [];
       const foundMessageIds: string[] = [];
+      const messageIdToThreadId = new Map<string, string>();
 
       const indexKeys = messageIds.map(id => getMessageIndexKey(id));
       const indexResults = await this.client.mGet(indexKeys);
@@ -987,6 +998,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       for (const { messageId, threadId } of indexedMessages) {
         messageKeys.push(getMessageKey(threadId, messageId));
         foundMessageIds.push(messageId);
+        messageIdToThreadId.set(messageId, threadId);
         threadIds.add(threadId);
       }
 
@@ -1004,6 +1016,7 @@ export class StoreMemoryRedis extends MemoryStorage {
             messageKeys.push(key);
             foundMessageIds.push(messageId);
             if (message.threadId) {
+              messageIdToThreadId.set(messageId, message.threadId);
               threadIds.add(message.threadId);
             }
             break;
@@ -1027,9 +1040,9 @@ export class StoreMemoryRedis extends MemoryStorage {
 
       if (threadIds.size > 0) {
         for (const threadId of threadIds) {
-          for (const msg of indexedMessages) {
-            if (msg.threadId === threadId) {
-              multi.zRem(getThreadMessagesKey(threadId), msg.messageId);
+          for (const [msgId, msgThreadId] of messageIdToThreadId) {
+            if (msgThreadId === threadId) {
+              multi.zRem(getThreadMessagesKey(threadId), msgId);
             }
           }
 
