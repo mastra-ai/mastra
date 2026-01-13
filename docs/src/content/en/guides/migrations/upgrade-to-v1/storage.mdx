@@ -152,7 +152,7 @@ To migrate, call `getStore()` with the domain name, then call methods on the ret
 
 ### `getThreadsByResourceId` to `listThreads`
 
-The `getThreadsByResourceId()` method has been replaced with `listThreads()`, which supports optional filtering by `resourceId` and/or `metadata`.
+The `getThreadsByResourceId()` method has been replaced with `listThreads()`. `listThreads()` supports filtering by `resourceId` or `metadata` or a combination of both.
 
 To migrate, use the memory store and the new `listThreads()` method with an optional filter object.
 
