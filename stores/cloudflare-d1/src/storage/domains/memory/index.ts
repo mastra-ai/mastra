@@ -294,12 +294,35 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
-          // Pass native values directly so SQLite compares types correctly
-          const condition = `json_extract(metadata, '$.${key}') = ?`;
-          const filterValue = value as string | number | boolean | null;
-          countQuery = countQuery.whereAnd(condition, filterValue);
-          selectQuery = selectQuery.whereAnd(condition, filterValue);
+          // Validate filter value type - only allow scalar types
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          // Handle null values specially: json_extract returns NULL for null values,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            const condition = `json_extract(metadata, '$.${key}') IS NULL`;
+            countQuery = countQuery.whereAnd(condition);
+            selectQuery = selectQuery.whereAnd(condition);
+          } else {
+            // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
+            // Pass native values directly so SQLite compares types correctly
+            const condition = `json_extract(metadata, '$.${key}') = ?`;
+            // Type assertion is safe here because we've validated above that value is a scalar type
+            const filterValue = value as string | number | boolean;
+            countQuery = countQuery.whereAnd(condition, filterValue);
+            selectQuery = selectQuery.whereAnd(condition, filterValue);
+          }
         }
       }
 
