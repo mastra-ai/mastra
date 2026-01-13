@@ -14,7 +14,6 @@ import { PoolAdapter } from './client';
 import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { AgentsPG } from './domains/agents';
-import { AgentVersionsPG } from './domains/agent-versions';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
@@ -27,7 +26,7 @@ const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
 export { exportSchemas } from './db';
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsPG, AgentVersionsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';

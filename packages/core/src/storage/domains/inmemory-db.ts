@@ -1,7 +1,7 @@
 import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
 import type { StorageAgentType, StorageMessageType, StorageResourceType, StorageWorkflowRun } from '../types';
-import type { AgentVersion } from './agent-versions/base';
+import type { AgentVersion } from './agents/base';
 import type { TraceEntry } from './observability';
 
 /**
