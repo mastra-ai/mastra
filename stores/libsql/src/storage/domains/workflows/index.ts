@@ -154,10 +154,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         snapshot.context[stepId] = result;
         snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
-        // Update the snapshot within the same transaction
+        // Upsert the snapshot within the same transaction
+        const now = new Date().toISOString();
         await tx.execute({
-          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?) WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(snapshot), workflowName, runId],
+          sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, snapshot, createdAt, updatedAt)
+                VALUES (?, ?, jsonb(?), ?, ?)
+                ON CONFLICT(workflow_name, run_id)
+                DO UPDATE SET snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+          args: [workflowName, runId, JSON.stringify(snapshot), now, now],
         });
 
         await tx.commit();

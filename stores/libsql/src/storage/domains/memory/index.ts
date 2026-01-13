@@ -26,6 +26,7 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
   #client: Client;
@@ -761,7 +762,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_THREADS)} ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
 

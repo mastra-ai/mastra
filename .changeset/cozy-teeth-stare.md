@@ -14,12 +14,14 @@ These were the last remaining columns storing JSON as TEXT. This change aligns t
 - `mastra_threads.metadata` - Thread metadata
 - `mastra_workflow_snapshot.snapshot` - Workflow run state
 
-## PostgreSQL
+**PostgreSQL**
 
-**Migration Required** - PostgreSQL enforces column types, so existing tables must be migrated.
+Migration Required - PostgreSQL enforces column types, so existing tables must be migrated. Note: Migration will fail if existing column values contain invalid JSON.
 
-*Option 1: Use the helper methods (recommended)*
+Option 1: Use the helper methods (recommended)
 ```typescript
+import { PostgresStore } from '@mastra/pg';
+
 const store = new PostgresStore({ id: 'my-store', connectionString: '...' });
 await store.init();
 
@@ -30,7 +32,7 @@ await store.migrateThreadsMetadataToJsonb();
 await store.migrateWorkflowSnapshotToJsonb();
 ```
 
-*Option 2: Run SQL directly*
+Option 2: Run SQL directly
 ```sql
 ALTER TABLE mastra_threads
 ALTER COLUMN metadata TYPE jsonb
@@ -41,9 +43,9 @@ ALTER COLUMN snapshot TYPE jsonb
 USING snapshot::jsonb;
 ```
 
-## LibSQL
+**LibSQL**
 
-**No Migration Required** - LibSQL now uses native SQLite JSONB format (added in SQLite 3.45) for ~3x performance improvement on JSON operations. The changes are fully backwards compatible:
+No Migration Required - LibSQL now uses native SQLite JSONB format (added in SQLite 3.45) for ~3x performance improvement on JSON operations. The changes are fully backwards compatible:
 
 - Existing TEXT JSON data continues to work
 - New data is stored in binary JSONB format

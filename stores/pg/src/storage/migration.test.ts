@@ -580,7 +580,7 @@ describe('PostgreSQL Threads Metadata Migration', () => {
 
   it('should return migrated: false when table does not exist', async () => {
     // Create a new store with a fresh schema that has no tables
-    const emptySchema = `empty_schema_${Date.now()}`;
+    const emptySchema = `empty_schema_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const client = await adminPool.connect();
     try {
       await client.query(`CREATE SCHEMA ${emptySchema}`);
@@ -790,7 +790,7 @@ describe('PostgreSQL Workflow Snapshot Migration', () => {
 
   it('should return migrated: false when table does not exist', async () => {
     // Create a new store with a fresh schema that has no tables
-    const emptySchema = `empty_workflow_schema_${Date.now()}`;
+    const emptySchema = `empty_workflow_schema_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const client = await adminPool.connect();
     try {
       await client.query(`CREATE SCHEMA ${emptySchema}`);

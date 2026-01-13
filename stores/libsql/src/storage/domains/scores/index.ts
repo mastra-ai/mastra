@@ -198,12 +198,9 @@ export class ScoresLibSQL extends ScoresStorage {
 
   /**
    * LibSQL-specific score row transformation.
-   * Maps additionalLLMContext column to additionalContext field.
    */
   private transformScoreRow(row: Record<string, any>): ScoreRowData {
-    return coreTransformScoreRow(row, {
-      fieldMappings: { additionalContext: 'additionalLLMContext' },
-    });
+    return coreTransformScoreRow(row);
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

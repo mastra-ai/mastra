@@ -12,6 +12,7 @@ import {
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
+  buildSelectColumns,
   createExecuteWriteOperationWithRetry,
   prepareDeleteStatement,
   prepareStatement,
@@ -375,16 +376,7 @@ export class LibSQLDB extends MastraBase {
    */
   async select<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-    const schema = TABLE_SCHEMAS[tableName];
-
-    // Build column list, wrapping jsonb columns with json() to get TEXT back
-    const columns = Object.keys(schema)
-      .map(col => {
-        const colDef = schema[col];
-        const parsedCol = parseSqlIdentifier(col, 'column name');
-        return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
-      })
-      .join(', ');
+    const columns = buildSelectColumns(tableName);
 
     const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
 
@@ -446,16 +438,7 @@ export class LibSQLDB extends MastraBase {
     args?: any[];
   }): Promise<R[]> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-    const schema = TABLE_SCHEMAS[tableName];
-
-    // Build column list, wrapping jsonb columns with json() to get TEXT back
-    const columns = Object.keys(schema)
-      .map(col => {
-        const colDef = schema[col];
-        const parsedCol = parseSqlIdentifier(col, 'column name');
-        return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
-      })
-      .join(', ');
+    const columns = buildSelectColumns(tableName);
 
     let statement = `SELECT ${columns} FROM ${parsedTableName}`;
 
@@ -481,7 +464,7 @@ export class LibSQLDB extends MastraBase {
     });
 
     // Parse JSON columns (same as select())
-    return result.rows.map(row => {
+    return (result.rows ?? []).map(row => {
       return Object.fromEntries(
         Object.entries(row || {}).map(([k, v]) => {
           try {
@@ -539,8 +522,10 @@ export class LibSQLDB extends MastraBase {
         return 'REAL'; // SQLite's floating point type
       case 'boolean':
         return 'INTEGER'; // SQLite uses 0/1 for booleans
+      case 'jsonb':
+        return 'TEXT'; // SQLite: column stores TEXT, we use jsonb()/json() functions for binary optimization
       default:
-        return getSqlType(type); // text, integer, uuid, jsonb all map correctly
+        return getSqlType(type); // text, integer, uuid all map correctly
     }
   }
 

@@ -8,6 +8,13 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
  * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()
  * to convert binary JSONB to TEXT.
  *
+ * The json() function handles both:
+ * - Binary JSONB data (converts to TEXT)
+ * - Legacy TEXT JSON data (returns as-is)
+ *
+ * Note: json_valid() was considered for guarding against malformed legacy TEXT,
+ * but it doesn't work correctly with binary JSONB data (returns false for valid JSONB blobs).
+ *
  * @param tableName - The table name to get the schema for
  * @returns A comma-separated column list with json() wrappers for JSONB columns
  */
@@ -99,19 +106,20 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
   const schema = TABLE_SCHEMAS[tableName];
   const columnNames = Object.keys(record);
   const columns = columnNames.map(col => parseSqlIdentifier(col, 'column name'));
-  const values = columnNames.map((col, i) => {
-    const v = Object.values(record)[i];
+  const values = columnNames.map(col => {
+    const v = record[col];
     if (typeof v === `undefined` || v === null) {
       // returning an undefined value will cause libsql to throw
       return null;
     }
-    if (v instanceof Date) {
-      return v.toISOString();
-    }
     // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
     const colDef = schema[col];
     if (colDef?.type === 'jsonb') {
       return JSON.stringify(v);
+    }
+    if (v instanceof Date) {
+      return v.toISOString();
     }
     return typeof v === 'object' ? JSON.stringify(v) : v;
   });
@@ -146,9 +154,9 @@ export function prepareUpdateStatement({
   // Prepare SET clause
   const updateColumnNames = Object.keys(updates);
   const updateColumns = updateColumnNames.map(col => parseSqlIdentifier(col, 'column name'));
-  const updateValues = updateColumnNames.map((col, i) => {
+  const updateValues = updateColumnNames.map(col => {
     const colDef = schema[col];
-    const v = Object.values(updates)[i];
+    const v = updates[col];
     // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
     if (colDef?.type === 'jsonb') {
       return transformToSqlValue(v, true);
@@ -174,12 +182,13 @@ export function transformToSqlValue(value: any, forceJsonStringify: boolean = fa
   if (typeof value === 'undefined' || value === null) {
     return null;
   }
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
   // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+  // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
   if (forceJsonStringify) {
     return JSON.stringify(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
   }
   return typeof value === 'object' ? JSON.stringify(value) : value;
 }
