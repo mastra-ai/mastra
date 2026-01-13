@@ -228,7 +228,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
 
-      const agent = await agentsStore.updateAgent({
+      let agent = await agentsStore.updateAgent({
         id: storedAgentId,
         name,
         description,
@@ -259,8 +259,9 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         const versionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
 
         // Create a new version snapshot
+        const newVersionId = generateVersionId();
         await agentsStore.createVersion({
-          id: generateVersionId(),
+          id: newVersionId,
           agentId: storedAgentId,
           versionNumber,
           snapshot: agent,
@@ -268,8 +269,14 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
           changeMessage: `Auto-saved after edit`,
         });
 
+        // Set the new version as the active version
+        agent = await agentsStore.updateAgent({
+          id: storedAgentId,
+          activeVersionId: newVersionId,
+        });
+
         // Enforce retention limit
-        await enforceRetentionLimit(agentsStore, storedAgentId, agent.activeVersionId);
+        await enforceRetentionLimit(agentsStore, storedAgentId, newVersionId);
       }
 
       return agent;
