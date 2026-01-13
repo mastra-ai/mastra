@@ -598,8 +598,8 @@ You may use these tools without asking for additional permission.
       }
     }
 
-    // 3. Build skill tools
-    const skillTools: Record<string, ReturnType<typeof createTool>> = {};
+    // 3. Build skill tools (typed as Record<string, unknown> to match ProcessInputStepResult)
+    const skillTools: Record<string, unknown> = {};
 
     if (hasSkills) {
       skillTools['skill-activate'] = this.createSkillActivateTool();

@@ -524,7 +524,8 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
       return { messageList };
     }
 
-    const resultTools: Record<string, ReturnType<typeof createTool>> = {};
+    // Typed as Record<string, unknown> to match ProcessInputStepResult
+    const resultTools: Record<string, unknown> = {};
 
     resultTools['knowledge-search'] = this.createKnowledgeSearchTool();
     resultTools['knowledge-read'] = this.createKnowledgeReadTool();
