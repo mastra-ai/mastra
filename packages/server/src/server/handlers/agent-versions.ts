@@ -17,6 +17,9 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
 
+// Default maximum versions per agent (can be made configurable in the future)
+const DEFAULT_MAX_VERSIONS_PER_AGENT = 50;
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -131,6 +134,66 @@ function computeVersionDiffs(
   return diffs;
 }
 
+/**
+ * Enforces version retention limit by deleting oldest versions that exceed the maximum.
+ * Never deletes the active version.
+ *
+ * @param agentsStore - The agents storage domain
+ * @param agentId - The agent ID to enforce retention for
+ * @param activeVersionId - The active version ID (will never be deleted)
+ * @param maxVersions - Maximum number of versions to keep (default: 50)
+ */
+async function enforceRetentionLimit(
+  agentsStore: {
+    listVersions: (params: {
+      agentId: string;
+      page?: number;
+      perPage?: number | false;
+      orderBy?: { field?: 'versionNumber' | 'createdAt'; direction?: 'ASC' | 'DESC' };
+    }) => Promise<{
+      versions: Array<{ id: string; versionNumber: number }>;
+      total: number;
+    }>;
+    deleteVersion: (id: string) => Promise<void>;
+  },
+  agentId: string,
+  activeVersionId: string | undefined | null,
+  maxVersions: number = DEFAULT_MAX_VERSIONS_PER_AGENT,
+): Promise<{ deletedCount: number }> {
+  // Get total version count
+  const { total } = await agentsStore.listVersions({ agentId, perPage: 1 });
+
+  if (total <= maxVersions) {
+    return { deletedCount: 0 };
+  }
+
+  const versionsToDelete = total - maxVersions;
+
+  // Get the oldest versions (ordered by versionNumber ascending)
+  const { versions: oldestVersions } = await agentsStore.listVersions({
+    agentId,
+    perPage: versionsToDelete + 1, // Get one extra in case we need to skip the active version
+    orderBy: { field: 'versionNumber', direction: 'ASC' },
+  });
+
+  let deletedCount = 0;
+  for (const version of oldestVersions) {
+    if (deletedCount >= versionsToDelete) {
+      break;
+    }
+
+    // Never delete the active version
+    if (version.id === activeVersionId) {
+      continue;
+    }
+
+    await agentsStore.deleteVersion(version.id);
+    deletedCount++;
+  }
+
+  return { deletedCount };
+}
+
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -233,6 +296,9 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
         changedFields: changedFields.length > 0 ? changedFields : undefined,
         changeMessage,
       });
+
+      // Enforce retention limit - delete oldest versions if we exceed the max
+      await enforceRetentionLimit(agentsStore, agentId, agent.activeVersionId);
 
       return version;
     } catch (error) {
@@ -411,6 +477,9 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         ),
         changeMessage: `Restored from version ${versionToRestore.versionNumber}${versionToRestore.name ? ` (${versionToRestore.name})` : ''}`,
       });
+
+      // Enforce retention limit - delete oldest versions if we exceed the max
+      await enforceRetentionLimit(agentsStore, agentId, updatedAgent.activeVersionId);
 
       return newVersion;
     } catch (error) {
