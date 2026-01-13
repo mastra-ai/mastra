@@ -90,6 +90,18 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
+      // If an active version is set, resolve from that version's snapshot
+      if (agent.activeVersionId) {
+        const activeVersion = await agentsStore.getVersion(agent.activeVersionId);
+        if (activeVersion) {
+          // Return the snapshot with activeVersionId preserved
+          return {
+            ...activeVersion.snapshot,
+            activeVersionId: agent.activeVersionId,
+          };
+        }
+      }
+
       return agent;
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
