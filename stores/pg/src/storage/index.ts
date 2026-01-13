@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage, TABLE_THREADS } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import {
@@ -183,6 +183,85 @@ export class PostgresStore extends MastraStorage {
   async close(): Promise<void> {
     if (this.#ownsPool) {
       await this.#pool.end();
+    }
+  }
+
+  /**
+   * Gets the current data type of a column in the database.
+   * @returns The PostgreSQL data type (e.g., 'text', 'jsonb') or null if column doesn't exist
+   */
+  private async getColumnType(tableName: string, columnName: string): Promise<string | null> {
+    const result = await this.#db.oneOrNone<{ data_type: string }>(
+      `SELECT data_type FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+      [this.schema, tableName, columnName],
+    );
+    return result?.data_type ?? null;
+  }
+
+  /**
+   * Migrates the threads table metadata column from TEXT to JSONB.
+   *
+   * This migration is required for users upgrading from versions where
+   * TABLE_THREADS.metadata was stored as TEXT. The migration converts
+   * the column type and preserves all existing JSON data.
+   *
+   * @returns Object indicating migration status:
+   *   - `migrated: true` if the column was converted from TEXT to JSONB
+   *   - `migrated: false` if no migration was needed (already JSONB or column doesn't exist)
+   *   - `previousType` the column type before migration (if migration occurred)
+   *
+   * @example
+   * ```typescript
+   * const store = new PostgresStore({ connectionString: '...' });
+   * await store.init();
+   *
+   * const result = await store.migrateThreadsMetadataToJsonb();
+   * if (result.migrated) {
+   *   console.log(`Migrated metadata column from ${result.previousType} to JSONB`);
+   * }
+   * ```
+   */
+  async migrateThreadsMetadataToJsonb(): Promise<{ migrated: boolean; previousType?: string }> {
+    const tableName = TABLE_THREADS;
+    const columnName = 'metadata';
+    const fullTableName = this.schema === 'public' ? tableName : `"${this.schema}".${tableName}`;
+
+    try {
+      const currentType = await this.getColumnType(tableName, columnName);
+
+      // Column doesn't exist - nothing to migrate
+      if (!currentType) {
+        return { migrated: false };
+      }
+
+      // Already JSONB - no migration needed
+      if (currentType === 'jsonb') {
+        return { migrated: false };
+      }
+
+      // Migrate TEXT to JSONB
+      if (currentType === 'text') {
+        await this.#db.none(
+          `ALTER TABLE ${fullTableName}
+           ALTER COLUMN "${columnName}" TYPE jsonb
+           USING "${columnName}"::jsonb`,
+        );
+        return { migrated: true, previousType: currentType };
+      }
+
+      // Unexpected type - don't migrate, let user handle it
+      return { migrated: false, previousType: currentType };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'MIGRATE_THREADS_METADATA', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName, columnName },
+        },
+        error,
+      );
     }
   }
 }

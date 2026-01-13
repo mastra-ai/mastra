@@ -1,5 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
-import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS, TABLE_THREADS } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PgDB } from './db';
@@ -394,4 +394,212 @@ describe('PostgreSQL Spans Table Migration', () => {
     expect(createdSpan).not.toBeNull();
     expect(createdSpan!.name).toBe('Test Span After Migration');
   }, 30000); // 30 second timeout
+});
+
+/**
+ * PostgreSQL-specific migration tests that verify the threads table metadata
+ * column migration from TEXT to JSONB works correctly.
+ */
+describe('PostgreSQL Threads Metadata Migration', () => {
+  const testSchema = `threads_migration_test_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  let migrationStore: PostgresStore;
+  let adminPool: Pool;
+
+  beforeAll(async () => {
+    // Use a temp pool to set up schema
+    adminPool = new Pool({ connectionString });
+    const client = await adminPool.connect();
+
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${testSchema}`);
+    } finally {
+      client.release();
+    }
+
+    migrationStore = new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'threads-migration-test-store',
+      schemaName: testSchema,
+    });
+
+    await migrationStore.init();
+  }, 30000);
+
+  afterAll(async () => {
+    await migrationStore?.close();
+
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+    } finally {
+      client.release();
+      await adminPool.end();
+    }
+  }, 30000);
+
+  it('should migrate threads metadata column from TEXT to JSONB and preserve data', async () => {
+    // Drop the table created by init (which uses JSONB)
+    await migrationStore.db.none(`DROP TABLE IF EXISTS ${testSchema}.${TABLE_THREADS}`);
+
+    // Step 1: Create table with OLD schema (TEXT metadata) simulating existing database
+    await migrationStore.db.none(`
+      CREATE TABLE ${testSchema}.${TABLE_THREADS} (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "resourceId" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "metadata" TEXT,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Step 2: Insert test data with JSON stored as TEXT
+    const testThreads = [
+      {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Thread with metadata',
+        metadata: JSON.stringify({ key: 'value', nested: { a: 1, b: [1, 2, 3] } }),
+      },
+      {
+        id: 'thread-2',
+        resourceId: 'resource-1',
+        title: 'Thread with null metadata',
+        metadata: null,
+      },
+      {
+        id: 'thread-3',
+        resourceId: 'resource-2',
+        title: 'Thread with empty object',
+        metadata: JSON.stringify({}),
+      },
+      {
+        id: 'thread-4',
+        resourceId: 'resource-2',
+        title: 'Thread with special chars',
+        metadata: JSON.stringify({ emoji: '🚀', unicode: 'ñ', quotes: '"test"' }),
+      },
+    ];
+
+    for (const thread of testThreads) {
+      await migrationStore.db.none(
+        `INSERT INTO ${testSchema}.${TABLE_THREADS} ("id", "resourceId", "title", "metadata")
+         VALUES ($1, $2, $3, $4)`,
+        [thread.id, thread.resourceId, thread.title, thread.metadata],
+      );
+    }
+
+    // Verify data exists before migration
+    const countBefore = await migrationStore.db.one<{ count: string }>(
+      `SELECT COUNT(*) as count FROM ${testSchema}.${TABLE_THREADS}`,
+    );
+    expect(Number(countBefore.count)).toBe(4);
+
+    // Verify column type is TEXT before migration
+    const typeBefore = await migrationStore.db.one<{ data_type: string }>(
+      `SELECT data_type FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = $2 AND column_name = 'metadata'`,
+      [testSchema, TABLE_THREADS],
+    );
+    expect(typeBefore.data_type).toBe('text');
+
+    // Step 3: Run the migration
+    const result = await migrationStore.migrateThreadsMetadataToJsonb();
+
+    // Verify migration occurred
+    expect(result.migrated).toBe(true);
+    expect(result.previousType).toBe('text');
+
+    // Step 4: Verify column type is now JSONB
+    const typeAfter = await migrationStore.db.one<{ data_type: string }>(
+      `SELECT data_type FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = $2 AND column_name = 'metadata'`,
+      [testSchema, TABLE_THREADS],
+    );
+    expect(typeAfter.data_type).toBe('jsonb');
+
+    // Step 5: Verify all data was preserved
+    const thread1 = await migrationStore.db.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT metadata FROM ${testSchema}.${TABLE_THREADS} WHERE id = $1`,
+      ['thread-1'],
+    );
+    expect(thread1?.metadata).toEqual({ key: 'value', nested: { a: 1, b: [1, 2, 3] } });
+
+    const thread2 = await migrationStore.db.oneOrNone<{ metadata: Record<string, unknown> | null }>(
+      `SELECT metadata FROM ${testSchema}.${TABLE_THREADS} WHERE id = $1`,
+      ['thread-2'],
+    );
+    expect(thread2?.metadata).toBeNull();
+
+    const thread3 = await migrationStore.db.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT metadata FROM ${testSchema}.${TABLE_THREADS} WHERE id = $1`,
+      ['thread-3'],
+    );
+    expect(thread3?.metadata).toEqual({});
+
+    const thread4 = await migrationStore.db.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT metadata FROM ${testSchema}.${TABLE_THREADS} WHERE id = $1`,
+      ['thread-4'],
+    );
+    expect(thread4?.metadata).toEqual({ emoji: '🚀', unicode: 'ñ', quotes: '"test"' });
+
+    // Step 6: Verify JSONB operators work after migration
+    const threadsWithKey = await migrationStore.db.any<{ id: string }>(
+      `SELECT id FROM ${testSchema}.${TABLE_THREADS} WHERE metadata ? 'key'`,
+    );
+    expect(threadsWithKey.map(t => t.id)).toEqual(['thread-1']);
+
+    // Step 7: Verify we can insert new data with JSONB
+    await migrationStore.db.none(
+      `INSERT INTO ${testSchema}.${TABLE_THREADS} ("id", "resourceId", "title", "metadata")
+       VALUES ($1, $2, $3, $4::jsonb)`,
+      ['thread-5', 'resource-3', 'New thread', JSON.stringify({ newKey: 'newValue' })],
+    );
+
+    const thread5 = await migrationStore.db.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT metadata FROM ${testSchema}.${TABLE_THREADS} WHERE id = $1`,
+      ['thread-5'],
+    );
+    expect(thread5?.metadata).toEqual({ newKey: 'newValue' });
+  }, 30000);
+
+  it('should return migrated: false when column is already JSONB', async () => {
+    // The table was migrated in the previous test, so column should be JSONB
+    const result = await migrationStore.migrateThreadsMetadataToJsonb();
+
+    expect(result.migrated).toBe(false);
+    expect(result.previousType).toBeUndefined();
+  }, 10000);
+
+  it('should return migrated: false when table does not exist', async () => {
+    // Create a new store with a fresh schema that has no tables
+    const emptySchema = `empty_schema_${Date.now()}`;
+    const client = await adminPool.connect();
+    try {
+      await client.query(`CREATE SCHEMA ${emptySchema}`);
+    } finally {
+      client.release();
+    }
+
+    const emptyStore = new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'empty-store',
+      schemaName: emptySchema,
+      disableInit: true, // Don't create tables
+    });
+
+    const result = await emptyStore.migrateThreadsMetadataToJsonb();
+    expect(result.migrated).toBe(false);
+
+    await emptyStore.close();
+
+    // Cleanup
+    const cleanupClient = await adminPool.connect();
+    try {
+      await cleanupClient.query(`DROP SCHEMA IF EXISTS ${emptySchema} CASCADE`);
+    } finally {
+      cleanupClient.release();
+    }
+  }, 10000);
 });

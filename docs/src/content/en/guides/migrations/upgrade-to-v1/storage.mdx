@@ -424,3 +424,52 @@ To migrate, use storage APIs directly for testing instead of specialized evals t
 The `TABLE_EVALS` table has been removed from MSSQL storage implementations. This change reflects the removal of legacy evals functionality.
 
 If you were using MSSQL storage with evals, migrate to a different storage adapter or remove evals functionality.
+
+## Database Schema Migrations
+
+### Threads metadata column (TEXT → JSONB)
+
+The `metadata` column in the `mastra_threads` table has been changed from `TEXT` to `JSONB`. This provides native JSONB operators, GIN indexing support, and consistency with other tables.
+
+**PostgreSQL users with existing tables must migrate the column type.** Other databases (LibSQL, ClickHouse, etc.) do not require migration.
+
+#### Option 1: Use the helper method (Recommended)
+
+```typescript
+import { PostgresStore } from '@mastra/pg';
+
+const store = new PostgresStore({
+  id: 'my-store',
+  connectionString: process.env.DATABASE_URL,
+});
+
+await store.init();
+
+// Run the migration
+const result = await store.migrateThreadsMetadataToJsonb();
+if (result.migrated) {
+  console.log(`Migrated metadata column from ${result.previousType} to JSONB`);
+}
+```
+
+#### Option 2: Run SQL directly
+
+```sql
+ALTER TABLE mastra_threads
+ALTER COLUMN metadata TYPE jsonb
+USING metadata::jsonb;
+```
+
+If using a custom schema:
+
+```sql
+ALTER TABLE "your_schema".mastra_threads
+ALTER COLUMN metadata TYPE jsonb
+USING metadata::jsonb;
+```
+
+#### What happens if you don't migrate?
+
+- Your application will continue to work (the JSON stringify/parse pattern works with both TEXT and JSONB)
+- New tables will use JSONB automatically
+- JSONB-specific features (native operators like `metadata ? 'key'`, GIN indexing) won't work until you migrate
