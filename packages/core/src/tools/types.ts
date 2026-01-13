@@ -14,7 +14,7 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
+import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
@@ -28,40 +28,33 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
  * MCP-specific context properties available during tool execution in MCP environments.
  */
 // Agent tool execution context - properties specific when tools are executed by agents
-export interface AgentToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
   toolCallId: string;
   messages: any[];
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
   threadId?: string;
   resourceId?: string;
 
   // Optional - only present if tool was previously suspended
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
+  resumeData?: TResume;
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
-export interface WorkflowToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   // Always present when called from workflow context
   runId: string;
   workflowId: string;
   state: any;
   setState: (state: any) => void;
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>, suspendOptions?: SuspendOptions) => Promise<any>;
-
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
+  resumeData?: TResume;
 }
 
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
@@ -246,10 +239,7 @@ export type InternalCoreTool = {
 );
 
 // Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
   requestContext?: RequestContext;
@@ -263,32 +253,29 @@ export interface ToolExecutionContext<
   // ============ Context-specific nested properties ============
 
   // Agent-specific properties
-  agent?: AgentToolExecutionContext<TSuspendSchema, TResumeSchema>;
+  agent?: AgentToolExecutionContext<TSuspend, TResume>;
 
   // Workflow-specific properties
-  workflow?: WorkflowToolExecutionContext<TSuspendSchema, TResumeSchema>;
+  workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
 }
 
 export interface ToolAction<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSuspendSchema,
-    TResumeSchema
-  >,
+  TSchemaIn,
+  TSchemaOut,
+  TSuspend = unknown,
+  TResume = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
 > {
   id: TId;
   description: string;
-  inputSchema?: TSchemaIn;
-  outputSchema?: TSchemaOut;
-  suspendSchema?: TSuspendSchema;
-  resumeSchema?: TResumeSchema;
+  inputSchema?: SchemaWithValidation<TSchemaIn>;
+  outputSchema?: SchemaWithValidation<TSchemaOut>;
+  suspendSchema?: SchemaWithValidation<TSuspend>;
+  resumeSchema?: SchemaWithValidation<TResume>;
   /**
    * MCP tool annotations for describing tool behavior and UI presentation.
    * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
@@ -308,12 +295,7 @@ export interface ToolAction<
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
-  execute?: (
-    inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-    context?: TContext,
-  ) => Promise<
-    (TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> & { error?: never } : any) | ValidationError
-  >;
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
   /**
@@ -337,12 +319,12 @@ export interface ToolAction<
   ) => void | PromiseLike<void>;
   onInputAvailable?: (
     options: {
-      input: InferZodLikeSchema<TSchemaIn>;
+      input: TSchemaIn;
     } & ToolCallOptions,
   ) => void | PromiseLike<void>;
   onOutput?: (
     options: {
-      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+      output: TSchemaOut;
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;

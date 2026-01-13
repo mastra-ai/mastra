@@ -1,6 +1,6 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
+import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions } from '../workflows';
 import type { ToolAction, ToolAnnotations, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
@@ -58,10 +58,10 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
  * ```
  */
 export class Tool<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspendSchema = unknown,
+  TResumeSchema = unknown,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
@@ -75,16 +75,16 @@ export class Tool<
   description: string;
 
   /** Schema for validating input parameters */
-  inputSchema?: TSchemaIn;
+  inputSchema?: SchemaWithValidation<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: TSchemaOut;
+  outputSchema?: SchemaWithValidation<TSchemaOut>;
 
   /** Schema for suspend operation data */
-  suspendSchema?: TSuspendSchema;
+  suspendSchema?: SchemaWithValidation<TSuspendSchema>;
 
   /** Schema for resume operation data */
-  resumeSchema?: TResumeSchema;
+  resumeSchema?: SchemaWithValidation<TResumeSchema>;
 
   /**
    * Tool execution function
@@ -394,25 +394,13 @@ export class Tool<
  */
 export function createTool<
   TId extends string = string,
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSuspendSchema,
-    TResumeSchema
-  >,
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspend = unknown,
+  TResume = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>,
-): [TSchemaIn, TSchemaOut] extends [ZodLikeSchema, ZodLikeSchema]
-  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-      inputSchema: TSchemaIn;
-      outputSchema: TSchemaOut;
-      execute: (
-        inputData: InferZodLikeSchema<TSchemaIn>,
-        context?: TContext,
-      ) => Promise<InferZodLikeSchemaInput<TSchemaOut> & { error?: never }>;
-    }
-  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
-  return new Tool(opts) as any;
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId> {
+  return new Tool(opts);
 }
