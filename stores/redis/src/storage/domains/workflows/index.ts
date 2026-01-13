@@ -276,7 +276,20 @@ export class WorkflowsRedis extends WorkflowsStorage {
             },
         );
 
-      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName);
+      const data = workflows.find(workflow => {
+        if (!workflow) {
+          return false;
+        }
+
+        const runIdMatch = workflow.run_id === runId;
+
+        if (workflowName) {
+          return runIdMatch && workflow.workflow_name === workflowName;
+        }
+
+        return runIdMatch;
+      });
+
       if (!data) {
         return null;
       }
@@ -342,6 +355,9 @@ export class WorkflowsRedis extends WorkflowsStorage {
         );
       }
 
+      const normalizedFrom = fromDate ? ensureDate(fromDate) : undefined;
+      const normalizedTo = toDate ? ensureDate(toDate) : undefined;
+
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
       if (workflowName && resourceId) {
         pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
@@ -378,10 +394,10 @@ export class WorkflowsRedis extends WorkflowsStorage {
         .filter(record => !workflowName || record.workflow_name === workflowName)
         .map(w => parseWorkflowRun(w))
         .filter(w => {
-          if (fromDate && w.createdAt < fromDate) {
+          if (normalizedFrom && w.createdAt < normalizedFrom) {
             return false;
           }
-          if (toDate && w.createdAt > toDate) {
+          if (normalizedTo && w.createdAt > normalizedTo) {
             return false;
           }
           if (status) {
