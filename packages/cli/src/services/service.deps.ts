@@ -13,7 +13,7 @@ export class DepsService {
   }
 
   private findLockFile(dir: string): string | null {
-    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock'];
+    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock', 'bun.lockb'];
     for (const file of lockFiles) {
       if (fs.existsSync(path.join(dir, file))) {
         return file;
