@@ -1,3 +1,4 @@
+import { deepEqual } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -62,45 +63,6 @@ export function calculateChangedFields(
   }
 
   return changedFields;
-}
-
-/**
- * Deep equality comparison for detecting changes between values.
- */
-export function deepEqual(a: unknown, b: unknown): boolean {
-  // Handle identical references and primitives
-  if (a === b) return true;
-
-  // Handle null/undefined
-  if (a == null || b == null) return a === b;
-
-  // Handle different types
-  if (typeof a !== typeof b) return false;
-
-  // Handle arrays
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    return a.every((item, index) => deepEqual(item, b[index]));
-  }
-
-  // Handle dates (must check before generic objects since Date is also an object)
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime();
-  }
-
-  // Handle objects (after Date check to avoid treating Dates as plain objects)
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
-    const aKeys = Object.keys(aObj);
-    const bKeys = Object.keys(bObj);
-
-    if (aKeys.length !== bKeys.length) return false;
-
-    return aKeys.every(key => deepEqual(aObj[key], bObj[key]));
-  }
-
-  return false;
 }
 
 /**

@@ -1,3 +1,4 @@
+import { deepEqual } from '../../../utils';
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
   StorageAgentType,
@@ -145,7 +146,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     if (metadata && Object.keys(metadata).length > 0) {
       agents = agents.filter(agent => {
         if (!agent.metadata) return false;
-        return Object.entries(metadata).every(([key, value]) => agent.metadata![key] === value);
+        return Object.entries(metadata).every(([key, value]) => deepEqual(agent.metadata![key], value));
       });
     }
 

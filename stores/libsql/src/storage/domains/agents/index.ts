@@ -580,21 +580,11 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async deleteVersionsByAgentId(agentId: string): Promise<void> {
     try {
-      // Get all versions for this agent and delete them one by one
-      const versions = await this.#db.selectMany<Record<string, unknown>>({
+      // Delete all versions for this agent in a single query
+      await this.#db.delete({
         tableName: TABLE_AGENT_VERSIONS,
-        whereClause: {
-          sql: 'WHERE "agentId" = ?',
-          args: [agentId],
-        },
+        keys: { agentId },
       });
-
-      for (const version of versions) {
-        await this.#db.delete({
-          tableName: TABLE_AGENT_VERSIONS,
-          keys: { id: version.id as string },
-        });
-      }
     } catch (error) {
       throw new MastraError(
         {
