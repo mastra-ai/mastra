@@ -150,5 +150,5 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       }
     },
     // Use any for output schema as the structure of the output causes type inference issues
-  }) as RagTool<typeof inputSchema, any>;
+  }) as RagTool<z.infer<typeof inputSchema>, any>;
 };
