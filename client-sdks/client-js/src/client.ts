@@ -749,10 +749,14 @@ export class MastraClient extends BaseResource {
   /**
    * Creates a new stored agent
    * @param params - Agent configuration including id, name, instructions, model, etc.
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the created stored agent
    */
-  public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
-    return this.request('/api/stored/agents', {
+  public createStoredAgent(
+    params: CreateStoredAgentParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<StoredAgentResponse> {
+    return this.request(`/api/stored/agents${requestContextQueryString(requestContext)}`, {
       method: 'POST',
       body: params,
     });
