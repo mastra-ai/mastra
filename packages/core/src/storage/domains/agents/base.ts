@@ -163,9 +163,10 @@ export abstract class AgentsStorage extends StorageDomain {
     if (agent.activeVersionId) {
       const activeVersion = await this.getVersion(agent.activeVersionId);
       if (activeVersion) {
-        // Return the snapshot with activeVersionId preserved
+        // Return the snapshot with id and activeVersionId preserved from the current agent record
         return {
           ...activeVersion.snapshot,
+          id: agent.id,
           activeVersionId: agent.activeVersionId,
         };
       }
@@ -192,6 +193,8 @@ export abstract class AgentsStorage extends StorageDomain {
           if (activeVersion) {
             return {
               ...activeVersion.snapshot,
+              // Ensure id and activeVersionId are preserved from the current agent record
+              id: agent.id,
               activeVersionId: agent.activeVersionId,
             };
           }

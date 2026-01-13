@@ -515,21 +515,31 @@ export const LIST_AGENTS_ROUTE = createRoute({
       try {
         const storedAgentsResult = await mastra.listStoredAgents();
         if (storedAgentsResult?.agents) {
-          const serializedStoredAgentsMap = await Promise.all(
-            storedAgentsResult.agents.map(async agent => {
-              return formatAgentList({ id: agent.id, mastra, agent, requestContext, partial: isPartial });
-            }),
-          );
-
-          for (const { id, ...rest } of serializedStoredAgentsMap) {
-            // Don't overwrite code-defined agents with same ID
-            if (!serializedAgents[id]) {
-              serializedAgents[id] = { id, ...rest };
+          // Process each agent individually to avoid one bad agent breaking the whole list
+          for (const agent of storedAgentsResult.agents) {
+            try {
+              const serialized = await formatAgentList({
+                id: agent.id,
+                mastra,
+                agent,
+                requestContext,
+                partial: isPartial,
+              });
+              // Don't overwrite code-defined agents with same ID
+              if (!serializedAgents[serialized.id]) {
+                serializedAgents[serialized.id] = serialized;
+              }
+            } catch (agentError) {
+              // Log but continue with other agents
+              const logger = mastra.getLogger();
+              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
             }
           }
         }
-      } catch {
-        // Storage not configured or doesn't support agents - ignore
+      } catch (storageError) {
+        // Storage not configured or doesn't support agents - log and ignore
+        const logger = mastra.getLogger();
+        logger.debug('Failed to fetch stored agents', { error: storageError });
       }
 
       return serializedAgents;
