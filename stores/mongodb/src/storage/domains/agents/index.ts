@@ -199,6 +199,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       }
 
       if (updates.ownerId !== undefined) updateDoc.ownerId = updates.ownerId;
+      if (updates.activeVersionId !== undefined) updateDoc.activeVersionId = updates.activeVersionId;
 
       await collection.updateOne({ id }, { $set: updateDoc });
 

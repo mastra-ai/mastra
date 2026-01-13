@@ -76,7 +76,7 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
-      ifNotExists: ['ownerId'],
+      ifNotExists: ['ownerId', 'activeVersionId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -148,6 +148,7 @@ export class AgentsPG extends AgentsStorage {
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
       ownerId: row.ownerId as string | undefined,
+      activeVersionId: row.activeVersionId as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -186,9 +187,9 @@ export class AgentsPG extends AgentsStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, name, description, instructions, model, tools, 
-          "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, "ownerId",
+          "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, "ownerId", "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
         [
           agent.id,
           agent.name,
@@ -205,6 +206,7 @@ export class AgentsPG extends AgentsStorage {
           agent.scorers ? JSON.stringify(agent.scorers) : null,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
           agent.ownerId ?? null,
+          agent.activeVersionId ?? null,
           nowIso,
           nowIso,
           nowIso,
@@ -320,6 +322,11 @@ export class AgentsPG extends AgentsStorage {
       if (updates.ownerId !== undefined) {
         setClauses.push(`"ownerId" = $${paramIndex++}`);
         values.push(updates.ownerId);
+      }
+
+      if (updates.activeVersionId !== undefined) {
+        setClauses.push(`"activeVersionId" = $${paramIndex++}`);
+        values.push(updates.activeVersionId);
       }
 
       // Always update the updatedAt timestamp
