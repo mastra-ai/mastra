@@ -66,8 +66,8 @@ const mastra = new Mastra({
 });
 
 // All agents automatically use this storage
-const agent1 = new Agent({ memory: new Memory() });
-const agent2 = new Agent({ memory: new Memory() });
+const agent1 = new Agent({ id: "agent-1", memory: new Memory() });
+const agent2 = new Agent({ id: "agent-2", memory: new Memory() });
 ```
 
 ### Agent-level storage
@@ -80,6 +80,7 @@ import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
 
 const agent = new Agent({
+  id: "agent",
   memory: new Memory({
     storage: new PostgresStore({
       id: 'agent-storage',
@@ -121,6 +122,7 @@ Use this option when implementing a ChatGPT-style chat interface to render a tit
 
 ```typescript 
 export const testAgent = new Agent({
+  id: "test-agent",
   memory: new Memory({
     options: {
       generateTitle: true,
@@ -135,13 +137,12 @@ To optimize cost or behavior, provide a smaller `model` and custom `instructions
 
 ```typescript
 export const testAgent = new Agent({
+  id: "test-agent",
   memory: new Memory({
     options: {
-      threads: {
-        generateTitle: {
-          model: "openai/gpt-4o-mini",
-          instructions: "Generate a concise title based on the user's first message",
-        },
+      generateTitle: {
+        model: "openai/gpt-4o-mini",
+        instructions: "Generate a concise title based on the user's first message",
       },
     },
   }),
@@ -171,6 +172,7 @@ const mastra = new Mastra({
 
 // Agent-level vector configuration
 const agent = new Agent({
+  id: "agent",
   memory: new Memory({
     vector: new PineconeVector({
       id: 'agent-vector',

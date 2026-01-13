@@ -167,6 +167,7 @@ await store.upsert({
 import { AstraVector } from "@mastra/astra";
 
 const store = new AstraVector({
+  id: 'astra-vector',
   token: process.env.ASTRA_DB_TOKEN,
   endpoint: process.env.ASTRA_DB_ENDPOINT,
   keyspace: process.env.ASTRA_DB_KEYSPACE,
@@ -240,6 +241,7 @@ await store.upsert({
 import { CloudflareVector } from "@mastra/vectorize";
 
 const store = new CloudflareVector({
+  id: 'cloudflare-vector',
   accountId: process.env.CF_ACCOUNT_ID,
   apiToken: process.env.CF_API_TOKEN,
 });
@@ -282,7 +284,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
-const store = new ElasticSearchVector({ url: process.env.ELASTICSEARCH_URL });
+const store = new ElasticSearchVector({ id: 'elasticsearch-vector', url: process.env.ELASTICSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",
@@ -303,6 +305,7 @@ await store.upsert({
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
+  id: 'couchbase-vector',
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -354,6 +357,7 @@ For detailed setup instructions and best practices, see the [official LanceDB do
 import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
+  id: 's3-vectors',
   vectorBucketName: "my-vector-bucket",
   clientConfig: {
     region: "us-east-1",
