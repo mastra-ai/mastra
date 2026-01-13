@@ -1,5 +1,11 @@
 import { SpanType } from '@mastra/core/observability';
-import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  OLD_SPAN_SCHEMA,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PgDB } from './db';
