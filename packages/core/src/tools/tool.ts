@@ -153,7 +153,7 @@ export class Tool<
       const originalExecute = opts.execute;
       this.execute = async (inputData: unknown, context?: any) => {
         // Validate input if schema exists
-        const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
+        const { data, error } = await validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
           return error as any;
         }
@@ -255,7 +255,7 @@ export class Tool<
           organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
 
         if (resumeData) {
-          const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
+          const resumeValidation = await validateToolInput(this.resumeSchema, resumeData, this.id);
           if (resumeValidation.error) {
             return resumeValidation.error as any;
           }
@@ -265,7 +265,7 @@ export class Tool<
         const output = await originalExecute(data as any, organizedContext);
 
         if (suspendData) {
-          const suspendValidation = validateToolSuspendData(this.suspendSchema, suspendData, this.id);
+          const suspendValidation = await validateToolSuspendData(this.suspendSchema, suspendData, this.id);
           if (suspendValidation.error) {
             return suspendValidation.error as any;
           }
@@ -274,7 +274,7 @@ export class Tool<
         const skiptOutputValidation = !!(typeof output === 'undefined' && suspendData);
 
         // Validate output if schema exists
-        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
+        const outputValidation = await validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
         if (outputValidation.error) {
           return outputValidation.error as any;
         }

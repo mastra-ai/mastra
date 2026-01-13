@@ -398,7 +398,7 @@ export class CoreToolBuilder extends MastraBase {
           const resumeData = execOptions.resumeData;
 
           if (resumeData) {
-            const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
+            const resumeValidation = await validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
               toolSpan?.end({ output: resumeValidation.error });
@@ -411,7 +411,7 @@ export class CoreToolBuilder extends MastraBase {
 
         if (suspendData) {
           const suspendSchema = this.getSuspendSchema();
-          const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
+          const suspendValidation = await validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
             logger?.warn(suspendValidation.error.message);
             toolSpan?.end({ output: suspendValidation.error });
@@ -431,7 +431,7 @@ export class CoreToolBuilder extends MastraBase {
         // applies Zod transforms (e.g., .transform(), .pipe()) to the output
         if (isVercelTool(tool)) {
           const outputSchema = this.getOutputSchema();
-          const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
+          const outputValidation = await validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
             logger?.warn(outputValidation.error.message);
             toolSpan?.end({ output: outputValidation.error });
@@ -457,7 +457,7 @@ export class CoreToolBuilder extends MastraBase {
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = processedSchema || this.getParameters();
-        const { data, error } = validateToolInput(parameters, args, options.name);
+        const { data, error } = await validateToolInput(parameters, args, options.name);
         if (error) {
           logger.warn(error.message);
           return error;
