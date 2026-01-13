@@ -508,8 +508,8 @@ export class AgentLegacyHandler {
             const promises: Promise<any>[] = [];
 
             // Add title generation to promises if needed
-            // Use titleGenerated metadata flag to track if title has been generated
-            // This supports pre-created threads (via client SDK) with any title
+            // Check if this is the first user message by looking at remembered (historical) messages
+            // This works automatically for pre-created threads without requiring any metadata flags
             const config = memory.getMergedThreadConfig(memoryConfig);
             const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
@@ -519,9 +519,11 @@ export class AgentLegacyHandler {
               instructions: titleInstructions,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            const titleAlreadyGenerated = thread.metadata?.titleGenerated === true;
+            // Check for existing user messages from memory - if none, this is the first user message
+            const rememberedUserMessages = messageList.get.remembered.db().filter(m => m.role === 'user');
+            const isFirstUserMessage = rememberedUserMessages.length === 0;
 
-            if (shouldGenerate && !titleAlreadyGenerated && userMessage) {
+            if (shouldGenerate && isFirstUserMessage && userMessage) {
               promises.push(
                 this.capabilities
                   .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
@@ -532,7 +534,7 @@ export class AgentLegacyHandler {
                         resourceId,
                         memoryConfig,
                         title,
-                        metadata: { ...thread.metadata, titleGenerated: true },
+                        metadata: thread.metadata,
                       });
                     }
                   }),

@@ -1629,13 +1629,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should generate title for pre-created thread with any title (issue #11757)', async () => {
       // This test validates that generateTitle works for pre-created threads with ANY title.
-      // When generateTitle: true is configured, title generation should trigger regardless of
-      // the initial title, using the titleGenerated metadata flag to prevent re-generation.
+      // When generateTitle: true is configured, title generation should trigger on the first
+      // user message, regardless of the initial title. No metadata flags are needed.
       // See: https://github.com/mastra-ai/mastra/issues/11757
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
       let updatedThreadTitle = '';
-      let updatedMetadata: Record<string, unknown> = {};
 
       const mockMemory = new MockMemory();
 
@@ -1660,14 +1659,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         };
       };
 
-      // Track when createThread is called to update title and metadata
+      // Track when createThread is called to update title
       const originalCreateThread = mockMemory.createThread.bind(mockMemory);
       mockMemory.createThread = async (params: any) => {
         if (params.title && params.title !== customTitle) {
           updatedThreadTitle = params.title;
-        }
-        if (params.metadata) {
-          updatedMetadata = params.metadata;
         }
         return originalCreateThread(params);
       };
@@ -1759,13 +1755,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Title generation should trigger because:
       // 1. generateTitle: true is configured
-      // 2. Thread doesn't have titleGenerated metadata flag set
+      // 2. This is the first user message (no existing user messages in memory)
       // The initial title ("New Chat") doesn't matter - generateTitle option wins
-      // After generation, the titleGenerated flag is set to prevent future regeneration
       expect(titleGenerationCallCount).toBe(1);
       expect(agentCallCount).toBe(1); // Main agent should still be called
       expect(updatedThreadTitle).toBe('Help with coding project');
-      expect(updatedMetadata.titleGenerated).toBe(true);
     });
 
     it('should handle errors in title generation gracefully', async () => {

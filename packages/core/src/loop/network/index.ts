@@ -264,8 +264,8 @@ export async function prepareMemoryStep({
   }
 
   // Add title generation to promises if needed (non-blocking)
-  // Use titleGenerated metadata flag to track if title has been generated
-  // This supports pre-created threads (via client SDK) with any title
+  // Check if this is the first user message by looking at existing messages in the thread
+  // This works automatically for pre-created threads without requiring any metadata flags
   if (thread && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 
@@ -275,30 +275,39 @@ export async function prepareMemoryStep({
       instructions: titleInstructions,
     } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
 
-    const titleAlreadyGenerated = thread.metadata?.titleGenerated === true;
+    if (shouldGenerate && userMessage) {
+      // Check for existing user messages in the thread - if none, this is the first user message
+      // We fetch existing messages before the new message is saved
+      const existingMessages = await memory.recall({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+      });
+      const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
+      const isFirstUserMessage = existingUserMessages.length === 0;
 
-    if (shouldGenerate && !titleAlreadyGenerated && userMessage) {
-      promises.push(
-        routingAgent
-          .genTitle(
-            userMessage,
-            requestContext,
-            tracingContext || { currentSpan: undefined },
-            titleModel,
-            titleInstructions,
-          )
-          .then(title => {
-            if (title) {
-              return memory.createThread({
-                threadId: thread.id,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title,
-                metadata: { ...thread.metadata, titleGenerated: true },
-              });
-            }
-          }),
-      );
+      if (isFirstUserMessage) {
+        promises.push(
+          routingAgent
+            .genTitle(
+              userMessage,
+              requestContext,
+              tracingContext || { currentSpan: undefined },
+              titleModel,
+              titleInstructions,
+            )
+            .then(title => {
+              if (title) {
+                return memory.createThread({
+                  threadId: thread.id,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                  title,
+                  metadata: thread.metadata,
+                });
+              }
+            }),
+        );
+      }
     }
   }
 

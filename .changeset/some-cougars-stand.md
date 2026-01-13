@@ -4,8 +4,9 @@
 
 Fix generateTitle for pre-created threads
 
-- Generate titles for existing threads: threads without `metadata.titleGenerated` will have a title generated on the next message when `generateTitle: true` is enabled
-- Preserve custom titles on pre-created threads unless `metadata.titleGenerated` is explicitly set
-- Opt out of title generation by setting `metadata.titleGenerated: true` when creating a thread
+- Title generation now works automatically for pre-created threads (via client SDK)
+- When `generateTitle: true` is configured, titles are generated on the first user message
+- Detection is based on message history: if no existing user messages in memory, it's the first message
+- No metadata flags required - works seamlessly with optimistic UI patterns
 
 Fixes #11757
