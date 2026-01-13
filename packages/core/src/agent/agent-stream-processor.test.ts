@@ -14,33 +14,16 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     readonly name = 'Redaction Processor';
 
     async processOutputStream({ part }: any) {
-      // Handle both internal format (payload.text) and AISDK format (text)
-      if (part.type === 'text-delta') {
-        let text: string | undefined;
+      // Handle internal format (payload.text)
+      if (part.type === 'text-delta' && part.payload && 'text' in part.payload) {
+        const text = part.payload.text;
+        const processedText = text.replace(/SENSITIVE/g, '[REDACTED]');
+        processedStreamChunks.push(processedText);
 
-        // Handle internal format
-        if (part.payload && 'text' in part.payload) {
-          text = part.payload.text;
-        }
-        // Handle AISDK format
-        else if ('text' in part) {
-          text = part.text;
-        }
-
-        if (text) {
-          const processedText = text.replace(/SENSITIVE/g, '[REDACTED]');
-          processedStreamChunks.push(processedText);
-
-          // Return in the same format we received
-          if (part.payload && 'text' in part.payload) {
-            return {
-              ...part,
-              payload: { ...part.payload, text: processedText },
-            };
-          } else {
-            return { ...part, text: processedText };
-          }
-        }
+        return {
+          ...part,
+          payload: { ...part.payload, text: processedText },
+        };
       }
       return part;
     }
@@ -102,9 +85,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     });
 
     // Stream the response
-    const stream = await agent.stream('test message', {
-      format: 'aisdk',
-    });
+    const stream = await agent.stream('test message');
 
     // Collect stream chunks
     const streamedText: string[] = [];
@@ -135,7 +116,6 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
 
     // Stream the response with memory enabled
     const stream = await agent.stream('test message', {
-      format: 'aisdk',
       memory: {
         thread: 'test-thread-123',
         resource: 'test-resource-123',

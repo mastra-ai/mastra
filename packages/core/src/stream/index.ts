@@ -52,7 +52,6 @@ export { ChunkFrom } from './types';
 export { MastraAgentNetworkStream } from './MastraAgentNetworkStream';
 export { MastraModelOutput } from './base/output';
 export { WorkflowRunOutput } from './RunOutput';
-export { AISDKV5OutputStream } from './aisdk/v5/output';
 export { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './aisdk/v5/file';
 export { convertFullStreamChunkToMastra, convertMastraChunkToAISDKv5 } from './aisdk/v5/transform';
 export { convertFullStreamChunkToUIMessageStream } from './aisdk/v5/compat';
