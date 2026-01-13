@@ -1,49 +1,52 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <base href="%%MASTRA_STUDIO_BASE_PATH%%/" />
-    <link rel="icon" type="image/svg+xml" href="./mastra.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mastra Studio</title>
-    <script>
-      window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
-      window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
-      window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
-      window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
-      window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
-      window.MASTRA_SERVER_PROTOCOL = '%%MASTRA_SERVER_PROTOCOL%%';
 
-      function connectSSE() {
-        const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
-        const events = new EventSource(`${basePath}/refresh-events`);
+<head>
+  <meta charset="UTF-8" />
+  <base href="%%MASTRA_STUDIO_BASE_PATH%%/" />
+  <link rel="icon" type="image/svg+xml" href="./mastra.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mastra Studio</title>
+  <script>
+    window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
+    window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
+    window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
+    window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
+    window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
+    window.MASTRA_SERVER_PROTOCOL = '%%MASTRA_SERVER_PROTOCOL%%';
+    window.MASTRA_CLOUD_API_ENDPOINT = '%%MASTRA_CLOUD_API_ENDPOINT%%';
 
-        events.onmessage = event => {
-          if (event.data === 'refresh') {
-            window.location.reload();
-          }
-        };
+    function connectSSE() {
+      const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
+      const events = new EventSource(`${basePath}/refresh-events`);
 
-        events.onerror = () => {
-          events.close();
-          setTimeout(connectSSE, 1000);
-        };
+      events.onmessage = event => {
+        if (event.data === 'refresh') {
+          window.location.reload();
+        }
+      };
 
-        window.addEventListener('beforeunload', () => {
-          events.close();
-        });
-      }
+      events.onerror = () => {
+        events.close();
+        setTimeout(connectSSE, 1000);
+      };
 
-      connectSSE();
-    </script>
-  </head>
+      window.addEventListener('beforeunload', () => {
+        events.close();
+      });
+    }
 
-  <body class="overflow-hidden">
-    <div id="root" class="dark"></div>
-    <script type="module">
-      // Use relative import to work with any base path
-      // Vite transforms this during build to reference compiled output with correct paths
-      import('./src/main.tsx');
-    </script>
-  </body>
+    connectSSE();
+  </script>
+</head>
+
+<body class="overflow-hidden">
+  <div id="root" class="dark"></div>
+  <script type="module">
+    // Use relative import to work with any base path
+    // Vite transforms this during build to reference compiled output with correct paths
+    import('./src/main.tsx');
+  </script>
+</body>
+
 </html>
