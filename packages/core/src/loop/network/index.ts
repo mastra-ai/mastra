@@ -61,7 +61,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema as any),
+        zodToJsonSchema(workflow.inputSchema),
       )}`;
     })
     .join('\n');
@@ -70,7 +70,7 @@ async function getRoutingAgent({
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema((tool as any).inputSchema || z.object({})),
+        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
       )}`;
     })
     .join('\n');

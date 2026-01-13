@@ -184,7 +184,6 @@ export function createStep<
     scorers?: DynamicArgument<MastraScorers>;
   },
 ): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
-
 /**
  * Creates a step from a tool
  */
@@ -203,7 +202,7 @@ export function createStep<
  * Creates a step from a Processor - wraps a Processor as a workflow step
  */
 export function createStep<TProcessorId extends string>(
-  processor: Processor<TProcessorId> & { inputSchema?: InferSchemaOutput<typeof ProcessorStepSchema> },
+  processor: Processor<TProcessorId>,
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -221,7 +220,7 @@ export function createStep<TProcessorId extends string>(
 export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
   params:
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>
-    | Agent<any, any>
+    | Agent<TStepId, any>
     | ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>
     | (Processor<TStepId> & { inputSchema?: TStepInput }),
   agentOrToolOptions?:
@@ -268,7 +267,7 @@ export function createStep<TStepId extends string, TState, TStepInput, TStepOutp
 
   if (isProcessor(params)) {
     // Double cast needed because processor step ID has prefix that doesn't overlap with TStepId
-    return createStepFromProcessor(params) as unknown as Step<
+    return createStepFromProcessor(params) as Step<
       TStepId,
       TState,
       TStepInput,
@@ -311,17 +310,16 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
     | undefined;
   // Determine output schema based on structuredOutput option
-  const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
+  const outputSchema = (options?.structuredOutput?.schema ??
+    z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
   const { retries, scorers, ...agentOptions } = options ?? {};
 
   return {
     id: params.id,
     description: params.getDescription(),
-    // @ts-ignore
     inputSchema: z.object({
       prompt: z.string(),
     }),
-    // @ts-ignore
     outputSchema,
     retries,
     scorers,
@@ -443,16 +441,18 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       }
 
       if (abortSignal.aborted) {
-        return abort() as TStepOutput;
+        return abort();
       }
 
       // Return structured output if available, otherwise default text
       if (structuredResult !== null) {
-        return structuredResult;
+        return structuredResult satisfies TStepOutput;
       }
       return {
         text: await streamPromise.promise,
-      } as TStepOutput;
+      } satisfies {
+        text: string;
+      };
     },
     component: params.component,
   };
@@ -468,8 +468,6 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   }
 
   return {
-    // TODO: tool probably should have strong id type
-    // @ts-ignore
     id: params.id,
     description: params.description,
     inputSchema: params.inputSchema,
@@ -505,6 +503,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
           setState,
         },
       };
+
       return params.execute(inputData, toolContext) as TStepOutput;
     },
     component: 'TOOL',
@@ -513,15 +512,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
 
 function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
-): Step<
-  `processor:${TProcessorId}`,
-  unknown,
-  InferSchemaOutput<typeof ProcessorStepSchema>,
-  InferSchemaOutput<typeof ProcessorStepOutputSchema>,
-  unknown,
-  unknown,
-  DefaultEngineType
-> {
+): Step<`processor:${TProcessorId}`, unknown, any, any, unknown, unknown, DefaultEngineType> {
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -576,14 +567,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   };
 
   return {
-    // @ts-ignore - processor overload has specific id type
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
-    // @ts-ignore - Use discriminated union for input (better UI experience)
     inputSchema: ProcessorStepSchema,
-    // @ts-ignore - Use flexible schema for output (allows any phase combination)
     outputSchema: ProcessorStepOutputSchema,
-    // @ts-ignore this is wrongly typed
     execute: async ({ inputData, requestContext, tracingContext }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1070,7 +1057,15 @@ function createStepFromProcessor<TProcessorId extends string>(
       });
     },
     component: 'PROCESSOR',
-  };
+  } satisfies Step<
+    `processor:${TProcessorId}`,
+    unknown,
+    InferSchemaOutput<typeof ProcessorStepSchema>,
+    InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+    unknown,
+    unknown,
+    DefaultEngineType
+  >;
 }
 
 export function cloneStep<TStepId extends string>(
@@ -2741,19 +2736,37 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  streamLegacy({
-    inputData,
-    requestContext,
-    onChunk,
-    tracingContext,
-    tracingOptions,
-  }: {
-    inputData?: TInput;
-    requestContext?: RequestContext;
-    tracingContext?: TracingContext;
-    onChunk?: (chunk: StreamEvent) => Promise<unknown>;
-    tracingOptions?: TracingOptions;
-  } = {}): {
+  streamLegacy(
+    {
+      inputData,
+      requestContext,
+      onChunk,
+      tracingContext,
+      tracingOptions,
+    }: (TInput extends unknown
+      ? {
+          inputData?: TInput;
+        }
+      : {
+          inputData: TInput;
+        }) & {
+      requestContext?: RequestContext;
+      tracingContext?: TracingContext;
+      onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+      tracingOptions?: TracingOptions;
+    } = {} as (TInput extends unknown
+      ? {
+          inputData?: TInput;
+        }
+      : {
+          inputData: TInput;
+        }) & {
+      requestContext?: RequestContext;
+      tracingContext?: TracingContext;
+      onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+      tracingOptions?: TracingOptions;
+    },
+  ): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
