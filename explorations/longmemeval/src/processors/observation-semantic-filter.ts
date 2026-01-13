@@ -893,11 +893,11 @@ ${filteredObservations}
       const { threadId, lineIndex, resourceId } = chunk.metadata;
 
       // Determine expansion range based on score
+      // High score = include FULL thread, medium = ±1 line, low = just the match
+      const includeFullThread = similarity >= this.highScoreThreshold;
       let range = 0;
-      if (similarity >= this.highScoreThreshold) {
-        range = 2; // ±2 lines for high confidence
-      } else if (similarity >= this.mediumScoreThreshold) {
-        range = 1; // ±1 line for medium confidence
+      if (!includeFullThread && similarity >= this.mediumScoreThreshold) {
+        range = 2; // ±1 line for medium confidence
       }
       // range = 0 for low confidence (just the match)
 
@@ -913,9 +913,10 @@ ${filteredObservations}
         continue;
       }
 
-      // Find observations within range
+      // Find observations within range (or all if includeFullThread)
       for (const obs of threadObs) {
-        if (obs.lineIndex >= lineIndex - range && obs.lineIndex <= lineIndex + range) {
+        const inRange = includeFullThread || (obs.lineIndex >= lineIndex - range && obs.lineIndex <= lineIndex + range);
+        if (inRange) {
           const lineKey = `${threadId}:${obs.lineIndex}`;
           if (!includedLines.has(lineKey)) {
             includedLines.add(lineKey);
