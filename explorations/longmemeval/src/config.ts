@@ -460,7 +460,7 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
   'observational-memory': {
     type: 'observational-memory',
     memoryOptions: {
-      lastMessages: 5, // OM handles context, just keep minimal recent
+      lastMessages: 0,
       semanticRecall: false,
       workingMemory: { enabled: false },
     },

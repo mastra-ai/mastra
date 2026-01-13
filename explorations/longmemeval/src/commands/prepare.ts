@@ -74,8 +74,14 @@ export class PrepareCommand {
 
     // For readOnlyConfig, no preparation is needed - just use the base config's data
     if (configDef.readOnlyConfig && configDef.baseConfig) {
-      console.log(chalk.green(`\n✓ Config "${options.memoryConfig}" is read-only and uses data from "${configDef.baseConfig}"`));
-      console.log(chalk.gray(`  No preparation needed. Run benchmark directly with: pnpm bench <variant> ${options.memoryConfig}`));
+      console.log(
+        chalk.green(`\n✓ Config "${options.memoryConfig}" is read-only and uses data from "${configDef.baseConfig}"`),
+      );
+      console.log(
+        chalk.gray(
+          `  No preparation needed. Run benchmark directly with: pnpm bench <variant> ${options.memoryConfig}`,
+        ),
+      );
       console.log(chalk.gray(`  Make sure "${configDef.baseConfig}" is prepared first.\n`));
       return;
     }
@@ -100,7 +106,7 @@ export class PrepareCommand {
     // Filter by questionId if specified
     let questionsToProcess = questions;
     let fromFailuresData: FailuresFile | null = null;
-    
+
     if (options.fromFailures) {
       // Load failures.json and filter to those question IDs
       if (!existsSync(options.fromFailures)) {
@@ -109,15 +115,19 @@ export class PrepareCommand {
       fromFailuresData = JSON.parse(await readFile(options.fromFailures, 'utf-8')) as FailuresFile;
       const failedIds = new Set(fromFailuresData.questionIds);
       questionsToProcess = questions.filter(q => failedIds.has(q.question_id));
-      
+
       if (questionsToProcess.length === 0) {
         throw new Error(`No matching questions found for ${fromFailuresData.questionIds.length} failed IDs`);
       }
-      
-      console.log(chalk.yellow(`\n🔄 Re-preparing ${questionsToProcess.length} failed questions from: ${options.fromFailures}`));
+
+      console.log(
+        chalk.yellow(`\n🔄 Re-preparing ${questionsToProcess.length} failed questions from: ${options.fromFailures}`),
+      );
       console.log(chalk.gray(`   Run ID: ${fromFailuresData.runId}`));
-      console.log(chalk.gray(`   Original failures: ${fromFailuresData.totalFailed}/${fromFailuresData.totalQuestions}\n`));
-      
+      console.log(
+        chalk.gray(`   Original failures: ${fromFailuresData.totalFailed}/${fromFailuresData.totalQuestions}\n`),
+      );
+
       // Clean existing prepared data for these questions
       const preparedDir = join(this.baseDir, options.dataset, options.memoryConfig);
       let cleanedCount = 0;
@@ -1027,9 +1037,9 @@ export class PrepareCommand {
           scope: 'resource',
           // Actual values used in ObservationalMemory constructor
           observationThreshold: 30000,
-          reflectionThreshold: 80000,
-          observerModel: configDef.omModel ?? 'google/gemini-2.0-flash',
-          reflectorModel: configDef.omModel ?? 'google/gemini-2.0-flash',
+          reflectionThreshold: 40000,
+          observerModel: configDef.omModel ?? 'google/gemini-2.5-flash',
+          reflectorModel: configDef.omModel ?? 'google/gemini-2.5-flash',
           recognizePatterns: false,
         },
       }),

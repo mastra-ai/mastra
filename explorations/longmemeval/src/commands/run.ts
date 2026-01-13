@@ -1027,7 +1027,17 @@ ${JSON.stringify(responses, null, 2)}`);
     await writeFile(resultsPath, resultsContent);
 
     // Save failures.json for re-preparation
-    const failedQuestionIds = results.filter(r => !r.is_correct).map(r => r.question_id);
+    // Only include questions where BOTH original and improved failed (or no improved version exists)
+    const failedQuestionIds = results
+      .filter(r => {
+        // If original passed, not a failure
+        if (r.is_correct) return false;
+        // If there's an improved version and it passed, not a failure
+        if (r.improved_question !== undefined && r.improved_is_correct) return false;
+        // Both failed (or no improved version)
+        return true;
+      })
+      .map(r => r.question_id);
     if (failedQuestionIds.length > 0) {
       const failuresPath = join(runDir, 'failures.json');
       const failuresData = {
