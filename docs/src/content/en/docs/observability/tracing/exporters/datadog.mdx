@@ -1,6 +1,9 @@
 ---
 title: "Datadog Exporter | Tracing | Observability"
 description: "Send traces to Datadog for LLM observability and analytics"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Datadog Exporter
@@ -28,7 +31,30 @@ DD_SITE=datadoghq.com  # Optional: defaults to datadoghq.com
 DD_ENV=production      # Optional: environment name
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { DatadogExporter } from "@mastra/datadog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: "my-service",
+        exporters: [new DatadogExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";

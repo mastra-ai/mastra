@@ -327,7 +327,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         url: dbFile,
       });
       const vector = new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: `semantic-recall-vector-${version}-${randomUUID()}`,
       });
 
@@ -408,7 +408,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         url: dbFile,
       });
       const vector = new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: `semantic-topk-vector-${version}-${randomUUID()}`,
       });
 
@@ -472,7 +472,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         url: dbFile,
       });
       const vector = new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: `semantic-perpage-vector-${version}-${randomUUID()}`,
       });
 
@@ -540,7 +540,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         url: dbFile,
       });
       const vector = new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: `combined-vector-${version}-${randomUUID()}`,
       });
 

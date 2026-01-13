@@ -1,6 +1,9 @@
 ---
 title: "Reference: DatadogExporter | Observability"
 description: Datadog LLM Observability exporter for Tracing
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -99,6 +102,17 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the exporter. Cancels any pending cleanup timers and disables LLM Observability.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+// Reads from DD_LLMOBS_ML_APP, DD_API_KEY, DD_SITE, DD_ENV
+const exporter = new DatadogExporter();
+```
+
+### Explicit Configuration
 
 ```typescript
 import { DatadogExporter } from "@mastra/datadog";
