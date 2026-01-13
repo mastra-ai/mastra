@@ -86,7 +86,9 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
   afterAll(async () => {
     await rawMcpClient?.close();
     await server?.close();
-    httpServer?.close();
+    await new Promise<void>((resolve, reject) => {
+      httpServer?.close((err?: Error) => (err ? reject(err) : resolve()));
+    });
   });
 
   it('should expose tool annotations.title in MCP listTools response', async () => {
