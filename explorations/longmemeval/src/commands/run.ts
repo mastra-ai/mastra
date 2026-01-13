@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { join } from 'path';
 import { readdir, readFile, mkdir, writeFile } from 'fs/promises';
-import { appendFileSync, existsSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
@@ -14,6 +14,8 @@ import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType
 import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling, type MemoryConfigDefinition } from '../config';
 import { DatasetLoader } from '../data/loader';
 import { reconcileQuestion } from './reconcile';
+import { ObservationSemanticFilter } from '../processors';
+import { fastembed } from '@mastra/fastembed';
 
 // Rate limit configuration
 const RATE_LIMIT_TOKEN_THRESHOLD = 50000; // Pause if remaining tokens below this
@@ -193,6 +195,12 @@ export class RunCommand {
       ? configDef.baseConfig 
       : options.memoryConfig;
     const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, effectiveConfig);
+    
+    // For readOnlyConfig, create a separate output directory for debug files
+    // This prevents writing to the base config's prepared data
+    const outputDir = configDef.readOnlyConfig 
+      ? join(options.preparedDataDir || this.preparedDataDir, options.dataset, options.memoryConfig)
+      : preparedDir;
 
     if (!existsSync(preparedDir)) {
       throw new Error(`Prepared data not found at: ${preparedDir}
@@ -429,6 +437,7 @@ Active evaluations:`;
         const result = await this.evaluateQuestion(
           meta,
           preparedDir,
+          outputDir,
           normalizeModelId(configDef.agentModel ?? 'gpt-4o'),
           options,
           configDef,
@@ -527,6 +536,7 @@ Active evaluations:`;
   private async evaluateQuestion(
     meta: PreparedQuestionMeta,
     preparedDir: string,
+    outputDir: string,
     agentModelId: `${string}/${string}`,
     options: RunOptions,
     configDef: MemoryConfigDefinition,
@@ -547,6 +557,8 @@ Active evaluations:`;
 
     // Load the prepared storage and vector store
     const questionDir = join(preparedDir, meta.questionId);
+    // Separate output directory for debug files (prevents writing to base config for readOnlyConfig)
+    const questionOutputDir = join(outputDir, meta.questionId);
     const benchmarkVectorStore = new BenchmarkVectorStore('read');
 
     const memoryOptions = getMemoryOptions(options.memoryConfig);
@@ -612,11 +624,34 @@ Active evaluations:`;
       });
     }
 
+    // Create observation semantic filter if using RAG config
+    let observationRagFilter: ObservationSemanticFilter | undefined;
+    const usesObservationRag = configDef.usesObservationRag;
+
+    if (usesObservationRag && usesObservationalMemory) {
+      console.log('[DEBUG] Creating ObservationSemanticFilter for RAG');
+      // Use a shared cache directory for embeddings (content-based, reusable across configs)
+      const embeddingsCacheDir = join(preparedDir, '..', '.embeddings-cache');
+      observationRagFilter = new ObservationSemanticFilter({
+        embedder: fastembed.small,
+        topK: 50,
+        minSimilarity: 0.25,
+        includeCurrentTask: false,
+        includeSuggestedResponse: false,
+        includePatterns: true,
+        cacheDir: embeddingsCacheDir,
+      });
+    }
+
     // Create agent with the specified model
     const agentInstructions = `You are a helpful assistant with access to extensive conversation history. 
 When answering questions, carefully review the conversation history to identify and use any relevant user preferences, interests, or specific details they have mentioned.`;
 
-    const omDebugPath = join(questionDir, 'om.md');
+    // Ensure output directory exists for readOnlyConfig
+    if (!existsSync(questionOutputDir)) {
+      mkdirSync(questionOutputDir, { recursive: true });
+    }
+    const omDebugPath = join(questionOutputDir, 'om.md');
 
     const today = `Todays date is ${new Intl.DateTimeFormat('en-US', {
       weekday: 'long',
@@ -654,18 +689,34 @@ When answering questions, carefully review the conversation history to identify 
       inputProcessors: usesObservationalMemory
         ? [
             observationalMemory!,
+            // Add RAG filter after OM if enabled - it will filter OM's injected observations
+            ...(observationRagFilter ? [observationRagFilter] : []),
             {
               id: 'debug',
               processInputStep: args => {
-                const omm = args.messageList.getSystemMessages(`observational-memory`);
-                if (omm.length && omm[0]?.content) {
+                // Check tagged OM messages first, then fall back to all system messages
+                // (RAG filter replaces tagged messages with untagged ones)
+                let omm = args.messageList.getSystemMessages(`observational-memory`);
+                const taggedCount = omm.length;
+                if (!omm.length) {
+                  // RAG filter may have replaced tagged messages - get all system messages
+                  omm = args.messageList.getAllSystemMessages();
+                }
+                // Find the message with observations (contains <observations> tag)
+                const observationsMsg = omm.find(m => {
+                  const content = typeof m.content === 'string' ? m.content : '';
+                  return content.includes('<observations>');
+                });
+                const msgToWrite = observationsMsg || omm[0];
+                if (msgToWrite?.content) {
+                  const content = typeof msgToWrite.content === 'string' ? msgToWrite.content : JSON.stringify(msgToWrite.content);
                   writeFileSync(
                     omDebugPath,
-                    (omm[0].content as string) +
+                    `[Debug: tagged=${taggedCount}, total=${omm.length}, hasObservations=${!!observationsMsg}]\n\n` +
+                    content +
                       `\n\n${JSON.stringify(args.messageList.get.all.core(), null, 2)}\n\n${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
                   );
                 }
-                omm;
                 return args.messageList;
               },
             },

@@ -21,7 +21,8 @@
     "obscure-thread-ids": "tsx src/cli.ts obscure-thread-ids -d longmemeval_s -c observational-memory",
     "list-partial": "tsx src/cli.ts list-partial",
     "clean-partial": "tsx src/cli.ts clean -d longmemeval_s -c observational-memory --partial",
-    "tokens": "tsx src/cli.ts tokens -d longmemeval_s"
+    "tokens": "tsx src/cli.ts tokens -d longmemeval_s",
+    "precompute-embeddings": "tsx src/cli.ts precompute-embeddings -d longmemeval_s -c observational-memory"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",

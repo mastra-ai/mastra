@@ -88,7 +88,7 @@ export function getAvailableVariants(): string[] {
  */
 export function applyStratifiedSampling<T extends { question_id: string; question_type: string }>(
   questions: T[],
-  perTypeCount: number
+  perTypeCount: number,
 ): T[] {
   // Sort by question_id for deterministic ordering
   const sorted = [...questions].sort((a, b) => a.question_id.localeCompare(b.question_id));
@@ -177,6 +177,9 @@ export interface MemoryConfigDefinition {
 
   /** Enable pattern recognition during observation */
   recognizePatterns?: boolean;
+
+  /** Enable observation RAG filtering at runtime */
+  usesObservationRag?: boolean;
 }
 
 // --- Shared config values ---
@@ -216,6 +219,8 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'om-glm': 'om-glm',
   'om-glm-patterns-observed': 'om-glm-patterns-observed',
   'om-glm-patterns-tool': 'om-glm-patterns-tool',
+  'om-rag': 'om-rag',
+  'om-glm-rag': 'om-glm-rag',
 
   // Full names (for completeness)
   'semantic-recall': 'semantic-recall',
@@ -255,6 +260,8 @@ export function getConfigAliases(): string[] {
     'om-glm',
     'om-glm-patterns-observed',
     'om-glm-patterns-tool',
+    'om-rag',
+    'om-glm-rag',
   ];
 }
 
@@ -558,6 +565,55 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     baseConfig: 'observational-memory', // Uses base OM data
     readOnlyConfig: true,
     recallToolEnabled: true,
+  },
+
+  // RAG variants - use semantic filtering on observations
+  'om-rag': {
+    type: 'om-rag',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true, // Uses same prepared data, just filters at runtime
+    usesObservationRag: true, // Enable the ObservationSemanticFilter processor
+  },
+
+  'om-glm-rag': {
+    type: 'om-glm-rag',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: CEREBRAS_GLM_MODEL,
+    evalModel: CEREBRAS_GLM_MODEL,
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true,
+    usesObservationRag: true,
   },
 };
 

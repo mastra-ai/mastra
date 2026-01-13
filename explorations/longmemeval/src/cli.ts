@@ -19,6 +19,7 @@ import { SessionsCommand } from './commands/sessions';
 import { DeterministicIdsCommand } from './commands/deterministic-ids';
 import { ListPartialCommand } from './commands/list-partial';
 import { TokensCommand } from './commands/tokens';
+import { PrecomputeEmbeddingsCommand } from './commands/precompute-embeddings';
 import {
   getRunVariant,
   resolveConfigAlias,
@@ -1066,6 +1067,34 @@ program
         preparedDataDir: options.preparedData,
         showSessions: options.sessions,
         topN: options.top,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('precompute-embeddings')
+  .description('Precompute embeddings for RAG-based observation filtering')
+  .requiredOption('-d, --dataset <dataset>', 'Dataset to use (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .requiredOption('-c, --memory-config <config>', 'Memory configuration to use')
+  .option('-o, --offset <n>', 'Skip first n questions', parseInt)
+  .option('-s, --subset <n>', 'Process only n questions (after offset)', parseInt)
+  .option('-p, --prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
+  .option('-b, --batch-size <n>', 'Batch size for embedding (default: 100)', parseInt)
+  .option('--cooldown <ms>', 'Cooldown in ms between questions (default: 1000)', parseInt)
+  .action(async options => {
+    try {
+      const command = new PrecomputeEmbeddingsCommand();
+      await command.run({
+        dataset: options.dataset,
+        memoryConfig: options.memoryConfig,
+        preparedDataDir: options.preparedData,
+        offset: options.offset,
+        subset: options.subset,
+        batchSize: options.batchSize,
+        cooldown: options.cooldown,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
