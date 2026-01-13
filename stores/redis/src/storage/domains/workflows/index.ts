@@ -67,12 +67,23 @@ export class WorkflowsRedis extends WorkflowsStorage {
     requestContext: Record<string, unknown>;
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     try {
-      const existingSnapshot = await this.loadWorkflowSnapshot({
-        namespace: 'workflows',
-        workflowName,
-        runId,
+      const existingRecord = await this.db.get<{
+        namespace: string;
+        workflow_name: string;
+        run_id: string;
+        snapshot: WorkflowRunState;
+        createdAt: string | Date;
+        updatedAt: string | Date;
+      }>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: {
+          namespace: 'workflows',
+          workflow_name: workflowName,
+          run_id: runId,
+        },
       });
 
+      const existingSnapshot = existingRecord?.snapshot;
       let snapshot = existingSnapshot;
 
       if (!snapshot) {
@@ -100,6 +111,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         workflowName,
         runId,
         snapshot,
+        createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
 
       return snapshot.context;
@@ -129,11 +141,23 @@ export class WorkflowsRedis extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     try {
-      const existingSnapshot = await this.loadWorkflowSnapshot({
-        namespace: 'workflows',
-        workflowName,
-        runId,
+      const existingRecord = await this.db.get<{
+        namespace: string;
+        workflow_name: string;
+        run_id: string;
+        snapshot: WorkflowRunState;
+        createdAt: string | Date;
+        updatedAt: string | Date;
+      }>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: {
+          namespace: 'workflows',
+          workflow_name: workflowName,
+          run_id: runId,
+        },
       });
+
+      const existingSnapshot = existingRecord?.snapshot;
 
       if (!existingSnapshot || !existingSnapshot.context) {
         return undefined;
@@ -146,6 +170,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         workflowName,
         runId,
         snapshot: updatedSnapshot,
+        createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
 
       return updatedSnapshot;
@@ -176,6 +201,26 @@ export class WorkflowsRedis extends WorkflowsStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
+      let finalCreatedAt = createdAt;
+      if (!finalCreatedAt) {
+        const existing = await this.db.get<{
+          namespace: string;
+          workflow_name: string;
+          run_id: string;
+          snapshot: WorkflowRunState;
+          createdAt: string | Date;
+          updatedAt: string | Date;
+        }>({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          keys: {
+            namespace,
+            workflow_name: workflowName,
+            run_id: runId,
+          },
+        });
+        finalCreatedAt = existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
+      }
+
       await this.db.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -184,7 +229,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: createdAt ?? new Date(),
+          createdAt: finalCreatedAt,
           updatedAt: updatedAt ?? new Date(),
         },
       });
