@@ -156,7 +156,7 @@ program
   .option('--resume-from-message-id <id>', 'Resume processing from a specific message ID')
   .option('--session-limit <n>', 'Limit processing to n sessions after resume point', parseInt)
   .option('--session-offset <n>', 'Start processing from the nth session (1-based)', parseInt)
-  .option('--from-failures <path>', 'Re-prepare failed questions from a failures.json file')
+  .option('--from-failures [path]', 'Re-prepare failed questions (uses latest failures.json if no path given)')
   .option('-y, --yes', 'Skip confirmation prompt')
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')

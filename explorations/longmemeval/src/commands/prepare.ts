@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { readdir } from 'fs/promises';
 import { Memory } from '@mastra/memory';
 import { ObservationalMemory } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
@@ -46,7 +47,7 @@ export interface PrepareOptions {
   resumeFromMessageId?: string;
   sessionLimit?: number;
   sessionOffset?: number;
-  fromFailures?: string; // Path to failures.json from a benchmark run
+  fromFailures?: string | boolean; // Path to failures.json, or true/latest for most recent
 }
 
 export class PrepareCommand {
@@ -108,11 +109,41 @@ export class PrepareCommand {
     let fromFailuresData: FailuresFile | null = null;
 
     if (options.fromFailures) {
-      // Load failures.json and filter to those question IDs
-      if (!existsSync(options.fromFailures)) {
-        throw new Error(`Failures file not found: ${options.fromFailures}`);
+      let failuresPath = typeof options.fromFailures === 'string' ? options.fromFailures : '';
+
+      // Handle flag with no value (true) or "latest" - find the most recent failures.json for this config
+      if (options.fromFailures === true || options.fromFailures === 'latest') {
+        const resultsDir = join(this.baseDir, '..', 'results', options.memoryConfig);
+        if (!existsSync(resultsDir)) {
+          throw new Error(`No results directory found for config: ${options.memoryConfig}`);
+        }
+
+        const runDirs = (await readdir(resultsDir))
+          .filter(d => d.startsWith('run_'))
+          .sort()
+          .reverse(); // Most recent first
+
+        let latestFailuresPath: string | null = null;
+        for (const runDir of runDirs) {
+          const candidatePath = join(resultsDir, runDir, 'failures.json');
+          if (existsSync(candidatePath)) {
+            latestFailuresPath = candidatePath;
+            break;
+          }
+        }
+
+        if (!latestFailuresPath) {
+          throw new Error(`No failures.json found in any run for config: ${options.memoryConfig}`);
+        }
+        failuresPath = latestFailuresPath;
+        console.log(chalk.gray(`Found latest failures: ${failuresPath}\n`));
       }
-      fromFailuresData = JSON.parse(await readFile(options.fromFailures, 'utf-8')) as FailuresFile;
+
+      // Load failures.json and filter to those question IDs
+      if (!existsSync(failuresPath)) {
+        throw new Error(`Failures file not found: ${failuresPath}`);
+      }
+      fromFailuresData = JSON.parse(await readFile(failuresPath, 'utf-8')) as FailuresFile;
       const failedIds = new Set(fromFailuresData.questionIds);
       questionsToProcess = questions.filter(q => failedIds.has(q.question_id));
 
