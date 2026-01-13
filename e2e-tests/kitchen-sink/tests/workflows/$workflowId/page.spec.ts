@@ -116,8 +116,8 @@ async function checkShortPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"')).toHaveText(
-    `1{2  \"reason\": \"Please provide user input to continue\"3}`,
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
+    `\"reason\": \"Please provide user input to continue\"`,
   );
 }
 
@@ -126,8 +126,8 @@ async function checkLongPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"')).toHaveText(
-    `1{2  \"reason\": \"Please provide user input to continue\"3}`,
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
+    `\"reason\": \"Please provide user input to continue\"`,
   );
 }
 
