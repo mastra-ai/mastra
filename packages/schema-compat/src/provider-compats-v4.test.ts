@@ -161,6 +161,24 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     expect(jsonSchema.additionalProperties).toBe(true);
   });
 
+  it('should handle nested passthrough objects', () => {
+    const schema = z.object({
+      outer: z
+        .object({
+          inner: z.string(),
+        })
+        .passthrough(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    const outerProps = jsonSchema.properties?.outer as any;
+    expectValidOpenAIAdditionalProperties(outerProps?.additionalProperties);
+    expect(outerProps?.additionalProperties).toBe(true);
+  });
+
   it('should preserve typed catchall with string type', () => {
     // .catchall(z.string()) produces additionalProperties: { type: "string" }
     const schema = z
