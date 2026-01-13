@@ -17,7 +17,8 @@ import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
-import { SpanCollector, type CollectedSpanData } from './span-collector';
+import { SpanCollector } from './span-collector';
+import type { CollectedSpanData } from './span-collector';
 import type {
   InngestEngineType,
   InngestFlowControlConfig,
