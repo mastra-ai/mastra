@@ -1,4 +1,3 @@
-import type { z } from 'zod';
 import type { Tool } from './tool';
 
 /**
