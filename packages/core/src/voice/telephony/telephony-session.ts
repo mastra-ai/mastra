@@ -22,6 +22,9 @@
  */
 
 import type { Agent, ToolsInput } from '../../agent';
+import { MastraBase } from '../../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { RegisteredLogger } from '../../logger';
 
 import type { MastraVoice } from '../voice';
 
@@ -68,10 +71,9 @@ export interface TelephonySessionConfig {
   speechThreshold?: number;
 
   /**
-   * Enable debug logging
-   * @default false
+   * Session name for logging
    */
-  debug?: boolean;
+  name?: string;
 }
 
 /**
@@ -111,14 +113,13 @@ type EventCallback = (...args: unknown[]) => void;
 /**
  * Orchestrates telephony and AI voice providers for phone calls
  */
-export class TelephonySession {
+export class TelephonySession extends MastraBase {
   private telephony: MastraVoice;
   private ai: MastraVoice;
   private agent?: Agent<string, ToolsInput>;
   private codec: AudioCodec;
-  private bargeIn: boolean;
+  private bargeInEnabled: boolean;
   private speechThreshold: number;
-  private debug: boolean;
 
   private state: SessionState = 'idle';
   private speaker: Speaker = 'none';
@@ -129,13 +130,17 @@ export class TelephonySession {
   private agentSpeaking = false;
 
   constructor(config: TelephonySessionConfig) {
+    super({
+      component: RegisteredLogger.VOICE,
+      name: config.name,
+    });
+
     this.telephony = config.telephony;
     this.ai = config.ai;
     this.agent = config.agent;
     this.codec = config.codec || 'mulaw';
-    this.bargeIn = config.bargeIn ?? true;
+    this.bargeInEnabled = config.bargeIn ?? true;
     this.speechThreshold = config.speechThreshold ?? 0.01;
-    this.debug = config.debug ?? false;
   }
 
   /**
@@ -148,11 +153,16 @@ export class TelephonySession {
    */
   async start(): Promise<void> {
     if (this.state !== 'idle') {
-      throw new Error(`Cannot start session in state: ${this.state}`);
+      throw new MastraError({
+        id: 'TELEPHONY_SESSION_INVALID_STATE',
+        text: `Cannot start session in state: ${this.state}`,
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
 
     this.state = 'connecting';
-    this.log('Starting telephony session...');
+    this.logger.debug('Starting telephony session...');
 
     // Add agent tools and instructions to AI voice
     if (this.agent) {
@@ -173,7 +183,7 @@ export class TelephonySession {
       if (this.ai.connect) {
         await this.ai.connect();
       }
-      this.log('AI provider connected');
+      this.logger.debug('AI provider connected');
     } catch (error) {
       this.emit('error', error as Error);
       this.state = 'idle';
@@ -187,7 +197,7 @@ export class TelephonySession {
   end(reason = 'manual'): void {
     if (this.state === 'ended') return;
 
-    this.log(`Ending session: ${reason}`);
+    this.logger.debug(`Ending session: ${reason}`);
     this.state = 'ended';
 
     // Close providers
@@ -239,15 +249,9 @@ export class TelephonySession {
         try {
           handler(data);
         } catch (error) {
-          console.error(`Error in ${event} handler:`, error);
+          this.logger.error(`Error in ${event} handler:`, { error });
         }
       });
-    }
-  }
-
-  private log(...args: unknown[]): void {
-    if (this.debug) {
-      console.log('[TelephonySession]', ...args);
     }
   }
 
@@ -262,7 +266,7 @@ export class TelephonySession {
       const tools = await this.agent.listTools();
       if (tools && Object.keys(tools).length > 0) {
         this.ai.addTools(tools);
-        this.log(`Added ${Object.keys(tools).length} tools from agent`);
+        this.logger.debug(`Added ${Object.keys(tools).length} tools from agent`);
       }
     }
 
@@ -271,7 +275,7 @@ export class TelephonySession {
       const instructions = await this.agent.getInstructions();
       if (typeof instructions === 'string') {
         this.ai.addInstructions(instructions);
-        this.log('Added agent instructions');
+        this.logger.debug('Added agent instructions');
       }
     }
   }
@@ -303,10 +307,10 @@ export class TelephonySession {
       }
 
       // Barge-in detection: if user speaks while agent is speaking
-      if (this.bargeIn && this.agentSpeaking) {
+      if (this.bargeInEnabled && this.agentSpeaking) {
         const energy = this.calculateAudioEnergy(pcmAudio);
         if (energy > this.speechThreshold) {
-          this.log('Barge-in detected');
+          this.logger.debug('Barge-in detected');
           this.agentSpeaking = false;
           this.speaker = 'user';
           this.emit('barge-in');
@@ -405,7 +409,7 @@ export class TelephonySession {
       this.state = 'active';
       const metadata = data as { callSid?: string; streamSid?: string } | undefined;
       this.streamSid = metadata?.streamSid;
-      this.log('Call started:', metadata);
+      this.logger.debug('Call started', { metadata });
       this.emit('ready', metadata || {});
     });
 

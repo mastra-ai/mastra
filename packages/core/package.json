@@ -221,6 +221,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@sindresorhus/slugify": "^2.2.1",
+    "alawmulaw": "^6.0.0",
     "dotenv": "^17.2.3",
     "gray-matter": "^4.0.3",
     "hono": "^4.11.3",

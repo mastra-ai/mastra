@@ -20,7 +20,7 @@ Building phone-based AI agents involves two distinct concerns:
 This module provides:
 
 - **`TelephonySession`** - Orchestrates the connection between telephony and AI providers
-- **Audio Codecs** - Convert between telephony formats (μ-law) and AI formats (PCM)
+- **Audio Codecs** - Convert between telephony formats (μ-law, A-law) and AI formats (PCM) using the [`alawmulaw`](https://www.npmjs.com/package/alawmulaw) library
 
 ## Quick Start
 
@@ -97,7 +97,7 @@ interface TelephonySessionConfig {
   codec?: 'mulaw' | 'alaw' | 'pcm'; // Audio codec (default: 'mulaw')
   bargeIn?: boolean; // Allow interrupting AI (default: true)
   speechThreshold?: number; // Energy threshold for speech detection (default: 0.01)
-  debug?: boolean; // Enable debug logging (default: false)
+  name?: string; // Session name for logging
 }
 ```
 
@@ -429,13 +429,15 @@ session.on('ended', ({ reason }) => {
 session.end('completed');
 ```
 
-### 4. Debug During Development
+### 4. Logging
+
+`TelephonySession` extends `MastraBase`, so logging is controlled via the Mastra logging configuration:
 
 ```typescript
 const session = new TelephonySession({
   telephony,
   ai,
-  debug: true, // Logs detailed info
+  name: 'customer-support', // Optional name for log identification
 });
 ```
 
