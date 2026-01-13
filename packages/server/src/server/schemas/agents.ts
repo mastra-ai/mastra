@@ -420,6 +420,13 @@ export const executeToolResponseSchema = z.any(); // Tool execution result varie
 export const enhanceInstructionsBodySchema = z.object({
   instructions: z.string().describe('The current agent instructions to enhance'),
   comment: z.string().describe('User comment describing how to enhance the instructions'),
+  model: z
+    .object({
+      provider: z.string().describe('The provider ID (e.g., "openai", "anthropic")'),
+      modelId: z.string().describe('The model ID (e.g., "gpt-4o", "claude-3-5-sonnet")'),
+    })
+    .optional()
+    .describe('Optional model to use for enhancement. If not provided, uses the agent default model.'),
 });
 
 /**
