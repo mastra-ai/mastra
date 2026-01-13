@@ -931,8 +931,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         let metadataIndex = 0;
         for (const [key, value] of Object.entries(filter.metadata)) {
           const paramName = `metadata${metadataIndex}`;
-          whereClauses.push(`JSONExtractString(metadata, '${key}') = {${paramName}:String}`);
-          queryParams[paramName] = JSON.stringify(value).replace(/^"|"$/g, '');
+          // Use JSONExtractRaw to compare exact JSON representation
+          whereClauses.push(`JSONExtractRaw(metadata, '${key}') = {${paramName}:String}`);
+          queryParams[paramName] = JSON.stringify(value);
           metadataIndex++;
         }
       }
