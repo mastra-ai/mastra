@@ -131,6 +131,10 @@ export class SemanticRecall implements Processor {
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
 
+  // Cache for index dimension validation (per-process)
+  // Prevents redundant API calls when index already validated
+  private indexValidationCache = new Map<string, { dimension: number }>();
+
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
     this.vector = options.vector;
@@ -454,20 +458,25 @@ export class SemanticRecall implements Processor {
 
   /**
    * Ensure vector index exists with correct dimensions
+   * Uses in-memory cache to avoid redundant validation calls
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
-    // Check if index exists
-    const indexes = await this.vector.listIndexes();
-    const indexExists = indexes.includes(indexName);
-
-    if (!indexExists) {
-      // Create index if it doesn't exist
-      await this.vector.createIndex({
-        indexName,
-        dimension,
-        metric: 'cosine',
-      });
+    // Check cache first - if already validated in this process, skip
+    const cached = this.indexValidationCache.get(indexName);
+    if (cached?.dimension === dimension) {
+      return;
     }
+
+    // Always call createIndex - it's idempotent and validates dimensions
+    // Vector stores handle the "already exists" case and validate dimensions
+    await this.vector.createIndex({
+      indexName,
+      dimension,
+      metric: 'cosine',
+    });
+
+    // Cache the validated dimension to avoid redundant calls
+    this.indexValidationCache.set(indexName, { dimension });
   }
 
   /**

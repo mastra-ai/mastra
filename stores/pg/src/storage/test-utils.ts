@@ -716,5 +716,105 @@ export function pgTests() {
         expect(schema).toContain('my_schema_mastra_ai_spans_traceid_spanid_pk');
       });
     });
+
+    // PG-specific: Unicode escape sequence handling in workflow snapshots
+    // See: https://github.com/mastra-ai/mastra/issues/11563
+    describe('Unicode Escape Sequence Handling', () => {
+      let unicodeStore: PostgresStore;
+      let workflowsStorage: any;
+
+      beforeAll(async () => {
+        // Create a dedicated store for these tests to avoid pool lifecycle issues
+        // with other tests that close/reopen the main store
+        unicodeStore = new PostgresStore({ ...TEST_CONFIG, id: 'unicode-test-store' });
+        await unicodeStore.init();
+        workflowsStorage = await unicodeStore.getStore('workflows');
+      });
+
+      afterAll(async () => {
+        try {
+          await unicodeStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        await workflowsStorage.dangerouslyClearAll();
+      });
+
+      it('should handle null characters in snapshot when filtering by status', async () => {
+        // Test for GitHub issue #11563: "Unsupported unicode escape sequence" when listing messages
+        // PostgreSQL's jsonb cast fails on null characters (\u0000) with error 22P05
+        const workflowName = 'unicode_null_test';
+        const runId = `run-${Date.now()}`;
+
+        const snapshotWithNull = {
+          runId,
+          status: 'success',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+          userMessage: 'Ótimo, já entendi! Vamos lá então.',
+          problematicContent: 'Text with null char: \u0000 and accented: áéíóú',
+        };
+
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: snapshotWithNull,
+        });
+
+        // This should NOT throw "unsupported Unicode escape sequence" error
+        const { runs } = await workflowsStorage.listWorkflowRuns({ status: 'success' });
+
+        expect(runs.length).toBeGreaterThanOrEqual(1);
+        const foundRun = runs.find((r: any) => r.workflowName === workflowName);
+        expect(foundRun).toBeDefined();
+        expect(foundRun.snapshot.userMessage).toBe('Ótimo, já entendi! Vamos lá então.');
+        // Verify the null character is preserved (no data loss)
+        expect(foundRun.snapshot.problematicContent).toBe('Text with null char: \u0000 and accented: áéíóú');
+        expect(foundRun.snapshot.problematicContent.includes('\u0000')).toBe(true);
+      });
+
+      it('should handle unpaired Unicode surrogates in snapshot when filtering by status', async () => {
+        // PostgreSQL's jsonb cast fails on unpaired surrogates (\uD800-\uDFFF)
+        const workflowName = 'unicode_surrogate_test';
+        const runId = `run-${Date.now()}`;
+
+        const snapshotWithSurrogate = {
+          runId,
+          status: 'failed',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+          problematicHigh: 'Text with high surrogate: \ud800 here',
+          problematicLow: 'Text with low surrogate: \udc00 here',
+        };
+
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: snapshotWithSurrogate,
+        });
+
+        // This should NOT throw "Unicode low surrogate must follow a high surrogate" error
+        const { runs } = await workflowsStorage.listWorkflowRuns({ status: 'failed' });
+
+        expect(runs.length).toBeGreaterThanOrEqual(1);
+        const foundRun = runs.find((r: any) => r.workflowName === workflowName);
+        expect(foundRun).toBeDefined();
+      });
+    });
   });
 }
