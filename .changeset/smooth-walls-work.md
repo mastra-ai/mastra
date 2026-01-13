@@ -2,16 +2,20 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed metadata handling across all tables to prevent empty string crashes and ensure consistent behavior.
+Fixed ClickHouse metadata handling to prevent empty string crashes when storing undefined metadata.
 
 **What changed:**
-- Applied DEFAULT '{}' constraint to metadata columns for both 'text' and 'jsonb' types across all tables (threads, resources, scorers, spans, agents)
-- Updated resources to use `serializeMetadata()` and `parseMetadata()` helper functions for safe JSON handling
-- Previously, only threads had this protection, while resources used unsafe `JSON.parse()` that could crash on empty strings
+- Applied DEFAULT '{}' constraint to metadata columns for both 'text' and 'jsonb' types (previously only 'text')
+- Extended `serializeMetadata()` and `parseMetadata()` helpers to resources (previously only threads)
+- ClickHouse-specific issue: undefined values become empty strings in String columns, causing JSON.parse() crashes
+
+**Why ClickHouse needs this:**
+- ClickHouse has no native JSON type - both 'text' and 'jsonb' map to String columns
+- When undefined is stored in String columns, it becomes `''` (empty string)
+- On retrieval, `JSON.parse('')` crashes with "Unexpected end of JSON input"
 
 **Impact:**
-- Provides defense-in-depth with both database-level (DEFAULT constraint) and application-level (helper functions) protection
-- All metadata columns now consistently handle null/undefined/empty strings by converting to `{}`
-- Prevents potential crashes across all storage domains, not just threads
+- Defense-in-depth: database-level DEFAULT '{}' + application-level safe parsing
+- Prevents crashes across all ClickHouse storage domains (threads, resources, scorers, spans, agents)
 
 Related to #11882
