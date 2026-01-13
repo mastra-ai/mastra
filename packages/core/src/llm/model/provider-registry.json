@@ -289,7 +289,7 @@
       "apiKeyEnvVar": "UPSTAGE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Upstage",
-      "models": ["solar-mini", "solar-pro2"],
+      "models": ["solar-mini", "solar-pro2", "solar-pro3"],
       "docUrl": "https://developers.upstage.ai/docs/apis/chat",
       "gateway": "models.dev"
     },
@@ -2542,7 +2542,7 @@
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwq-32b"
     ],
-    "upstage": ["solar-mini", "solar-pro2"],
+    "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
     "groq": [
       "llama-3.1-8b-instant",
       "llama-3.3-70b-versatile",

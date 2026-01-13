@@ -53,7 +53,13 @@ export const CodeEditor = ({ data, value, onChange, showCopyButton = true, class
   return (
     <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
       {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
-      <CodeMirror value={formattedCode} theme={theme} extensions={[jsonLanguage]} onChange={onChange} />
+      <CodeMirror
+        value={formattedCode}
+        theme={theme}
+        extensions={[jsonLanguage]}
+        onChange={onChange}
+        aria-label="Code editor"
+      />
     </div>
   );
 };

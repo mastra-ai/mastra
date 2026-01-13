@@ -37,7 +37,7 @@ export const Alert = ({ children, variant = 'destructive' }: AlertProps) => {
   );
 };
 
-export const AlertTitle = ({ children, as: As = 'h5' }: { children: React.ReactNode; as: TxtProps['as'] }) => {
+export const AlertTitle = ({ children, as: As = 'h5' }: { children: React.ReactNode; as?: TxtProps['as'] }) => {
   return (
     <Txt as={As} variant="ui-md" className="font-semibold">
       {children}

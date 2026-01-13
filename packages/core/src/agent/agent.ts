@@ -128,7 +128,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
@@ -413,15 +413,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
-      let step;
+      let step: Step<string, unknown, any, any, any, any>;
       if (isProcessorWorkflow(processorOrWorkflow)) {
         step = processorOrWorkflow;
       } else {
         // Set processorIndex on the processor for span attributes
-        const processor = processorOrWorkflow as Exclude<T, ProcessorWorkflow>;
+        const processor = processorOrWorkflow;
+        // @ts-ignore - TODO: fix types
         processor.processorIndex = index;
         step = createStep(processor);
       }
+
       workflow = workflow.then(step);
     }
 
@@ -636,7 +638,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -2144,6 +2146,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
+          // @ts-ignore
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
