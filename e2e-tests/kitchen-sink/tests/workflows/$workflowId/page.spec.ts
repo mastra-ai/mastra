@@ -82,7 +82,7 @@ test('running the workflow (form) - long condition', async ({ page }) => {
 
 test('running the workflow (json) - short condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
-  await page.getByRole('textbox', { name: 'Code editor' }).fill('{"text":"A"}');
+  await page.locator('.cm-content').fill('{"text":"A"}');
   await page.getByRole('button', { name: 'Run' }).click();
 
   await runWorkflow(page);
@@ -91,7 +91,7 @@ test('running the workflow (json) - short condition', async ({ page }) => {
 
 test('running the workflow (json) - long condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
-  await page.getByRole('textbox', { name: 'Code editor' }).fill('{"text":"SuperLongTextToStartWith"}');
+  await page.locator('.cm-content').fill('{"text":"SuperLongTextToStartWith"}');
   await page.getByRole('button', { name: 'Run' }).click();
 
   await runWorkflow(page);
