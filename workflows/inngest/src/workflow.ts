@@ -245,24 +245,48 @@ export class InngestWorkflow<
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext = new RequestContext<Record<string, any>>(Object.entries(event.data.requestContext ?? {}));
 
-        // Create workflow span for observability
-        // This span is created inside the Inngest function handler since spans are not serializable
-        // across the event boundary. The tracingOptions (traceId, parentSpanId) are passed from the caller.
-        const workflowSpan = getOrCreateSpan({
-          type: SpanType.WORKFLOW_RUN,
-          name: `workflow run: '${this.id}'`,
-          entityType: EntityType.WORKFLOW_RUN,
-          entityId: this.id,
-          input: inputData,
-          metadata: {
-            resourceId,
-            runId,
+        // Store mastra reference for use in proxy closure
+        const mastra = this.#mastra;
+        const tracingPolicy = this.options.tracingPolicy;
+        console.log('[INNGEST TRACING DEBUG] Handler start - mastra:', !!mastra, 'tracingPolicy:', !!tracingPolicy);
+
+        // Memoize span identity on first invocation.
+        // This captures the workflow start time and generates consistent IDs for the workflow span.
+        // Key insight from Inngest's tracing: separate span identity (IDs) from span objects.
+        // Child spans can reference the parent by ID even when the parent object doesn't exist.
+        const spanMeta = await step.run(`workflow.${this.id}.spanMeta`, async () => ({
+          startTime: Date.now(),
+          // Generate consistent IDs that will be used for the workflow span
+          traceId: tracingOptions?.traceId ?? randomUUID().replace(/-/g, ''),
+          spanId: randomUUID().replace(/-/g, '').slice(0, 16), // 16 hex chars
+        }));
+
+        // Create a proxy span that delegates createChildSpan to getOrCreateSpan with parentSpanId.
+        // This allows child spans to be created with correct parent linkage even though
+        // the actual workflow span doesn't exist yet (it's created in finalize).
+        // The proxy implements the minimal interface needed by workflow handlers.
+        // Note: end/error/update are no-ops here - the actual span lifecycle is managed in finalize.
+        const proxyWorkflowSpan = {
+          id: spanMeta.spanId,
+          traceId: spanMeta.traceId,
+          createChildSpan: (childOptions: Record<string, any>) => {
+            // Delegate to getOrCreateSpan which supports creating spans by parentSpanId
+            return getOrCreateSpan({
+              ...childOptions,
+              tracingPolicy,
+              tracingOptions: {
+                traceId: spanMeta.traceId,
+                parentSpanId: spanMeta.spanId, // Link to the workflow span by ID
+              },
+              requestContext,
+              mastra,
+            } as any);
           },
-          tracingPolicy: this.options.tracingPolicy,
-          tracingOptions,
-          requestContext,
-          mastra: this.#mastra,
-        });
+          // No-op methods - actual span lifecycle is managed in finalize step
+          end: () => {},
+          error: () => {},
+          update: () => {},
+        };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
 
@@ -288,7 +312,7 @@ export class InngestWorkflow<
             perStep,
             format,
             abortController: new AbortController(),
-            workflowSpan,
+            workflowSpan: proxyWorkflowSpan as any, // Proxy span for child span creation
             outputOptions,
             outputWriter: async (chunk: WorkflowStreamEvent) => {
               try {
@@ -303,21 +327,20 @@ export class InngestWorkflow<
             },
           });
         } catch (error) {
-          // End span on unexpected errors before re-throwing
-          workflowSpan?.error({
-            error: error instanceof Error ? error : new Error(String(error)),
-            attributes: { status: 'failed' },
-          });
+          // Re-throw - span will be created in finalize if we reach it
           throw error;
         }
 
-        // Final step to invoke lifecycle callbacks and check workflow status
-        // Wrapped in step.run for durability - callbacks are memoized on replay
+        // Final step to invoke lifecycle callbacks and check workflow status.
+        // This is also where we create the actual workflow span with memoized IDs.
+        // The span is created once here (finalize is memoized by step.run).
         await step.run(`workflow.${this.id}.finalize`, async () => {
+          console.log('[INNGEST TRACING DEBUG] Finalize step running');
+          console.log('[INNGEST TRACING DEBUG] mastra defined:', !!mastra);
+          console.log('[INNGEST TRACING DEBUG] mastra.observability:', !!mastra?.observability);
+
           if (result.status !== 'paused') {
             // Invoke lifecycle callbacks (onFinish and onError)
-            // Use invokeLifecycleCallbacksInternal to call the real implementation
-            // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
             await engine.invokeLifecycleCallbacksInternal({
               status: result.status,
               result: 'result' in result ? result.result : undefined,
@@ -331,6 +354,38 @@ export class InngestWorkflow<
               requestContext,
               state: result.state ?? initialState ?? {},
             });
+          }
+
+          // Create the actual workflow span with memoized IDs.
+          // Child spans created during execution already reference this span via parentSpanId.
+          const workflowSpan = getOrCreateSpan({
+            type: SpanType.WORKFLOW_RUN,
+            name: `workflow run: '${this.id}'`,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: this.id,
+            input: inputData,
+            metadata: {
+              resourceId,
+              runId,
+            },
+            tracingPolicy,
+            tracingOptions: {
+              ...tracingOptions,
+              traceId: spanMeta.traceId,
+            },
+            requestContext,
+            mastra,
+          });
+
+          console.log('[INNGEST TRACING DEBUG] workflowSpan created:', !!workflowSpan);
+          console.log('[INNGEST TRACING DEBUG] workflowSpan type:', typeof workflowSpan);
+          console.log('[INNGEST TRACING DEBUG] workflowSpan constructor:', workflowSpan?.constructor?.name);
+          console.log('[INNGEST TRACING DEBUG] workflowSpan.end type:', typeof workflowSpan?.end);
+          console.log('[INNGEST TRACING DEBUG] workflowSpan keys:', workflowSpan ? Object.keys(workflowSpan) : 'N/A');
+
+          // Set the start time to when the workflow actually started
+          if (workflowSpan && 'startTime' in workflowSpan) {
+            (workflowSpan as any).startTime = new Date(spanMeta.startTime);
           }
 
           // End the workflow span with appropriate status
