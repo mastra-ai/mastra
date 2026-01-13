@@ -18,7 +18,6 @@ import { InngestExecutionEngine } from './execution-engine';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import { SpanCollector } from './span-collector';
-import type { CollectedSpanData } from './span-collector';
 import type {
   InngestEngineType,
   InngestFlowControlConfig,
@@ -359,58 +358,6 @@ export class InngestWorkflow<
             });
           }
 
-          // Helper function to recursively create real spans from collected data.
-          // Uses step result timing (memoized by Inngest) instead of collected timing (replay time).
-          const createRealSpansFromCollected = (
-            collectedData: CollectedSpanData,
-            parentSpan: any,
-            stepResults: typeof result.steps,
-          ) => {
-            // Create the real span as a child of the parent
-            const realSpan = parentSpan.createChildSpan({
-              name: collectedData.name,
-              type: collectedData.type,
-              entityType: collectedData.entityType,
-              entityId: collectedData.entityId,
-              entityName: collectedData.entityName,
-              input: collectedData.input,
-              attributes: collectedData.attributes,
-              metadata: collectedData.metadata,
-            });
-
-            // Look up step result by entityId (which is the step ID for step spans)
-            const stepResult = collectedData.entityId
-              ? (stepResults as Record<string, any>)[collectedData.entityId]
-              : undefined;
-
-            // Use step result timing if available (memoized), otherwise fall back to collected timing
-            const startTime = stepResult?.startedAt ?? collectedData.startTime;
-            const endTime = stepResult?.endedAt ?? collectedData.endTime;
-
-            // Set the correct start time
-            if (realSpan && 'startTime' in realSpan) {
-              (realSpan as any).startTime = new Date(startTime);
-            }
-
-            // First, recursively create all child spans
-            for (const childData of collectedData.children) {
-              createRealSpansFromCollected(childData, realSpan, stepResults);
-            }
-
-            // Then end this span with the collected status
-            if (collectedData.status === 'error' && collectedData.error) {
-              realSpan?.error({
-                error: collectedData.error,
-                attributes: collectedData.attributes,
-              });
-            } else if (endTime) {
-              realSpan?.end({
-                output: collectedData.output,
-                attributes: collectedData.attributes,
-              });
-            }
-          };
-
           // Create the actual workflow span with memoized IDs.
           // This will be the root span, and all collected child spans will be attached to it.
           const workflowSpan = getOrCreateSpan({
@@ -437,16 +384,9 @@ export class InngestWorkflow<
             (workflowSpan as any).startTime = new Date(spanMeta.startTime);
           }
 
-          // Create real spans from all collected child span data.
-          // The workflow root span was collected too, so we only process its children here.
-          const collectedRootSpans = spanCollector.getCollectedData();
-          if (collectedRootSpans.length > 0 && workflowSpan) {
-            // The first root span is the workflow span we created in the collector
-            // Its children are the step/conditional spans that need to be created
-            const workflowSpanData = collectedRootSpans[0];
-            for (const childData of workflowSpanData?.children ?? []) {
-              createRealSpansFromCollected(childData, workflowSpan, result.steps);
-            }
+          // Materialize collected spans as real child spans of the workflow span
+          if (workflowSpan) {
+            spanCollector.materializeSpans(workflowSpan, result.steps as Record<string, any>);
           }
 
           // End the workflow span with appropriate status

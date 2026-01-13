@@ -317,4 +317,74 @@ export class SpanCollector {
       currentSpan: rootSpan as unknown as AnySpan,
     };
   }
+
+  /**
+   * Materialize collected spans as real spans attached to a parent.
+   * Uses step result timing (memoized by Inngest) for accurate durations.
+   *
+   * @param parentSpan - The real parent span to attach children to
+   * @param stepResults - Step results with memoized startedAt/endedAt timing
+   */
+  materializeSpans(parentSpan: any, stepResults: Record<string, any>): void {
+    const collectedRootSpans = this.getCollectedData();
+    if (collectedRootSpans.length === 0) return;
+
+    // The first root span is the workflow span we created in the collector
+    // Its children are the step/conditional spans that need to be materialized
+    const workflowSpanData = collectedRootSpans[0];
+    for (const childData of workflowSpanData?.children ?? []) {
+      this.materializeSpanRecursive(childData, parentSpan, stepResults);
+    }
+  }
+
+  /**
+   * Recursively create real spans from collected data.
+   */
+  private materializeSpanRecursive(
+    collectedData: CollectedSpanData,
+    parentSpan: any,
+    stepResults: Record<string, any>,
+  ): void {
+    // Create the real span as a child of the parent
+    const realSpan = parentSpan.createChildSpan({
+      name: collectedData.name,
+      type: collectedData.type,
+      entityType: collectedData.entityType,
+      entityId: collectedData.entityId,
+      entityName: collectedData.entityName,
+      input: collectedData.input,
+      attributes: collectedData.attributes,
+      metadata: collectedData.metadata,
+    });
+
+    // Look up step result by entityId (which is the step ID for step spans)
+    const stepResult = collectedData.entityId ? stepResults[collectedData.entityId] : undefined;
+
+    // Use step result timing if available (memoized), otherwise fall back to collected timing
+    const startTime = stepResult?.startedAt ?? collectedData.startTime;
+    const endTime = stepResult?.endedAt ?? collectedData.endTime;
+
+    // Set the correct start time
+    if (realSpan && 'startTime' in realSpan) {
+      (realSpan as any).startTime = new Date(startTime);
+    }
+
+    // Recursively create all child spans
+    for (const childData of collectedData.children) {
+      this.materializeSpanRecursive(childData, realSpan, stepResults);
+    }
+
+    // End this span with the collected status
+    if (collectedData.status === 'error' && collectedData.error) {
+      realSpan?.error({
+        error: collectedData.error,
+        attributes: collectedData.attributes,
+      });
+    } else if (endTime) {
+      realSpan?.end({
+        output: collectedData.output,
+        attributes: collectedData.attributes,
+      });
+    }
+  }
 }
