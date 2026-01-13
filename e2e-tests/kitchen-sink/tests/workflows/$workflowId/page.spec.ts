@@ -82,7 +82,7 @@ test('running the workflow (form) - long condition', async ({ page }) => {
 
 test('running the workflow (json) - short condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
-  await page.getByRole('textbox').fill('{"text":"A"}');
+  await page.getByRole('textbox', { name: 'Code editor' }).fill('{"text":"A"}');
   await page.getByRole('button', { name: 'Run' }).click();
 
   await runWorkflow(page);
@@ -91,7 +91,7 @@ test('running the workflow (json) - short condition', async ({ page }) => {
 
 test('running the workflow (json) - long condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
-  await page.getByRole('textbox').fill('{"text":"SuperLongTextToStartWith"}');
+  await page.getByRole('textbox', { name: 'Code editor' }).fill('{"text":"SuperLongTextToStartWith"}');
   await page.getByRole('button', { name: 'Run' }).click();
 
   await runWorkflow(page);
@@ -116,7 +116,7 @@ async function checkShortPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"')).toHaveText(
     `1{2  \"reason\": \"Please provide user input to continue\"3}`,
   );
 }
@@ -126,7 +126,7 @@ async function checkLongPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"')).toHaveText(
     `1{2  \"reason\": \"Please provide user input to continue\"3}`,
   );
 }
