@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { Slider } from '@/components/ui/slider';
 
 import { Label } from '@/components/ui/label';
@@ -20,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/components/ui/skeleton';
-import { isAnthropicModelWithSamplingRestriction } from '../utils/model-restrictions';
+import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -68,32 +67,12 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
 
-  // Check if this model has the temperature/topP mutual exclusion restriction
-  const hasSamplingRestriction = isAnthropicModelWithSamplingRestriction(agent?.provider, agent?.modelId);
-
-  // Track whether we've already cleared topP for the current agent/model to avoid infinite loops
-  const clearedTopPRef = useRef<string | null>(null);
-
-  // For models with sampling restriction, auto-clear topP if both values are set
-  // This handles users who have both values from localStorage or defaults
-  useEffect(() => {
-    const agentModelKey = `${agent?.provider}-${agent?.modelId}`;
-
-    // Reset tracking when switching to a non-restricted model
-    if (!hasSamplingRestriction) {
-      clearedTopPRef.current = null;
-      return;
-    }
-
-    // Only clear topP once per agent/model combination when topP is defined
-    if (settings?.modelSettings?.topP !== undefined && clearedTopPRef.current !== agentModelKey) {
-      clearedTopPRef.current = agentModelKey;
-      setSettings({
-        ...settings,
-        modelSettings: { ...settings.modelSettings, topP: undefined },
-      });
-    }
-  }, [hasSamplingRestriction, agent?.provider, agent?.modelId, settings, setSettings]);
+  const { hasSamplingRestriction } = useSamplingRestriction({
+    provider: agent?.provider,
+    modelId: agent?.modelId,
+    settings,
+    setSettings,
+  });
 
   if (isLoading || isMemoryLoading) {
     return <Skeleton className="h-full" />;
@@ -188,11 +167,14 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
         </Entry>
 
         {hasSamplingRestriction &&
-          settings?.modelSettings?.temperature !== undefined &&
-          settings?.modelSettings?.topP !== undefined && (
+          (settings?.modelSettings?.temperature !== undefined || settings?.modelSettings?.topP !== undefined) && (
             <div className="flex items-center gap-2 text-xs text-icon3 bg-surface3 rounded px-3 py-2">
               <Info className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>Claude 4.5+ models only accept Temperature OR Top P, not both.</span>
+              <span>
+                {settings?.modelSettings?.temperature !== undefined
+                  ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
+                  : 'Claude 4.5+ models only accept Temperature OR Top P. Setting Temperature will clear Top P.'}
+              </span>
             </div>
           )}
 
