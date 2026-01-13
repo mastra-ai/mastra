@@ -101,7 +101,7 @@ export function mapVariable<TStep extends Step<string, any, any, any, any, any>>
   step: TStep;
   path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
 };
-export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any>>({
+export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any, any>>({
   initData: TWorkflow,
   path,
 }: {

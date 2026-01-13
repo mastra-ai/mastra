@@ -158,7 +158,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
   /**
    * Default options used when calling `generate()`.
    */
