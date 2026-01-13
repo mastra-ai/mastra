@@ -234,9 +234,26 @@ export class MemoryMSSQL extends MemoryStorage {
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         let metadataIndex = 0;
         for (const [key, value] of Object.entries(filter.metadata)) {
-          const paramName = `metadata${metadataIndex}`;
-          whereClauses.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
-          params[paramName] = JSON.stringify(value).replace(/^"|"$/g, '');
+          // Validate filter value type - only allow scalar types
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError({
+              id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+              details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+            });
+          }
+
+          // Handle null values specially: JSON_VALUE returns NULL for null values,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            whereClauses.push(`JSON_VALUE(metadata, '$.${key}') IS NULL`);
+          } else {
+            const paramName = `metadata${metadataIndex}`;
+            whereClauses.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
+            params[paramName] = JSON.stringify(value).replace(/^"|"$/g, '');
+          }
           metadataIndex++;
         }
       }
