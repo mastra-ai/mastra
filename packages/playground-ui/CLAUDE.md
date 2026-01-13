@@ -172,6 +172,49 @@ export function App({ a, b }: AppProps) {
 }
 ```
 
+### Memoization & Performance
+
+- **FORBIDDEN**: Using `useCallback` or `useMemo` for typical operations
+- Only use `useCallback`/`useMemo` as a **last resort** for very expensive computations (e.g., processing 200+ entries)
+- **REQUIRED**: Use React 19.2's `useEffectEvent` instead of `useCallback` for event handlers
+
+```tsx
+// ✅ Good - useEffectEvent for event handlers (React 19.2+)
+import { useEffectEvent } from 'react';
+
+export function App() {
+  const onSubmit = useEffectEvent((data: FormData) => {
+    // handle submission
+  });
+
+  return <Form onSubmit={onSubmit} />;
+}
+
+// ❌ Bad - useCallback for simple event handlers
+export function App() {
+  const onSubmit = useCallback((data: FormData) => {
+    // handle submission
+  }, []);
+
+  return <Form onSubmit={onSubmit} />;
+}
+```
+
+```tsx
+// ✅ Good - useMemo ONLY for expensive computations (200+ items)
+const sortedItems = useMemo(() => {
+  return hugeDataset.sort((a, b) => a.value - b.value);
+}, [hugeDataset]); // hugeDataset has 500+ entries
+
+// ❌ Bad - useMemo for simple derivations
+const fullName = useMemo(() => {
+  return `${firstName} ${lastName}`;
+}, [firstName, lastName]);
+
+// ✅ Good - derive directly instead
+const fullName = `${firstName} ${lastName}`;
+```
+
 ---
 
 ## Key Principles
