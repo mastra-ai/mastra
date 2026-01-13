@@ -631,7 +631,8 @@ Active evaluations:`;
     if (usesObservationRag && usesObservationalMemory) {
       console.log('[DEBUG] Creating ObservationSemanticFilter for RAG');
       // Use a shared cache directory for embeddings (content-based, reusable across configs)
-      const embeddingsCacheDir = join(preparedDir, '..', '.embeddings-cache');
+      // Subdirectory by model name for future multi-model support
+      const embeddingsCacheDir = join(preparedDir, '..', '.embeddings-cache', 'fastembed-small');
       observationRagFilter = new ObservationSemanticFilter({
         embedder: fastembed.small,
         topK: 50,

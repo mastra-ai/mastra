@@ -86,13 +86,15 @@ export class PrecomputeEmbeddingsCommand {
 
     spinner.succeed(`Found ${questionDirs.length} questions, processing ${selectedQuestions.length}`);
 
-    // Create shared cache directory
-    const cacheDir = join(preparedDir, '..', '.embeddings-cache');
+    // Create shared cache directory with model subdirectory
+    const modelName = 'fastembed-small';
+    const cacheDir = join(preparedDir, '..', '.embeddings-cache', modelName);
     if (!existsSync(cacheDir)) {
       mkdirSync(cacheDir, { recursive: true });
     }
 
     console.log(chalk.gray(`Cache directory: ${cacheDir}`));
+    console.log(chalk.gray(`Embedding model: ${modelName}`));
 
     // Track stats
     let totalObservations = 0;
@@ -104,7 +106,8 @@ export class PrecomputeEmbeddingsCommand {
     let errorCount = 0;
 
     const hasher = await this.hasher;
-    const batchSize = options.batchSize || 100;
+    const batchSize = options.batchSize || 25; // Small batches to reduce CPU spikes
+    const cooldown = options.cooldown ?? 1000; // Default 1 second between questions
 
     // Process each question
     for (let i = 0; i < selectedQuestions.length; i++) {
@@ -165,9 +168,15 @@ export class PrecomputeEmbeddingsCommand {
           continue;
         }
 
-        // Embed in batches
+        // Embed in batches with micro-cooldowns to prevent CPU overload
+        const batchCooldown = Math.min(cooldown / 4, 250); // 250ms max between batches
+        const totalBatches = Math.ceil(uncachedLines.length / batchSize);
+        
         for (let b = 0; b < uncachedLines.length; b += batchSize) {
+          const batchNum = Math.floor(b / batchSize) + 1;
           const batch = uncachedLines.slice(b, b + batchSize);
+          
+          spinner.text = `${progress} ${questionId}: embedding batch ${batchNum}/${totalBatches} (${batch.length} items)`;
           
           const { embeddings } = await embedMany({
             model: fastembed.small,
@@ -186,6 +195,11 @@ export class PrecomputeEmbeddingsCommand {
             } catch {
               errorCount++;
             }
+          }
+          
+          // Micro-cooldown between batches within a question
+          if (batchCooldown > 0 && b + batchSize < uncachedLines.length) {
+            await new Promise(resolve => setTimeout(resolve, batchCooldown));
           }
         }
 
@@ -239,7 +253,6 @@ export class PrecomputeEmbeddingsCommand {
       }
 
       // Cooldown between questions to prevent CPU overload
-      const cooldown = options.cooldown ?? 1000; // Default 1 second
       if (cooldown > 0 && i < selectedQuestions.length - 1) {
         await new Promise(resolve => setTimeout(resolve, cooldown));
       }
