@@ -307,8 +307,14 @@ export class AgentsLibSQL extends AgentsStorage {
             console.warn(`Skipping invalid metadata key for filtering: "${key}" (must match ${SAFE_KEY_PATTERN})`);
             continue;
           }
-          whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
-          whereValues.push(typeof value === 'string' ? value : JSON.stringify(value));
+          // Use CAST for text comparison to match sql-builder.ts pattern
+          if (typeof value === 'string') {
+            whereClauses.push(`CAST(json_extract(metadata, '$.${key}') AS TEXT) = ?`);
+            whereValues.push(value);
+          } else {
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            whereValues.push(JSON.stringify(value));
+          }
         }
       }
 
@@ -529,11 +535,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
       // Get paginated results
       const fieldColumn = field === 'createdAt' ? '"createdAt"' : '"versionNumber"';
+      const limitValue = perPageInput === false ? total : perPage;
       const rows = await this.#db.selectMany<Record<string, unknown>>({
         tableName: TABLE_AGENT_VERSIONS,
         whereClause,
         orderBy: `${fieldColumn} ${direction}`,
-        limit: perPage,
+        limit: limitValue,
         offset,
       });
 
@@ -543,8 +550,8 @@ export class AgentsLibSQL extends AgentsStorage {
         versions,
         total,
         page,
-        perPage: perPageForResponse === false ? total : perPageForResponse,
-        hasMore: offset + perPage < total,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       throw new MastraError(

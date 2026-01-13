@@ -180,7 +180,7 @@ function isVersionNumberConflictError(error: unknown): boolean {
  * Uses generic types to work with any StorageAgentType-compatible structure.
  */
 export interface AgentsStoreWithVersions<TAgent = any> {
-  getLatestVersion: (agentId: string) => Promise<{ id: string; versionNumber: number } | null>;
+  getLatestVersion: (agentId: string) => Promise<{ id: string; versionNumber: number; snapshot: TAgent } | null>;
   createVersion: (params: {
     id: string;
     agentId: string;
@@ -273,8 +273,9 @@ export async function createVersionWithRetry<TAgent>(
 
 /**
  * Handles auto-versioning after an agent update.
- * Creates a new version and updates the agent's activeVersionId atomically (single update call).
- * Uses retry logic to handle race conditions on versionNumber.
+ * Creates a new version with retry logic, then updates the agent's activeVersionId,
+ * and finally enforces the retention limit. These are separate operations - if updateAgent
+ * fails after version creation, a created-but-not-activated version may remain.
  *
  * @param agentsStore - The agents storage domain
  * @param agentId - The agent ID

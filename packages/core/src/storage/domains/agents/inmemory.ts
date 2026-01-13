@@ -182,6 +182,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
     this.logger.debug(`InMemoryAgentsStorage: createVersion called for agent ${input.agentId}`);
 
+    // Check if version with this ID already exists (versions are immutable)
+    if (this.db.agentVersions.has(input.id)) {
+      throw new Error(`Version with id ${input.id} already exists`);
+    }
+
     const version: AgentVersion = {
       ...input,
       createdAt: new Date(),
