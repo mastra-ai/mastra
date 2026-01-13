@@ -1,5 +1,7 @@
 import { Readable } from 'node:stream';
+import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
+import { Mastra } from '@mastra/core/mastra';
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
@@ -14,6 +16,25 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
+
+/**
+ * Helper to get an agent by ID, checking both code-defined and stored agents
+ */
+async function getAgentByIdOrStored(mastra: Mastra, agentId: string): Promise<Agent | undefined> {
+  // First try code-defined agents
+  let agent: Agent | undefined | null = mastra.getAgentById(agentId);
+
+  // If not found, try stored agents
+  if (!agent) {
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch {
+      // Ignore errors, agent remains undefined
+    }
+  }
+
+  return agent ?? undefined;
+}
 
 // ============================================================================
 // Route Objects
@@ -34,7 +55,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
 
-      const agent = mastra.getAgentById(agentId);
+      const agent = await getAgentByIdOrStored(mastra, agentId);
 
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
@@ -89,7 +110,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
 
       validateBody({ text });
 
-      const agent = mastra.getAgentById(agentId);
+      const agent = await getAgentByIdOrStored(mastra, agentId);
 
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
@@ -156,7 +177,7 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Audio data is required' });
       }
 
-      const agent = mastra.getAgentById(agentId);
+      const agent = await getAgentByIdOrStored(mastra, agentId);
 
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
@@ -209,7 +230,7 @@ export const GET_LISTENER_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
 
-      const agent = mastra.getAgentById(agentId);
+      const agent = await getAgentByIdOrStored(mastra, agentId);
 
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
