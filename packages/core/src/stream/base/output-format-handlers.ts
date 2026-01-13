@@ -4,8 +4,6 @@ import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
-import type { ZodSchema } from 'zod/v3';
-import type { ZodAny } from 'zod/v4';
 import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';

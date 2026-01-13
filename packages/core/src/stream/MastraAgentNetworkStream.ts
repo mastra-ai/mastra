@@ -1,6 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
 import type { Run } from '../workflows';
-import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 import type { ChunkType } from './types';
 
 export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream<ChunkType<OUTPUT>> {

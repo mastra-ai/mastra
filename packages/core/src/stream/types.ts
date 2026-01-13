@@ -21,7 +21,6 @@ import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
-import type { OutputSchema } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
