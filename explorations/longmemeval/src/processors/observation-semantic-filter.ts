@@ -110,6 +110,25 @@ export interface ObservationSemanticFilterConfig {
    * @default undefined (no caching)
    */
   cacheDir?: string;
+
+  /**
+   * Enable score-based context expansion.
+   * High-scoring matches will include surrounding observation lines.
+   * @default true
+   */
+  expandContext?: boolean;
+
+  /**
+   * Similarity threshold for high-confidence matches (±2 lines)
+   * @default 0.6
+   */
+  highScoreThreshold?: number;
+
+  /**
+   * Similarity threshold for medium-confidence matches (±1 line)
+   * @default 0.4
+   */
+  mediumScoreThreshold?: number;
 }
 
 /**
@@ -441,6 +460,14 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
   private cacheDir?: string;
   private hasher = xxhash();
   private embeddingCache = new Map<string, number[]>(); // hash -> embedding
+  
+  // Context expansion settings
+  private expandContext: boolean;
+  private highScoreThreshold: number;
+  private mediumScoreThreshold: number;
+  
+  // Store all parsed observations for neighbor lookup during expansion
+  private allParsedObservations: ParsedObservation[] = [];
 
   constructor(config: ObservationSemanticFilterConfig) {
     this.embedder = config.embedder;
@@ -451,6 +478,9 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
     this.includeSuggestedResponse = config.includeSuggestedResponse ?? false;
     this.includePatterns = config.includePatterns ?? true;
     this.cacheDir = config.cacheDir;
+    this.expandContext = config.expandContext ?? true;
+    this.highScoreThreshold = config.highScoreThreshold ?? 0.6;
+    this.mediumScoreThreshold = config.mediumScoreThreshold ?? 0.4;
 
     // Ensure cache directory exists
     if (this.cacheDir && !existsSync(this.cacheDir)) {
@@ -598,13 +628,14 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
       topK: this.topK,
       minSimilarity: this.minSimilarity,
     });
-
-    // Build filtered observations with preserved structure (thread + date grouping)
-    const filteredObservations = rebuildObservationsWithStructure(
-      results.map(r => r.chunk)
-    );
     console.log('[RAG Filter] Found', results.length, 'relevant chunks out of', this.vectorStore.size, 'total');
     console.log('[RAG Filter] Top 3 similarities:', results.slice(0, 3).map(r => r.similarity.toFixed(3)).join(', '));
+
+    // Expand results based on similarity score (high score = more context)
+    const expandedChunks = this.expandResults(results);
+
+    // Build filtered observations with preserved structure (thread + date grouping)
+    const filteredObservations = rebuildObservationsWithStructure(expandedChunks);
 
     // Build the new context with filtered observations
     let newContext = `
@@ -656,8 +687,9 @@ ${filteredObservations}
 
     // Store stats in state for debugging
     state.ragStats = {
-      originalLines: parseObservationLines(observationsContent).length,
-      filteredLines: results.length,
+      originalLines: this.allParsedObservations.length,
+      matchedLines: results.length,
+      expandedLines: expandedChunks.length,
       topSimilarity: results[0]?.similarity ?? 0,
       query: userQuery.slice(0, 100),
     };
@@ -674,6 +706,9 @@ ${filteredObservations}
   ): Promise<void> {
     const parsedObs = parseObservationLines(observations);
     if (parsedObs.length === 0) return;
+    
+    // Store all parsed observations for neighbor lookup during expansion
+    this.allParsedObservations = parsedObs;
 
     // Get resourceId from state if available
     const resourceId = state.resourceId as string | undefined;
@@ -710,39 +745,140 @@ ${filteredObservations}
 
     console.log(`[RAG Filter] Cache: ${cachedChunks.length} hits, ${uncachedObs.length} misses`);
 
-    // Embed uncached observations
+    // Embed uncached observations in batches
     if (uncachedObs.length > 0) {
-      const { embeddings } = await embedMany({
-        model: this.embedder,
-        values: uncachedObs.map(l => l.line),
-      });
-
-      // Create chunks and save to cache
-      for (let i = 0; i < uncachedObs.length; i++) {
-        const obs = uncachedObs[i];
-        const hash = await this.hashContent(obs.line);
-        const embedding = embeddings[i];
-
-        // Save to cache
-        this.saveEmbeddingToCache(hash, embedding);
-
-        cachedChunks.push({
-          id: `obs_${hash}`,
-          embedding,
-          metadata: {
-            threadId: obs.threadId,
-            resourceId,
-            dateGroup: obs.dateGroup,
-            time: obs.time,
-            labels: obs.labels,
-            lineIndex: obs.lineIndex,
-            content: obs.line,
-          },
+      const batchSize = 25;
+      for (let b = 0; b < uncachedObs.length; b += batchSize) {
+        const batch = uncachedObs.slice(b, b + batchSize);
+        
+        const { embeddings } = await embedMany({
+          model: this.embedder,
+          values: batch.map(l => l.line),
         });
+
+        // Create chunks and save to cache
+        for (let i = 0; i < batch.length; i++) {
+          const obs = batch[i];
+          const hash = await this.hashContent(obs.line);
+          const embedding = embeddings[i];
+
+          // Save to cache
+          this.saveEmbeddingToCache(hash, embedding);
+
+          cachedChunks.push({
+            id: `obs_${hash}`,
+            embedding,
+            metadata: {
+              threadId: obs.threadId,
+              resourceId,
+              dateGroup: obs.dateGroup,
+              time: obs.time,
+              labels: obs.labels,
+              lineIndex: obs.lineIndex,
+              content: obs.line,
+            },
+          });
+        }
       }
     }
 
     this.vectorStore.upsert(cachedChunks);
+  }
+
+  /**
+   * Expand search results by including neighboring observations based on similarity score.
+   * High score (≥0.6): Include ±2 lines of context
+   * Medium score (0.4-0.6): Include ±1 line of context
+   * Low score (<0.4): Just the matched line
+   */
+  private expandResults(
+    results: Array<{ chunk: ObservationChunk; similarity: number }>
+  ): Array<{ metadata: ObservationChunkMetadata & { threadId: string; dateGroup: string } }> {
+    if (!this.expandContext || this.allParsedObservations.length === 0) {
+      // Return results as-is without expansion
+      return results.map(r => r.chunk);
+    }
+
+    // Create a lookup for all observations by threadId and lineIndex
+    const obsLookup = new Map<string, ParsedObservation[]>();
+    for (const obs of this.allParsedObservations) {
+      const key = obs.threadId;
+      if (!obsLookup.has(key)) {
+        obsLookup.set(key, []);
+      }
+      obsLookup.get(key)!.push(obs);
+    }
+    
+    // Sort each thread's observations by lineIndex
+    for (const [, obsList] of Array.from(obsLookup.entries())) {
+      obsList.sort((a, b) => a.lineIndex - b.lineIndex);
+    }
+
+    // Track which lines we've already included (by threadId + lineIndex)
+    const includedLines = new Set<string>();
+    const expandedChunks: Array<{ metadata: ObservationChunkMetadata & { threadId: string; dateGroup: string } }> = [];
+
+    for (const result of results) {
+      const { chunk, similarity } = result;
+      const { threadId, lineIndex, resourceId } = chunk.metadata;
+      
+      // Determine expansion range based on score
+      let range = 0;
+      if (similarity >= this.highScoreThreshold) {
+        range = 2; // ±2 lines for high confidence
+      } else if (similarity >= this.mediumScoreThreshold) {
+        range = 1; // ±1 line for medium confidence
+      }
+      // range = 0 for low confidence (just the match)
+
+      // Get observations for this thread
+      const threadObs = obsLookup.get(threadId) || [];
+      if (threadObs.length === 0) {
+        // Fallback: just include the original chunk
+        const lineKey = `${threadId}:${lineIndex}`;
+        if (!includedLines.has(lineKey)) {
+          includedLines.add(lineKey);
+          expandedChunks.push(chunk);
+        }
+        continue;
+      }
+
+      // Find observations within range
+      for (const obs of threadObs) {
+        if (obs.lineIndex >= lineIndex - range && obs.lineIndex <= lineIndex + range) {
+          const lineKey = `${threadId}:${obs.lineIndex}`;
+          if (!includedLines.has(lineKey)) {
+            includedLines.add(lineKey);
+            expandedChunks.push({
+              metadata: {
+                threadId: obs.threadId,
+                resourceId,
+                dateGroup: obs.dateGroup,
+                time: obs.time,
+                labels: obs.labels,
+                lineIndex: obs.lineIndex,
+                content: obs.line,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // Sort expanded chunks by threadId, dateGroup, then lineIndex for proper reconstruction
+    expandedChunks.sort((a, b) => {
+      if (a.metadata.threadId !== b.metadata.threadId) {
+        return a.metadata.threadId.localeCompare(b.metadata.threadId);
+      }
+      if (a.metadata.dateGroup !== b.metadata.dateGroup) {
+        return a.metadata.dateGroup.localeCompare(b.metadata.dateGroup);
+      }
+      return a.metadata.lineIndex - b.metadata.lineIndex;
+    });
+
+    console.log(`[RAG Filter] Context expansion: ${results.length} matches → ${expandedChunks.length} lines (range based on score)`);
+    
+    return expandedChunks;
   }
 
   /**

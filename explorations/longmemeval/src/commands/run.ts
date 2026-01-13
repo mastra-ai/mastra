@@ -636,7 +636,7 @@ Active evaluations:`;
       observationRagFilter = new ObservationSemanticFilter({
         embedder: fastembed.small,
         topK: 50,
-        minSimilarity: 0.25,
+        minSimilarity: 0.4,
         includeCurrentTask: false,
         includeSuggestedResponse: false,
         includePatterns: true,
