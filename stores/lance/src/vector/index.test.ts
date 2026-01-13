@@ -1733,6 +1733,82 @@ describe('Lance vector store tests', () => {
         await vectorDB.deleteTable(indexName);
       });
     });
+
+    describe('schema mismatch handling', () => {
+      it('should filter extra columns when upserting to non-empty table with different schema', async () => {
+        const tableName = 'schema_mismatch_extra_cols_' + Date.now();
+
+        // Create table with initial data (establishes schema with metadata_field1)
+        await vectorDB.createTable(tableName, [{ id: '1', vector: [0.1, 0.2, 0.3], metadata_field1: 'value1' }]);
+
+        // Upsert with different metadata fields (metadata_field2 not in schema)
+        // The extra column should be filtered out
+        const ids = await vectorDB.upsert({
+          tableName,
+          indexName: 'vector',
+          vectors: [[0.4, 0.5, 0.6]],
+          metadata: [{ field2: 'value2' }], // Different field than schema - will be dropped
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Query to verify data was added
+        const results = await vectorDB.query({
+          tableName,
+          indexName: 'vector',
+          queryVector: [0.4, 0.5, 0.6],
+          topK: 5,
+          includeAllColumns: true,
+        });
+
+        expect(results.length).toBe(2); // Original + new row
+        // New row should have metadata_field1 as null (from schema), not field2
+        const newRow = results.find(r => r.id === ids[0]);
+        expect(newRow).toBeDefined();
+        expect(newRow?.metadata?.field2).toBeUndefined(); // Dropped
+        expect(newRow?.metadata?.field1).toBeNull(); // Set to null for schema column
+
+        // Cleanup
+        await vectorDB.deleteTable(tableName);
+      });
+
+      it('should set missing schema columns to null when upserting partial data', async () => {
+        const tableName = 'schema_mismatch_missing_cols_' + Date.now();
+
+        // Create table with schema including metadata_field1 and metadata_field2
+        await vectorDB.createTable(tableName, [
+          { id: '1', vector: [0.1, 0.2, 0.3], metadata_field1: 'value1', metadata_field2: 'value2' },
+        ]);
+
+        // Upsert with only field1 (field2 missing from incoming data)
+        const ids = await vectorDB.upsert({
+          tableName,
+          indexName: 'vector',
+          vectors: [[0.4, 0.5, 0.6]],
+          metadata: [{ field1: 'new_value1' }], // field2 not provided
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Query to verify data - field2 should be null for new row
+        const results = await vectorDB.query({
+          tableName,
+          indexName: 'vector',
+          queryVector: [0.4, 0.5, 0.6],
+          topK: 5,
+          includeAllColumns: true,
+        });
+
+        const newRow = results.find(r => r.id === ids[0]);
+        expect(newRow).toBeDefined();
+        expect(newRow?.metadata?.field1).toBe('new_value1');
+        // field2 should be null (not undefined) since it's in schema but not in data
+        expect(newRow?.metadata?.field2).toBeNull();
+
+        // Cleanup
+        await vectorDB.deleteTable(tableName);
+      });
+    });
   });
 });
 

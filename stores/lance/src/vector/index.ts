@@ -335,35 +335,42 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         const schema = await table.schema();
         const existingColumns = new Set(schema.fields.map(f => f.name));
 
-        // Check if any data column is not in the schema
-        const dataColumns = Object.keys(data[0] || {});
-        const missingColumns = dataColumns.filter(col => !existingColumns.has(col));
+        // Check for schema mismatches:
+        // - extraColumns: columns in data not in schema (will be dropped)
+        // - missingSchemaColumns: columns in schema not in data (will be set to null)
+        const dataColumns = new Set(Object.keys(data[0] || {}));
+        const extraColumns = [...dataColumns].filter(col => !existingColumns.has(col));
+        const missingSchemaColumns = [...existingColumns].filter(col => !dataColumns.has(col));
+        const hasSchemaMismatch = extraColumns.length > 0 || missingSchemaColumns.length > 0;
 
-        if (rowCount === 0 && missingColumns.length > 0) {
-          // Empty table with missing columns - recreate it with the correct schema
+        if (rowCount === 0 && extraColumns.length > 0) {
+          // Empty table with extra columns in data - recreate it with the correct schema
           this.logger.debug(
-            `Table ${resolvedTableName} is empty and missing columns ${missingColumns.join(', ')}. Recreating with new schema.`,
+            `Table ${resolvedTableName} is empty and data has extra columns ${extraColumns.join(', ')}. Recreating with new schema.`,
           );
           await this.lanceClient.dropTable(resolvedTableName);
           await this.lanceClient.createTable(resolvedTableName, data);
-        } else if (missingColumns.length > 0) {
-          // Non-empty table with missing columns - filter data to match existing schema
-          // LanceDB requires data to match table schema exactly
-          this.logger.warn(
-            `Table ${resolvedTableName} has ${rowCount} rows and is missing columns ${missingColumns.join(', ')}. ` +
-              `These columns will be dropped from the upsert. To include new columns, recreate the table.`,
-          );
-          const filteredData = data.map(row => {
-            const filtered: Record<string, any> = {};
-            for (const col of existingColumns) {
+        } else if (hasSchemaMismatch) {
+          // Non-empty table or schema mismatch - normalize data to match existing schema
+          // LanceDB requires data to match table schema exactly, in the same column order
+          if (extraColumns.length > 0) {
+            this.logger.warn(
+              `Table ${resolvedTableName} has ${rowCount} rows. Columns ${extraColumns.join(', ')} will be dropped from upsert.`,
+            );
+          }
+          // Use schema field order to ensure columns are in the correct order
+          const schemaFieldNames = schema.fields.map(f => f.name);
+          const normalizedData = data.map(row => {
+            const normalized: Record<string, any> = {};
+            for (const col of schemaFieldNames) {
               // Include column from row if present, otherwise set to null
-              filtered[col] = col in row ? row[col] : null;
+              normalized[col] = col in row ? row[col] : null;
             }
-            return filtered;
+            return normalized;
           });
-          await table.add(filteredData, { mode: 'overwrite' });
+          await table.add(normalizedData);
         } else {
-          // Table has data and schema matches - add data normally
+          // Schema matches exactly - add data normally
           await table.add(data, { mode: 'overwrite' });
         }
       } else {
