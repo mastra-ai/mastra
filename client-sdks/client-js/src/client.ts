@@ -772,6 +772,12 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.ownerId) {
+      searchParams.set('ownerId', params.ownerId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
 
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
     if (requestContextParam) {

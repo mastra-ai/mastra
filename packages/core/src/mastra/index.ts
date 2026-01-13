@@ -814,6 +814,10 @@ export class Mastra<
     }
 
     // Handle version resolution
+    if (options?.versionId && options?.versionNumber !== undefined) {
+      this.#logger?.warn(`Both versionId and versionNumber provided for agent "${id}". Using versionId.`);
+    }
+
     if (options?.versionId) {
       // Fetch the specific version by its ID
       const version = await agentsStore.getVersion(options.versionId);

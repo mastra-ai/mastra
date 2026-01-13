@@ -86,8 +86,11 @@ const formatInstructions = (instructions: GetAgentResponse['instructions']): str
     if ('content' in instructions && typeof instructions.content === 'string') {
       return instructions.content;
     }
-    if ('text' in instructions && typeof (instructions as { text?: unknown }).text === 'string') {
-      return (instructions as { text: string }).text;
+    if ('text' in instructions) {
+      const textValue = (instructions as Record<string, unknown>).text;
+      if (typeof textValue === 'string') {
+        return textValue;
+      }
     }
     return JSON.stringify(instructions, null, 2);
   }

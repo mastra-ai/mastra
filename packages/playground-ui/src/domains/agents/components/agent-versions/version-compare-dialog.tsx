@@ -95,9 +95,9 @@ function DiffRow({ diff }: { diff: VersionDiff }) {
           <span
             className={cn(
               'text-xs px-1.5 py-0.5 rounded font-medium',
-              changeType === 'added' && 'bg-green-500/20 text-green-400',
-              changeType === 'removed' && 'bg-red-500/20 text-red-400',
-              changeType === 'modified' && 'bg-yellow-500/20 text-yellow-400',
+              changeType === 'added' && 'bg-accent1Dark text-accent1',
+              changeType === 'removed' && 'bg-accent2Dark text-accent2',
+              changeType === 'modified' && 'bg-accent6Dark text-accent6',
             )}
           >
             {changeType}
@@ -120,7 +120,7 @@ function DiffRow({ diff }: { diff: VersionDiff }) {
             className={cn(
               'text-sm p-3 rounded-md bg-surface3 overflow-x-auto whitespace-pre-wrap break-words font-mono',
               changeType === 'added' && 'opacity-50',
-              changeType === 'removed' && 'border border-red-500/30 bg-red-500/10',
+              changeType === 'removed' && 'border border-accent2 bg-accent2Dark',
             )}
           >
             {previousStr}
@@ -134,8 +134,8 @@ function DiffRow({ diff }: { diff: VersionDiff }) {
             className={cn(
               'text-sm p-3 rounded-md bg-surface3 overflow-x-auto whitespace-pre-wrap break-words font-mono',
               changeType === 'removed' && 'opacity-50',
-              changeType === 'added' && 'border border-green-500/30 bg-green-500/10',
-              changeType === 'modified' && 'border border-yellow-500/30 bg-yellow-500/10',
+              changeType === 'added' && 'border border-accent1 bg-accent1Dark',
+              changeType === 'modified' && 'border border-accent6 bg-accent6Dark',
             )}
           >
             {currentStr}
