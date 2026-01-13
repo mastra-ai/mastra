@@ -153,9 +153,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns The index if condition is truthy, null otherwise
    */
   async evaluateCondition(
-    conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
+    conditionFn: ConditionFunction<any, any, any, any, any, DefaultEngineType>,
     index: number,
-    context: ConditionFunctionParams<any, any, any, any, DefaultEngineType>,
+    context: ConditionFunctionParams<any, any, any, any, any, DefaultEngineType>,
     operationId: string,
   ): Promise<number | null> {
     return this.wrapDurableOperation(operationId, async () => {
