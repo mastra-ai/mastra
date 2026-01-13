@@ -185,6 +185,46 @@ export abstract class MemoryStorage extends StorageDomain {
       throw new Error('page value too large');
     }
   }
+
+  /**
+   * Validates pagination input before normalization.
+   * Use this when accepting raw perPageInput (number | false) from callers.
+   *
+   * When perPage is false (fetch all), page must be 0 since pagination is disabled.
+   * When perPage is a number, delegates to validatePagination for full validation.
+   *
+   * @param page - Page number (0-indexed)
+   * @param perPageInput - Items per page as number, or false to fetch all results
+   * @throws Error if perPageInput is false and page !== 0
+   * @throws Error if perPageInput is invalid (not false or a non-negative safe integer)
+   * @throws Error if page is invalid or offset would overflow
+   */
+  protected validatePaginationInput(page: number, perPageInput: number | false): void {
+    // Validate perPageInput type first
+    if (perPageInput !== false) {
+      if (typeof perPageInput !== 'number' || !Number.isFinite(perPageInput) || !Number.isSafeInteger(perPageInput)) {
+        throw new Error('perPage must be false or a safe integer');
+      }
+      if (perPageInput < 0) {
+        throw new Error('perPage must be >= 0');
+      }
+    }
+
+    // When fetching all (perPage: false), only page 0 is valid
+    if (perPageInput === false) {
+      if (page !== 0) {
+        throw new Error('page must be 0 when perPage is false');
+      }
+      // Still validate page is a valid integer
+      if (!Number.isFinite(page) || !Number.isSafeInteger(page)) {
+        throw new Error('page must be >= 0');
+      }
+      return;
+    }
+
+    // For numeric perPage, delegate to existing validation
+    this.validatePagination(page, perPageInput);
+  }
 }
 
 const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {

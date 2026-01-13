@@ -93,22 +93,24 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
 
     try {
-      // Validate pagination parameters (throws on invalid input)
-      this.validatePagination(page, perPage);
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page, perPage },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
         error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
     }
+
+    const perPage = normalizePerPage(perPageInput, 100);
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 

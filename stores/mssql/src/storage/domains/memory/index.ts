@@ -185,20 +185,22 @@ export class MemoryMSSQL extends MemoryStorage {
 
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
 
     try {
-      // Validate pagination parameters (throws on invalid input)
-      this.validatePagination(page, perPage);
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
     } catch (error) {
       throw new MastraError({
         id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: error instanceof Error ? error.message : 'Invalid pagination parameters',
-        details: { page, perPage },
+        details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
       });
     }
+
+    const perPage = normalizePerPage(perPageInput, 100);
 
     // Validate metadata keys to prevent SQL injection
     try {

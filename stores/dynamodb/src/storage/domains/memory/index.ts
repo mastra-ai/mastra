@@ -604,19 +604,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
 
     try {
-      // Validate pagination parameters (throws on invalid input)
-      // For unbounded requests (perPage: false), validate page must be 0 and use dummy value for perPage
-      if (perPageInput === false) {
-        if (page !== 0) {
-          throw new Error('page must be 0 when perPage is false');
-        }
-        // Skip validation for unbounded requests (don't validate against MAX_SAFE_INTEGER)
-      } else {
-        this.validatePagination(page, perPage);
-      }
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
     } catch (error) {
       throw new MastraError(
         {
@@ -631,6 +623,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
     }
+
+    const perPage = normalizePerPage(perPageInput, 100);
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);

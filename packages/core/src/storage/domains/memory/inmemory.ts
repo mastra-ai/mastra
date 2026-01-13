@@ -463,10 +463,12 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
 
-    // Validate pagination parameters (throws on invalid input)
-    this.validatePagination(page, perPage);
+    // Validate pagination input before normalization
+    // This ensures page === 0 when perPageInput === false
+    this.validatePaginationInput(page, perPageInput ?? 100);
+
+    const perPage = normalizePerPage(perPageInput, 100);
 
     this.logger.debug(`InMemoryMemory: listThreads called with filter: ${JSON.stringify(filter)}`);
 
