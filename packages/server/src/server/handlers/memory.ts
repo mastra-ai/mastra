@@ -111,10 +111,20 @@ async function getMemoryFromContext({
         }
       }
     }
+  }
 
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
+  // Try to get stored agent if not found in code-defined agents
+  if (agentId && !agent) {
+    logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
     }
+  }
+
+  if (agentId && !agent) {
+    throw new HTTPException(404, { message: 'Agent not found' });
   }
 
   if (agent) {
