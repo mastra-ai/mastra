@@ -120,6 +120,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public id: TAgentId;
   public name: string;
   public readonly source: 'code' | 'stored';
+  public readonly activeVersionId?: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -170,6 +171,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     this.name = config.name;
     this.id = config.id ?? config.name;
     this.source = config.source ?? 'code';
+    this.activeVersionId = config.activeVersionId;
 
     this.#instructions = config.instructions;
     this.#description = config.description;

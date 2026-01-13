@@ -1033,6 +1033,7 @@ export class Mastra<
       scorers,
       defaultOptions: storedAgent.defaultOptions,
       source: 'stored',
+      activeVersionId: storedAgent.activeVersionId,
     });
 
     // Register the agent with Mastra

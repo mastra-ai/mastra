@@ -43,25 +43,25 @@
 | **Task 14** | Add Edit button to Agent Header                   | PR #11864 |
 | **Task 15** | Export new components                             | PR #11864 |
 
-### 🔲 Remaining Tasks - Phase 1A UI Components
+### ✅ Completed Tasks - Phase 1A + 1B Backend
 
-| Task       | Description                     | Status |
-| ---------- | ------------------------------- | ------ |
-| **Task 7** | Add Memory Configs API endpoint | TODO   |
+| Task       | Description                                    | PR/Commit |
+| ---------- | ---------------------------------------------- | --------- |
+| **Task 7** | Add Memory Configs API endpoint                | PR #11865 |
+| **V7**     | Update `getStoredAgent` for version resolution | PR #11866 |
+| **V8**     | Add version methods to client SDK              | PR #11866 |
+| **V9**     | Create `useAgentVersions` hooks                | PR #11867 |
+| **V10**    | Create `AgentVersions` list component          | PR #11868 |
+| **V11**    | Create `SaveVersionDialog` component           | PR #11868 |
+| **V12**    | Create `VersionCompareDialog` with diff view   | PR #11869 |
 
-### 🔲 Remaining Tasks - Phase 1B Versioning
+### 🔲 Remaining Tasks - Phase 1B Versioning UI
 
-| Task    | Description                                    | Status |
-| ------- | ---------------------------------------------- | ------ |
-| **V7**  | Update `getStoredAgent` for version resolution | TODO   |
-| **V8**  | Add version methods to client SDK              | TODO   |
-| **V9**  | Create `useAgentVersions` hooks                | TODO   |
-| **V10** | Create `AgentVersions` list component          | TODO   |
-| **V11** | Create `SaveVersionDialog` component           | TODO   |
-| **V12** | Create `VersionCompareDialog` with diff view   | TODO   |
-| **V13** | Add "Versions" tab to `AgentInformation`       | TODO   |
-| **V14** | Add version badge to `AgentEntityHeader`       | TODO   |
-| **V15** | Implement retention enforcement                | TODO   |
+| Task    | Description                              | Status |
+| ------- | ---------------------------------------- | ------ |
+| **V13** | Add "Versions" tab to `AgentInformation` | TODO   |
+| **V14** | Add version badge to `AgentEntityHeader` | TODO   |
+| **V15** | Implement retention enforcement          | TODO   |
 
 ---
 

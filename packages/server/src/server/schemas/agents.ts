@@ -105,6 +105,7 @@ export const serializedAgentSchema = z.object({
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
   source: z.enum(['code', 'stored']).optional(),
+  activeVersionId: z.string().optional(),
 });
 
 /**

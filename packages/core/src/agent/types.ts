@@ -136,6 +136,11 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   source?: 'code' | 'stored';
   /**
+   * Active version ID for stored agents.
+   * References the currently active version in the agent_versions table.
+   */
+  activeVersionId?: string;
+  /**
    * Unique identifier for the agent.
    */
   name: string;

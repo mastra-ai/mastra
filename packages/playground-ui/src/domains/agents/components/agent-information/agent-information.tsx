@@ -8,6 +8,7 @@ import { useMemory } from '@/domains/memory/hooks';
 import { useAgentSettings } from '../../context/agent-context';
 import { AgentSettings } from '../agent-settings';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+import { AgentVersionsList } from '../agent-versions';
 
 export interface AgentInformationProps {
   agentId: string;
@@ -15,18 +16,21 @@ export interface AgentInformationProps {
 }
 
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
+  const { data: agent } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const hasMemory = !isMemoryLoading && Boolean(memory?.result);
+  const isStoredAgent = agent?.source === 'stored';
 
   return (
     <AgentInformationLayout agentId={agentId}>
       <AgentEntityHeader agentId={agentId} />
 
-      <AgentInformationTabLayout agentId={agentId}>
+      <AgentInformationTabLayout agentId={agentId} isStoredAgent={isStoredAgent}>
         <TabList>
           <Tab value="overview">Overview</Tab>
           <Tab value="model-settings">Model Settings</Tab>
           {hasMemory && <Tab value="memory">Memory</Tab>}
+          {isStoredAgent && <Tab value="versions">Versions</Tab>}
           <Tab value="tracing-options">Tracing Options</Tab>
         </TabList>
         <TabContent value="overview">
@@ -38,6 +42,11 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
         {hasMemory && (
           <TabContent value="memory">
             <AgentMemory agentId={agentId} threadId={threadId} />
+          </TabContent>
+        )}
+        {isStoredAgent && (
+          <TabContent value="versions">
+            <AgentVersionsList agentId={agentId} activeVersionId={agent?.activeVersionId} />
           </TabContent>
         )}
         <TabContent value="tracing-options">
@@ -119,6 +128,7 @@ export const AgentInformationLayout = ({ children, agentId }: AgentInformationLa
 export interface AgentInformationTabLayoutProps {
   children: React.ReactNode;
   agentId: string;
+  isStoredAgent?: boolean;
 }
 export const AgentInformationTabLayout = ({ children, agentId }: AgentInformationTabLayoutProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
