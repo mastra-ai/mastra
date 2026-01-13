@@ -5,6 +5,7 @@
  * out-of-order span arrival via queuing, delayed cleanup, and memory management.
  */
 
+import { TracingEventType } from '@mastra/core/observability';
 import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
@@ -176,7 +177,7 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
    * @param key - Storage key
    * @returns The stored value, or undefined if not found
    */
-  getExtraValue(key: string): unknown | undefined {
+  getExtraValue(key: string): unknown {
     return this.#extraData.get(key);
   }
 
@@ -186,15 +187,22 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
 
   /**
    * Add an event to the waiting queue.
-   * @param event - The tracing event to queue
-   * @param waitingFor - 'root' or a specific parentSpanId
+   * @param args.event - The tracing event to queue
+   * @param args.waitingFor - 'root' or a specific parentSpanId
+   * @param args.attempts - Optional: preserve attempts count when re-queuing
+   * @param args.queuedAt - Optional: preserve original queue time when re-queuing
    */
-  addToWaitingQueue(args: { event: TracingEvent; waitingFor: 'root' | string }): void {
+  addToWaitingQueue(args: {
+    event: TracingEvent;
+    waitingFor: 'root' | string;
+    attempts?: number;
+    queuedAt?: Date;
+  }): void {
     const queuedEvent: QueuedEvent = {
       event: args.event,
       waitingFor: args.waitingFor,
-      attempts: 0,
-      queuedAt: new Date(),
+      attempts: args.attempts ?? 0,
+      queuedAt: args.queuedAt ?? new Date(),
     };
 
     if (args.waitingFor === 'root') {
@@ -208,18 +216,18 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
 
   /**
    * Get all events waiting for the root span.
-   * Returns the array (which can be mutated for processing).
+   * Returns a copy of the internal array.
    */
   getEventsWaitingForRoot(): QueuedEvent[] {
-    return this.#waitingForRoot;
+    return [...this.#waitingForRoot];
   }
 
   /**
    * Get all events waiting for a specific parent span.
-   * Returns the array (which can be mutated for processing).
+   * Returns a copy of the internal array.
    */
   getEventsWaitingFor(args: { spanId: string }): QueuedEvent[] {
-    return this.#waitingForParent.get(args.spanId) ?? [];
+    return [...(this.#waitingForParent.get(args.spanId) ?? [])];
   }
 
   /**
@@ -469,10 +477,12 @@ export abstract class TrackingExporter<
   #traceMap = new Map<string, TraceData<TRootData, TSpanData, TEventData, TMetadata>>();
   /** Flag to prevent processing during shutdown */
   #shutdownStarted = false;
+  /** Flag to prevent concurrent hard cap enforcement */
+  #hardCapEnforcementInProgress = false;
   /** Map of traceId to scheduled cleanup timeout */
   #pendingCleanups = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Tracks insertion order of traces for cap enforcement (oldest first) */
-  #traceInsertionOrder: string[] = [];
+  // Note: #traceMap maintains insertion order (JS Map spec), so we use
+  // #traceMap.keys() to iterate traces oldest-first for cap enforcement.
 
   /** Subclass configuration with resolved values */
   protected readonly config: TConfig;
@@ -577,7 +587,13 @@ export abstract class TrackingExporter<
         // Move to waiting-for-parent if we now know the parent
         const parentId = queuedEvent.event.exportedSpan.parentSpanId;
         if (parentId && traceData.isRootProcessed()) {
-          traceData.addToWaitingQueue({ event: queuedEvent.event, waitingFor: parentId });
+          // Preserve attempts and queuedAt when moving between queues
+          traceData.addToWaitingQueue({
+            event: queuedEvent.event,
+            waitingFor: parentId,
+            attempts: queuedEvent.attempts,
+            queuedAt: queuedEvent.queuedAt,
+          });
         } else {
           toKeep.push(queuedEvent);
         }
@@ -587,7 +603,13 @@ export abstract class TrackingExporter<
     // Update the queue with remaining events
     traceData.clearWaitingForRoot();
     for (const event of toKeep) {
-      traceData.addToWaitingQueue({ event: event.event, waitingFor: 'root' });
+      // Preserve attempts and queuedAt when re-adding to queue
+      traceData.addToWaitingQueue({
+        event: event.event,
+        waitingFor: 'root',
+        attempts: event.attempts,
+        queuedAt: event.queuedAt,
+      });
     }
   }
 
@@ -644,7 +666,13 @@ export abstract class TrackingExporter<
     // Update the queue
     traceData.clearWaitingFor({ spanId });
     for (const event of toKeep) {
-      traceData.addToWaitingQueue({ event: event.event, waitingFor: spanId });
+      // Preserve attempts and queuedAt when re-adding to queue
+      traceData.addToWaitingQueue({
+        event: event.event,
+        waitingFor: spanId,
+        attempts: event.attempts,
+        queuedAt: event.queuedAt,
+      });
     }
   }
 
@@ -776,12 +804,8 @@ export abstract class TrackingExporter<
       });
     }
 
-    // Remove from trace map and insertion order
+    // Remove from trace map (O(1) - Map maintains insertion order automatically)
     this.#traceMap.delete(traceId);
-    const orderIndex = this.#traceInsertionOrder.indexOf(traceId);
-    if (orderIndex !== -1) {
-      this.#traceInsertionOrder.splice(orderIndex, 1);
-    }
 
     this.logger.debug(`${this.name}: Cleaned up trace data`, { traceId });
   }
@@ -805,9 +829,9 @@ export abstract class TrackingExporter<
       cap: this.#maxPendingCleanupTraces,
     });
 
-    // Remove oldest pending cleanups
+    // Remove oldest pending cleanups (Map.keys() iterates in insertion order)
     let removed = 0;
-    for (const traceId of this.#traceInsertionOrder) {
+    for (const traceId of this.#traceMap.keys()) {
       if (removed >= toRemove) break;
 
       if (this.#pendingCleanups.has(traceId)) {
@@ -821,45 +845,57 @@ export abstract class TrackingExporter<
   /**
    * Enforce hard cap on total traces.
    * Will kill even active traces if necessary.
+   * Uses a flag to prevent concurrent executions when called fire-and-forget.
    */
   async #enforceHardCap(): Promise<void> {
-    if (this.#traceMap.size <= this.#maxTotalTraces) {
+    // Skip if already under cap or enforcement already in progress
+    if (this.#traceMap.size <= this.#maxTotalTraces || this.#hardCapEnforcementInProgress) {
       return;
     }
 
-    const toRemove = this.#traceMap.size - this.#maxTotalTraces;
-    this.logger.warn(`${this.name}: Total trace cap exceeded, killing ${toRemove} oldest traces`, {
-      traceCount: this.#traceMap.size,
-      cap: this.#maxTotalTraces,
-    });
-
-    const reason: SpanErrorInfo = {
-      id: 'TRACE_CAP_EXCEEDED',
-      message: 'Trace killed due to memory cap enforcement.',
-      domain: 'MASTRA_OBSERVABILITY',
-      category: 'SYSTEM',
-    };
-
-    let removed = 0;
-    // Use a copy of the array since we're modifying it
-    for (const traceId of [...this.#traceInsertionOrder]) {
-      if (removed >= toRemove) break;
-
-      const traceData = this.#traceMap.get(traceId);
-      if (traceData) {
-        // Abort any active spans
-        for (const spanId of traceData.activeSpanIds) {
-          const span = traceData.getSpan({ spanId });
-          if (span) {
-            await this._abortSpan({ span, traceData, reason });
-          }
-        }
-
-        // Cancel any pending cleanup and remove
-        this.#cancelScheduledCleanup(traceId);
-        this.#performCleanup(traceId);
-        removed++;
+    this.#hardCapEnforcementInProgress = true;
+    try {
+      // Re-check after acquiring the flag (another call may have just finished)
+      if (this.#traceMap.size <= this.#maxTotalTraces) {
+        return;
       }
+
+      const toRemove = this.#traceMap.size - this.#maxTotalTraces;
+      this.logger.warn(`${this.name}: Total trace cap exceeded, killing ${toRemove} oldest traces`, {
+        traceCount: this.#traceMap.size,
+        cap: this.#maxTotalTraces,
+      });
+
+      const reason: SpanErrorInfo = {
+        id: 'TRACE_CAP_EXCEEDED',
+        message: 'Trace killed due to memory cap enforcement.',
+        domain: 'MASTRA_OBSERVABILITY',
+        category: 'SYSTEM',
+      };
+
+      let removed = 0;
+      // Use a copy of keys since we're modifying the map during iteration
+      for (const traceId of [...this.#traceMap.keys()]) {
+        if (removed >= toRemove) break;
+
+        const traceData = this.#traceMap.get(traceId);
+        if (traceData) {
+          // Abort any active spans
+          for (const spanId of traceData.activeSpanIds) {
+            const span = traceData.getSpan({ spanId });
+            if (span) {
+              await this._abortSpan({ span, traceData, reason });
+            }
+          }
+
+          // Cancel any pending cleanup and remove
+          this.#cancelScheduledCleanup(traceId);
+          this.#performCleanup(traceId);
+          removed++;
+        }
+      }
+    } finally {
+      this.#hardCapEnforcementInProgress = false;
     }
   }
 
@@ -990,17 +1026,23 @@ export abstract class TrackingExporter<
   protected skipCachingEventSpans = false;
 
   private getMethod(event: TracingEvent): 'handleEventSpan' | 'handleSpanStart' | 'handleSpanUpdate' | 'handleSpanEnd' {
-    if (!event.exportedSpan.isEvent) {
-      switch (event.type) {
-        case 'span_started':
-          return 'handleSpanStart';
-        case 'span_updated':
-          return 'handleSpanUpdate';
-        case 'span_ended':
-          return 'handleSpanEnd';
+    if (event.exportedSpan.isEvent) {
+      return 'handleEventSpan';
+    }
+    const eventType = event.type;
+    switch (eventType) {
+      case TracingEventType.SPAN_STARTED:
+        return 'handleSpanStart';
+      case TracingEventType.SPAN_UPDATED:
+        return 'handleSpanUpdate';
+      case TracingEventType.SPAN_ENDED:
+        return 'handleSpanEnd';
+      default: {
+        // Exhaustive check - TypeScript will error if new TracingEventType values are added
+        const _exhaustiveCheck: never = eventType;
+        throw new Error(`Unhandled event type: ${_exhaustiveCheck}`);
       }
     }
-    return 'handleEventSpan';
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
@@ -1176,7 +1218,7 @@ export abstract class TrackingExporter<
 
     if (!this.#traceMap.has(traceId)) {
       this.#traceMap.set(traceId, new TraceData());
-      this.#traceInsertionOrder.push(traceId);
+      // Note: Map.set() maintains insertion order automatically
       this.logger.debug(`${this.name}: Created new trace data cache`, {
         traceId,
         method,
@@ -1265,7 +1307,6 @@ export abstract class TrackingExporter<
     }
 
     this.#traceMap.clear();
-    this.#traceInsertionOrder = [];
     await this._postShutdown();
     await super.shutdown();
   }

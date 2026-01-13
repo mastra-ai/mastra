@@ -1,5 +1,11 @@
 /**
- * Integration tests using real Braintrust SDK to verify span nesting behavior.
+ * Unit tests using real Braintrust SDK to verify span nesting behavior.
+ *
+ * NOTE: We intentionally use the real SDK (not mocked) because we need to verify
+ * the SDK's internal span relationship tracking (_spanId, _rootSpanId, _spanParents).
+ * We use a fake API key ('test-key') so the SDK initializes and creates real span
+ * objects with proper internal state, but no data is actually sent to Braintrust
+ * servers. This runs at unit test speed with no external dependencies.
  *
  * These tests verify that our BraintrustExporter correctly uses the SDK's
  * startSpan() chain to establish proper parent-child relationships.
@@ -14,7 +20,7 @@ import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { initLogger } from 'braintrust';
 import type { Logger, Span } from 'braintrust';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { BraintrustExporter } from './tracing';
 
 class TestBraintrustExporter extends BraintrustExporter {
@@ -120,10 +126,10 @@ describe('Braintrust SDK - Direct startSpan() behavior', () => {
 });
 
 // =============================================================================
-// Exporter Integration Tests - Non-External Case
+// Exporter Tests - Non-External Case
 // =============================================================================
 
-describe('BraintrustExporter Integration - Non-External Case', () => {
+describe('BraintrustExporter - Non-External Case', () => {
   let logger: Logger<true>;
   let exporter: TestBraintrustExporter;
 
@@ -138,6 +144,10 @@ describe('BraintrustExporter Integration - Non-External Case', () => {
     exporter = new TestBraintrustExporter({
       braintrustLogger: logger,
     });
+  });
+
+  afterEach(async () => {
+    await exporter.shutdown();
   });
 
   it('root span processed by exporter has correct rootSpanId = spanId', async () => {
@@ -290,10 +300,10 @@ describe('BraintrustExporter Integration - Non-External Case', () => {
 });
 
 // =============================================================================
-// Exporter Integration Tests - External Case
+// Exporter Tests - External Case
 // =============================================================================
 
-describe('BraintrustExporter Integration - External Case', () => {
+describe('BraintrustExporter - External Case', () => {
   let logger: Logger<true>;
 
   beforeAll(async () => {

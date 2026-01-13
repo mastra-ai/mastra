@@ -125,8 +125,9 @@ export class LangSmithExporter extends TrackingExporter<
     }
 
     // use start-time as end-time to make an event span.
-    await langSmithSpan.end({ endTime: args.span.startTime.getTime() / 1000 });
+    await langSmithSpan.end({ endTime: args.span.startTime.getTime() });
     await langSmithSpan.patchRun();
+    return langSmithSpan;
   }
 
   protected override async _updateSpan(args: { span: AnyExportedSpan; traceData: LangSmithTraceData }): Promise<void> {
@@ -137,7 +138,11 @@ export class LangSmithExporter extends TrackingExporter<
     await this.handleSpanUpdateOrEnd({ ...args, isEnd: true });
   }
 
-  protected override async _abortSpan(args: { span: LangSmithSpan; reason: SpanErrorInfo }): Promise<void> {
+  protected override async _abortSpan(args: {
+    span: LangSmithSpan;
+    traceData: LangSmithTraceData;
+    reason: SpanErrorInfo;
+  }): Promise<void> {
     const { span, reason } = args;
     span.error = reason.message;
     span.metadata = {
@@ -189,9 +194,9 @@ export class LangSmithExporter extends TrackingExporter<
     }
 
     if (isEnd) {
-      // End the span with the correct endTime (convert milliseconds to seconds)
+      // End the span with the correct endTime
       if (span.endTime) {
-        await langSmithSpan.end({ endTime: span.endTime.getTime() / 1000 });
+        await langSmithSpan.end({ endTime: span.endTime.getTime() });
       } else {
         await langSmithSpan.end();
       }
@@ -210,7 +215,7 @@ export class LangSmithExporter extends TrackingExporter<
 
     if (isNew) {
       payload.run_type = mapSpanType(span.type);
-      payload.start_time = span.startTime.getTime() / 1000;
+      payload.start_time = span.startTime.getTime();
     }
 
     // Add project name if configured
@@ -260,7 +265,7 @@ export class LangSmithExporter extends TrackingExporter<
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
+      const otherAttributes = omitKeys(attributes, ['model', 'provider', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

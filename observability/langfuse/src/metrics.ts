@@ -41,9 +41,10 @@ export function formatUsageMetrics(usage?: UsageStats): LangfuseUsageMetrics {
     metrics.reasoning = usage.outputDetails.reasoning;
   }
 
-  if (metrics.input && metrics.output) {
+  // Use explicit null checks to handle zero values correctly
+  if (metrics.input != null && metrics.output != null) {
     metrics.total = metrics.input + metrics.output;
-    if (metrics.cache_write_input_tokens) {
+    if (metrics.cache_write_input_tokens != null) {
       metrics.total += metrics.cache_write_input_tokens;
     }
   }

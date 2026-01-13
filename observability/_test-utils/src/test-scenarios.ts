@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { TracingEvent } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { generateTrace, reverseHierarchyOrder, sendWithDelays } from './trace-generator';
 
 /**
@@ -65,14 +66,17 @@ export function runOutOfOrderSpanTests(factory: ExporterFactory, exporterName: s
       // Advance timers to allow cleanup scheduling
       vi.advanceTimersByTime(1000);
 
-      // All spans should eventually be processed
-      // (verification depends on exporter implementation)
+      // Verify spans were tracked (if exporter exposes this method)
+      if (exporter.getTraceMapSize) {
+        // After processing, at least one trace should be tracked
+        expect(exporter.getTraceMapSize()).toBeGreaterThanOrEqual(1);
+      }
     });
 
     it('should handle interleaved start and end events', async () => {
       const events = generateTrace({ depth: 2, breadth: 3, includeEvents: true });
 
-      // Interleave events: start1, start2, end1, start3, end2, end3...
+      // Interleave events: start0, end0, start1, end1, start2, end2...
       const starts = events.filter(e => e.type === 'span_started');
       const ends = events.filter(e => e.type === 'span_ended');
 
@@ -85,6 +89,11 @@ export function runOutOfOrderSpanTests(factory: ExporterFactory, exporterName: s
 
       await sendWithDelays(exporter, interleaved);
       await flushAsync(10);
+
+      // Verify at least one trace was processed
+      if (exporter.getTraceMapSize) {
+        expect(exporter.getTraceMapSize()).toBeGreaterThanOrEqual(1);
+      }
     });
   });
 }
@@ -124,6 +133,11 @@ export function runRootArrivesLastTests(factory: ExporterFactory, exporterName: 
       // Allow async processing
       await flushAsync(10);
 
+      // Verify trace is being tracked after root arrives
+      if (exporter.getTraceMapSize) {
+        expect(exporter.getTraceMapSize()).toBeGreaterThanOrEqual(1);
+      }
+
       // Send end events
       await sendWithDelays(exporter, ends);
       await flushAsync(5);
@@ -150,6 +164,11 @@ export function runRootArrivesLastTests(factory: ExporterFactory, exporterName: 
       );
 
       await flushAsync(15);
+
+      // Verify trace is being tracked
+      if (exporter.getTraceMapSize) {
+        expect(exporter.getTraceMapSize()).toBeGreaterThanOrEqual(1);
+      }
 
       // Send end events
       await sendWithDelays(
@@ -204,12 +223,12 @@ export function runDeepHierarchyTests(factory: ExporterFactory, exporterName: st
       const now = new Date();
 
       const spanA: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'span-A',
           traceId,
           name: 'span-A',
-          type: 'AGENT_RUN' as any,
+          type: SpanType.AGENT_RUN,
           isRootSpan: true,
           isEvent: false,
           startTime: now,
@@ -217,13 +236,13 @@ export function runDeepHierarchyTests(factory: ExporterFactory, exporterName: st
       };
 
       const spanB: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'span-B',
           traceId,
           parentSpanId: 'span-A',
           name: 'span-B',
-          type: 'TOOL_CALL' as any,
+          type: SpanType.TOOL_CALL,
           isRootSpan: false,
           isEvent: false,
           startTime: new Date(now.getTime() + 100),
@@ -231,13 +250,13 @@ export function runDeepHierarchyTests(factory: ExporterFactory, exporterName: st
       };
 
       const spanC: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'span-C',
           traceId,
           parentSpanId: 'span-B',
           name: 'span-C',
-          type: 'TOOL_CALL' as any,
+          type: SpanType.TOOL_CALL,
           isRootSpan: false,
           isEvent: false,
           startTime: new Date(now.getTime() + 200),
@@ -245,13 +264,13 @@ export function runDeepHierarchyTests(factory: ExporterFactory, exporterName: st
       };
 
       const spanD: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'span-D',
           traceId,
           parentSpanId: 'span-C',
           name: 'span-D',
-          type: 'TOOL_CALL' as any,
+          type: SpanType.TOOL_CALL,
           isRootSpan: false,
           isEvent: false,
           startTime: new Date(now.getTime() + 300),
@@ -299,13 +318,13 @@ export function runLateEventTests(factory: ExporterFactory, exporterName: string
       // All spans have ended, cleanup is scheduled
       // Send a late event before cleanup fires
       const lateEvent: TracingEvent = {
-        type: 'span_ended',
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: {
           id: 'late-event',
           traceId: events[0].exportedSpan.traceId,
           parentSpanId: events[0].exportedSpan.id,
           name: 'late-event',
-          type: 'EVENT' as any,
+          type: SpanType.MODEL_GENERATION,
           isRootSpan: false,
           isEvent: true,
           startTime: new Date(),
@@ -331,12 +350,12 @@ export function runLateEventTests(factory: ExporterFactory, exporterName: string
 
       // Try to send data for the (now cleaned up) trace
       const veryLateEvent: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'very-late-span',
           traceId: events[0].exportedSpan.traceId,
           name: 'very-late-span',
-          type: 'TOOL_CALL' as any,
+          type: SpanType.TOOL_CALL,
           isRootSpan: false,
           isEvent: false,
           startTime: new Date(),
@@ -369,13 +388,13 @@ export function runOrphanedSpanTests(factory: ExporterFactory, exporterName: str
     it('should drop spans after max attempts', async () => {
       // Send a child without ever sending the parent
       const orphanSpan: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'orphan-span',
           traceId: `orphan-trace-${Date.now()}`,
           parentSpanId: 'non-existent-parent',
           name: 'orphan-span',
-          type: 'TOOL_CALL' as any,
+          type: SpanType.TOOL_CALL,
           isRootSpan: false,
           isEvent: false,
           startTime: new Date(),
@@ -390,18 +409,23 @@ export function runOrphanedSpanTests(factory: ExporterFactory, exporterName: str
         vi.advanceTimersByTime(1000);
       }
 
-      // Span should eventually be dropped (can't verify without access to logs)
+      // Verify orphan was dropped (if exporter exposes this method)
+      // After max attempts, the orphan trace should be cleaned up
+      if (exporter.getTraceMapSize) {
+        // Orphan should have been dropped, so trace map should be empty
+        expect(exporter.getTraceMapSize()).toBe(0);
+      }
     });
 
     it('should drop spans after TTL expiry', async () => {
       const orphanSpan: TracingEvent = {
-        type: 'span_started',
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: {
           id: 'ttl-orphan-span',
           traceId: `ttl-orphan-trace-${Date.now()}`,
           parentSpanId: 'non-existent-parent',
           name: 'ttl-orphan-span',
-          type: 'TOOL_CALL' as any,
+          type: SpanType.TOOL_CALL,
           isRootSpan: false,
           isEvent: false,
           startTime: new Date(),
@@ -415,6 +439,10 @@ export function runOrphanedSpanTests(factory: ExporterFactory, exporterName: str
       await flushAsync(5);
 
       // Span should be dropped due to TTL
+      if (exporter.getTraceMapSize) {
+        // After TTL expiry, the orphan trace should be cleaned up
+        expect(exporter.getTraceMapSize()).toBe(0);
+      }
     });
   });
 }

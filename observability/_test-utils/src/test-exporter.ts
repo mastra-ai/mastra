@@ -48,6 +48,9 @@ export class TestTrackingExporter extends TrackingExporter<
   public builtEvents: Map<string, TestEventData> = new Map();
   public abortedSpans: Map<string, SpanErrorInfo> = new Map();
 
+  // Track spanId -> traceId for _abortSpan debugging
+  private spanToTraceId: Map<string, string> = new Map();
+
   // Track root span ID for parent checking
   private rootSpanId?: string;
 
@@ -93,6 +96,7 @@ export class TestTrackingExporter extends TrackingExporter<
 
     const rootData: TestRootData = { type: 'root', spanId: args.span.id };
     this.builtRoots.set(args.span.id, rootData);
+    this.spanToTraceId.set(args.span.id, args.span.traceId);
     this.rootSpanId = args.span.id;
     return rootData;
   }
@@ -134,6 +138,7 @@ export class TestTrackingExporter extends TrackingExporter<
 
     const spanData: TestSpanData = { type: 'span', spanId: args.span.id };
     this.builtSpans.set(args.span.id, spanData);
+    this.spanToTraceId.set(args.span.id, args.span.traceId);
 
     // If this is a root span (skipRoot=true mode), track the root ID
     if (args.span.isRootSpan) {
@@ -196,7 +201,7 @@ export class TestTrackingExporter extends TrackingExporter<
     this.calls.push({
       method: '_abortSpan',
       spanId: args.span.spanId,
-      traceId: 'unknown', // TraceData doesn't have traceId directly
+      traceId: this.spanToTraceId.get(args.span.spanId) ?? 'unknown',
       timestamp: new Date(),
       args: { reason: args.reason },
     });
@@ -224,5 +229,16 @@ export class TestTrackingExporter extends TrackingExporter<
     this.builtSpans.clear();
     this.builtEvents.clear();
     this.abortedSpans.clear();
+    this.spanToTraceId.clear();
+    this.rootSpanId = undefined;
+  }
+
+  /**
+   * Override shutdown to clear test-specific state.
+   * This prevents stale span-to-trace mappings from affecting subsequent test runs.
+   */
+  async shutdown(): Promise<void> {
+    await super.shutdown();
+    this.reset();
   }
 }

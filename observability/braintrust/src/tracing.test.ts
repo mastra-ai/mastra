@@ -18,7 +18,7 @@ import type {
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { initLogger, _exportsForTestingOnly } from 'braintrust';
 import type { Logger } from 'braintrust';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';
 import type { BraintrustExporterConfig } from './tracing';
 
@@ -49,6 +49,7 @@ describe('BraintrustExporter', () => {
   let config: BraintrustExporterConfig;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
 
     // Set up mocks
@@ -82,6 +83,10 @@ describe('BraintrustExporter', () => {
     };
 
     exporter = new TestBraintrustExporter(config);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -121,8 +126,8 @@ describe('BraintrustExporter', () => {
 
         expect(mockInitLogger).not.toHaveBeenCalled();
       } finally {
-        // Restore env var
-        if (originalApiKey) process.env.BRAINTRUST_API_KEY = originalApiKey;
+        // Restore env var safely (avoid setting to string "undefined")
+        if (originalApiKey !== undefined) process.env.BRAINTRUST_API_KEY = originalApiKey;
       }
     });
   });
@@ -1345,7 +1350,7 @@ describe('BraintrustExporter', () => {
       });
 
       // Wait for cleanup delay (config uses 10ms)
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await vi.advanceTimersByTimeAsync(20);
 
       const newTraceData = exporter._getTraceData(rootSpan.traceId);
 
@@ -1609,8 +1614,8 @@ describe('BraintrustExporter', () => {
       expect(mockLogger.startSpan).toHaveBeenCalledOnce();
 
       // Should startSpan without tags property
-      const call = mockLogger.startSpan.mock.calls[0];
-      expect(call.tags).toBeUndefined();
+      const callArg = mockLogger.startSpan.mock.calls[0][0];
+      expect(callArg.tags).toBeUndefined();
     });
 
     it('should include tags with workflow spans', async () => {
@@ -1764,15 +1769,16 @@ describe('BraintrustExporter', () => {
       // Verify maps have data
       expect(exporter._traceMapSize).toBeGreaterThan(0);
 
-      // Shutdown
+      // Shutdown - TrackingExporter now aborts all open spans
       await exporter.shutdown();
 
-      // TODO: figure out what we want to do on shutdown if open
-      // spans exist.
-      // Ideally end all open spans with some error message.
-      //
-      // Verify all spans were ended
-      // expect(mockSpan.end).toHaveBeenCalled();
+      // Verify span was aborted with error logged and then ended
+      expect(mockSpan.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Observability is shutting down.',
+        }),
+      );
+      expect(mockSpan.end).toHaveBeenCalled();
 
       // Verify maps were cleared
       expect(exporter._traceMapSize).toBe(0);

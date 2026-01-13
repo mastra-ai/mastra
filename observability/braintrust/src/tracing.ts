@@ -193,12 +193,14 @@ export class BraintrustExporter extends TrackingExporter<
       return this.#localLogger;
     }
     try {
-      return await initLogger({
+      const logger = await initLogger({
         projectName: this.config.projectName ?? 'mastra-tracing',
         apiKey: this.config.apiKey,
         appUrl: this.config.endpoint,
         ...this.config.tuningParameters,
       });
+      this.#localLogger = logger;
+      return logger;
     } catch (err) {
       this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err });
       this.setDisabled('Failed to initialize Braintrust logger');
@@ -527,6 +529,9 @@ export class BraintrustExporter extends TrackingExporter<
    */
   private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
+      if (!output || typeof output !== 'object') {
+        return output;
+      }
       const { text, ...rest } = output;
       return { role: 'assistant', content: text, ...rest };
     }
@@ -551,9 +556,10 @@ export class BraintrustExporter extends TrackingExporter<
 
     // Initialize metrics and metadata objects
     payload.metrics = {};
+    // Spread span.metadata first, then set spanType to prevent accidental override
     payload.metadata = {
-      spanType: span.type,
       ...span.metadata,
+      spanType: span.type,
     };
 
     if (isCreate) {

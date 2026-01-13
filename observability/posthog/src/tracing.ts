@@ -90,7 +90,7 @@ export class PosthogExporter extends TrackingExporter<
   PosthogRoot,
   PosthogSpan,
   PosthogEvent,
-  PosthogTraceData,
+  PosthogMetadata,
   PosthogExporterConfig
 > {
   name = 'posthog';
@@ -195,7 +195,14 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   protected override async _finishSpan(args: { span: AnyExportedSpan; traceData: PosthogTraceData }): Promise<void> {
-    const eventMessage = this.buildEventMessage(args);
+    const { span, traceData } = args;
+
+    // Merge input from cached span (SPAN_STARTED) if not present on end span
+    // This handles the case where input is only sent at start
+    const cachedSpan = traceData.getSpan({ spanId: span.id });
+    const mergedSpan = !span.input && cachedSpan?.input ? { ...span, input: cachedSpan.input } : span;
+
+    const eventMessage = this.buildEventMessage({ span: mergedSpan, traceData });
     this.#client?.capture(eventMessage);
   }
 

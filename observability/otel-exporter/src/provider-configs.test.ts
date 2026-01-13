@@ -106,7 +106,7 @@ describe('Provider Configurations', () => {
 
         expect(config).toBeNull();
       } finally {
-        if (originalApiKey) process.env.LMNR_PROJECT_API_KEY = originalApiKey;
+        if (originalApiKey !== undefined) process.env.LMNR_PROJECT_API_KEY = originalApiKey;
       }
     });
   });

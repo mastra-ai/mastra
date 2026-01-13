@@ -17,7 +17,7 @@ import type {
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Client, RunTree } from 'langsmith';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LangSmithExporter } from './tracing';
 import type { LangSmithExporterConfig } from './tracing';
 
@@ -45,6 +45,7 @@ describe('TestLangSmithExporter', () => {
   let config: LangSmithExporterConfig;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
 
     // Set up mocks for RunTree
@@ -89,6 +90,10 @@ describe('TestLangSmithExporter', () => {
     };
 
     exporter = new TestLangSmithExporter(config);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -136,8 +141,10 @@ describe('TestLangSmithExporter', () => {
 
       const disabledExporter = new TestLangSmithExporter(invalidConfig);
 
-      // Restore env var
-      process.env.LANGSMITH_API_KEY = originalEnvKey;
+      // Restore env var safely (avoid setting to string "undefined")
+      if (originalEnvKey !== undefined) {
+        process.env.LANGSMITH_API_KEY = originalEnvKey;
+      }
 
       // Should be disabled when apiKey is missing
       expect(disabledExporter['isDisabled']).toBe(true);
@@ -186,7 +193,7 @@ describe('TestLangSmithExporter', () => {
         name: 'root-agent',
         run_type: 'chain', // Default span type mapping for AGENT_RUN
         client: mockClient,
-        start_time: rootSpan.startTime.getTime() / 1000,
+        start_time: rootSpan.startTime.getTime(),
         metadata: {
           mastra_span_type: 'agent_run',
           agentId: 'agent-123',
@@ -242,7 +249,7 @@ describe('TestLangSmithExporter', () => {
         name: 'child-tool',
         run_type: 'tool', // TOOL_CALL maps to 'tool'
         client: mockClient,
-        start_time: childSpan.startTime.getTime() / 1000,
+        start_time: childSpan.startTime.getTime(),
         metadata: {
           mastra_span_type: 'tool_call',
           toolId: 'calculator',
@@ -575,14 +582,13 @@ describe('TestLangSmithExporter', () => {
         name: 'gpt-4-call',
         run_type: 'llm',
         client: mockClient,
-        start_time: llmSpan.startTime.getTime() / 1000,
+        start_time: llmSpan.startTime.getTime(),
         inputs: { messages: [{ role: 'user', content: 'Hello' }] },
         outputs: { content: 'Hi there!' },
         metadata: {
           mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-4',
           ls_provider: 'openai',
-          provider: 'openai',
           usage_metadata: {
             input_tokens: 10,
             output_tokens: 5,
@@ -618,7 +624,7 @@ describe('TestLangSmithExporter', () => {
         name: 'simple-llm',
         run_type: 'llm',
         client: mockClient,
-        start_time: llmSpan.startTime.getTime() / 1000,
+        start_time: llmSpan.startTime.getTime(),
         metadata: {
           mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-3.5-turbo',
@@ -833,7 +839,7 @@ describe('TestLangSmithExporter', () => {
       );
 
       // Should end the RunTree
-      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: span.endTime.getTime() / 1000 });
+      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: span.endTime.getTime() });
       expect(mockRunTree.patchRun).toHaveBeenCalled();
     });
 
@@ -877,7 +883,7 @@ describe('TestLangSmithExporter', () => {
         }),
       );
 
-      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: errorSpan.endTime.getTime() / 1000 });
+      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: errorSpan.endTime.getTime() });
       expect(mockRunTree.patchRun).toHaveBeenCalled();
     });
 
@@ -906,7 +912,7 @@ describe('TestLangSmithExporter', () => {
       });
 
       // Wait for cleanup delay (config uses 10ms)
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await vi.advanceTimersByTimeAsync(20);
 
       // Should clean up traceMap
       expect(exporter._traceMapSize).toBe(0);
@@ -938,7 +944,7 @@ describe('TestLangSmithExporter', () => {
         name: 'user-feedback',
         run_type: 'chain',
         client: mockClient,
-        start_time: eventSpan.startTime.getTime() / 1000,
+        start_time: eventSpan.startTime.getTime(),
         outputs: { message: 'Great response!' },
         metadata: {
           mastra_span_type: 'generic',
@@ -951,7 +957,7 @@ describe('TestLangSmithExporter', () => {
       expect(mockRunTree.postRun).toHaveBeenCalled();
 
       // Should immediately end with same timestamp
-      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: eventSpan.startTime.getTime() / 1000 });
+      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: eventSpan.startTime.getTime() });
       expect(mockRunTree.patchRun).toHaveBeenCalled();
     });
 
@@ -999,7 +1005,7 @@ describe('TestLangSmithExporter', () => {
         name: 'tool-result',
         run_type: 'chain',
         client: mockClient,
-        start_time: childEventSpan.startTime.getTime() / 1000,
+        start_time: childEventSpan.startTime.getTime(),
         outputs: { result: 42 },
         metadata: {
           mastra_span_type: 'generic',
@@ -1010,7 +1016,7 @@ describe('TestLangSmithExporter', () => {
 
       // Should post and immediately end the child
       expect(mockRunTree.postRun).toHaveBeenCalledTimes(2);
-      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: childEventSpan.startTime.getTime() / 1000 });
+      expect(mockRunTree.end).toHaveBeenCalledWith({ endTime: childEventSpan.startTime.getTime() });
       expect(mockRunTree.patchRun).toHaveBeenCalled();
     });
 
@@ -1265,10 +1271,13 @@ function createMockSpan({
     tags,
     startTime: new Date(),
     endTime: undefined,
+    // Default traceId: root spans use their own ID as traceId, child spans use a shared trace ID.
+    // Tests that need specific trace relationships should override these values explicitly.
     traceId: traceId ?? (isRoot ? id : 'parent-trace-id'),
     get isRootSpan() {
       return isRoot;
     },
+    // Default parentSpanId: only child spans have a parent (pointing to a generic 'parent-id').
     parentSpanId: isRoot ? undefined : 'parent-id',
     isEvent: false,
   } as AnyExportedSpan;

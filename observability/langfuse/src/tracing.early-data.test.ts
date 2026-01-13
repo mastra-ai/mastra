@@ -13,13 +13,20 @@
  * - Child spans wait for root before processing
  */
 
-import { runAllEarlyDataTests, runLateEventTests, runOrphanedSpanTests } from '@observability/test-utils';
 import type { ExporterFactory } from '@observability/test-utils';
+import {
+  generateTrace,
+  runAllEarlyDataTests,
+  runLateEventTests,
+  runOrphanedSpanTests,
+  sendWithDelays,
+} from '@observability/test-utils';
 import { describe, beforeEach, afterEach, vi, it, expect } from 'vitest';
 import { LangfuseExporter } from './tracing';
 
 // Mock Langfuse to avoid real API calls
-vi.mock('langfuse', () => {
+// Track mock function calls for assertions using vi.hoisted to avoid hoisting issues
+const { mockLangfuseTrace } = vi.hoisted(() => {
   const createMockSpan = (): any => {
     const mockSpan: any = {
       id: `mock-span-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -46,9 +53,15 @@ vi.mock('langfuse', () => {
     };
   };
 
+  const mockLangfuseTrace = vi.fn().mockImplementation(() => createMockTrace());
+
+  return { mockLangfuseTrace, createMockSpan, createMockTrace };
+});
+
+vi.mock('langfuse', () => {
   // Use a class constructor for proper `new` support
   class MockLangfuse {
-    trace = vi.fn().mockImplementation(() => createMockTrace());
+    trace = mockLangfuseTrace;
     score = vi.fn().mockResolvedValue(undefined);
     flushAsync = vi.fn().mockResolvedValue(undefined);
     shutdownAsync = vi.fn().mockResolvedValue(undefined);
@@ -80,6 +93,8 @@ describe('LangfuseExporter Early Data Handling', () => {
 
     beforeEach(() => {
       vi.useFakeTimers();
+      // Clear mock call history
+      mockLangfuseTrace.mockClear();
       exporter = factory() as LangfuseExporter;
     });
 
@@ -88,22 +103,44 @@ describe('LangfuseExporter Early Data Handling', () => {
       vi.useRealTimers();
     });
 
-    it('should create trace wrapper for root span', async () => {
-      // Langfuse creates a wrapper via _buildRoot for the root span
-      // This test verifies the root span is properly identified
-      const { generateTrace, sendWithDelays } = await import('@observability/test-utils');
+    it('should create trace wrapper for root span via langfuse.trace()', async () => {
+      // Langfuse creates a wrapper via _buildRoot for the root span.
+      // This test verifies langfuse.trace() is called for the root span.
 
-      const events = generateTrace({ depth: 1, breadth: 1, includeEvents: false });
+      // Record initial call count after exporter initialization
+      const initialTraceCalls = mockLangfuseTrace?.mock.calls.length ?? 0;
+
+      // Generate a trace with root + 1 child
+      const events = generateTrace({ depth: 2, breadth: 1, includeEvents: false });
       const rootStart = events.find(e => e.type === 'span_started' && e.exportedSpan.isRootSpan);
+      const childStarts = events.filter(e => e.type === 'span_started' && !e.exportedSpan.isRootSpan);
 
       expect(rootStart).toBeDefined();
-      expect(rootStart!.exportedSpan.isRootSpan).toBe(true);
+      expect(childStarts.length).toBeGreaterThan(0);
 
+      // Process root span first (normal order)
       await sendWithDelays(exporter, [rootStart!]);
-      // Use vi.advanceTimersToNextTimerAsync for fake timers
-      for (let i = 0; i < 5; i++) {
-        await vi.advanceTimersToNextTimerAsync();
-      }
+      // Advance timers to allow async processing
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Verify langfuse.trace() was called for the root span
+      const newTraceCalls = (mockLangfuseTrace?.mock.calls.length ?? 0) - initialTraceCalls;
+      expect(newTraceCalls).toBeGreaterThan(0);
+
+      // Verify the trace was created with the correct name
+      const lastTraceCall = mockLangfuseTrace?.mock.calls[mockLangfuseTrace.mock.calls.length - 1];
+      expect(lastTraceCall?.[0]).toEqual(
+        expect.objectContaining({
+          name: rootStart!.exportedSpan.name,
+        }),
+      );
+
+      // Process child span - this should succeed if root was properly set up
+      await sendWithDelays(exporter, [childStarts[0]]);
+      await vi.advanceTimersByTimeAsync(100);
+
+      // If we get here without errors, the trace wrapper was created correctly
+      // and children can be attached to it
     });
   });
 });

@@ -14,12 +14,16 @@
  * - Child spans still wait for their parent (including root) before processing
  */
 
-import { runAllEarlyDataTests, runLateEventTests, runOrphanedSpanTests } from '@observability/test-utils';
 import type { ExporterFactory } from '@observability/test-utils';
+import { runAllEarlyDataTests, runLateEventTests, runOrphanedSpanTests } from '@observability/test-utils';
 import { describe, beforeEach, afterEach, vi, it, expect } from 'vitest';
 import { LangSmithExporter } from './tracing';
 
 // Mock LangSmith to avoid real API calls
+// Track constructor calls for assertions
+const runTreeConstructorCalls: any[] = [];
+const clientConstructorCalls: any[] = [];
+
 vi.mock('langsmith', () => {
   // Use classes for proper `new` support
   class MockRunTree {
@@ -29,13 +33,16 @@ vi.mock('langsmith', () => {
     outputs: Record<string, unknown> = {};
     metadata: Record<string, unknown> = {};
     error?: string;
+    config: any;
 
-    constructor() {
+    constructor(config?: any) {
+      runTreeConstructorCalls.push(config);
+      this.config = config;
       this.id = `mock-run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      this.name = 'mock-run';
+      this.name = config?.name ?? 'mock-run';
     }
 
-    createChild = vi.fn().mockImplementation(() => new MockRunTree());
+    createChild = vi.fn().mockImplementation((childConfig?: any) => new MockRunTree(childConfig));
     postRun = vi.fn().mockResolvedValue(undefined);
     patchRun = vi.fn().mockResolvedValue(undefined);
     end = vi.fn().mockResolvedValue(undefined);
@@ -43,6 +50,13 @@ vi.mock('langsmith', () => {
   }
 
   class MockClient {
+    config: any;
+
+    constructor(config?: any) {
+      clientConstructorCalls.push(config);
+      this.config = config;
+    }
+
     createRun = vi.fn().mockResolvedValue(undefined);
     updateRun = vi.fn().mockResolvedValue(undefined);
   }
@@ -73,6 +87,9 @@ describe('LangSmithExporter Early Data Handling', () => {
 
     beforeEach(() => {
       vi.useFakeTimers();
+      // Clear constructor call tracking
+      runTreeConstructorCalls.length = 0;
+      clientConstructorCalls.length = 0;
       exporter = factory() as LangSmithExporter;
     });
 
@@ -86,6 +103,9 @@ describe('LangSmithExporter Early Data Handling', () => {
       // are processed directly as RunTrees without a wrapper
       const { generateTrace, sendWithDelays } = await import('@observability/test-utils');
 
+      // Clear any constructor calls from exporter initialization
+      const initialRunTreeCalls = runTreeConstructorCalls.length;
+
       const events = generateTrace({ depth: 1, breadth: 1, includeEvents: false });
       const rootStart = events.find(e => e.type === 'span_started' && e.exportedSpan.isRootSpan);
 
@@ -93,10 +113,18 @@ describe('LangSmithExporter Early Data Handling', () => {
       expect(rootStart!.exportedSpan.isRootSpan).toBe(true);
 
       await sendWithDelays(exporter, [rootStart!]);
-      // Use vi.advanceTimersToNextTimerAsync for fake timers
-      for (let i = 0; i < 5; i++) {
-        await vi.advanceTimersToNextTimerAsync();
-      }
+      // Advance timers to allow async processing
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Verify RunTree was created for the root span (not a trace wrapper)
+      const newRunTreeCalls = runTreeConstructorCalls.slice(initialRunTreeCalls);
+      expect(newRunTreeCalls.length).toBeGreaterThan(0);
+
+      // The first new RunTree should be for the root span with the span's name
+      const rootRunTreeConfig = newRunTreeCalls[0];
+      expect(rootRunTreeConfig).toBeDefined();
+      expect(rootRunTreeConfig.name).toBe(rootStart!.exportedSpan.name);
+      expect(rootRunTreeConfig.run_type).toBeDefined();
     });
   });
 });

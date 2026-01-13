@@ -23,6 +23,9 @@ describe('formatUsageMetrics', () => {
     expect(result?.cache_write_input_tokens).toBe(500);
     // cacheWrite tokens are subtracted from input
     expect(result?.input).toBe(500);
+    // total should include input (after subtraction) + output + cache_write_input_tokens
+    // total = 500 (input after subtraction) + 200 (output) + 500 (cache_write) = 1200
+    expect(result?.total).toBe(1200);
   });
 
   it('should extract reasoning from outputDetails', () => {

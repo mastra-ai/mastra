@@ -16,7 +16,7 @@ import type {
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Langfuse } from 'langfuse';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LangfuseExporter } from './tracing';
 import type { LangfuseExporterConfig } from './tracing';
 
@@ -45,6 +45,7 @@ describe('LangfuseExporter', () => {
   let config: LangfuseExporterConfig;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
 
     // Set up mocks
@@ -111,6 +112,10 @@ describe('LangfuseExporter', () => {
     exporter = new TestLangfuseExporter(config);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('Initialization', () => {
     it('should initialize with correct configuration', () => {
       expect(exporter.name).toBe('langfuse');
@@ -145,7 +150,7 @@ describe('LangfuseExporter', () => {
           baseUrl: undefined,
         });
       } finally {
-        if (originalBaseUrl) process.env.LANGFUSE_BASE_URL = originalBaseUrl;
+        if (originalBaseUrl !== undefined) process.env.LANGFUSE_BASE_URL = originalBaseUrl;
       }
     });
 
@@ -153,10 +158,9 @@ describe('LangfuseExporter', () => {
       // Clear env vars to ensure exporter is truly disabled
       const originalPublicKey = process.env.LANGFUSE_PUBLIC_KEY;
       delete process.env.LANGFUSE_PUBLIC_KEY;
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
         const exporterWithMissingKey = new LangfuseExporter({
           secretKey: 'test-secret-key',
           baseUrl: 'https://test-langfuse.com',
@@ -165,10 +169,9 @@ describe('LangfuseExporter', () => {
         // Should create exporter but disable it
         expect(exporterWithMissingKey.name).toBe('langfuse');
         expect(exporterWithMissingKey.isDisabled).toBeTruthy();
-
-        mockConsoleWarn.mockRestore();
       } finally {
-        if (originalPublicKey) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
+        mockConsoleWarn.mockRestore();
+        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
       }
     });
 
@@ -176,10 +179,9 @@ describe('LangfuseExporter', () => {
       // Clear env vars to ensure exporter is truly disabled
       const originalSecretKey = process.env.LANGFUSE_SECRET_KEY;
       delete process.env.LANGFUSE_SECRET_KEY;
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
         const exporterWithMissingKey = new LangfuseExporter({
           publicKey: 'test-public-key',
           baseUrl: 'https://test-langfuse.com',
@@ -188,10 +190,9 @@ describe('LangfuseExporter', () => {
         // Should create exporter but disable it
         expect(exporterWithMissingKey.name).toBe('langfuse');
         expect(exporterWithMissingKey.isDisabled).toBeTruthy();
-
-        mockConsoleWarn.mockRestore();
       } finally {
-        if (originalSecretKey) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
+        mockConsoleWarn.mockRestore();
+        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
       }
     });
 
@@ -201,10 +202,9 @@ describe('LangfuseExporter', () => {
       const originalSecretKey = process.env.LANGFUSE_SECRET_KEY;
       delete process.env.LANGFUSE_PUBLIC_KEY;
       delete process.env.LANGFUSE_SECRET_KEY;
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
         const exporterWithMissingKeys = new LangfuseExporter({
           baseUrl: 'https://test-langfuse.com',
         });
@@ -212,11 +212,10 @@ describe('LangfuseExporter', () => {
         // Should create exporter but disable it
         expect(exporterWithMissingKeys.name).toBe('langfuse');
         expect(exporterWithMissingKeys.isDisabled).toBeTruthy();
-
-        mockConsoleWarn.mockRestore();
       } finally {
-        if (originalPublicKey) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
-        if (originalSecretKey) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
+        mockConsoleWarn.mockRestore();
+        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
+        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
       }
     });
   });
@@ -820,17 +819,16 @@ describe('LangfuseExporter', () => {
       });
 
       // Verify span was created without input
+      expect(mockSpan.span).toHaveBeenCalledTimes(1);
       expect(mockSpan.span).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'model-step-span',
           name: 'model-step',
         }),
       );
-      expect(mockSpan.span).toHaveBeenCalledWith(
-        expect.not.objectContaining({
-          input: expect.anything(),
-        }),
-      );
+      // Verify the specific call didn't include input
+      const createCallArg = mockSpan.span.mock.calls[0][0];
+      expect(createCallArg).not.toHaveProperty('input');
 
       // Clear mock to track update calls
       mockSpan.update.mockClear();
@@ -961,7 +959,7 @@ describe('LangfuseExporter', () => {
       });
 
       // Wait for cleanup delay (config uses 10ms)
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await vi.advanceTimersByTimeAsync(20);
 
       // Trace should be cleaned up since this was the only active span
       // (traceData is always created if it doesn't exist, but the old object
@@ -1155,7 +1153,7 @@ describe('LangfuseExporter', () => {
 
   describe('Out-of-order span handling with delayed ends', () => {
     it('should handle spans that end after parent trace is removed', async () => {
-      const traceId = 'out-of-order trace';
+      const traceId = 'out-of-order-trace';
 
       // Create a root workflow span
       const workflowSpan = createMockSpan({
@@ -1277,7 +1275,7 @@ describe('LangfuseExporter', () => {
       mockTrace.update.mockClear();
 
       // Wait for cleanup delay (config uses 10ms)
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await vi.advanceTimersByTimeAsync(20);
 
       // Now try to send late updates/ends for already completed trace
       const lateStep1Update = createMockSpan({
@@ -1388,7 +1386,7 @@ describe('LangfuseExporter', () => {
       });
 
       // Wait for cleanup delay (config uses 10ms)
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await vi.advanceTimersByTimeAsync(20);
 
       // All operations should complete without errors
       // Trace should be cleaned up since all spans have ended
@@ -1492,9 +1490,9 @@ describe('LangfuseExporter', () => {
         // Should not call Langfuse client
         expect(mockLangfuseClient.score).not.toHaveBeenCalled();
       } finally {
-        // Restore env vars
-        if (originalPublicKey) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
-        if (originalSecretKey) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
+        // Restore env vars safely (avoid setting to string "undefined")
+        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
+        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
       }
     });
 

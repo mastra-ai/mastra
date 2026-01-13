@@ -3,8 +3,7 @@
  * Generates realistic trace data with configurable depth and breadth.
  */
 
-import type { TracingEvent, AnyExportedSpan } from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import { TracingEvent, AnyExportedSpan, TracingEventType, SpanType } from '@mastra/core/observability';
 
 export interface GenerateTraceOptions {
   /** Number of levels deep (default: 3) */
@@ -30,6 +29,13 @@ interface SpanInfo {
 }
 
 let spanCounter = 0;
+
+/**
+ * Reset the span counter. Call in beforeEach for test isolation.
+ */
+export function resetSpanCounter(): void {
+  spanCounter = 0;
+}
 
 function generateSpanId(): string {
   return `span-${++spanCounter}-${Date.now()}`;
@@ -74,7 +80,7 @@ function createExportedSpan(args: {
 /**
  * Create a tracing event for a span.
  */
-function createTracingEvent(type: 'span_started' | 'span_updated' | 'span_ended', span: AnyExportedSpan): TracingEvent {
+function createTracingEvent(type: TracingEventType, span: AnyExportedSpan): TracingEvent {
   return {
     type,
     exportedSpan: span,
@@ -140,11 +146,13 @@ export function generateTrace(opts: GenerateTraceOptions = {}): TracingEvent[] {
 
   const spanTree = generateSpanTree(opts);
   const events: TracingEvent[] = [];
+  const spanStartTimes = new Map<string, Date>();
   let currentTime = baseTime.getTime();
 
   // Generate start events (in tree order - parents before children)
   for (const spanInfo of spanTree) {
     const startTime = new Date(currentTime);
+    spanStartTimes.set(spanInfo.id, startTime);
     currentTime += timeIncrement;
 
     const span = createExportedSpan({
@@ -152,7 +160,7 @@ export function generateTrace(opts: GenerateTraceOptions = {}): TracingEvent[] {
       traceId,
       parentSpanId: spanInfo.parentId,
       name: spanInfo.isEvent ? `event-${spanInfo.id}` : `span-${spanInfo.id}`,
-      type: spanInfo.isEvent ? SpanType.EVENT : spanInfo.isRoot ? SpanType.AGENT_RUN : SpanType.TOOL_CALL,
+      type: spanInfo.isEvent ? SpanType.MODEL_GENERATION : spanInfo.isRoot ? SpanType.AGENT_RUN : SpanType.TOOL_CALL,
       isRootSpan: spanInfo.isRoot,
       isEvent: spanInfo.isEvent,
       startTime,
@@ -161,9 +169,9 @@ export function generateTrace(opts: GenerateTraceOptions = {}): TracingEvent[] {
 
     if (spanInfo.isEvent) {
       // Events are single-shot
-      events.push(createTracingEvent('span_ended', { ...span, endTime: startTime }));
+      events.push(createTracingEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: startTime }));
     } else {
-      events.push(createTracingEvent('span_started', span));
+      events.push(createTracingEvent(TracingEventType.SPAN_STARTED, span));
     }
   }
 
@@ -182,12 +190,12 @@ export function generateTrace(opts: GenerateTraceOptions = {}): TracingEvent[] {
       type: spanInfo.isRoot ? SpanType.AGENT_RUN : SpanType.TOOL_CALL,
       isRootSpan: spanInfo.isRoot,
       isEvent: false,
-      startTime: new Date(baseTime.getTime()), // Approximate
+      startTime: spanStartTimes.get(spanInfo.id) ?? baseTime,
       endTime,
       output: { test: 'output' },
     });
 
-    events.push(createTracingEvent('span_ended', span));
+    events.push(createTracingEvent(TracingEventType.SPAN_ENDED, span));
   }
 
   return events;
