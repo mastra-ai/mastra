@@ -157,9 +157,8 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
   });
 
-  it('should preserve typed catchall schemas', () => {
-    // A typed catchall like .catchall(z.string()) produces
-    // additionalProperties: { type: "string" } which IS valid for OpenAI
+  it('should preserve typed catchall with string type', () => {
+    // .catchall(z.string()) produces additionalProperties: { type: "string" }
     const schema = z
       .object({
         name: z.string(),
@@ -170,10 +169,56 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     const layer = new OpenAISchemaCompatLayer(modelInfo);
     const jsonSchema = layer.processToJSONSchema(schema);
 
-    // Typed catchall should be preserved and produce valid additionalProperties
     expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
-
-    // Verify the catchall type is preserved (should have type: "string")
     expect(jsonSchema.additionalProperties).toEqual({ type: 'string' });
+  });
+
+  it('should preserve typed catchall with number type', () => {
+    const schema = z
+      .object({
+        name: z.string(),
+      })
+      .catchall(z.number());
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    expect(jsonSchema.additionalProperties).toEqual({ type: 'number' });
+  });
+
+  it('should preserve typed catchall with object type', () => {
+    // Object catchalls are valid as long as they have proper structure
+    const schema = z
+      .object({
+        id: z.string(),
+      })
+      .catchall(
+        z.object({
+          value: z.string(),
+          count: z.number(),
+        }),
+      );
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    expect(jsonSchema.additionalProperties).toHaveProperty('type', 'object');
+    expect(jsonSchema.additionalProperties).toHaveProperty('properties');
+  });
+
+  it('should preserve typed catchall with array type', () => {
+    const schema = z
+      .object({
+        name: z.string(),
+      })
+      .catchall(z.array(z.string()));
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+    expect(jsonSchema.additionalProperties).toHaveProperty('type', 'array');
   });
 });
