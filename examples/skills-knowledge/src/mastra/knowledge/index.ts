@@ -6,14 +6,16 @@ import { KnowledgeFilesystemStorage, Knowledge } from '@mastra/skills';
  * Resolve knowledge path - works from both project root and src/mastra/public/
  */
 function resolveKnowledgePath(): string {
+  const cwd = process.cwd();
+
   // Try project root first (for demo scripts)
-  const fromRoot = resolve(process.cwd(), '.mastra-knowledge/knowledge/support');
+  const fromRoot = resolve(cwd, '.mastra-knowledge/knowledge/support');
   if (existsSync(fromRoot)) {
     return fromRoot;
   }
 
   // Try from src/mastra/public/ (for mastra dev - 3 levels up)
-  const fromOutput = resolve(process.cwd(), '../../../.mastra-knowledge/knowledge/support');
+  const fromOutput = resolve(cwd, '../../../.mastra-knowledge/knowledge/support');
   if (existsSync(fromOutput)) {
     return fromOutput;
   }
