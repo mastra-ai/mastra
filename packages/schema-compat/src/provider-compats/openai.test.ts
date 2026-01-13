@@ -903,7 +903,6 @@ describe('OpenAISchemaCompatLayer - Passthrough/LooseObject Schemas', () => {
       .passthrough();
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
 
     // Convert to JSON Schema
     const jsonSchema = layer.processToJSONSchema(schema);

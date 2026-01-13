@@ -89,7 +89,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
       return value;
     } else if (isObj(z)(value)) {
-      return this.defaultZodObjectHandler(value);
+      // OpenAI doesn't support additionalProperties: {} (empty object)
+      // which is what Zod v4's looseObject/passthrough produces.
+      // Setting passthrough: false converts these to strict objects instead.
+      return this.defaultZodObjectHandler(value, { passthrough: false });
     } else if (isUnion(z)(value)) {
       return this.defaultZodUnionHandler(value);
     } else if (isArr(z)(value)) {

@@ -307,7 +307,16 @@ export class SchemaCompatLayer {
     if (value._zod.def.catchall instanceof z.ZodNever) {
       result = z.strictObject(processedShape);
     }
-    if (value._zod.def.catchall && !(value._zod.def.catchall instanceof z.ZodNever)) {
+    // Only add catchall if:
+    // 1. catchall exists and isn't ZodNever
+    // 2. AND either passthrough is enabled OR catchall isn't ZodUnknown
+    // This prevents adding ZodUnknown catchall when passthrough is disabled,
+    // which would produce additionalProperties: {} (invalid for OpenAI)
+    if (
+      value._zod.def.catchall &&
+      !(value._zod.def.catchall instanceof z.ZodNever) &&
+      (options.passthrough || !(value._zod.def.catchall instanceof z.ZodUnknown))
+    ) {
       result = result.catchall(value._zod.def.catchall);
     }
 
