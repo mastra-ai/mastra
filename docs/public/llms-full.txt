@@ -8608,7 +8608,30 @@ DD_SITE=datadoghq.com  # Optional: defaults to datadoghq.com
 DD_ENV=production      # Optional: environment name
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { DatadogExporter } from "@mastra/datadog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: "my-service",
+        exporters: [new DatadogExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -79116,6 +79139,17 @@ Flushes pending data and shuts down the exporter. Cancels any pending cleanup ti
 
 ## Usage
 
+### Zero-Config (using environment variables)
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+// Reads from DD_LLMOBS_ML_APP, DD_API_KEY, DD_SITE, DD_ENV
+const exporter = new DatadogExporter();
+```
+
+### Explicit Configuration
+
 ```typescript
 import { DatadogExporter } from "@mastra/datadog";
 
@@ -90545,6 +90579,76 @@ This enables direct queries and custom transaction management. When using these 
 - Direct access bypasses any additional logic or validation provided by PostgresStore methods.
 
 This approach is intended for advanced scenarios where low-level access is required.
+
+### Using with Next.js
+
+When using `PostgresStore` in Next.js applications, [Hot Module Replacement (HMR)](https://nextjs.org/docs/architecture/fast-refresh) during development can cause multiple storage instances to be created, resulting in this warning:
+
+```
+WARNING: Creating a duplicate database object for the same connection.
+```
+
+To prevent this, store the `PostgresStore` instance on the global object so it persists across HMR reloads:
+
+```typescript title="src/mastra/storage.ts"
+import { PostgresStore } from "@mastra/pg";
+import { Memory } from "@mastra/memory";
+
+// Extend the global type to include our instances
+declare global {
+  var pgStore: PostgresStore | undefined;
+  var memory: Memory | undefined;
+}
+
+// Get or create the PostgresStore instance
+function getPgStore(): PostgresStore {
+  if (!global.pgStore) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not defined in environment variables");
+    }
+    global.pgStore = new PostgresStore({
+      id: "pg-storage",
+      connectionString: process.env.DATABASE_URL,
+      ssl:
+        process.env.DATABASE_SSL === "true"
+          ? { rejectUnauthorized: false }
+          : false,
+    });
+  }
+  return global.pgStore;
+}
+
+// Get or create the Memory instance
+function getMemory(): Memory {
+  if (!global.memory) {
+    global.memory = new Memory({
+      storage: getPgStore(),
+    });
+  }
+  return global.memory;
+}
+
+export const storage = getPgStore();
+export const memory = getMemory();
+```
+
+Then use the exported instances in your Mastra configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { storage } from "./storage";
+
+export const mastra = new Mastra({
+  storage,
+  // ...other config
+});
+```
+
+This pattern ensures only one `PostgresStore` instance is created regardless of how many times the module is reloaded during development. The same pattern can be applied to other storage providers like `LibSQLStore`.
+
+:::tip
+This singleton pattern is only necessary during local development with HMR. In production builds, modules are only loaded once.
+:::
 
 ## Usage Example
 

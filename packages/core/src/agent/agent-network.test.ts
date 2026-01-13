@@ -5072,3 +5072,256 @@ describe('Agent - network - tool approval and suspension', () => {
     }, 120e3);
   });
 }, 120e3);
+
+describe('Agent - network - message history transfer to sub-agents', () => {
+  it('should pass original user message history to sub-agents WITHOUT memory so they have conversation context', async () => {
+    // Sub-agents without their own memory should still receive conversation context
+    // from the network so they can understand prior messages in the conversation.
+
+    const memory = new MockMemory();
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Your name is Alice.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Your name is Alice.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const questionAnswerAgent = new Agent({
+      id: 'question-answer-agent',
+      name: 'Question Answer Agent',
+      description: 'An agent that answers questions based on conversation context',
+      instructions:
+        'Answer questions based on the conversation history. If asked about names, look for where the user introduced themselves.',
+      model: subAgentMockModel,
+      // No memory configured
+    });
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'questionAnswerAgent',
+      primitiveType: 'agent',
+      prompt: 'What is my name?',
+      selectionReason: 'User is asking a question that requires conversation context',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Your name is Alice.',
+      completionReason: 'The question was answered',
+    });
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingResponse : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingResponse : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-agent',
+      name: 'Network Agent',
+      instructions: 'Route questions to the question-answer-agent.',
+      model: routingMockModel,
+      agents: { questionAnswerAgent },
+      memory,
+    });
+
+    const threadId = 'test-thread-message-history';
+    const resourceId = 'test-resource-message-history';
+
+    const anStream = await networkAgent.network(
+      [
+        { role: 'user', content: 'My name is Alice.' },
+        { role: 'user', content: 'What is my name?' },
+      ],
+      {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+      },
+    );
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(0);
+
+    const lastPrompt = subAgentReceivedPrompts[subAgentReceivedPrompts.length - 1];
+    const promptString = JSON.stringify(lastPrompt);
+
+    // Sub-agent should receive the original user message for context
+    expect(promptString).toContain('My name is Alice');
+  });
+
+  it('should NOT include internal network JSON messages (isNetwork: true) in sub-agent context', async () => {
+    // Internal network routing messages should be filtered out from sub-agent context.
+
+    const memory = new MockMemory();
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Done.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Done.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      description: 'A sub-agent',
+      instructions: 'Do the task.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    const routingResponse1 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do step 1',
+      selectionReason: 'First step',
+    });
+
+    const routingResponse2 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do step 2',
+      selectionReason: 'Second step',
+    });
+
+    const notCompleteResponse = JSON.stringify({
+      isComplete: false,
+      finalResult: '',
+      completionReason: '',
+    });
+
+    const completeResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'All done.',
+      completionReason: 'Both steps completed',
+    });
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else if (routingCallCount === 2) text = notCompleteResponse;
+        else if (routingCallCount === 3) text = routingResponse2;
+        else text = completeResponse;
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else if (routingCallCount === 2) text = notCompleteResponse;
+        else if (routingCallCount === 3) text = routingResponse2;
+        else text = completeResponse;
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'multi-step-network-agent',
+      name: 'Multi-Step Network Agent',
+      instructions: 'Execute multiple steps.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do a multi-step task', {
+      maxSteps: 3,
+      memory: {
+        thread: 'test-thread-no-network-json',
+        resource: 'test-resource-no-network-json',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // The second sub-agent call should not see internal network JSON from the first call
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+    const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
+    expect(secondCallPrompt).not.toContain('isNetwork');
+    expect(secondCallPrompt).not.toContain('selectionReason');
+  });
+});
