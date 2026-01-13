@@ -1186,24 +1186,32 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   summary: 'Enhance agent instructions',
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, agentId, instructions, comment, model: requestedModel }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent);
-      if (!model) {
-        throw new HTTPException(400, {
-          message:
-            'No model with a configured API key found. Please set the required environment variable for your model provider.',
-        });
+      let modelToUse: Awaited<ReturnType<Agent['getModel']>> | string;
+
+      if (requestedModel) {
+        // Use the model specified in the request (format: provider/modelId)
+        modelToUse = `${requestedModel.provider}/${requestedModel.modelId}`;
+      } else {
+        // Find the first model with a connected provider (similar to how chat works)
+        const connectedModel = await findConnectedModel(agent);
+        if (!connectedModel) {
+          throw new HTTPException(400, {
+            message:
+              'No model with a configured API key found. Please set the required environment variable for your model provider.',
+          });
+        }
+        modelToUse = connectedModel;
       }
 
       const systemPromptAgent = new Agent({
         id: 'system-prompt-enhancer',
         name: 'system-prompt-enhancer',
         instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
-        model,
+        model: modelToUse,
       });
 
       const result = await systemPromptAgent.generate(
