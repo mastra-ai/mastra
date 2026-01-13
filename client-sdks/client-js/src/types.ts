@@ -692,6 +692,71 @@ export interface Provider {
 }
 
 // ============================================================================
+// Agent Version Types
+// ============================================================================
+
+/**
+ * Response for a single agent version
+ */
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: StoredAgentResponse;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Parameters for listing agent versions
+ */
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  orderDirection?: 'ASC' | 'DESC';
+}
+
+/**
+ * Response for listing agent versions
+ */
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating an agent version
+ */
+export interface CreateAgentVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+/**
+ * Represents a single field difference between two versions
+ */
+export interface AgentVersionDiff {
+  field: string;
+  previousValue: unknown;
+  currentValue: unknown;
+}
+
+/**
+ * Response for comparing two agent versions
+ */
+export interface CompareVersionsResponse {
+  diffs: AgentVersionDiff[];
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
+}
+
+// ============================================================================
 // Memory Config Types
 // ============================================================================
 

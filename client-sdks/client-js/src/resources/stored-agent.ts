@@ -1,6 +1,16 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { ClientOptions, StoredAgentResponse, UpdateStoredAgentParams, DeleteStoredAgentResponse } from '../types';
+import type {
+  ClientOptions,
+  StoredAgentResponse,
+  UpdateStoredAgentParams,
+  DeleteStoredAgentResponse,
+  AgentVersionResponse,
+  ListAgentVersionsParams,
+  ListAgentVersionsResponse,
+  CreateAgentVersionParams,
+  CompareVersionsResponse,
+} from '../types';
 import { requestContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
@@ -57,6 +67,109 @@ export class StoredAgent extends BaseResource {
       {
         method: 'DELETE',
       },
+    );
+  }
+
+  // ==========================================================================
+  // Version Methods
+  // ==========================================================================
+
+  /**
+   * Lists all versions for this stored agent
+   * @param params - Optional pagination and sorting parameters
+   * @returns Promise containing paginated list of versions
+   */
+  listVersions(params?: ListAgentVersionsParams): Promise<ListAgentVersionsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page !== undefined) queryParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
+    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
+    if (params?.orderDirection) queryParams.set('orderDirection', params.orderDirection);
+
+    const queryString = queryParams.toString();
+    return this.request(
+      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  /**
+   * Creates a new version snapshot for this stored agent
+   * @param params - Optional name and change message for the version
+   * @returns Promise containing the created version
+   */
+  createVersion(params?: CreateAgentVersionParams): Promise<AgentVersionResponse> {
+    return this.request(`/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions`, {
+      method: 'POST',
+      body: params || {},
+    });
+  }
+
+  /**
+   * Retrieves a specific version by its ID
+   * @param versionId - The ULID of the version to retrieve
+   * @returns Promise containing the version details
+   */
+  getVersion(versionId: string): Promise<AgentVersionResponse> {
+    return this.request(
+      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}`,
+    );
+  }
+
+  /**
+   * Activates a specific version, making it the active version for this agent
+   * @param versionId - The ULID of the version to activate
+   * @returns Promise that resolves when activation is complete
+   */
+  activateVersion(versionId: string): Promise<void> {
+    return this.request(
+      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Restores a version by creating a new version with the same configuration
+   * @param versionId - The ULID of the version to restore
+   * @returns Promise containing the newly created version
+   */
+  restoreVersion(versionId: string): Promise<AgentVersionResponse> {
+    return this.request(
+      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Deletes a specific version
+   * @param versionId - The ULID of the version to delete
+   * @returns Promise that resolves when deletion is complete
+   */
+  deleteVersion(versionId: string): Promise<void> {
+    return this.request(
+      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Compares two versions and returns their differences
+   * @param fromId - The ULID of the source version
+   * @param toId - The ULID of the target version
+   * @returns Promise containing the comparison results
+   */
+  compareVersions(fromId: string, toId: string): Promise<CompareVersionsResponse> {
+    const queryParams = new URLSearchParams();
+    queryParams.set('from', fromId);
+    queryParams.set('to', toId);
+
+    return this.request(
+      `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/compare?${queryParams.toString()}`,
     );
   }
 }
