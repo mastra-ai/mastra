@@ -5301,9 +5301,6 @@ importers:
 
   voice/twilio:
     dependencies:
-      alawmulaw:
-        specifier: ^6.0.0
-        version: 6.0.0
       ws:
         specifier: ^8.18.3
         version: 8.18.3
@@ -12291,10 +12288,6 @@ packages:
 
   ajv@8.17.1:
     resolution: {integrity: sha512-B/gBuNg5SiMTrPkC+A2+cW0RszwxYmn6VYxB/inlBStS5nx6xHIt/ehKRhIMhqusl7a8LjQoZnjCs5vhwxOQ1g==}
-
-  alawmulaw@6.0.0:
-    resolution: {integrity: sha512-1aQJZX2Ax5X7Bq9j9Wkv0gczxexnkshlNNxTc0sD5DjAb+NIgfHkI3rpnjSgr6pK1s4V0Z7viBgE9/FHcIwkyw==}
-    engines: {node: '>=8'}
 
   alien-signals@0.4.14:
     resolution: {integrity: sha512-itUAVzhczTmP2U5yX67xVpsbbOiquusbWVyA9N+sy6+r6YVbFkahXvNCeEPWEOMhwDYwbVbGHFkVL03N9I5g+Q==}
@@ -26747,8 +26740,6 @@ snapshots:
       fast-uri: 3.1.0
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
-
-  alawmulaw@6.0.0: {}
 
   alien-signals@0.4.14: {}
 
