@@ -7,6 +7,9 @@ export type { ModelPickerProps } from './model-picker';
 export { MultiSelectPicker } from './multi-select-picker';
 export type { MultiSelectPickerProps } from './multi-select-picker';
 
+export { InstructionsEnhancer } from './instructions-enhancer';
+export type { InstructionsEnhancerProps } from './instructions-enhancer';
+
 export { CreateAgentDialog } from './create-agent-dialog';
 export type { CreateAgentDialogProps } from './create-agent-dialog';
 

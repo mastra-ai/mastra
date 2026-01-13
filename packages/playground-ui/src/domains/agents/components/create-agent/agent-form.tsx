@@ -18,6 +18,7 @@ import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 import { ModelPicker } from './model-picker';
 import { MultiSelectPicker } from './multi-select-picker';
+import { InstructionsEnhancer } from './instructions-enhancer';
 import type { AgentFormValues } from './form-validation';
 
 // Simple validation resolver without zod to avoid version conflicts
@@ -212,20 +213,19 @@ export function AgentForm({
           <Label htmlFor="instructions" className="text-icon5">
             Instructions <span className="text-accent2">*</span>
           </Label>
-          <textarea
-            id="instructions"
-            placeholder="Enter agent instructions"
-            rows={6}
-            {...register('instructions')}
-            className={cn(
-              'flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors',
-              'border-sm border-border1 placeholder:text-icon3',
-              'px-[13px] py-2 text-[calc(13_/_16_*_1rem)] resize-y min-h-[120px]',
-              'disabled:cursor-not-allowed disabled:opacity-50',
-              errors.instructions && 'border-accent2',
+          <Controller
+            name="instructions"
+            control={control}
+            render={({ field }) => (
+              <InstructionsEnhancer
+                value={field.value}
+                onChange={field.onChange}
+                agentId={mode === 'edit' ? agentId : undefined}
+                placeholder="Enter agent instructions"
+                error={errors.instructions?.message}
+              />
             )}
           />
-          {errors.instructions && <span className="text-xs text-accent2">{errors.instructions.message}</span>}
         </div>
       </div>
 

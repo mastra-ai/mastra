@@ -14,7 +14,6 @@ import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './a
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
-import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
 import {
   useReorderModelList,
   useResetAgentModel,
@@ -183,9 +182,6 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
       <AgentMetadataSection title="Scorers">
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
-      </AgentMetadataSection>
-      <AgentMetadataSection title="System Prompt">
-        <PromptEnhancer agentId={agentId} />
       </AgentMetadataSection>
     </AgentMetadataWrapper>
   );
