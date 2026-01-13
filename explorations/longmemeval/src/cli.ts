@@ -758,44 +758,39 @@ program
         return;
       }
 
-      // Group by memory configuration
-      const byMemoryConfig = new Map<string, typeof allRuns>();
-      for (const run of allRuns) {
-        const key = `${run.config.dataset}_${run.config.memoryConfig}`;
-        if (!byMemoryConfig.has(key)) {
-          byMemoryConfig.set(key, []);
+      // Sort all runs based on sortBy option (best/newest at bottom for terminal viewing)
+      let runsToShow = [...allRuns];
+      
+      if (options.latest) {
+        // Group by config and take only the latest from each
+        const byConfig = new Map<string, typeof allRuns[0]>();
+        for (const run of allRuns) {
+          const key = `${run.config.dataset}_${run.config.memoryConfig}`;
+          const existing = byConfig.get(key);
+          if (!existing || run.timestamp > existing.timestamp) {
+            byConfig.set(key, run);
+          }
         }
-        byMemoryConfig.get(key)!.push(run);
+        runsToShow = Array.from(byConfig.values());
       }
 
-      // Sort groups based on sortBy option (best/newest at bottom for terminal viewing)
-      const sortedConfigs = Array.from(byMemoryConfig.entries()).sort(([_aKey, aRuns], [_bKey, bRuns]) => {
-        // Get latest run for each config
-        const aLatest = aRuns.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-        const bLatest = bRuns.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-
+      // Sort runs (oldest/worst first, newest/best at bottom for terminal viewing)
+      runsToShow.sort((a, b) => {
         if (sortBy === 'date') {
           // Sort by date (oldest first, newest at bottom)
-          return aLatest.timestamp.localeCompare(bLatest.timestamp);
+          return a.timestamp.localeCompare(b.timestamp);
         } else if (sortBy === 'fixed') {
           // Sort by fixed accuracy (worst first, best at bottom), fall back to vanilla if no fixed
-          const aFixed = aLatest.metrics.fixed_overall_accuracy ?? aLatest.metrics.overall_accuracy;
-          const bFixed = bLatest.metrics.fixed_overall_accuracy ?? bLatest.metrics.overall_accuracy;
+          const aFixed = a.metrics.fixed_overall_accuracy ?? a.metrics.overall_accuracy;
+          const bFixed = b.metrics.fixed_overall_accuracy ?? b.metrics.overall_accuracy;
           return aFixed - bFixed;
         } else {
           // Sort by vanilla accuracy (worst first, best at bottom)
-          return aLatest.metrics.overall_accuracy - bLatest.metrics.overall_accuracy;
+          return a.metrics.overall_accuracy - b.metrics.overall_accuracy;
         }
       });
 
-      for (const [_configKey, runs] of sortedConfigs) {
-        // Sort runs by timestamp (newest first)
-        runs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-
-        // Show all or just latest
-        const runsToShow = options.latest ? [runs[0]] : runs;
-
-        for (const run of runsToShow) {
+      for (const run of runsToShow) {
           // Get terminal width, default to 80 if not available
           const terminalWidth = process.stdout.columns || 80;
           const lineWidth = Math.min(terminalWidth - 1, 80); // Cap at 80 for readability
@@ -888,15 +883,17 @@ program
             );
           }
         }
-      }
 
       // Get terminal width for final separator
       const terminalWidth = process.stdout.columns || 80;
       const lineWidth = Math.min(terminalWidth - 1, 80);
 
+      // Count unique configurations
+      const uniqueConfigs = new Set(allRuns.map(r => `${r.config.dataset}_${r.config.memoryConfig}`));
+
       console.log(chalk.bold('\n' + '═'.repeat(lineWidth)));
-      console.log(chalk.gray(`\nFound ${allRuns.length} total runs across ${byMemoryConfig.size} configurations`));
-      if (!options.latest && byMemoryConfig.size > 0 && allRuns.length > byMemoryConfig.size) {
+      console.log(chalk.gray(`\nFound ${allRuns.length} total runs across ${uniqueConfigs.size} configurations`));
+      if (!options.latest && uniqueConfigs.size > 0 && allRuns.length > uniqueConfigs.size) {
         console.log(chalk.gray('Use --latest to see only the latest run per config'));
       }
     } catch (error) {
