@@ -5,7 +5,7 @@ import { Agent } from '@mastra/core/agent';
 import { Skills } from '@mastra/skills';
 
 /**
- * Resolve docs-skills path - works from both project root and .mastra/output/
+ * Resolve docs-skills path - works from both project root and src/mastra/public/
  */
 function resolveDocsSkillsPath(): string {
   // Try project root first (for demo scripts)
@@ -14,13 +14,13 @@ function resolveDocsSkillsPath(): string {
     return fromRoot;
   }
 
-  // Try from .mastra/output/ (for mastra dev)
-  const fromOutput = resolve(process.cwd(), '../../docs-skills');
+  // Try from src/mastra/public/ (for mastra dev - 3 levels up)
+  const fromOutput = resolve(process.cwd(), '../../../docs-skills');
   if (existsSync(fromOutput)) {
     return fromOutput;
   }
 
-  // Fallback to project root path (will error if not found)
+  // Fallback to project root path
   return fromRoot;
 }
 

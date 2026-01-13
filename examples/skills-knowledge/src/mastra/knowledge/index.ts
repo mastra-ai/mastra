@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { KnowledgeFilesystemStorage, Knowledge } from '@mastra/skills';
 
 /**
- * Resolve knowledge path - works from both project root and .mastra/output/
+ * Resolve knowledge path - works from both project root and src/mastra/public/
  */
 function resolveKnowledgePath(): string {
   // Try project root first (for demo scripts)
@@ -12,13 +12,13 @@ function resolveKnowledgePath(): string {
     return fromRoot;
   }
 
-  // Try from .mastra/output/ (for mastra dev)
-  const fromOutput = resolve(process.cwd(), '../../.mastra-knowledge/knowledge/support');
+  // Try from src/mastra/public/ (for mastra dev - 3 levels up)
+  const fromOutput = resolve(process.cwd(), '../../../.mastra-knowledge/knowledge/support');
   if (existsSync(fromOutput)) {
     return fromOutput;
   }
 
-  // Fallback to project root path (will error if not found)
+  // Fallback to project root path
   return fromRoot;
 }
 
