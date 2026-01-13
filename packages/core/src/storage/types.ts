@@ -274,6 +274,28 @@ export interface StorageAgentType {
   updatedAt: Date;
 }
 
+/**
+ * Represents a versioned snapshot of an agent's configuration.
+ * Used for tracking changes and enabling rollback capabilities.
+ */
+export interface StorageAgentVersionType {
+  /** Unique identifier (ULID) */
+  id: string;
+  /** Reference to the parent agent */
+  agentId: string;
+  /** Sequential version number */
+  versionNumber: number;
+  /** Optional vanity name for this version */
+  name?: string;
+  /** Full agent configuration snapshot */
+  snapshot: Record<string, unknown>;
+  /** Array of field names that changed in this version */
+  changedFields?: string[];
+  /** Optional message describing the changes */
+  changeMessage?: string;
+  createdAt: Date;
+}
+
 export type StorageCreateAgentInput = Omit<StorageAgentType, 'createdAt' | 'updatedAt'>;
 
 export type StorageUpdateAgentInput = {
