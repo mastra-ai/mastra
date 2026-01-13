@@ -17,7 +17,6 @@ import { Workflow } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';
-import type { InferSchemaOutput } from '../../../packages/core/dist/stream/base/schema';
 import type { InngestEngineType, InngestWorkflowConfig } from './types';
 import { InngestWorkflow } from './workflow';
 
