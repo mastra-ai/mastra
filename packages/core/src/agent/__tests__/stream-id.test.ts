@@ -1,15 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import type { UIMessageChunk } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
-import type { StorageThreadType } from '../../memory';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
-import type { MastraMessageV1 } from '../message-list';
 
 describe('Stream ID Consistency', () => {
   /**
