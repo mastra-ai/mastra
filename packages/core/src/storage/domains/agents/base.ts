@@ -18,7 +18,7 @@ import { StorageDomain } from '../base';
  * Represents a stored version of an agent configuration.
  */
 export interface AgentVersion {
-  /** ULID identifier for this version */
+  /** UUID identifier for this version */
   id: string;
   /** ID of the agent this version belongs to */
   agentId: string;
@@ -40,7 +40,7 @@ export interface AgentVersion {
  * Input for creating a new agent version.
  */
 export interface CreateVersionInput {
-  /** ULID identifier for this version */
+  /** UUID identifier for this version */
   id: string;
   /** ID of the agent this version belongs to */
   agentId: string;
@@ -250,7 +250,7 @@ export abstract class AgentsStorage extends StorageDomain {
 
   /**
    * Retrieves a version by its unique ID.
-   * @param id - The ULID of the version
+   * @param id - The UUID of the version
    * @returns The version if found, null otherwise
    */
   abstract getVersion(id: string): Promise<AgentVersion | null>;
@@ -279,7 +279,7 @@ export abstract class AgentsStorage extends StorageDomain {
 
   /**
    * Deletes a specific version by ID.
-   * @param id - The ULID of the version to delete
+   * @param id - The UUID of the version to delete
    */
   abstract deleteVersion(id: string): Promise<void>;
 

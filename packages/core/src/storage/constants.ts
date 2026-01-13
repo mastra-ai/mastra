@@ -110,7 +110,7 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
 };
 
 export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
-  id: { type: 'text', nullable: false, primaryKey: true }, // ULID
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
   agentId: { type: 'text', nullable: false },
   versionNumber: { type: 'integer', nullable: false },
   name: { type: 'text', nullable: true }, // Vanity name

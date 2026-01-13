@@ -18,7 +18,7 @@ export const agentVersionPathParams = z.object({
  */
 export const versionIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the stored agent'),
-  versionId: z.string().describe('Unique identifier for the version (ULID)'),
+  versionId: z.string().describe('Unique identifier for the version (UUID)'),
 });
 
 // ============================================================================
@@ -44,8 +44,8 @@ export const listVersionsQuerySchema = createPagePaginationSchema(20).extend({
  * GET /api/stored/agents/:agentId/versions/compare - Compare versions query params
  */
 export const compareVersionsQuerySchema = z.object({
-  from: z.string().describe('Version ID (ULID) to compare from'),
-  to: z.string().describe('Version ID (ULID) to compare to'),
+  from: z.string().describe('Version ID (UUID) to compare from'),
+  to: z.string().describe('Version ID (UUID) to compare to'),
 });
 
 // ============================================================================
@@ -68,7 +68,7 @@ export const createVersionBodySchema = z.object({
  * Agent version object schema (full response)
  */
 export const agentVersionSchema = z.object({
-  id: z.string().describe('Unique identifier for the version (ULID)'),
+  id: z.string().describe('Unique identifier for the version (UUID)'),
   agentId: z.string().describe('ID of the agent this version belongs to'),
   versionNumber: z.number().describe('Sequential version number (1, 2, 3, ...)'),
   name: z.string().optional().describe('Optional vanity name for this version'),

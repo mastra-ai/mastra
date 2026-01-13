@@ -279,7 +279,7 @@ export interface StorageAgentType {
  * Used for tracking changes and enabling rollback capabilities.
  */
 export interface StorageAgentVersionType {
-  /** Unique identifier (ULID) */
+  /** Unique identifier (UUID) */
   id: string;
   /** Reference to the parent agent */
   agentId: string;

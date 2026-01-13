@@ -118,7 +118,7 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Retrieves a specific version by its ID
-   * @param versionId - The ULID of the version to retrieve
+   * @param versionId - The UUID of the version to retrieve
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the version details
    */
@@ -130,7 +130,7 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Activates a specific version, making it the active version for this agent
-   * @param versionId - The ULID of the version to activate
+   * @param versionId - The UUID of the version to activate
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise that resolves when activation is complete
    */
@@ -145,7 +145,7 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Restores a version by creating a new version with the same configuration
-   * @param versionId - The ULID of the version to restore
+   * @param versionId - The UUID of the version to restore
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the newly created version
    */
@@ -163,7 +163,7 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Deletes a specific version
-   * @param versionId - The ULID of the version to delete
+   * @param versionId - The UUID of the version to delete
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise that resolves when deletion is complete
    */
@@ -178,8 +178,8 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Compares two versions and returns their differences
-   * @param fromId - The ULID of the source version
-   * @param toId - The ULID of the target version
+   * @param fromId - The UUID of the source version
+   * @param toId - The UUID of the target version
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the comparison results
    */
