@@ -11,36 +11,21 @@ Storage APIs have been standardized with consistent pagination and naming patter
 
 If you're using PostgreSQL or LibSQL storage, you'll need to update your database schema to rename a column in the `mastra_scorers` table.
 
-**Important:** Run this SQL through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process). Do not run it directly on production databases without proper review.
+**Important:** Run this SQL through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process). Your migration tool will ensure it only runs once. Do not run it directly on production databases without proper review.
 
 **PostgreSQL:**
 ```sql
--- Check if column exists before renaming
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT FROM information_schema.columns
-    WHERE table_name = 'mastra_scorers'
-    AND column_name = 'runtimeContext'
-  ) THEN
-    ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
-  END IF;
-END $$;
+ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
 ```
 
 **LibSQL:**
 ```sql
--- LibSQL/SQLite doesn't support conditional DDL
--- Check if you have the old column name before running:
--- SELECT * FROM pragma_table_info('mastra_scorers') WHERE name = 'runtimeContext';
--- If the query returns a row, run:
 ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
 ```
 
 This migration:
 - Only affects the `mastra_scorers` table
 - Renames the column used for request context tracking
-- PostgreSQL version is safe to run multiple times (checks if column exists)
 
 :::tip[Migration Safety]
 The column rename is a safe operation that doesn't affect data. However, if you have active connections querying the old column name, those queries will fail until you update your code. Coordinate this migration with your code deployment.
