@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
 import { OpenAISchemaCompatLayer } from './provider-compats/openai';
+import { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
 import type { ModelInformation } from './types';
 
 // Mock the regular 'zod' import to use zod v4
