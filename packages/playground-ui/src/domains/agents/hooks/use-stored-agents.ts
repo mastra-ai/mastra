@@ -1,7 +1,28 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
-import type { CreateStoredAgentParams, UpdateStoredAgentParams } from '@mastra/client-js';
+import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams } from '@mastra/client-js';
+
+export const useStoredAgents = (params?: ListStoredAgentsParams) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['stored-agents', params, requestContext],
+    queryFn: () => client.listStoredAgents(params, requestContext),
+  });
+};
+
+export const useStoredAgent = (agentId?: string) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['stored-agent', agentId, requestContext],
+    queryFn: () => (agentId ? client.getStoredAgent(agentId).details(requestContext) : null),
+    enabled: Boolean(agentId),
+  });
+};
 
 export const useStoredAgentMutations = (agentId?: string) => {
   const client = useMastraClient();

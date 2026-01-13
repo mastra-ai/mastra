@@ -722,9 +722,13 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all stored agents with optional pagination
    * @param params - Optional pagination and ordering parameters
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing paginated list of stored agents
    */
-  public listStoredAgents(params?: ListStoredAgentsParams): Promise<ListStoredAgentsResponse> {
+  public listStoredAgents(
+    params?: ListStoredAgentsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListStoredAgentsResponse> {
     const searchParams = new URLSearchParams();
 
     if (params?.page !== undefined) {
@@ -740,6 +744,11 @@ export class MastraClient extends BaseResource {
       if (params.orderBy.direction) {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
+    }
+
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();

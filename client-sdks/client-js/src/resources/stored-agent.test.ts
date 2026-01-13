@@ -103,6 +103,29 @@ describe('StoredAgent Resource', () => {
         }),
       );
     });
+
+    it('should list stored agents with requestContext', async () => {
+      const mockResponse = {
+        agents: [],
+        total: 0,
+        page: 0,
+        perPage: 100,
+        hasMore: false,
+      };
+      const requestContext = { userId: '123', tenantId: 'tenant-456' };
+      const expectedBase64 = btoa(JSON.stringify(requestContext));
+      const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
+      mockFetchResponse(mockResponse);
+
+      const result = await client.listStoredAgents(undefined, requestContext);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?requestContext=${expectedEncodedBase64}`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
   });
 
   describe('createStoredAgent', () => {
