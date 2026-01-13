@@ -103,6 +103,29 @@ describe('StoredAgent Resource', () => {
         }),
       );
     });
+
+    it('should list stored agents with requestContext', async () => {
+      const mockResponse = {
+        agents: [],
+        total: 0,
+        page: 0,
+        perPage: 100,
+        hasMore: false,
+      };
+      const requestContext = { userId: '123', tenantId: 'tenant-456' };
+      const expectedBase64 = btoa(JSON.stringify(requestContext));
+      const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
+      mockFetchResponse(mockResponse);
+
+      const result = await client.listStoredAgents(undefined, requestContext);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?requestContext=${expectedEncodedBase64}`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
   });
 
   describe('createStoredAgent', () => {
@@ -130,6 +153,34 @@ describe('StoredAgent Resource', () => {
           headers: expect.objectContaining({
             'content-type': 'application/json',
           }),
+        }),
+      );
+    });
+
+    it('should create a stored agent with requestContext', async () => {
+      const createParams = {
+        id: 'new-agent',
+        name: 'New Agent',
+        instructions: 'You are a helpful assistant',
+        model: { provider: 'openai', name: 'gpt-4' },
+      };
+      const requestContext = { userId: '123', tenantId: 'tenant-456' };
+      const expectedBase64 = btoa(JSON.stringify(requestContext));
+      const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
+      const mockResponse = {
+        ...createParams,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await client.createStoredAgent(createParams, requestContext);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?requestContext=${expectedEncodedBase64}`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(createParams),
         }),
       );
     });
@@ -191,6 +242,30 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it('should get stored agent details with requestContext', async () => {
+      const requestContext = { userId: '123', tenantId: 'tenant-456' };
+      const expectedBase64 = btoa(JSON.stringify(requestContext));
+      const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
+      const mockResponse = {
+        id: storedAgentId,
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant',
+        model: { provider: 'openai', name: 'gpt-4' },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.details(requestContext);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}?requestContext=${expectedEncodedBase64}`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
     it('should update stored agent', async () => {
       const updateParams = {
         name: 'Updated Agent Name',
@@ -216,6 +291,34 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it('should update stored agent with requestContext', async () => {
+      const updateParams = {
+        name: 'Updated Agent Name',
+        instructions: 'Updated instructions',
+      };
+      const requestContext = { userId: '123', tenantId: 'tenant-456' };
+      const expectedBase64 = btoa(JSON.stringify(requestContext));
+      const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
+      const mockResponse = {
+        id: storedAgentId,
+        ...updateParams,
+        model: { provider: 'openai', name: 'gpt-4' },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.update(updateParams, requestContext);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}?requestContext=${expectedEncodedBase64}`,
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify(updateParams),
+        }),
+      );
+    });
+
     it('should delete stored agent', async () => {
       const mockResponse = {
         success: true,
@@ -227,6 +330,26 @@ describe('StoredAgent Resource', () => {
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}`,
+        expect.objectContaining({
+          method: 'DELETE',
+        }),
+      );
+    });
+
+    it('should delete stored agent with requestContext', async () => {
+      const requestContext = { userId: '123', tenantId: 'tenant-456' };
+      const expectedBase64 = btoa(JSON.stringify(requestContext));
+      const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
+      const mockResponse = {
+        success: true,
+        message: `Agent ${storedAgentId} deleted successfully`,
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.delete(requestContext);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}?requestContext=${expectedEncodedBase64}`,
         expect.objectContaining({
           method: 'DELETE',
         }),

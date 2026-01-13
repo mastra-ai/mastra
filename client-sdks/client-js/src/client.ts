@@ -722,9 +722,13 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all stored agents with optional pagination
    * @param params - Optional pagination and ordering parameters
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing paginated list of stored agents
    */
-  public listStoredAgents(params?: ListStoredAgentsParams): Promise<ListStoredAgentsResponse> {
+  public listStoredAgents(
+    params?: ListStoredAgentsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListStoredAgentsResponse> {
     const searchParams = new URLSearchParams();
 
     if (params?.page !== undefined) {
@@ -742,6 +746,11 @@ export class MastraClient extends BaseResource {
       }
     }
 
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
     const queryString = searchParams.toString();
     return this.request(`/api/stored/agents${queryString ? `?${queryString}` : ''}`);
   }
@@ -749,10 +758,14 @@ export class MastraClient extends BaseResource {
   /**
    * Creates a new stored agent
    * @param params - Agent configuration including id, name, instructions, model, etc.
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the created stored agent
    */
-  public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
-    return this.request('/api/stored/agents', {
+  public createStoredAgent(
+    params: CreateStoredAgentParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<StoredAgentResponse> {
+    return this.request(`/api/stored/agents${requestContextQueryString(requestContext)}`, {
       method: 'POST',
       body: params,
     });
