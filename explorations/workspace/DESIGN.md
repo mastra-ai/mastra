@@ -1,8 +1,8 @@
 # Agent Workspace Design
 
 A **Workspace** is composed of two core abstractions:
-1. **Filesystem (FS)** - Where the agent stores and retrieves files and state
-2. **Executor** - Where the agent runs code and commands
+1. **Filesystem (FS)** - Where the agent stores and retrieves files
+2. **Sandbox** - Where the agent runs code and commands
 
 Both are optional but at least one must be present for a workspace to be useful.
 
@@ -14,81 +14,208 @@ Both are optional but at least one must be present for a workspace to be useful.
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │                              Agent                                       │ │
 │  │  ┌─────────────────────────────────────────────────────────────────────┐ │ │
-│  │  │                     Workspace Manager                                │ │ │
+│  │  │                         Workspace                                    │ │ │
 │  │  │                                                                      │ │ │
-│  │  │   ┌─────────────────────┐    ┌──────────────────────────────────┐   │ │ │
-│  │  │   │  Agent Workspace    │    │      Thread Workspaces           │   │ │ │
-│  │  │   │  (scope: agent)     │    │      (scope: thread)             │   │ │ │
-│  │  │   │                     │    │                                  │   │ │ │
-│  │  │   │  Shared across      │    │  ┌──────────┐  ┌──────────┐     │   │ │ │
-│  │  │   │  all threads        │    │  │ Thread A │  │ Thread B │ ... │   │ │ │
-│  │  │   │                     │    │  │ Workspace│  │ Workspace│     │   │ │ │
-│  │  │   └─────────────────────┘    │  └──────────┘  └──────────┘     │   │ │ │
-│  │  │                              └──────────────────────────────────┘   │ │ │
+│  │  │   ┌─────────────────────────┐   ┌──────────────────────────────┐    │ │ │
+│  │  │   │      Filesystem         │   │         Sandbox              │    │ │ │
+│  │  │   │  (provider instance)    │   │    (provider instance)       │    │ │ │
+│  │  │   │                         │   │                              │    │ │ │
+│  │  │   │  Built-in (@mastra/core):│   │  Built-in (@mastra/core):   │    │ │ │
+│  │  │   │  ┌─────────────────┐    │   │  ┌─────────────────┐         │    │ │ │
+│  │  │   │  │ • LocalFilesystem│   │   │  │ • LocalSandbox  │         │    │ │ │
+│  │  │   │  └─────────────────┘    │   │  └─────────────────┘         │    │ │ │
+│  │  │   │                         │   │                              │    │ │ │
+│  │  │   │  External packages:     │   │  External packages:          │    │ │ │
+│  │  │   │  ┌─────────────────┐    │   │  ┌─────────────────┐         │    │ │ │
+│  │  │   │  │ • AgentFilesystem│   │   │  │ • ComputeSDK    │         │    │ │ │
+│  │  │   │  │   (@mastra/     │   │   │  │   (@mastra/     │         │    │ │ │
+│  │  │   │  │   filesystem-   │   │   │  │   sandbox-      │         │    │ │ │
+│  │  │   │  │   agentfs)      │   │   │  │   computesdk)   │         │    │ │ │
+│  │  │   │  └─────────────────┘    │   │  └─────────────────┘         │    │ │ │
+│  │  │   └─────────────────────────┘   └──────────────────────────────┘    │ │ │
 │  │  └─────────────────────────────────────────────────────────────────────┘ │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                        Workspace                             │
-│  ┌─────────────────────────┐  ┌─────────────────────────┐   │
-│  │      Filesystem         │  │       Executor          │   │
-│  │   (WorkspaceFilesystem) │  │   (WorkspaceExecutor)   │   │
-│  │                         │  │                         │   │
-│  │  Providers:             │  │  Providers:             │   │
-│  │  ┌─────────────────┐    │  │  ┌─────────────────┐    │   │
-│  │  │ • AgentFS       │    │  │  │ • E2B           │    │   │
-│  │  │ • LocalFS       │    │  │  │ • Modal         │    │   │
-│  │  │ • MemoryFS      │    │  │  │ • Docker        │    │   │
-│  │  │ • S3            │    │  │  │ • Daytona       │    │   │
-│  │  │ • Custom...     │    │  │  │ • Local         │    │   │
-│  │  └─────────────────┘    │  │  │ • ComputeSDK    │    │   │
-│  │                         │  │  └─────────────────┘    │   │
-│  └─────────────────────────┘  └─────────────────────────┘   │
-│                                                              │
-│  Optional:                                                   │
-│  ┌─────────────────────────┐  ┌─────────────────────────┐   │
-│  │   State (KV Store)      │  │      Audit Trail        │   │
-│  │   (WorkspaceState)      │  │   (WorkspaceAudit)      │   │
-│  └─────────────────────────┘  └─────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Design Principles
 
 1. **Provider Agnostic** - Interfaces don't assume implementation details
-2. **Composable** - Mix any FS provider with any Executor provider
-3. **Optional Components** - Workspace can have just FS, just Executor, or both
-4. **Syncable** - When both exist, files can sync between them
-5. **Auditable** - Operations can be logged/tracked
-6. **Scoped** - Workspaces can be agent-level, thread-level, or both
+2. **Instance-Based** - Users pass provider instances directly to Workspace
+3. **Composable** - Mix any FS provider with any Sandbox provider
+4. **Optional Components** - Workspace can have just FS, just Sandbox, or both
+5. **Built-in Basics** - LocalFilesystem and LocalSandbox are in `@mastra/core`
+6. **External Providers** - Cloud/remote providers are separate packages
 
 ---
 
-## Workspace Scopes
+## Package Structure
 
-### Agent-Level Workspace (`scope: 'agent'`)
-- Shared across all conversation threads for an agent
-- Persists for the lifetime of the agent
-- Good for: shared knowledge, templates, accumulated learnings
+```
+@mastra/core                    # Core Workspace class, interfaces, AND local providers
+├── src/workspace/
+│   ├── workspace.ts           # Workspace class
+│   ├── filesystem.ts          # WorkspaceFilesystem interface
+│   ├── sandbox.ts             # WorkspaceSandbox interface
+│   ├── local-filesystem.ts    # LocalFilesystem implementation
+│   ├── local-sandbox.ts       # LocalSandbox implementation
+│   └── index.ts               # Exports
 
-### Thread-Level Workspace (`scope: 'thread'`)
-- Isolated per conversation thread
-- Created when thread starts, destroyed when thread ends (or times out)
-- Good for: code review, one-off tasks, security isolation
+# External provider packages
+@mastra/filesystem-agentfs      # AgentFS - Turso-backed filesystem
+@mastra/sandbox-computesdk      # ComputeSDK - E2B, Modal, Railway, etc.
 
-### Hybrid Workspace (`scope: 'hybrid'`)
-- Both agent-level and thread-level workspaces
-- Agent workspace mounted at `/shared`, thread workspace at `/project`
-- Good for: development environments, shared + isolated needs
+explorations/workspace/         # Development/testing package
+├── src/                       # Reference implementations for testing
+```
+
+---
+
+## Usage
+
+### Basic Usage
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+
+// Create a workspace with local filesystem (folder on disk)
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './my-workspace' }),
+});
+
+await workspace.init();
+
+// File operations
+await workspace.writeFile('/hello.txt', 'Hello World!');
+const content = await workspace.readFile('/hello.txt', { encoding: 'utf-8' });
+
+// Code execution
+const result = await workspace.executeCode('console.log("Hi")', { runtime: 'node' });
+console.log(result.stdout); // "Hi"
+
+await workspace.destroy();
+```
+
+### Using External Providers
+
+```typescript
+import { Workspace } from '@mastra/core';
+import { AgentFilesystem } from '@mastra/filesystem-agentfs';
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
+
+// Cloud-based workspace with persistent filesystem and secure execution
+const workspace = new Workspace({
+  filesystem: new AgentFilesystem({ id: 'my-agent' }),
+  sandbox: new ComputeSDKSandbox({
+    provider: 'e2b',
+    apiKey: process.env.COMPUTESDK_API_KEY,
+  }),
+});
+
+await workspace.init();
+
+// Execute code securely in the cloud
+const result = await workspace.executeCode(
+  'print("Hello from E2B!")',
+  { runtime: 'python' }
+);
+```
+
+---
+
+## Filesystem Providers
+
+| Provider | Package | Storage | Persistence | Best For |
+|----------|---------|---------|-------------|----------|
+| **LocalFilesystem** | `@mastra/core` | Disk folder | ✅ Yes | Development, local agents |
+| **RamFilesystem** | `@mastra/workspace` | Memory | ❌ No | Testing, ephemeral workspaces |
+| **AgentFilesystem** | `@mastra/filesystem-agentfs` | SQLite/Turso | ✅ Yes | Production, audit trail |
+
+### LocalFilesystem
+
+Stores files in a folder on the user's machine. Built into `@mastra/core`.
+
+```typescript
+import { LocalFilesystem } from '@mastra/core';
+
+const fs = new LocalFilesystem({
+  basePath: './workspace',  // Files stored here
+  sandbox: true,            // Prevent path traversal (default: true)
+});
+```
+
+### RamFilesystem
+
+In-memory filesystem for testing and ephemeral workspaces. Available in exploration package.
+
+```typescript
+import { RamFilesystem } from '@mastra/workspace';
+
+const fs = new RamFilesystem({
+  initialFiles: {
+    '/config.json': '{"initialized": true}',
+  },
+});
+```
+
+---
+
+## Sandbox Providers
+
+| Provider | Package | Isolation | Best For |
+|----------|---------|-----------|----------|
+| **LocalSandbox** | `@mastra/core` | ❌ None (host machine) | Development only |
+| **ComputeSDKSandbox** | `@mastra/sandbox-computesdk` | ✅ Full | Production |
+
+### LocalSandbox
+
+Runs code directly on the host machine. Built into `@mastra/core`. **Only use for development.**
+
+```typescript
+import { LocalSandbox } from '@mastra/core';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',  // Working directory
+  timeout: 30000,                   // Default timeout (ms)
+});
+```
+
+### ComputeSDKSandbox
+
+Uses ComputeSDK to access E2B, Modal, Railway, Daytona, and other cloud sandbox providers.
+
+```typescript
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
+
+// Using E2B
+const sandbox = new ComputeSDKSandbox({
+  provider: 'e2b',
+  apiKey: process.env.COMPUTESDK_API_KEY,
+});
+
+// Using Modal
+const sandbox2 = new ComputeSDKSandbox({
+  provider: 'modal',
+  apiKey: process.env.COMPUTESDK_API_KEY,
+});
+
+// All supported providers:
+// e2b, modal, railway, daytona, vercel, runloop, cloudflare, codesandbox, blaxel
+```
 
 ---
 
 ## Interface Summary
 
-### `WorkspaceFilesystem`
+### WorkspaceFilesystem
+
 ```typescript
 interface WorkspaceFilesystem {
+  readonly id: string;
+  readonly name: string;
+  readonly provider: string;
+
   // File operations
   readFile(path: string, options?: ReadOptions): Promise<string | Buffer>;
   writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void>;
@@ -96,183 +223,91 @@ interface WorkspaceFilesystem {
   deleteFile(path: string, options?: RemoveOptions): Promise<void>;
   copyFile(src: string, dest: string, options?: CopyOptions): Promise<void>;
   moveFile(src: string, dest: string, options?: CopyOptions): Promise<void>;
-  
+
   // Directory operations
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   rmdir(path: string, options?: RemoveOptions): Promise<void>;
   readdir(path: string, options?: ListOptions): Promise<FileEntry[]>;
-  
+
   // Path operations
   exists(path: string): Promise<boolean>;
   stat(path: string): Promise<FileStat>;
   isFile(path: string): Promise<boolean>;
   isDirectory(path: string): Promise<boolean>;
-  
+
   // Lifecycle
   init?(): Promise<void>;
   destroy?(): Promise<void>;
 }
 ```
 
-### `WorkspaceExecutor`
+### WorkspaceSandbox
+
 ```typescript
-interface WorkspaceExecutor {
+interface WorkspaceSandbox {
+  readonly id: string;
+  readonly name: string;
+  readonly provider: string;
+  readonly status: SandboxStatus;
+  readonly supportedRuntimes: readonly SandboxRuntime[];
+  readonly defaultRuntime: SandboxRuntime;
+
   // Code execution
   executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
   executeCodeStream?(code: string, options?: ExecuteCodeOptions): Promise<StreamingExecutionResult>;
-  
+
   // Command execution
   executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
   executeCommandStream?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<StreamingExecutionResult>;
-  
+
   // Package management
-  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<void>;
-  
+  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<InstallPackageResult>;
+
   // Lifecycle
   start(): Promise<void>;
   stop?(): Promise<void>;
   destroy(): Promise<void>;
   isReady(): Promise<boolean>;
+  getInfo(): Promise<SandboxInfo>;
 }
 ```
 
-### `Workspace`
+### Workspace
+
 ```typescript
-interface Workspace {
+class Workspace {
   readonly id: string;
-  readonly scope: WorkspaceScope;
-  readonly owner: WorkspaceOwner;
-  
-  // Components
-  readonly fs?: WorkspaceFilesystem;
+  readonly name: string;
+  readonly status: WorkspaceStatus;
+  readonly filesystem?: WorkspaceFilesystem;
+  readonly sandbox?: WorkspaceSandbox;
   readonly state?: WorkspaceState;
-  readonly executor?: WorkspaceExecutor;
-  readonly audit?: WorkspaceAudit;
-  
-  // Convenience methods (delegate to components)
+
+  constructor(config: WorkspaceConfig);
+
+  // Convenience methods (delegate to providers)
   readFile(path: string, options?: ReadOptions): Promise<string | Buffer>;
   writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void>;
+  readdir(path: string, options?: ListOptions): Promise<FileEntry[]>;
+  exists(path: string): Promise<boolean>;
   executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
   executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-  
-  // Sync (when both fs and executor present)
-  syncToExecutor?(paths?: string[]): Promise<SyncResult>;
-  syncFromExecutor?(paths?: string[]): Promise<SyncResult>;
-  
+
+  // Sync operations
+  syncToSandbox(paths?: string[]): Promise<SyncResult>;
+  syncFromSandbox(paths?: string[]): Promise<SyncResult>;
+
   // Snapshots
-  snapshot?(options?: SnapshotOptions): Promise<WorkspaceSnapshot>;
-  restore?(snapshot: WorkspaceSnapshot, options?: RestoreOptions): Promise<void>;
-  
+  snapshot(options?: SnapshotOptions): Promise<WorkspaceSnapshot>;
+  restore(snapshot: WorkspaceSnapshot, options?: RestoreOptions): Promise<void>;
+
   // Lifecycle
   init(): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
   destroy(): Promise<void>;
+  getInfo(): Promise<WorkspaceInfo>;
 }
-```
-
----
-
-## Provider Implementations
-
-### Filesystem Providers
-
-| Provider | Persistence | Performance | Audit | Best For |
-|----------|-------------|-------------|-------|----------|
-| **AgentFS** | ✅ SQLite file | Medium | ✅ Full | Agent state, reproducibility |
-| **LocalFS** | ✅ Disk | Fast | ❌ | Development, testing |
-| **MemoryFS** | ❌ RAM only | Fastest | ❌ | Ephemeral threads |
-| **S3** | ✅ Cloud | Slow | Partial | Large files, cloud native |
-
-### Executor Providers
-
-| Provider | Isolation | Runtimes | Cost | Best For |
-|----------|-----------|----------|------|----------|
-| **E2B** | ✅ VM | Python, Node | $$ | General purpose |
-| **Modal** | ✅ Container | Python (GPU) | $$$ | ML, GPU workloads |
-| **Docker** | ✅ Container | Any | $ | Self-hosted |
-| **Daytona** | ✅ Workspace | Any | $$ | Dev environments |
-| **Local** | ❌ Process | System | Free | Development only |
-
----
-
-## Thread Workspace Lifecycle
-
-```
-Thread Created
-     │
-     ▼
-┌─────────────────┐
-│ Check if        │
-│ workspace exists│
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-  Exists    Create New
-    │         │
-    │    ┌────┴────┐
-    │    │ Init FS │
-    │    │ Start   │
-    │    │ Executor│
-    │    └────┬────┘
-    │         │
-    └────┬────┘
-         │
-         ▼
-┌─────────────────┐
-│ Workspace Ready │◄──────────────┐
-└────────┬────────┘               │
-         │                        │
-         ▼                        │
-┌─────────────────┐               │
-│ Agent Execution │               │
-│ (read/write/    │───────────────┘
-│  execute)       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Thread Inactive │
-│ (timeout)       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Destroy         │
-│ Workspace       │
-└─────────────────┘
-```
-
----
-
-## Package Structure
-
-Following interface-first patterns:
-
-```
-src/
-├── index.ts                    # Public exports (interfaces first)
-├── filesystem/
-│   ├── types.ts               # WorkspaceFilesystem interface & types
-│   ├── base.ts                # BaseFilesystem abstract class
-│   ├── factory.ts             # Factory functions returning interfaces
-│   ├── providers/
-│   │   ├── index.ts
-│   │   ├── memory.ts          # MemoryFilesystem implementation
-│   │   └── local.ts           # LocalFilesystem implementation
-│   └── *.test.ts
-├── executor/
-│   ├── types.ts               # WorkspaceExecutor interface & types
-│   ├── base.ts                # BaseExecutor abstract class
-│   ├── factory.ts             # Factory functions returning interfaces
-│   ├── providers/
-│   │   ├── index.ts
-│   │   └── local.ts           # LocalExecutor implementation
-│   └── *.test.ts
-└── workspace/
-    ├── types.ts               # Workspace interface & types
-    ├── workspace.ts           # BaseWorkspace + factory functions
-    └── *.test.ts
 ```
 
 ---
@@ -281,66 +316,128 @@ src/
 
 ### ✅ Completed
 
-1. **Interface-First Architecture**
-   - Factory functions return interface types
-   - Consumers depend on contracts, not implementations
-   - Base classes for provider implementers
+1. **Workspace class in @mastra/core**
+   - Full Workspace implementation with filesystem and sandbox support
+   - Key-value state backed by filesystem
+   - Snapshot and restore capabilities
+   - Sync between filesystem and sandbox
 
-2. **Core Interfaces & Types** (`src/*/types.ts`)
-   - `WorkspaceFilesystem` interface
-   - `WorkspaceExecutor` interface
-   - `Workspace` interface with snapshots, sync, lifecycle
-   - Configuration types for all providers
-   - Custom error classes
+2. **LocalFilesystem in @mastra/core**
+   - Folder-based storage on disk
+   - Path traversal protection (sandbox mode)
+   - Full POSIX-like operations
 
-3. **Base Classes** (`src/*/base.ts`)
-   - `BaseFilesystem` - shared utilities for FS providers
-   - `BaseExecutor` - shared utilities for executor providers
-
-4. **Factory Functions** (`src/*/factory.ts`)
-   - `createFilesystem()`, `createMemoryFilesystem()`, `createLocalFilesystem()`
-   - `createExecutor()`, `createLocalExecutor()`
-   - `createWorkspace()`, `createMemoryWorkspace()`, `createLocalWorkspace()`
-
-5. **Memory Filesystem Provider** (`src/filesystem/providers/memory.ts`)
-   - Full POSIX-like file operations
-   - Directory operations
-   - Initial file seeding
-   - 35 passing tests
-
-6. **Local Filesystem Provider** (`src/filesystem/providers/local.ts`)
-   - Sandboxed file access
-   - Path traversal protection
-   - MIME type detection
-   - 16 passing tests
-
-7. **Local Executor Provider** (`src/executor/providers/local.ts`)
+3. **LocalSandbox in @mastra/core**
    - Multi-runtime support (Node, Python, Bash, etc.)
    - Code and command execution
-   - Streaming output support
-   - Timeout handling
    - Package installation
 
-8. **Workspace Implementation** (`src/workspace/workspace.ts`)
-   - `BaseWorkspace` class combining filesystem and executor
-   - Key-value state backed by filesystem
-   - Snapshot and restore
-   - 21 passing tests
+4. **RamFilesystem (explorations package)**
+   - In-memory filesystem for testing
+   - Initial file seeding support
 
-**Total: 72 passing tests**
+**Total: 50 passing tests (in explorations/workspace)**
 
-### 🚧 In Progress
+### ✅ Agent Integration Complete
 
-9. **Agent integration** - Add `workspace` config to AgentConfig
-10. **Auto tool injection** - Inject workspace tools when workspace is configured
-11. **Thread workspace manager** - Lifecycle management for thread workspaces
+When you configure a workspace on an agent, the following tools are automatically injected:
 
-### 📋 Planned
+**Filesystem tools** (when `filesystem` is configured):
+- `workspace_read_file` - Read file contents
+- `workspace_write_file` - Write content to a file
+- `workspace_list_files` - List files in a directory
+- `workspace_delete_file` - Delete a file
+- `workspace_file_exists` - Check if a file exists
+- `workspace_mkdir` - Create a directory
 
-12. **AgentFS provider** - Using `agentfs-sdk` from Turso
-13. **ComputeSDK/E2B provider** - Remote sandbox execution
-14. **Docker provider** - Container-based execution
-15. **Sync operations** - Sync files between filesystem and executor
-16. **Audit trail** - Track all workspace operations
-17. **Mastra integration** - WorkspaceFactory in Mastra class
+**Sandbox tools** (when `sandbox` is configured):
+- `workspace_execute_code` - Execute code (Node.js, Python, shell, etc.)
+- `workspace_execute_command` - Execute shell commands
+- `workspace_install_package` - Install packages
 
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+
+// Create and initialize workspace
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './agent-workspace' }),
+});
+await workspace.init();
+
+// Create agent with workspace - tools are auto-injected
+const agent = new Agent({
+  id: 'code-assistant',
+  name: 'Code Assistant',
+  model: 'openai/gpt-4',
+  instructions: 'You are a helpful coding assistant with access to a workspace.',
+  workspace,
+});
+
+// Agent now has access to workspace_read_file, workspace_write_file, etc.
+const response = await agent.generate('Create a hello.txt file with "Hello World" content');
+```
+
+### ✅ AgentFS Provider Complete
+
+The `@mastra/filesystem-agentfs` package provides SQLite/Turso-backed persistent storage:
+
+```typescript
+import { Workspace } from '@mastra/core';
+import { AgentFilesystem } from '@mastra/filesystem-agentfs';
+
+const workspace = new Workspace({
+  filesystem: new AgentFilesystem({ id: 'my-agent' }),
+});
+
+await workspace.init();
+await workspace.writeFile('/data.json', JSON.stringify({ key: 'value' }));
+```
+
+Features:
+- Persistent storage in SQLite database
+- Works with local SQLite or Turso cloud
+- POSIX-like filesystem semantics
+- Atomic operations
+- Easy backup (single file)
+
+### ✅ ComputeSDK Sandbox Provider Complete
+
+The `@mastra/sandbox-computesdk` package provides secure cloud execution via ComputeSDK:
+
+```typescript
+import { Workspace } from '@mastra/core';
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
+
+const workspace = new Workspace({
+  sandbox: new ComputeSDKSandbox({
+    provider: 'e2b',  // or modal, railway, daytona, vercel...
+    apiKey: process.env.COMPUTESDK_API_KEY,
+  }),
+});
+
+await workspace.init();
+const result = await workspace.executeCode('print("Secure!")', { runtime: 'python' });
+```
+
+Supported providers:
+- **e2b** - E2B cloud sandboxes
+- **modal** - Modal compute
+- **railway** - Railway environments
+- **daytona** - Daytona workspaces
+- **vercel** - Vercel Functions sandbox
+- **runloop** - Runloop sandboxes
+- **cloudflare** - Cloudflare Workers
+- **codesandbox** - CodeSandbox environments
+- **blaxel** - Blaxel compute
+
+### ✅ All Core Features Complete
+
+The workspace system is now feature-complete with:
+- Core Workspace class in `@mastra/core`
+- Built-in LocalFilesystem and LocalSandbox providers
+- AgentFilesystem provider for persistent SQLite/Turso storage
+- ComputeSDKSandbox provider for secure cloud execution
+- Full agent integration with auto-injected tools
+- 50 passing tests in explorations/workspace

@@ -2,15 +2,13 @@
  * Local Filesystem Provider
  *
  * A filesystem implementation backed by a folder on the local disk.
- * This is the "in memory" filesystem referred to in the Mastra workspace design -
- * it stores files in a local folder on the user's machine.
- *
- * Operations are sandboxed to a base directory for security.
+ * This is the default filesystem for development and local agents.
  */
 
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import type {
+  WorkspaceFilesystem,
   FileContent,
   FileStat,
   FileEntry,
@@ -19,7 +17,7 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-} from '../../types';
+} from './filesystem';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -28,7 +26,7 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
-} from '../../types';
+} from './filesystem';
 
 /**
  * Local filesystem provider configuration.
@@ -50,8 +48,7 @@ export interface LocalFilesystemOptions {
  *
  * @example
  * ```typescript
- * import { Workspace } from '@mastra/core';
- * import { LocalFilesystem } from '@mastra/workspace-fs-local';
+ * import { Workspace, LocalFilesystem } from '@mastra/core';
  *
  * const workspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
@@ -79,10 +76,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     return `local-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private Helpers
-  // ---------------------------------------------------------------------------
-
   private toBuffer(content: FileContent): Buffer {
     if (Buffer.isBuffer(content)) return content;
     if (content instanceof Uint8Array) return Buffer.from(content);
@@ -109,17 +102,11 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     return mimeTypes[ext ?? ''] ?? 'application/octet-stream';
   }
 
-  /**
-   * Resolve a path relative to the base path.
-   * Paths like "/test.txt" are treated as relative to the base path.
-   */
   private resolvePath(inputPath: string): string {
-    // Remove leading slashes to treat all paths as relative to basePath
     const cleanedPath = inputPath.replace(/^\/+/, '');
     const normalizedInput = nodePath.normalize(cleanedPath);
     const absolutePath = nodePath.resolve(this.basePath, normalizedInput);
 
-    // Sandbox check: ensure path is within basePath
     if (this.sandbox) {
       const relative = nodePath.relative(this.basePath, absolutePath);
       if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
@@ -130,16 +117,9 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     return absolutePath;
   }
 
-  /**
-   * Convert absolute path back to workspace-relative path.
-   */
   private toRelativePath(absolutePath: string): string {
     return '/' + nodePath.relative(this.basePath, absolutePath).replace(/\\/g, '/');
   }
-
-  // ---------------------------------------------------------------------------
-  // File Operations
-  // ---------------------------------------------------------------------------
 
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     const absolutePath = this.resolvePath(inputPath);
@@ -298,10 +278,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Directory Operations
-  // ---------------------------------------------------------------------------
-
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
     const absolutePath = this.resolvePath(inputPath);
 
@@ -416,10 +392,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Path Operations
-  // ---------------------------------------------------------------------------
-
   async exists(inputPath: string): Promise<boolean> {
     const absolutePath = this.resolvePath(inputPath);
     try {
@@ -470,16 +442,11 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Lifecycle
-  // ---------------------------------------------------------------------------
-
   async init(): Promise<void> {
     await fs.mkdir(this.basePath, { recursive: true });
   }
 
   async destroy(): Promise<void> {
     // LocalFilesystem doesn't clean up on destroy by default
-    // Users can call rmdir('/') if they want to clear the workspace
   }
 }
