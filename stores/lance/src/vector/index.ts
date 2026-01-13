@@ -346,7 +346,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           // Empty table with extra columns in data - recreate it with the correct schema
           // Note: This operation is not atomic. Concurrent upserts during table recreation
           // may fail and should be retried by the caller.
-          this.logger.debug(
+          this.logger.warn(
             `Table ${resolvedTableName} is empty and data has extra columns ${extraColumns.join(', ')}. Recreating with new schema.`,
           );
           await this.lanceClient.dropTable(resolvedTableName);
@@ -573,7 +573,14 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
         const initVector = new Array(dimension).fill(0);
         table = await this.lanceClient.createTable(resolvedTableName, [{ id: '__init__', vector: initVector }]);
-        await table.delete("id = '__init__'");
+        try {
+          await table.delete("id = '__init__'");
+        } catch (deleteError) {
+          this.logger.warn(
+            `Failed to delete initialization row from ${resolvedTableName}. Subsequent queries may include '__init__' row.`,
+            deleteError,
+          );
+        }
         // Table is now empty; index will be created when data is upserted and row count >= 256
         this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
         return;

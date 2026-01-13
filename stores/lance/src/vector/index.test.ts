@@ -206,6 +206,7 @@ describe('Lance vector store tests', () => {
       const deleteIndexTestTable = 'delete-index-test-table' + Date.now();
       const indexColumnName = 'vector';
 
+      // Clean up tables from previous test runs to ensure isolation
       beforeAll(async () => {
         await vectorDB.deleteAllTables();
       });
@@ -251,6 +252,7 @@ describe('Lance vector store tests', () => {
   describe('Create table operations', () => {
     const testTableName = 'test-table' + Date.now();
 
+    // Clean up tables from previous test runs to ensure isolation
     beforeAll(async () => {
       await vectorDB.deleteAllTables();
     });
@@ -811,6 +813,7 @@ describe('Lance vector store tests', () => {
       const testTableIndexColumn = 'vector';
 
       beforeAll(async () => {
+        // Clean up tables from previous test runs to ensure isolation
         await vectorDB.deleteAllTables();
 
         const generateTableData = (numRows: number) => {
