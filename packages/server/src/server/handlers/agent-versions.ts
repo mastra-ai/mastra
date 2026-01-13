@@ -83,7 +83,12 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     return a.every((item, index) => deepEqual(item, b[index]));
   }
 
-  // Handle objects
+  // Handle dates (must check before generic objects since Date is also an object)
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+
+  // Handle objects (after Date check to avoid treating Dates as plain objects)
   if (typeof a === 'object' && typeof b === 'object') {
     const aObj = a as Record<string, unknown>;
     const bObj = b as Record<string, unknown>;
@@ -93,11 +98,6 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     if (aKeys.length !== bKeys.length) return false;
 
     return aKeys.every(key => deepEqual(aObj[key], bObj[key]));
-  }
-
-  // Handle dates
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime();
   }
 
   return false;

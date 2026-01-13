@@ -47,9 +47,6 @@ function formatValue(value: unknown): string {
 }
 
 /**
- * Determines the change type for a diff entry.
- */
-/**
  * Checks if a value is a complex type (object or array) that would benefit from a JSON diff view.
  */
 function isComplexValue(value: unknown): boolean {
@@ -59,6 +56,9 @@ function isComplexValue(value: unknown): boolean {
   return typeof value === 'object';
 }
 
+/**
+ * Determines the change type for a diff entry.
+ */
 function getChangeType(diff: VersionDiff): 'added' | 'removed' | 'modified' {
   const prevEmpty = diff.previousValue === null || diff.previousValue === undefined;
   const currEmpty = diff.currentValue === null || diff.currentValue === undefined;

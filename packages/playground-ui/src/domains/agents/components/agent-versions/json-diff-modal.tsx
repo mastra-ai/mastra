@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { FileDiff } from '@pierre/diffs/react';
+import { parseDiffFromFile } from '@pierre/diffs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Button } from '@/ds/components/Button';
+import type { FileContents } from '@pierre/diffs';
 
 interface JsonDiffModalProps {
   open: boolean;
@@ -14,9 +15,9 @@ interface JsonDiffModalProps {
 }
 
 /**
- * Encodes a value as a JSON string for the diffs.com URL.
+ * Formats a value as a JSON string for display.
  */
-function encodeJsonValue(value: unknown): string {
+function formatJsonValue(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
@@ -27,47 +28,40 @@ function encodeJsonValue(value: unknown): string {
 }
 
 /**
- * Modal component that displays a JSON diff using diffs.com in an iframe.
- * Uses the diffs.com URL format: https://diffs.com/?left=<encoded>&right=<encoded>
+ * Modal component that displays a JSON diff using @pierre/diffs locally.
+ * All diff computation happens client-side - no data is sent to external services.
  */
 export function JsonDiffModal({ open, onOpenChange, fieldName, previousValue, currentValue }: JsonDiffModalProps) {
-  const diffUrl = useMemo(() => {
-    const leftContent = encodeJsonValue(previousValue);
-    const rightContent = encodeJsonValue(currentValue);
-
-    // diffs.com accepts left and right parameters with base64 encoded content
-    const leftEncoded = btoa(unescape(encodeURIComponent(leftContent)));
-    const rightEncoded = btoa(unescape(encodeURIComponent(rightContent)));
-
-    return `https://diffs.com/?left=${leftEncoded}&right=${rightEncoded}`;
-  }, [previousValue, currentValue]);
-
-  const handleOpenExternal = () => {
-    window.open(diffUrl, '_blank', 'noopener,noreferrer');
-  };
+  const fileDiff = useMemo(() => {
+    const filename = `${fieldName}.json`;
+    const oldFile: FileContents = {
+      name: filename,
+      contents: formatJsonValue(previousValue),
+      lang: 'json',
+    };
+    const newFile: FileContents = {
+      name: filename,
+      contents: formatJsonValue(currentValue),
+      lang: 'json',
+    };
+    return parseDiffFromFile(oldFile, newFile);
+  }, [previousValue, currentValue, fieldName]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[90vw] sm:max-h-[90vh] w-[90vw] h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle>JSON Diff: {fieldName}</DialogTitle>
-              <DialogDescription>Comparing previous and current values</DialogDescription>
-            </div>
-            <Button variant="ghost" size="md" onClick={handleOpenExternal} title="Open in new tab">
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Open in new tab
-            </Button>
-          </div>
+          <DialogTitle>JSON Diff: {fieldName}</DialogTitle>
+          <DialogDescription>Comparing previous and current values</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 rounded-md overflow-hidden border border-border1 bg-white">
-          <iframe
-            src={diffUrl}
-            title={`JSON Diff for ${fieldName}`}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin"
+        <div className="flex-1 min-h-0 rounded-md overflow-auto border border-border1 bg-surface2">
+          <FileDiff
+            fileDiff={fileDiff}
+            options={{
+              theme: 'pierre-dark',
+              lineDiffType: 'word',
+            }}
           />
         </div>
       </DialogContent>
