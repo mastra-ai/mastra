@@ -119,6 +119,7 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
 export class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
   public id: TAgentId;
   public name: string;
+  public readonly source: 'code' | 'stored';
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -168,6 +169,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     this.name = config.name;
     this.id = config.id ?? config.name;
+    this.source = config.source ?? 'code';
 
     this.#instructions = config.instructions;
     this.#description = config.description;

@@ -30,7 +30,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   summary: 'List stored agents',
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
-  handler: async ({ mastra, page, perPage, orderBy }) => {
+  handler: async ({ mastra, page, perPage, orderBy, ownerId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -47,6 +47,8 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        ownerId,
+        metadata,
       });
 
       return result;
@@ -122,6 +124,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     memory,
     scorers,
     metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -160,6 +163,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           memory,
           scorers,
           metadata,
+          ownerId,
         },
       });
 
@@ -199,6 +203,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     memory,
     scorers,
     metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -236,6 +241,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         memory,
         scorers,
         metadata,
+        ownerId,
       });
 
       return agent;

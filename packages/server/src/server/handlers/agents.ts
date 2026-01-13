@@ -109,6 +109,7 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  source?: 'code' | 'stored';
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -299,6 +300,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: agent.source ?? 'code',
   };
 }
 
@@ -454,6 +456,7 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: agent.source ?? 'code',
   };
 }
 

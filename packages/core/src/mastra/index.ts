@@ -985,6 +985,7 @@ export class Mastra<
       memory,
       scorers,
       defaultOptions: storedAgent.defaultOptions,
+      source: 'stored',
     });
 
     // Register the agent with Mastra

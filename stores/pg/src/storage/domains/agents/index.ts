@@ -40,25 +40,44 @@ export class AgentsPG extends AgentsStorage {
 
   /**
    * Returns default index definitions for the agents domain tables.
-   * Currently no default indexes are defined for agents.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    return [];
+    return [
+      {
+        name: 'idx_agents_owner_id',
+        table: TABLE_AGENTS,
+        columns: ['ownerId'],
+      },
+    ];
   }
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for agents.
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
       return;
     }
-    // No default indexes for agents domain
+
+    const defaultIndexes = this.getDefaultIndexDefinitions();
+    for (const indexDef of defaultIndexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create default index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    // Add any new columns that may not exist in older tables
+    await this.#db.alterTable({
+      tableName: TABLE_AGENTS,
+      schema: TABLE_SCHEMAS[TABLE_AGENTS],
+      ifNotExists: ['ownerId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -128,6 +147,7 @@ export class AgentsPG extends AgentsStorage {
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
+      ownerId: row.ownerId as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -166,9 +186,9 @@ export class AgentsPG extends AgentsStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, name, description, instructions, model, tools, 
-          "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, 
+          "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, "ownerId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [
           agent.id,
           agent.name,
@@ -184,6 +204,7 @@ export class AgentsPG extends AgentsStorage {
           agent.memory ? JSON.stringify(agent.memory) : null,
           agent.scorers ? JSON.stringify(agent.scorers) : null,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
+          agent.ownerId ?? null,
           nowIso,
           nowIso,
           nowIso,
@@ -296,6 +317,11 @@ export class AgentsPG extends AgentsStorage {
         values.push(JSON.stringify(mergedMetadata));
       }
 
+      if (updates.ownerId !== undefined) {
+        setClauses.push(`"ownerId" = $${paramIndex++}`);
+        values.push(updates.ownerId);
+      }
+
       // Always update the updatedAt timestamp
       const now = new Date().toISOString();
       setClauses.push(`"updatedAt" = $${paramIndex++}`);
@@ -362,7 +388,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, ownerId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -383,8 +409,29 @@ export class AgentsPG extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-      // Get total count
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      // Build WHERE clause for filtering
+      const whereClauses: string[] = [];
+      const whereValues: any[] = [];
+      let paramIndex = 1;
+
+      if (ownerId !== undefined) {
+        whereClauses.push(`"ownerId" = $${paramIndex++}`);
+        whereValues.push(ownerId);
+      }
+
+      // Filter by metadata using JSONB containment operator
+      if (metadata && Object.keys(metadata).length > 0) {
+        whereClauses.push(`metadata @> $${paramIndex++}`);
+        whereValues.push(JSON.stringify(metadata));
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+      // Get total count with filters
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        whereValues,
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -397,11 +444,11 @@ export class AgentsPG extends AgentsStorage {
         };
       }
 
-      // Get paginated results
+      // Get paginated results with filters
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "${field}" ${direction} LIMIT $1 OFFSET $2`,
-        [limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...whereValues, limitValue, offset],
       );
 
       const agents = (dataResult || []).map(row => this.parseRow(row));

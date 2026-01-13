@@ -101,6 +101,7 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   memory: { type: 'jsonb', nullable: true }, // Memory configuration
   scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  ownerId: { type: 'text', nullable: true }, // Owner identifier for multi-tenant filtering
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

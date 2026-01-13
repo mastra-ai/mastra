@@ -48,6 +48,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       { collection: TABLE_AGENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_AGENTS, keys: { createdAt: -1 } },
       { collection: TABLE_AGENTS, keys: { updatedAt: -1 } },
+      { collection: TABLE_AGENTS, keys: { ownerId: 1 } },
     ];
   }
 
@@ -197,6 +198,8 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updateDoc.metadata = { ...existingMetadata, ...updates.metadata };
       }
 
+      if (updates.ownerId !== undefined) updateDoc.ownerId = updates.ownerId;
+
       await collection.updateOne({ id }, { $set: updateDoc });
 
       const updatedAgent = await collection.findOne<any>({ id });
@@ -246,7 +249,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, ownerId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -265,7 +268,22 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const collection = await this.getCollection(TABLE_AGENTS);
-      const total = await collection.countDocuments({});
+
+      // Build filter query
+      const filter: Record<string, any> = {};
+
+      if (ownerId !== undefined) {
+        filter.ownerId = ownerId;
+      }
+
+      // Filter by metadata (AND logic - all key-value pairs must match)
+      if (metadata && Object.keys(metadata).length > 0) {
+        for (const [key, value] of Object.entries(metadata)) {
+          filter[`metadata.${key}`] = value;
+        }
+      }
+
+      const total = await collection.countDocuments(filter);
 
       if (total === 0 || perPage === 0) {
         return {
@@ -281,7 +299,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
       let cursor = collection
-        .find({})
+        .find(filter)
         .sort({ [field]: sortOrder })
         .skip(offset);
 
