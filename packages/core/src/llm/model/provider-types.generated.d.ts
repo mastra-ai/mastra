@@ -212,7 +212,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
   ];
-  readonly upstage: readonly ['solar-mini', 'solar-pro2'];
+  readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly groq: readonly [
     'llama-3.1-8b-instant',
     'llama-3.3-70b-versatile',
