@@ -54,6 +54,7 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  ListMemoryConfigsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -145,6 +146,15 @@ export class MastraClient extends BaseResource {
     return this.request(
       `/api/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
     );
+  }
+
+  /**
+   * Lists all registered memory configurations
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing list of memory configurations
+   */
+  public listMemoryConfigs(requestContext?: Record<string, unknown>): Promise<ListMemoryConfigsResponse> {
+    return this.request(`/api/memory/configs${requestContextQueryString(requestContext)}`);
   }
 
   /**
