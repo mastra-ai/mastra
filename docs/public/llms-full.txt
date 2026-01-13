@@ -31788,6 +31788,10 @@ npx @mastra/codemod@beta v1
 
 :::
 
+:::note[Database Migration Required]
+If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#database-migration) for details.
+:::
+
 ## Breaking Changes by Area
 
 - **[Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
@@ -31988,6 +31992,47 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 [EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/storage
 
 Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
+
+## Database Migration
+
+Run these SQL migrations through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process).
+
+### Scorers table column rename
+
+The `runtimeContext` column in `mastra_scorers` was renamed to `requestContext`.
+
+:::note[Who needs this migration]
+Only if you use `@mastra/pg` or `@mastra/libsql` with evals/scoring and have existing data in the `runtimeContext` column.
+:::
+
+:::important[What breaks without it]
+Existing score records won't have their request context data accessible.
+:::
+
+After deploying v1 (which adds the new `requestContext` column on init), copy the data and drop the old column:
+
+```sql
+UPDATE mastra_scorers SET "requestContext" = "runtimeContext" WHERE "runtimeContext" IS NOT NULL;
+ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
+```
+
+### JSON columns (TEXT → JSONB)
+
+**PostgreSQL only.** The `metadata` column in `mastra_threads` and `snapshot` column in `mastra_workflow_snapshot` changed from TEXT to JSONB.
+
+:::note[Recommended]
+Migrating to JSONB enables native PostgreSQL JSON operators and GIN indexing for better query performance on JSON fields.
+:::
+
+```sql
+ALTER TABLE mastra_threads
+ALTER COLUMN metadata TYPE jsonb
+USING metadata::jsonb;
+
+ALTER TABLE mastra_workflow_snapshot
+ALTER COLUMN snapshot TYPE jsonb
+USING snapshot::jsonb;
+```
 
 ## Added
 
@@ -86394,6 +86439,24 @@ const results = await store.query({
 
 - Supports advanced filtering with nested conditions
 - Payload (metadata) fields must be explicitly indexed for filtering
+- Use `createPayloadIndex()` to index fields you want to filter on:
+
+```typescript
+// Index a field before filtering on it
+await store.createPayloadIndex({
+  indexName: "my_index",
+  fieldName: "source",
+  fieldSchema: "keyword", // 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'
+});
+
+// Now filtering works
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  filter: { source: "document-a" },
+});
+```
+
 - Efficient handling of geo-spatial queries
 - Special handling for null and empty values
 - Vector-specific filtering capabilities
@@ -89078,6 +89141,7 @@ The DynamoDB storage implementation provides a scalable and performant NoSQL dat
 - Compatible with AWS DynamoDB Local for development
 - Stores Thread, Message, Trace, Eval, and Workflow data
 - Optimized for serverless environments
+- Configurable TTL (Time To Live) for automatic data expiration per entity type
 
 ## Installation
 
@@ -89190,8 +89254,128 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
         "AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.",
       isOptional: true,
     },
+    {
+      name: "config.ttl",
+      type: "object",
+      description:
+        "TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
+      isOptional: true,
+    },
   ]}
 />
+
+## TTL (Time To Live) Configuration
+
+DynamoDB TTL allows you to automatically delete items after a specified time period. This is useful for:
+
+- **Cost optimization**: Automatically remove old data to reduce storage costs
+- **Data lifecycle management**: Implement retention policies for compliance
+- **Performance**: Prevent tables from growing indefinitely
+- **Privacy compliance**: Automatically purge personal data after specified periods
+
+### Enabling TTL
+
+To use TTL, you must:
+
+1. **Configure TTL in DynamoDBStore** (shown below)
+2. **Enable TTL on your DynamoDB table** via AWS Console or CLI, specifying the attribute name (default: `ttl`)
+
+```typescript
+import { DynamoDBStore } from "@mastra/dynamodb";
+
+const storage = new DynamoDBStore({
+  name: "dynamodb",
+  config: {
+    tableName: "mastra-single-table",
+    region: "us-east-1",
+    ttl: {
+      // Messages expire after 30 days
+      message: {
+        enabled: true,
+        defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+      },
+      // Threads expire after 90 days
+      thread: {
+        enabled: true,
+        defaultTtlSeconds: 90 * 24 * 60 * 60, // 90 days
+      },
+      // Traces expire after 7 days with custom attribute name
+      trace: {
+        enabled: true,
+        attributeName: "expiresAt", // Custom TTL attribute
+        defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+      },
+      // Workflow snapshots don't expire
+      workflow_snapshot: {
+        enabled: false,
+      },
+    },
+  },
+});
+```
+
+### Supported Entity Types
+
+TTL can be configured for these entity types:
+
+| Entity | Description |
+|--------|-------------|
+| `thread` | Conversation threads |
+| `message` | Messages within threads |
+| `trace` | Observability traces |
+| `eval` | Evaluation results |
+| `workflow_snapshot` | Workflow state snapshots |
+| `resource` | User/resource data |
+| `score` | Scoring results |
+
+### TTL Entity Configuration
+
+Each entity type accepts the following configuration:
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description: "Whether TTL is enabled for this entity type.",
+      isOptional: false,
+    },
+    {
+      name: "attributeName",
+      type: "string",
+      description: "The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
+      isOptional: true,
+    },
+    {
+      name: "defaultTtlSeconds",
+      type: "number",
+      description: "Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Enabling TTL on Your DynamoDB Table
+
+After configuring TTL in your code, you must enable TTL on the DynamoDB table itself:
+
+**Using AWS CLI:**
+
+```bash
+aws dynamodb update-time-to-live \
+  --table-name mastra-single-table \
+  --time-to-live-specification "Enabled=true, AttributeName=ttl"
+```
+
+**Using AWS Console:**
+
+1. Go to the DynamoDB console
+2. Select your table
+3. Go to "Additional settings" tab
+4. Under "Time to Live (TTL)", click "Manage TTL"
+5. Enable TTL and specify the attribute name (default: `ttl`)
+
+> **Note**: DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
 
 ## AWS IAM Permissions
 
@@ -104323,6 +104507,78 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
       type: "Record<string, any>",
       isOptional: true,
       description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
+### createPayloadIndex()
+
+Creates a payload (metadata) index on a collection field to enable efficient filtering. This is **required** for Qdrant Cloud and any Qdrant instance with `strict_mode_config = true`.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection to create the payload index on",
+    },
+    {
+      name: "fieldName",
+      type: "string",
+      description: "Name of the payload field to index",
+    },
+    {
+      name: "fieldSchema",
+      type: "'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'",
+      description: "The schema type for the payload field",
+    },
+    {
+      name: "wait",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to wait for the operation to complete",
+    },
+  ]}
+/>
+
+```typescript
+// Create a keyword index for filtering by source
+await store.createPayloadIndex({
+  indexName: "my_index",
+  fieldName: "source",
+  fieldSchema: "keyword",
+});
+
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  filter: { source: "document-a" },
+});
+```
+
+### deletePayloadIndex()
+
+Removes a payload index from a collection field.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection to delete the payload index from",
+    },
+    {
+      name: "fieldName",
+      type: "string",
+      description: "Name of the payload field index to delete",
+    },
+    {
+      name: "wait",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to wait for the operation to complete",
     },
   ]}
 />
