@@ -19,21 +19,19 @@ If you use `@mastra/pg` or `@mastra/libsql` with evals/scoring (the `mastra_scor
 ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
 ```
 
-### Threads metadata column (TEXT → JSONB)
+### JSON columns (TEXT → JSONB)
 
-**PostgreSQL only.** The `metadata` column in `mastra_threads` changed from TEXT to JSONB:
+**PostgreSQL only.** The `metadata` column in `mastra_threads` and `snapshot` column in `mastra_workflow_snapshot` changed from TEXT to JSONB.
+
+:::note[Recommended]
+Migrating to JSONB enables native PostgreSQL JSON operators and GIN indexing for better query performance on JSON fields.
+:::
 
 ```sql
 ALTER TABLE mastra_threads
 ALTER COLUMN metadata TYPE jsonb
 USING metadata::jsonb;
-```
 
-### Workflow snapshot column (TEXT → JSONB)
-
-**PostgreSQL only.** The `snapshot` column in `mastra_workflow_snapshot` changed from TEXT to JSONB:
-
-```sql
 ALTER TABLE mastra_workflow_snapshot
 ALTER COLUMN snapshot TYPE jsonb
 USING snapshot::jsonb;
