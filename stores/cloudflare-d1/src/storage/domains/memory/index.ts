@@ -295,10 +295,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
           // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
-          // Compare directly with the value for consistent matching
+          // Pass native values directly so SQLite compares types correctly
           const condition = `json_extract(metadata, '$.${key}') = ?`;
-          // For strings, pass directly. For other types, SQLite handles the comparison.
-          const filterValue = typeof value === 'string' ? value : JSON.stringify(value);
+          const filterValue = value as string | number | boolean | null;
           countQuery = countQuery.whereAnd(condition, filterValue);
           selectQuery = selectQuery.whereAnd(condition, filterValue);
         }
