@@ -18,21 +18,6 @@ These were the last remaining columns storing JSON as TEXT. This change aligns t
 
 Migration Required - PostgreSQL enforces column types, so existing tables must be migrated. Note: Migration will fail if existing column values contain invalid JSON.
 
-Option 1: Use the helper methods (recommended)
-```typescript
-import { PostgresStore } from '@mastra/pg';
-
-const store = new PostgresStore({ id: 'my-store', connectionString: '...' });
-await store.init();
-
-// Migrate threads metadata
-await store.migrateThreadsMetadataToJsonb();
-
-// Migrate workflow snapshots
-await store.migrateWorkflowSnapshotToJsonb();
-```
-
-Option 2: Run SQL directly
 ```sql
 ALTER TABLE mastra_threads
 ALTER COLUMN metadata TYPE jsonb

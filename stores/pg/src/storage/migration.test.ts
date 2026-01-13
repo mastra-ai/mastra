@@ -510,12 +510,12 @@ describe('PostgreSQL Threads Metadata Migration', () => {
     );
     expect(typeBefore.data_type).toBe('text');
 
-    // Step 3: Run the migration
-    const result = await migrationStore.migrateThreadsMetadataToJsonb();
-
-    // Verify migration occurred
-    expect(result.migrated).toBe(true);
-    expect(result.previousType).toBe('text');
+    // Step 3: Run the migration SQL
+    await migrationStore.db.none(`
+      ALTER TABLE "${testSchema}"."${TABLE_THREADS}"
+      ALTER COLUMN "metadata" TYPE jsonb
+      USING "metadata"::jsonb
+    `);
 
     // Step 4: Verify column type is now JSONB
     const typeAfter = await migrationStore.db.one<{ data_type: string }>(
@@ -569,45 +569,6 @@ describe('PostgreSQL Threads Metadata Migration', () => {
     );
     expect(thread5?.metadata).toEqual({ newKey: 'newValue' });
   }, 30000);
-
-  it('should return migrated: false when column is already JSONB', async () => {
-    // The table was migrated in the previous test, so column should be JSONB
-    const result = await migrationStore.migrateThreadsMetadataToJsonb();
-
-    expect(result.migrated).toBe(false);
-    expect(result.previousType).toBeUndefined();
-  }, 10000);
-
-  it('should return migrated: false when table does not exist', async () => {
-    // Create a new store with a fresh schema that has no tables
-    const emptySchema = `empty_schema_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const client = await adminPool.connect();
-    try {
-      await client.query(`CREATE SCHEMA ${emptySchema}`);
-    } finally {
-      client.release();
-    }
-
-    const emptyStore = new PostgresStore({
-      ...TEST_CONFIG,
-      id: 'empty-store',
-      schemaName: emptySchema,
-      disableInit: true, // Don't create tables
-    });
-
-    const result = await emptyStore.migrateThreadsMetadataToJsonb();
-    expect(result.migrated).toBe(false);
-
-    await emptyStore.close();
-
-    // Cleanup
-    const cleanupClient = await adminPool.connect();
-    try {
-      await cleanupClient.query(`DROP SCHEMA IF EXISTS ${emptySchema} CASCADE`);
-    } finally {
-      cleanupClient.release();
-    }
-  }, 10000);
 });
 
 /**
@@ -724,12 +685,12 @@ describe('PostgreSQL Workflow Snapshot Migration', () => {
     );
     expect(typeBefore.data_type).toBe('text');
 
-    // Step 3: Run the migration
-    const result = await migrationStore.migrateWorkflowSnapshotToJsonb();
-
-    // Verify migration occurred
-    expect(result.migrated).toBe(true);
-    expect(result.previousType).toBe('text');
+    // Step 3: Run the migration SQL
+    await migrationStore.db.none(`
+      ALTER TABLE "${testSchema}"."${TABLE_WORKFLOW_SNAPSHOT}"
+      ALTER COLUMN "snapshot" TYPE jsonb
+      USING "snapshot"::jsonb
+    `);
 
     // Step 4: Verify column type is now JSONB
     const typeAfter = await migrationStore.db.one<{ data_type: string }>(
@@ -779,43 +740,4 @@ describe('PostgreSQL Workflow Snapshot Migration', () => {
     );
     expect(newSnapshot?.snapshot).toEqual({ status: 'new', data: [1, 2, 3] });
   }, 30000);
-
-  it('should return migrated: false when column is already JSONB', async () => {
-    // The table was migrated in the previous test, so column should be JSONB
-    const result = await migrationStore.migrateWorkflowSnapshotToJsonb();
-
-    expect(result.migrated).toBe(false);
-    expect(result.previousType).toBeUndefined();
-  }, 10000);
-
-  it('should return migrated: false when table does not exist', async () => {
-    // Create a new store with a fresh schema that has no tables
-    const emptySchema = `empty_workflow_schema_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const client = await adminPool.connect();
-    try {
-      await client.query(`CREATE SCHEMA ${emptySchema}`);
-    } finally {
-      client.release();
-    }
-
-    const emptyStore = new PostgresStore({
-      ...TEST_CONFIG,
-      id: 'empty-workflow-store',
-      schemaName: emptySchema,
-      disableInit: true, // Don't create tables
-    });
-
-    const result = await emptyStore.migrateWorkflowSnapshotToJsonb();
-    expect(result.migrated).toBe(false);
-
-    await emptyStore.close();
-
-    // Cleanup
-    const cleanupClient = await adminPool.connect();
-    try {
-      await cleanupClient.query(`DROP SCHEMA IF EXISTS ${emptySchema} CASCADE`);
-    } finally {
-      cleanupClient.release();
-    }
-  }, 10000);
 });
