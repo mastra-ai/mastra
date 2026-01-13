@@ -15062,7 +15062,7 @@ Agents, tools, and workflows can all accept `RequestContext` as a parameter, mak
 
 ## When to use `RequestContext`
 
-Use `RequestContext` when a primitive’s behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
+Use `RequestContext` when a primitive's behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
 
 :::note
 
@@ -15214,7 +15214,7 @@ Visit [createStep()](/reference/v1/workflows/step) for a full list of configurat
 
 ## Accessing values with tools
 
-You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
+You can access the `requestContext` argument from a tool's `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 export type UserTier = {
@@ -15236,6 +15236,48 @@ export const weatherTool = createTool({
 Visit [createTool()](/reference/v1/tools/create-tool) for a full list of configuration options.
 
 :::
+
+## TypeScript support
+
+When you provide a type parameter to `RequestContext`, all methods are fully typed:
+
+```typescript
+import { RequestContext } from "@mastra/core/request-context";
+
+type MyContext = {
+  userId: string;
+  maxTokens: number;
+  isPremium: boolean;
+};
+
+const ctx = new RequestContext<MyContext>();
+
+// set() enforces correct value types
+ctx.set("userId", "user-123");   // ✓ valid
+ctx.set("maxTokens", 4096);      // ✓ valid
+ctx.set("maxTokens", "wrong");   // ✗ TypeScript error: expected number
+
+// get() returns the correct type automatically
+const tokens = ctx.get("maxTokens"); // inferred as number
+const id = ctx.get("userId");        // inferred as string
+
+// keys() returns typed keys
+for (const key of ctx.keys()) {
+  // key is "userId" | "maxTokens" | "isPremium"
+}
+
+// entries() supports type narrowing
+for (const [key, value] of ctx.entries()) {
+  if (key === "maxTokens") {
+    // TypeScript knows value is number here
+    console.log(value.toFixed(2));
+  }
+  if (key === "userId") {
+    // TypeScript knows value is string here
+    console.log(value.toUpperCase());
+  }
+}
+```
 
 ## Related
 
@@ -34609,13 +34651,13 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="137 models"
+      description="138 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
     />    <CardGridItem
       title="Vercel"
-      description="84 models"
+      description="179 models"
       href="/models/v1/gateways/vercel"
       logo="https://models.dev/logos/vercel.svg"
 
@@ -34741,7 +34783,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 137 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 138 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -34891,6 +34933,7 @@ ANTHROPIC_API_KEY=ant-...
 | `qwen/qwen3-32b:free` |
 | `qwen/qwen3-8b:free` |
 | `qwen/qwen3-coder` |
+| `qwen/qwen3-coder-30b-a3b-instruct` |
 | `qwen/qwen3-coder-flash` |
 | `qwen/qwen3-coder:exacto` |
 | `qwen/qwen3-coder:free` |
@@ -34932,7 +34975,7 @@ description: "Use AI models through Vercel."
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
 [EN] Source: https://mastra.ai/en/models/gateways/vercel
 
-Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 84 models through Mastra's model router.
+Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 179 models through Mastra's model router.
 
 Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-providers).
 
@@ -34945,7 +34988,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "vercel/alibaba/qwen3-coder-plus"
+  model: "vercel/alibaba/qwen-3-14b"
 });
 ```
 
@@ -34971,54 +35014,120 @@ ANTHROPIC_API_KEY=ant-...
 
 | Model |
 |-------|
+| `alibaba/qwen-3-14b` |
+| `alibaba/qwen-3-235b` |
+| `alibaba/qwen-3-30b` |
+| `alibaba/qwen-3-32b` |
+| `alibaba/qwen3-235b-a22b-thinking` |
+| `alibaba/qwen3-coder` |
+| `alibaba/qwen3-coder-30b-a3b` |
 | `alibaba/qwen3-coder-plus` |
+| `alibaba/qwen3-embedding-0.6b` |
+| `alibaba/qwen3-embedding-4b` |
+| `alibaba/qwen3-embedding-8b` |
 | `alibaba/qwen3-max` |
+| `alibaba/qwen3-max-preview` |
 | `alibaba/qwen3-next-80b-a3b-instruct` |
 | `alibaba/qwen3-next-80b-a3b-thinking` |
 | `alibaba/qwen3-vl-instruct` |
 | `alibaba/qwen3-vl-thinking` |
+| `amazon/nova-2-lite` |
 | `amazon/nova-lite` |
 | `amazon/nova-micro` |
 | `amazon/nova-pro` |
+| `amazon/titan-embed-text-v2` |
 | `anthropic/claude-3-haiku` |
 | `anthropic/claude-3-opus` |
 | `anthropic/claude-3.5-haiku` |
 | `anthropic/claude-3.5-sonnet` |
+| `anthropic/claude-3.5-sonnet-20240620` |
 | `anthropic/claude-3.7-sonnet` |
-| `anthropic/claude-4-1-opus` |
-| `anthropic/claude-4-opus` |
-| `anthropic/claude-4-sonnet` |
-| `anthropic/claude-4.5-sonnet` |
 | `anthropic/claude-haiku-4.5` |
+| `anthropic/claude-opus-4` |
+| `anthropic/claude-opus-4.1` |
 | `anthropic/claude-opus-4.5` |
+| `anthropic/claude-sonnet-4` |
+| `anthropic/claude-sonnet-4.5` |
+| `arcee-ai/trinity-mini` |
+| `bfl/flux-kontext-max` |
+| `bfl/flux-kontext-pro` |
+| `bfl/flux-pro-1.0-fill` |
+| `bfl/flux-pro-1.1` |
+| `bfl/flux-pro-1.1-ultra` |
+| `bytedance/seed-1.6` |
+| `cohere/command-a` |
+| `cohere/embed-v4.0` |
 | `deepseek/deepseek-r1` |
+| `deepseek/deepseek-v3` |
+| `deepseek/deepseek-v3.1` |
 | `deepseek/deepseek-v3.1-terminus` |
+| `deepseek/deepseek-v3.2` |
 | `deepseek/deepseek-v3.2-exp` |
-| `deepseek/deepseek-v3.2-exp-thinking` |
+| `deepseek/deepseek-v3.2-thinking` |
 | `google/gemini-2.0-flash` |
 | `google/gemini-2.0-flash-lite` |
 | `google/gemini-2.5-flash` |
+| `google/gemini-2.5-flash-image` |
+| `google/gemini-2.5-flash-image-preview` |
 | `google/gemini-2.5-flash-lite` |
 | `google/gemini-2.5-flash-lite-preview-09-2025` |
 | `google/gemini-2.5-flash-preview-09-2025` |
 | `google/gemini-2.5-pro` |
+| `google/gemini-3-flash` |
+| `google/gemini-3-pro-image` |
 | `google/gemini-3-pro-preview` |
+| `google/gemini-embedding-001` |
+| `google/imagen-4.0-fast-generate-001` |
+| `google/imagen-4.0-generate-001` |
+| `google/imagen-4.0-ultra-generate-001` |
+| `google/text-embedding-005` |
+| `google/text-multilingual-embedding-002` |
+| `inception/mercury-coder-small` |
+| `kwaipilot/kat-coder-pro-v1` |
+| `meituan/longcat-flash-chat` |
+| `meituan/longcat-flash-thinking` |
+| `meta/llama-3.1-70b` |
+| `meta/llama-3.1-8b` |
+| `meta/llama-3.2-11b` |
+| `meta/llama-3.2-1b` |
+| `meta/llama-3.2-3b` |
+| `meta/llama-3.2-90b` |
 | `meta/llama-3.3-70b` |
 | `meta/llama-4-maverick` |
 | `meta/llama-4-scout` |
 | `minimax/minimax-m2` |
+| `minimax/minimax-m2.1` |
+| `minimax/minimax-m2.1-lightning` |
 | `mistral/codestral` |
+| `mistral/codestral-embed` |
+| `mistral/devstral-2` |
+| `mistral/devstral-small` |
+| `mistral/devstral-small-2` |
 | `mistral/magistral-medium` |
 | `mistral/magistral-small` |
+| `mistral/ministral-14b` |
 | `mistral/ministral-3b` |
 | `mistral/ministral-8b` |
-| `mistral/mistral-large` |
+| `mistral/mistral-embed` |
+| `mistral/mistral-large-3` |
+| `mistral/mistral-medium` |
+| `mistral/mistral-nemo` |
 | `mistral/mistral-small` |
 | `mistral/mixtral-8x22b-instruct` |
 | `mistral/pixtral-12b` |
 | `mistral/pixtral-large` |
+| `moonshotai/kimi-k2-0905` |
+| `moonshotai/kimi-k2-thinking` |
+| `moonshotai/kimi-k2-thinking-turbo` |
+| `moonshotai/kimi-k2-turbo` |
 | `morph/morph-v3-fast` |
 | `morph/morph-v3-large` |
+| `nvidia/nemotron-3-nano-30b-a3b` |
+| `nvidia/nemotron-nano-12b-v2-vl` |
+| `nvidia/nemotron-nano-9b-v2` |
+| `openai/codex-mini` |
+| `openai/gpt-3.5-turbo` |
+| `openai/gpt-3.5-turbo-instruct` |
 | `openai/gpt-4-turbo` |
 | `openai/gpt-4.1` |
 | `openai/gpt-4.1-mini` |
@@ -35026,41 +35135,70 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-4o` |
 | `openai/gpt-4o-mini` |
 | `openai/gpt-5` |
+| `openai/gpt-5-chat` |
 | `openai/gpt-5-codex` |
 | `openai/gpt-5-mini` |
 | `openai/gpt-5-nano` |
+| `openai/gpt-5-pro` |
+| `openai/gpt-5.1-codex` |
+| `openai/gpt-5.1-codex-max` |
+| `openai/gpt-5.1-codex-mini` |
+| `openai/gpt-5.1-instant` |
+| `openai/gpt-5.1-thinking` |
+| `openai/gpt-5.2` |
+| `openai/gpt-5.2-chat` |
+| `openai/gpt-5.2-pro` |
 | `openai/gpt-oss-120b` |
 | `openai/gpt-oss-20b` |
+| `openai/gpt-oss-safeguard-20b` |
 | `openai/o1` |
 | `openai/o3` |
+| `openai/o3-deep-research` |
 | `openai/o3-mini` |
+| `openai/o3-pro` |
 | `openai/o4-mini` |
+| `openai/text-embedding-3-large` |
+| `openai/text-embedding-3-small` |
+| `openai/text-embedding-ada-002` |
 | `perplexity/sonar` |
 | `perplexity/sonar-pro` |
 | `perplexity/sonar-reasoning` |
 | `perplexity/sonar-reasoning-pro` |
+| `prime-intellect/intellect-3` |
 | `vercel/v0-1.0-md` |
 | `vercel/v0-1.5-md` |
-| `xai/grok-2` |
+| `voyage/voyage-3-large` |
+| `voyage/voyage-3.5` |
+| `voyage/voyage-3.5-lite` |
+| `voyage/voyage-code-2` |
+| `voyage/voyage-code-3` |
+| `voyage/voyage-finance-2` |
+| `voyage/voyage-law-2` |
 | `xai/grok-2-vision` |
 | `xai/grok-3` |
 | `xai/grok-3-fast` |
 | `xai/grok-3-mini` |
 | `xai/grok-3-mini-fast` |
 | `xai/grok-4` |
-| `xai/grok-4-fast` |
 | `xai/grok-4-fast-non-reasoning` |
+| `xai/grok-4-fast-reasoning` |
+| `xai/grok-4.1-fast-non-reasoning` |
+| `xai/grok-4.1-fast-reasoning` |
 | `xai/grok-code-fast-1` |
+| `xiaomi/mimo-v2-flash` |
 | `zai/glm-4.5` |
 | `zai/glm-4.5-air` |
 | `zai/glm-4.5v` |
 | `zai/glm-4.6` |
+| `zai/glm-4.6v` |
+| `zai/glm-4.6v-flash` |
+| `zai/glm-4.7` |
 
 
 
 ---
 title: "Models"
-description: "Access 66+ AI providers and 1629+ models through Mastra's model router."
+description: "Access 69+ AI providers and 1750+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35073,7 +35211,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1629 models from 66 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1750 models from 69 providers through a single API.
 
 ## Features
 
@@ -35201,7 +35339,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 59 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 62 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -38687,7 +38825,7 @@ For detailed provider-specific documentation, see the [AI SDK Cerebras provider 
 
 ---
 title: "Chutes | Models | Mastra"
-description: "Use Chutes models with Mastra. 55 models available."
+description: "Use Chutes models with Mastra. 56 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -38697,7 +38835,7 @@ description: "Use Chutes models with Mastra. 55 models available."
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 [EN] Source: https://mastra.ai/en/models/providers/chutes
 
-Access 55 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 56 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -38880,7 +39018,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "chutes/miromind-ai/MiroThinker-v1.5-235B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "chutes/mistralai/Devstral-2-123B-Instruct-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/mistralai/Devstral-2-123B-Instruct-2512-TEE",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -38970,8 +39132,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 524288,
-    "maxOutput": 524288,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
     "inputCost": 0.1,
     "outputCost": 0.39
   },
@@ -39066,8 +39228,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 40960,
-    "maxOutput": 40960,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.6
   },
@@ -39199,7 +39361,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 32768,
-    "maxOutput": 32768,
+    "maxOutput": 8192,
     "inputCost": 0.01,
     "outputCost": 0.01
   },
@@ -39236,18 +39398,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.25,
-    "outputCost": 0.85
-  },
-  {
-    "model": "chutes/tngtech/DeepSeek-TNG-R1T2-Chimera-TEE",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 163840,
-    "maxOutput": 65536,
     "inputCost": 0.25,
     "outputCost": 0.85
   },
@@ -39330,8 +39480,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
     "inputCost": 0.17,
     "outputCost": 0.65
   },
@@ -41506,6 +41656,288 @@ const agent = new Agent({
 
 
 ---
+title: "Firmware | Models | Mastra"
+description: "Use Firmware models with Mastra. 16 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/firmware.svg" alt="Firmware logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Firmware
+[EN] Source: https://mastra.ai/en/models/providers/firmware
+
+Access 16 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
+
+Learn more in the [Firmware documentation](https://firmware.ai).
+
+```bash
+FIRMWARE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "firmware/anthropic/claude-haiku-4-5-20251001"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://firmware.ai) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "firmware/anthropic/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/anthropic/claude-opus-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/anthropic/claude-sonnet-4-5-20250929",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/deepseek/deepseek-chat",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/deepseek/deepseek-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/deepseek/deepseek-reasoner",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/google/gemini-2.5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/google/gemini-2.5-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/google/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/google/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/openai/gpt-4o",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/openai/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/openai/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/xai/grok-4-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/xai/grok-4-fast-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "firmware/xai/grok-code-fast-1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 10000,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://app.firmware.ai/api/v1",
+    id: "firmware/anthropic/claude-haiku-4-5-20251001",
+    apiKey: process.env.FIRMWARE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "firmware/xai/grok-code-fast-1"
+      : "firmware/anthropic/claude-haiku-4-5-20251001";
+  }
+});
+```
+
+
+
+
+---
 title: "Friendli | Models | Mastra"
 description: "Use Friendli models with Mastra. 11 models available."
 ---
@@ -41556,18 +41988,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "friendli/deepseek-ai/DeepSeek-R1-0528",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B",
     "imageInput": false,
     "audioInput": false,
@@ -41578,6 +41998,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 1
+  },
+  {
+    "model": "friendli/LGAI-EXAONE/K-EXAONE-236B-A23B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "friendli/meta-llama-3.1-8b-instruct",
@@ -45258,7 +45690,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
       title="Chutes"
-      description="55 models"
+      description="56 models"
       href="/models/v1/providers/chutes"
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
@@ -45286,6 +45718,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="16 models"
       href="/models/v1/providers/fireworks-ai"
       logo="https://models.dev/logos/fireworks-ai.svg"
+    />    <CardGridItem
+      title="Firmware"
+      description="16 models"
+      href="/models/v1/providers/firmware"
+      logo="https://models.dev/logos/firmware.svg"
     />    <CardGridItem
       title="Friendli"
       description="11 models"
@@ -45417,6 +45854,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/poe"
       logo="https://models.dev/logos/poe.svg"
     />    <CardGridItem
+      title="Privatemode AI"
+      description="5 models"
+      href="/models/v1/providers/privatemode-ai"
+      logo="https://models.dev/logos/privatemode-ai.svg"
+    />    <CardGridItem
       title="Requesty"
       description="20 models"
       href="/models/v1/providers/requesty"
@@ -45428,7 +45870,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/scaleway.svg"
     />    <CardGridItem
       title="SiliconFlow"
-      description="72 models"
+      description="75 models"
       href="/models/v1/providers/siliconflow"
       logo="https://models.dev/logos/siliconflow.svg"
     />    <CardGridItem
@@ -45458,9 +45900,14 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="24 models"
+      description="23 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
+    />    <CardGridItem
+      title="Vivgrid"
+      description="1 models"
+      href="/models/v1/providers/vivgrid"
+      logo="https://models.dev/logos/vivgrid.svg"
     />    <CardGridItem
       title="Vultr"
       description="5 models"
@@ -52793,6 +53240,156 @@ const agent = new Agent({
 
 
 ---
+title: "Privatemode AI | Models | Mastra"
+description: "Use Privatemode AI models with Mastra. 5 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/privatemode-ai.svg" alt="Privatemode AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Privatemode AI
+[EN] Source: https://mastra.ai/en/models/providers/privatemode-ai
+
+Access 5 Privatemode AI models through Mastra's model router. Authentication is handled automatically using the `PRIVATEMODE_API_KEY` environment variable.
+
+Learn more in the [Privatemode AI documentation](https://docs.privatemode.ai).
+
+```bash
+PRIVATEMODE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "privatemode-ai/gemma-3-27b"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Privatemode AI documentation](https://docs.privatemode.ai) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "privatemode-ai/gemma-3-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/qwen3-coder-30b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/qwen3-embedding-4b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 2560,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/whisper-large-v3",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "http://localhost:8080/v1",
+    id: "privatemode-ai/gemma-3-27b",
+    apiKey: process.env.PRIVATEMODE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "privatemode-ai/whisper-large-v3"
+      : "privatemode-ai/gemma-3-27b";
+  }
+});
+```
+
+
+
+
+---
 title: "Requesty | Models | Mastra"
 description: "Use Requesty models with Mastra. 20 models available."
 ---
@@ -54336,7 +54933,7 @@ const agent = new Agent({
 
 ---
 title: "SiliconFlow | Models | Mastra"
-description: "Use SiliconFlow models with Mastra. 72 models available."
+description: "Use SiliconFlow models with Mastra. 75 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54346,7 +54943,7 @@ description: "Use SiliconFlow models with Mastra. 72 models available."
 # <img src="https://models.dev/logos/siliconflow.svg" alt="SiliconFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow
 [EN] Source: https://mastra.ai/en/models/providers/siliconflow
 
-Access 72 SiliconFlow models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
+Access 75 SiliconFlow models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
 
 Learn more in the [SiliconFlow documentation](https://cloud.siliconflow.com/models).
 
@@ -54491,6 +55088,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 164000,
     "inputCost": 0.27,
     "outputCost": 1
+  },
+  {
+    "model": "siliconflow/deepseek-ai/DeepSeek-V3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 164000,
+    "maxOutput": 164000,
+    "inputCost": 0.27,
+    "outputCost": 0.42
   },
   {
     "model": "siliconflow/deepseek-ai/DeepSeek-V3.2-Exp",
@@ -55247,6 +55856,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 205000,
     "inputCost": 0.5,
     "outputCost": 1.9
+  },
+  {
+    "model": "siliconflow/zai-org/GLM-4.6V",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "siliconflow/zai-org/GLM-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 205000,
+    "maxOutput": 205000,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -55279,7 +55912,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "siliconflow/zai-org/GLM-4.6"
+      ? "siliconflow/zai-org/GLM-4.7"
       : "siliconflow/ByteDance-Seed/Seed-OSS-36B-Instruct";
   }
 });
@@ -56183,7 +56816,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.upstage.ai",
+    url: "https://api.upstage.ai/v1/solar",
     id: "upstage/solar-mini",
     apiKey: process.env.UPSTAGE_API_KEY,
     headers: {
@@ -56213,7 +56846,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 24 models available."
+description: "Use Venice AI models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -56223,7 +56856,7 @@ description: "Use Venice AI models with Mastra. 24 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 24 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 23 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -56514,18 +57147,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.9
   },
   {
-    "model": "venice/zai-org-glm-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 202752,
-    "maxOutput": 50688,
-    "inputCost": 0.85,
-    "outputCost": 2.75
-  },
-  {
     "model": "venice/zai-org-glm-4.6v",
     "imageInput": true,
     "audioInput": false,
@@ -56586,6 +57207,118 @@ const agent = new Agent({
 });
 ```
 
+
+
+
+---
+title: "Vivgrid | Models | Mastra"
+description: "Use Vivgrid models with Mastra. 1 model available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# <img src="https://models.dev/logos/vivgrid.svg" alt="Vivgrid logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vivgrid
+[EN] Source: https://mastra.ai/en/models/providers/vivgrid
+
+Access 1 Vivgrid model through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
+
+Learn more in the [Vivgrid documentation](https://docs.vivgrid.com/models).
+
+```bash
+VIVGRID_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "vivgrid/gpt-5.1-codex"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Vivgrid documentation](https://docs.vivgrid.com/models) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "vivgrid/gpt-5.1-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.vivgrid.com/v1",
+    id: "vivgrid/gpt-5.1-codex",
+    apiKey: process.env.VIVGRID_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "vivgrid/gpt-5.1-codex"
+      : "vivgrid/gpt-5.1-codex";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/openai) for more details.
+
+```bash npm2yarn copy
+npm install @ai-sdk/openai
+```
 
 
 
