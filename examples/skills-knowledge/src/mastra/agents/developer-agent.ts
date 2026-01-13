@@ -1,21 +1,12 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { SkillsProcessor } from '@mastra/skills';
-
-/**
- * Skills processor with NO config - inherits from Mastra instance.
- *
- * This demonstrates the recommended pattern: register skills globally
- * on the Mastra instance, then agents can inherit them automatically.
- */
-const skillsProcessor = new SkillsProcessor();
 
 /**
  * Developer agent that helps with code reviews and API design.
  *
  * This agent demonstrates:
- * 1. SkillsProcessor with no config - inherits skills from Mastra instance
- * 2. Access to all global skills registered with Mastra
+ * 1. Default skill inheritance - no `skills` config needed
+ * 2. Automatically gets skills from Mastra instance (code-review, api-design, customer-support)
  * 3. Skills are visible in the /skills UI page
  */
 export const developerAgent = new Agent({
@@ -27,7 +18,7 @@ export const developerAgent = new Agent({
 You have access to several skills that can help you:
 - code-review: Guidelines for reviewing TypeScript code
 - api-design: Best practices for REST API and TypeScript interface design
-- brand-guidelines: Writing style for documentation
+- customer-support: Support interaction guidelines
 
 When helping with code or design:
 1. Activate the relevant skill to get detailed guidelines
@@ -40,7 +31,5 @@ Available actions:
 
   model: openai('gpt-4o-mini'),
 
-  // SkillsProcessor inherits skills from Mastra instance
-  // All skills registered with mastra.skills are available
-  inputProcessors: [skillsProcessor],
+  // No skills config needed - inherits from Mastra by default
 });

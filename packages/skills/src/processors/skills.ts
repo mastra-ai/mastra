@@ -1,12 +1,10 @@
-import type { ProcessInputStepArgs } from '@mastra/core/processors';
-import { BaseProcessor } from '@mastra/core/processors';
+import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
 import type { MastraSkills } from '@mastra/core/skills';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
 import { extractLines } from '../bm25';
 import { Skills } from '../skills';
-import type { BM25SearchConfig } from '../search-engine';
 import type { SkillFormat, Skill } from '../types';
 
 // =========================================================================
@@ -17,20 +15,13 @@ import type { SkillFormat, Skill } from '../types';
  * Configuration options for SkillsProcessor
  */
 export interface SkillsProcessorOptions {
-  /** Path or paths to directories containing skills (default: ./skills) */
-  skillsPaths?: string | string[];
+  /**
+   * Skills instance to use.
+   * This is provided by the Agent - users don't create SkillsProcessor directly.
+   */
+  skills: Skills | MastraSkills;
   /** Format for skill injection (default: 'xml') */
   format?: SkillFormat;
-  /** Validate skills on load (default: true) */
-  validateSkills?: boolean;
-  /** BM25 search configuration */
-  bm25Config?: BM25SearchConfig;
-  /**
-   * Pre-existing Skills instance.
-   * If not provided and skillsPaths is set, a new Skills instance will be created.
-   * If neither is provided, the processor will try to inherit from Mastra at runtime.
-   */
-  skills?: Skills | MastraSkills;
 }
 
 // =========================================================================
@@ -39,32 +30,32 @@ export interface SkillsProcessorOptions {
 
 /**
  * Processor for Agent Skills specification.
- * Discovers skills from filesystem and makes them available to agents via tools.
+ * Makes skills available to agents via tools and system message injection.
  *
- * Uses the Skills class for skill management and search.
+ * This processor is created automatically by the Agent when skills are configured.
+ * Users should not create SkillsProcessor directly - instead, configure skills
+ * on the Agent.
  *
  * @example
  * ```typescript
- * // Option 1: Provide skills paths directly
- * const processor = new SkillsProcessor({
- *   skillsPaths: ['./skills', 'node_modules/@company/skills'],
- *   format: 'xml',
+ * // Configure skills on the Agent (recommended)
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   skills: mySkillsInstance,
+ *   // ... other config
  * });
  *
- * // Option 2: Use a pre-existing Skills instance
- * const skills = new Skills({ id: 'my-skills', paths: './skills' });
- * const processor = new SkillsProcessor({ skills });
- *
- * // Option 3: Inherit from Mastra (when registered with an agent that has Mastra)
- * const processor = new SkillsProcessor(); // Will use mastra.getSkills()
+ * // The Agent will create the SkillsProcessor automatically
  * ```
+ *
+ * @internal Created by Agent, not for direct use
  */
-export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
+export class SkillsProcessor implements Processor<'skills-processor'> {
   readonly id = 'skills-processor' as const;
   readonly name = 'Skills Processor';
 
-  /** Skills instance for managing skills (may be set at construction or inherited from Mastra) */
-  private _skills?: Skills | MastraSkills;
+  /** Skills instance for managing skills */
+  private _skills: Skills | MastraSkills;
 
   /** Format for skill injection */
   private format: SkillFormat;
@@ -75,61 +66,41 @@ export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
   /** Map of skill name -> allowed tools (only for skills with allowedTools defined) */
   private skillAllowedTools: Map<string, string[]> = new Map();
 
-  /** Options for creating skills lazily */
-  private skillsOptions?: {
-    paths: string | string[];
-    validateOnLoad: boolean;
-    bm25Config?: BM25SearchConfig;
-  };
-
-  constructor(opts?: SkillsProcessorOptions) {
-    super();
-    this.format = opts?.format ?? 'xml';
-
-    // Use provided Skills instance or store options for lazy creation
-    if (opts?.skills) {
-      this._skills = opts.skills;
-    } else if (opts?.skillsPaths) {
-      // Create skills instance now
-      this._skills = new Skills(
-        {
-          id: 'skills-processor-skills',
-          paths: opts.skillsPaths,
-          validateOnLoad: opts.validateSkills ?? true,
-        },
-        { bm25: opts.bm25Config },
-      );
-    }
-    // Otherwise, will try to inherit from Mastra at runtime
+  constructor(opts: SkillsProcessorOptions) {
+    this._skills = opts.skills;
+    this.format = opts.format ?? 'xml';
   }
 
   /**
-   * Get the skills instance from options or inherited from Mastra
+   * Get the skills instance
    */
   private getSkillsInstance(): Skills | MastraSkills {
-    if (this._skills) {
-      return this._skills;
-    }
-
-    // Try to inherit from the registered Mastra instance
-    if (this.mastra?.getSkills) {
-      const inherited = this.mastra.getSkills();
-      if (inherited) {
-        return inherited;
-      }
-    }
-
-    throw new Error(
-      'No skills instance available. Either pass a skills instance to the processor, ' +
-        'provide skillsPaths, or register a skills instance with Mastra.',
-    );
+    return this._skills;
   }
 
   /**
    * Get the skills instance (public accessor for testing)
    */
   get skills(): Skills | MastraSkills {
-    return this.getSkillsInstance();
+    return this._skills;
+  }
+
+  /**
+   * List all skills available to this processor.
+   * Used by the server to expose skills in the agent API response.
+   */
+  listSkills(): Array<{
+    name: string;
+    description: string;
+    license?: string;
+    allowedTools?: string[];
+  }> {
+    return this._skills.list().map(skill => ({
+      name: skill.name,
+      description: skill.description,
+      license: skill.license,
+      allowedTools: skill.allowedTools,
+    }));
   }
 
   // =========================================================================

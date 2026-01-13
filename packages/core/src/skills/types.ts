@@ -4,6 +4,7 @@
  */
 
 import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../artifacts';
+import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 
 /**
  * Skill source types indicating where the skill comes from and its access level.
@@ -223,4 +224,33 @@ export interface MastraSkills {
    * Refresh skills from disk (re-scan directories)
    */
   refresh(): void;
+
+  // ============================================================================
+  // Input Processors
+  // ============================================================================
+
+  /**
+   * Get input processors for this skills instance.
+   * The processors provide skill tools and context injection for agents.
+   * This follows the same pattern as Memory.getInputProcessors().
+   *
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @param options - Optional processor configuration
+   * @returns Array of input processors that can be added to agent inputProcessors
+   */
+  getInputProcessors(
+    configuredProcessors?: InputProcessorOrWorkflow[],
+    options?: SkillsProcessorConfig,
+  ): InputProcessor[];
+}
+
+/**
+ * Configuration options for skills processor creation.
+ */
+export interface SkillsProcessorConfig {
+  /**
+   * Format for injecting skill information into the context.
+   * @default 'xml'
+   */
+  format?: SkillFormat;
 }

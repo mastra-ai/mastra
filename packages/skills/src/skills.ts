@@ -1,8 +1,12 @@
 import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
+import type { InputProcessor, InputProcessorOrWorkflow } from '@mastra/core/processors';
+import { isProcessorWorkflow } from '@mastra/core/processors';
+import type { SkillsProcessorConfig } from '@mastra/core/skills';
 import type { MastraVector } from '@mastra/core/vector';
 import matter from 'gray-matter';
 
+import { SkillsProcessor } from './processors/skills';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchEngineConfig, BM25SearchConfig } from './search-engine';
 import { validateSkillMetadata, parseAllowedTools } from './schemas';
@@ -505,6 +509,34 @@ export class Skills implements MastraSkills {
 
       this.#discoverSkillsInPath(resolvedPath, source);
     }
+  }
+
+  /**
+   * Get an input processor for this skills instance.
+   * The processors provide skill tools and context injection for agents.
+   * This follows the same pattern as Memory.getInputProcessors().
+   *
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @param options - Optional processor configuration
+   * @returns Array of input processors that can be added to agent inputProcessors
+   */
+  getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    options?: SkillsProcessorConfig,
+  ): InputProcessor[] {
+    // Check if user already manually added a SkillsProcessor
+    const hasSkillsProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'skills-processor');
+
+    if (hasSkillsProcessor) {
+      return []; // Don't duplicate
+    }
+
+    return [
+      new SkillsProcessor({
+        skills: this,
+        format: options?.format,
+      }) as InputProcessor,
+    ];
   }
 
   /**

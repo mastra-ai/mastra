@@ -18,21 +18,23 @@ const storage = new LibSQLStore({
  *
  * Skills registered here are:
  * - Visible in the Skills UI (/skills page)
- * - Available to agents via SkillsProcessor (when no skillsPaths provided)
+ * - Inherited by all agents by default (unless they provide their own or disable)
  *
- * Skills include:
- * - brand-guidelines: Writing style and brand colors
+ * Global skills (in ./skills/):
  * - code-review: Code review guidelines
  * - api-design: API design patterns
  * - customer-support: Support interaction guidelines
+ *
+ * Agent-specific skills (in ./docs-skills/):
+ * - brand-guidelines: Writing style (only used by docsAgent)
  */
 export const mastra = new Mastra({
   agents: {
-    docsAgent, // Uses SkillsProcessor with own skillsPaths (agent-specific skills)
-    supportAgent, // Uses RetrievedKnowledge for FAQ search
-    developerAgent, // Uses SkillsProcessor with no config (inherits from Mastra)
+    docsAgent, // Has its own skills (brand-guidelines in docs-skills/)
+    supportAgent, // Inherits global skills + uses RetrievedKnowledge for FAQ
+    developerAgent, // Inherits global skills (code-review, api-design, customer-support)
   },
-  skills, // Register skills globally (visible in UI, available to agents)
+  skills, // Register skills globally (inherited by agents by default)
   knowledge: supportKnowledge, // Register knowledge with Mastra
   workflows: {
     ingestKnowledgeWorkflow, // Workflow for ingesting knowledge programmatically

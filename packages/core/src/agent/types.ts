@@ -28,6 +28,7 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
+import type { MastraSkills, SkillFormat } from '../skills';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -124,6 +125,51 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
+/**
+ * Configuration options for agent skills processing.
+ * When a Skills instance is provided, the agent will automatically
+ * create a SkillsProcessor to make skills available during execution.
+ */
+export interface AgentSkillsConfig {
+  /**
+   * Skills instance to use for this agent.
+   * When provided, this replaces any inherited skills from Mastra.
+   */
+  instance?: MastraSkills;
+  /**
+   * Format for injecting skill information into the context.
+   * @default 'xml'
+   */
+  format?: SkillFormat;
+}
+
+/**
+ * Skills configuration for an agent.
+ *
+ * By default, agents inherit skills from the Mastra instance (if registered).
+ * Use this option to:
+ * - Provide agent-specific skills: `skills: mySkillsInstance`
+ * - Configure format options: `skills: { format: 'markdown' }`
+ * - Use own skills with options: `skills: { instance: mySkills, format: 'json' }`
+ * - Explicitly disable skills: `skills: false`
+ *
+ * @example
+ * ```typescript
+ * // Use agent-specific skills (no inheritance)
+ * skills: mySkillsInstance,
+ *
+ * // Configure format while inheriting from Mastra
+ * skills: { format: 'markdown' },
+ *
+ * // Use own skills with custom format
+ * skills: { instance: mySkills, format: 'json' },
+ *
+ * // Disable skills entirely
+ * skills: false,
+ * ```
+ */
+export type AgentSkillsOption = MastraSkills | AgentSkillsConfig | false;
+
 export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
   /**
    * Identifier for the agent.
@@ -188,6 +234,27 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Memory module used for storing and retrieving stateful context.
    */
   memory?: DynamicArgument<MastraMemory>;
+  /**
+   * Skills configuration for this agent.
+   * When configured, the agent will create a SkillsProcessor to make skills
+   * available during execution.
+   *
+   * @example
+   * ```typescript
+   * // Use a Skills instance directly
+   * skills: mySkillsInstance,
+   *
+   * // Use config object with options
+   * skills: {
+   *   instance: mySkillsInstance,
+   *   format: 'markdown',
+   * },
+   *
+   * // Inherit from Mastra with defaults
+   * skills: true,
+   * ```
+   */
+  skills?: AgentSkillsOption;
   /**
    * Voice settings for speech input and output.
    */

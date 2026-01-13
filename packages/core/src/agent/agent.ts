@@ -38,6 +38,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWork
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import type { MastraSkills } from '../skills';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { createTool } from '../tools';
@@ -59,6 +60,8 @@ import type {
   AgentConfig,
   AgentGenerateOptions,
   AgentStreamOptions,
+  AgentSkillsConfig,
+  AgentSkillsOption,
   ToolsetsInput,
   ToolsInput,
   AgentModelManagerConfig,
@@ -86,6 +89,25 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
   }
 
   return cb(value as T);
+}
+
+/**
+ * Type guard to check if a value is a MastraSkills instance.
+ * Checks for the presence of required MastraSkills interface methods.
+ */
+function isMastraSkills(value: unknown): value is MastraSkills {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'id' in value &&
+    'list' in value &&
+    'get' in value &&
+    'has' in value &&
+    'getInputProcessors' in value &&
+    typeof (value as MastraSkills).list === 'function' &&
+    typeof (value as MastraSkills).get === 'function' &&
+    typeof (value as MastraSkills).getInputProcessors === 'function'
+  );
 }
 
 /**
@@ -119,6 +141,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
+  #skills?: AgentSkillsOption;
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
@@ -234,6 +257,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.#memory = config.memory;
     }
 
+    if (config.skills) {
+      this.#skills = config.skills;
+    }
+
     if (config.voice) {
       this.#voice = config.voice;
       if (typeof config.tools !== 'function') {
@@ -264,6 +291,56 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Resolves and returns the skills instance for this agent.
+   * Returns the configured skills instance, or inherits from Mastra if `skills: true` was set.
+   *
+   * @returns The skills instance or undefined if disabled
+   */
+  public getSkills(): MastraSkills | undefined {
+    // If skills is explicitly disabled, return undefined
+    if (this.#skills === false) {
+      return undefined;
+    }
+
+    // If skills is a MastraSkills instance, return it directly
+    if (isMastraSkills(this.#skills)) {
+      return this.#skills;
+    }
+
+    // If skills is a config object, check for instance
+    if (this.#skills && typeof this.#skills === 'object') {
+      const config = this.#skills as AgentSkillsConfig;
+      if (config.instance) {
+        return config.instance;
+      }
+    }
+
+    // Default: inherit from Mastra (even if #skills is undefined)
+    return this.#mastra?.getSkills();
+  }
+
+  /**
+   * Gets the skills processors to add to input processors.
+   * Calls skills.getInputProcessors() following the Memory pattern.
+   * @internal
+   */
+  private getSkillsProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
+    const skills = this.getSkills();
+    if (!skills) {
+      return [];
+    }
+
+    // Get format from config if provided
+    let format: 'xml' | 'json' | 'markdown' | undefined;
+    if (this.#skills && typeof this.#skills === 'object' && !isMastraSkills(this.#skills)) {
+      format = (this.#skills as AgentSkillsConfig).format;
+    }
+
+    // Get processors from skills instance (handles deduplication internally)
+    return skills.getInputProcessors(configuredProcessors, { format });
   }
 
   /**
@@ -442,9 +519,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get skills processors if skills are configured (with deduplication)
+    const skillsProcessors = this.getSkillsProcessors(configuredProcessors);
+
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
-    const allProcessors = [...memoryProcessors, ...configuredProcessors];
+    // Skills processors run after memory but before user-configured processors
+    const allProcessors = [...memoryProcessors, ...skillsProcessors, ...configuredProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
@@ -501,6 +582,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     return workflows;
+  }
+
+  /**
+   * Returns the raw configured input processors (before combining into workflow).
+   * This is useful for introspecting processor instances that have special methods
+   * like `listSkills()` on SkillsProcessor.
+   */
+  public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    if (!this.#inputProcessors) {
+      return [];
+    }
+    return typeof this.#inputProcessors === 'function'
+      ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+      : this.#inputProcessors;
   }
 
   /**

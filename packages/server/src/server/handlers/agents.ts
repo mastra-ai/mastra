@@ -62,6 +62,13 @@ export interface SerializedProcessor {
   name?: string;
 }
 
+export interface SerializedSkill {
+  name: string;
+  description: string;
+  license?: string;
+  allowedTools?: string[];
+}
+
 export interface SerializedTool {
   id: string;
   description?: string;
@@ -89,6 +96,7 @@ export interface SerializedAgent {
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
   workflows: Record<string, SerializedWorkflow>;
+  skills: SerializedSkill[];
   inputProcessors: SerializedProcessor[];
   outputProcessors: SerializedProcessor[];
   provider?: string;
@@ -186,6 +194,31 @@ export function getSerializedProcessors(
   });
 }
 
+/**
+ * Extract skills from agent's configured skills instance.
+ * Uses agent.getSkills() to get the skills directly.
+ */
+export function getSerializedSkillsFromAgent(agent: Agent): SerializedSkill[] {
+  // Check if agent has getSkills method (new pattern)
+  if ('getSkills' in agent && typeof agent.getSkills === 'function') {
+    const skills = agent.getSkills();
+    if (!skills) {
+      return [];
+    }
+
+    return skills
+      .list()
+      .map((skill: { name: string; description: string; license?: string; allowedTools?: string[] }) => ({
+        name: skill.name,
+        description: skill.description,
+        license: skill.license,
+        allowedTools: skill.allowedTools,
+      }));
+  }
+
+  return [];
+}
+
 interface SerializedAgentDefinition {
   id: string;
   name: string;
@@ -269,6 +302,9 @@ async function formatAgentList({
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
+  // Extract skills directly from agent's configured skills instance
+  const serializedSkills = getSerializedSkillsFromAgent(agent);
+
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
   const modelList = models?.map(md => ({
@@ -288,6 +324,7 @@ async function formatAgentList({
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
+    skills: serializedSkills,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -436,6 +473,9 @@ async function formatAgent({
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
+  // Extract skills directly from agent's configured skills instance
+  const serializedSkills = getSerializedSkillsFromAgent(agent);
+
   return {
     name: agent.name,
     description,
@@ -443,6 +483,7 @@ async function formatAgent({
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
     workflows: serializedAgentWorkflows,
+    skills: serializedSkills,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),

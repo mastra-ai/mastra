@@ -11,15 +11,19 @@ This example demonstrates both Skills and Knowledge primitives working together 
 
 ```
 examples/skills-knowledge/
-├── skills/                    # Skills directory (auto-discovered)
+├── skills/                    # Global skills (inherited by all agents)
+│   ├── api-design/
+│   ├── code-review/
+│   └── customer-support/
+├── docs-skills/               # Agent-specific skills (docs agent only)
 │   └── brand-guidelines/
-│       └── SKILL.md           # Brand guidelines skill
 ├── .mastra-knowledge/         # Knowledge storage
 │   └── knowledge/support/     # Support FAQ knowledge base
 ├── src/
 │   ├── mastra/
 │   │   ├── agents/
-│   │   │   ├── skills-agent.ts    # Agent using SkillsProcessor
+│   │   │   ├── skills-agent.ts    # Agent with own skills (brand-guidelines)
+│   │   │   ├── developer-agent.ts # Agent inheriting global skills
 │   │   │   └── knowledge-agent.ts # Agent using RetrievedKnowledge
 │   │   ├── knowledge/
 │   │   │   └── index.ts           # Knowledge setup and sample data
@@ -48,16 +52,33 @@ pnpm demo:knowledge
 
 ## Key Concepts
 
-### Skills (SkillsProcessor)
+### Skills
 
 Skills are domain expertise packaged as SKILL.md files. The agent decides when to activate them.
 
+**Default behavior**: Agents automatically inherit skills from Mastra.
+
 ```typescript
-import { SkillsProcessor } from '@mastra/skills';
+import { Skills } from '@mastra/skills';
+
+// Default: Agent inherits skills from Mastra (no config needed)
+const agent = new Agent({
+  // skills are inherited automatically
+});
+
+// Agent-specific skills (replaces inherited)
+const mySkills = new Skills({
+  id: 'my-skills',
+  paths: ['./my-skills'],
+});
 
 const agent = new Agent({
-  inputProcessors: [new SkillsProcessor()],
-  // ...
+  skills: mySkills, // Uses only these skills, not Mastra's
+});
+
+// Disable skills entirely
+const agent = new Agent({
+  skills: false, // No skills
 });
 ```
 
