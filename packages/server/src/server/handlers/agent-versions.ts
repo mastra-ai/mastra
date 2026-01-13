@@ -194,6 +194,163 @@ export async function enforceRetentionLimit(
   return { deletedCount };
 }
 
+/**
+ * Determines if an error is a unique constraint violation on versionNumber.
+ * This is used to detect race conditions when creating versions concurrently.
+ */
+function isVersionNumberConflictError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    // Check for common unique constraint violation patterns across databases
+    return (
+      (message.includes('unique') && message.includes('constraint')) ||
+      message.includes('duplicate key') ||
+      message.includes('unique_violation') ||
+      message.includes('sqlite_constraint_unique') ||
+      message.includes('versionnumber')
+    );
+  }
+  return false;
+}
+
+/**
+ * Type for the agents store with version-related methods.
+ * Uses generic types to work with any StorageAgentType-compatible structure.
+ */
+export interface AgentsStoreWithVersions<TAgent = any> {
+  getLatestVersion: (agentId: string) => Promise<{ id: string; versionNumber: number } | null>;
+  createVersion: (params: {
+    id: string;
+    agentId: string;
+    versionNumber: number;
+    name?: string;
+    snapshot: TAgent;
+    changedFields?: string[];
+    changeMessage?: string;
+  }) => Promise<{ id: string; versionNumber: number }>;
+  updateAgent: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
+  listVersions: (params: {
+    agentId: string;
+    page?: number;
+    perPage?: number | false;
+    orderBy?: { field?: 'versionNumber' | 'createdAt'; direction?: 'ASC' | 'DESC' };
+  }) => Promise<{
+    versions: Array<{ id: string; versionNumber: number }>;
+    total: number;
+  }>;
+  deleteVersion: (id: string) => Promise<void>;
+}
+
+/**
+ * Creates a new version with retry logic for race condition handling.
+ * If a unique constraint violation occurs on versionNumber, retries with a fresh versionNumber.
+ *
+ * @param agentsStore - The agents storage domain
+ * @param agentId - The agent ID to create a version for
+ * @param snapshot - The agent configuration snapshot
+ * @param changedFields - Array of field names that changed
+ * @param changeMessage - Optional description of the changes
+ * @param maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns The created version and the updated activeVersionId
+ */
+export async function createVersionWithRetry<TAgent>(
+  agentsStore: AgentsStoreWithVersions<TAgent>,
+  agentId: string,
+  snapshot: TAgent,
+  changedFields: string[],
+  changeMessage?: string,
+  maxRetries: number = 3,
+): Promise<{ versionId: string; versionNumber: number }> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Get the latest version number (fresh on each attempt)
+      const latestVersion = await agentsStore.getLatestVersion(agentId);
+      const versionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+      // Generate a unique version ID
+      const versionId = generateVersionId();
+
+      // Create the version
+      await agentsStore.createVersion({
+        id: versionId,
+        agentId,
+        versionNumber,
+        snapshot,
+        changedFields,
+        changeMessage,
+      });
+
+      return { versionId, versionNumber };
+    } catch (error) {
+      lastError = error;
+
+      // If it's a unique constraint violation, retry with a fresh versionNumber
+      if (isVersionNumberConflictError(error) && attempt < maxRetries - 1) {
+        // Small delay before retry to reduce contention
+        await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
+        continue;
+      }
+
+      // For other errors or last attempt, rethrow
+      throw error;
+    }
+  }
+
+  // Should not reach here, but just in case
+  throw lastError;
+}
+
+/**
+ * Handles auto-versioning after an agent update.
+ * Creates a new version and updates the agent's activeVersionId atomically (single update call).
+ * Uses retry logic to handle race conditions on versionNumber.
+ *
+ * @param agentsStore - The agents storage domain
+ * @param agentId - The agent ID
+ * @param existingAgent - The agent state before the update
+ * @param updatedAgent - The agent state after the update
+ * @returns The updated agent with the new activeVersionId, or the original if no changes
+ */
+export async function handleAutoVersioning<TAgent>(
+  agentsStore: AgentsStoreWithVersions<TAgent>,
+  agentId: string,
+  existingAgent: TAgent,
+  updatedAgent: TAgent,
+): Promise<{ agent: TAgent; versionCreated: boolean }> {
+  // Calculate what fields changed
+  const changedFields = calculateChangedFields(
+    existingAgent as unknown as Record<string, unknown>,
+    updatedAgent as unknown as Record<string, unknown>,
+  );
+
+  // Only create version if there are actual changes (excluding metadata timestamps)
+  if (changedFields.length === 0) {
+    return { agent: updatedAgent, versionCreated: false };
+  }
+
+  // Create version with retry logic for race conditions
+  const { versionId } = await createVersionWithRetry(
+    agentsStore,
+    agentId,
+    updatedAgent,
+    changedFields,
+    'Auto-saved after edit',
+  );
+
+  // Update the agent's activeVersionId
+  const finalAgent = await agentsStore.updateAgent({
+    id: agentId,
+    activeVersionId: versionId,
+  });
+
+  // Enforce retention limit
+  await enforceRetentionLimit(agentsStore, agentId, versionId);
+
+  return { agent: finalAgent, versionCreated: true };
+}
+
 // ============================================================================
 // Route Definitions
 // ============================================================================

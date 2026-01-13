@@ -12,7 +12,7 @@ import {
 } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
-import { generateVersionId, calculateChangedFields, enforceRetentionLimit } from './agent-versions';
+import { handleAutoVersioning } from './agent-versions';
 import { handleError } from './error';
 
 // ============================================================================
@@ -228,7 +228,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
 
-      let agent = await agentsStore.updateAgent({
+      const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
         name,
         description,
@@ -246,38 +246,9 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         ownerId,
       });
 
-      // Auto-create a version if there are meaningful changes
-      const changedFields = calculateChangedFields(
-        existing as unknown as Record<string, unknown>,
-        agent as unknown as Record<string, unknown>,
-      );
-
-      // Only create version if there are actual changes (excluding metadata timestamps)
-      if (changedFields.length > 0) {
-        // Get the latest version number
-        const latestVersion = await agentsStore.getLatestVersion(storedAgentId);
-        const versionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-        // Create a new version snapshot
-        const newVersionId = generateVersionId();
-        await agentsStore.createVersion({
-          id: newVersionId,
-          agentId: storedAgentId,
-          versionNumber,
-          snapshot: agent,
-          changedFields,
-          changeMessage: `Auto-saved after edit`,
-        });
-
-        // Set the new version as the active version
-        agent = await agentsStore.updateAgent({
-          id: storedAgentId,
-          activeVersionId: newVersionId,
-        });
-
-        // Enforce retention limit
-        await enforceRetentionLimit(agentsStore, storedAgentId, newVersionId);
-      }
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a version if there are meaningful changes and updates activeVersionId
+      const { agent } = await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent);
 
       return agent;
     } catch (error) {

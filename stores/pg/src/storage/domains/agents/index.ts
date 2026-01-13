@@ -224,7 +224,7 @@ export class AgentsPG extends AgentsStorage {
           agent.agents ? JSON.stringify(agent.agents) : null,
           agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
           agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
-          agent.memory ? JSON.stringify(agent.memory) : null,
+          agent.memory ?? null, // memory is a plain string key, not JSON
           agent.scorers ? JSON.stringify(agent.scorers) : null,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
           agent.ownerId ?? null,
@@ -326,7 +326,7 @@ export class AgentsPG extends AgentsStorage {
 
       if (updates.memory !== undefined) {
         setClauses.push(`memory = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.memory));
+        values.push(updates.memory); // memory is a plain string key, not JSON
       }
 
       if (updates.scorers !== undefined) {

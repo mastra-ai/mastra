@@ -296,8 +296,17 @@ export class AgentsLibSQL extends AgentsStorage {
       }
 
       // Filter by metadata using JSON extraction (SQLite/LibSQL syntax)
+      // SECURITY: Validate metadata keys to prevent SQL injection
       if (metadata && Object.keys(metadata).length > 0) {
+        // Only allow alphanumeric keys with underscores (safe for JSON path interpolation)
+        const SAFE_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
         for (const [key, value] of Object.entries(metadata)) {
+          // Skip invalid keys to prevent SQL injection
+          if (!SAFE_KEY_PATTERN.test(key)) {
+            console.warn(`Skipping invalid metadata key for filtering: "${key}" (must match ${SAFE_KEY_PATTERN})`);
+            continue;
+          }
           whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
           whereValues.push(typeof value === 'string' ? value : JSON.stringify(value));
         }
