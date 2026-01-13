@@ -1,5 +1,8 @@
 export { AgentForm } from './agent-form';
-export type { AgentFormProps, AgentFormValues } from './agent-form';
+export type { AgentFormProps } from './agent-form';
+
+export { ModelPicker } from './model-picker';
+export type { ModelPickerProps } from './model-picker';
 
 export { DeleteAgentConfirm } from './delete-agent-confirm';
 export type { DeleteAgentConfirmProps } from './delete-agent-confirm';

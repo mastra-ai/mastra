@@ -84,6 +84,8 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       ...(updates.metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...updates.metadata },
       }),
+      ...(updates.ownerId !== undefined && { ownerId: updates.ownerId }),
+      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
       updatedAt: new Date(),
     };
 
@@ -98,7 +100,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, ownerId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryAgentsStorage: listAgents called`);
@@ -116,8 +118,23 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error('page value too large');
     }
 
-    // Get all agents and sort them
-    const agents = Array.from(this.db.agents.values());
+    // Get all agents and apply filters
+    let agents = Array.from(this.db.agents.values());
+
+    // Filter by ownerId if provided
+    if (ownerId !== undefined) {
+      agents = agents.filter(agent => agent.ownerId === ownerId);
+    }
+
+    // Filter by metadata if provided (AND logic - all key-value pairs must match)
+    if (metadata && Object.keys(metadata).length > 0) {
+      agents = agents.filter(agent => {
+        if (!agent.metadata) return false;
+        return Object.entries(metadata).every(([key, value]) => agent.metadata![key] === value);
+      });
+    }
+
+    // Sort filtered agents
     const sortedAgents = this.sortAgents(agents, field, direction);
 
     // Clone agents to avoid mutation

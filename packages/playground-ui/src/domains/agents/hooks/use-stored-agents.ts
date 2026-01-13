@@ -1,90 +1,71 @@
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { UpdateStoredAgentParams, CreateStoredAgentParams } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { usePlaygroundStore } from '@/store/playground-store';
+import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams } from '@mastra/client-js';
 
-/**
- * Hook to fetch a single stored agent by ID
- */
-export const useStoredAgent = (agentId?: string) => {
+export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['stored-agent', agentId],
-    queryFn: () => (agentId ? client.getStoredAgent(agentId).details() : null),
-    retry: false,
+    queryKey: ['stored-agents', params, requestContext],
+    queryFn: () => client.listStoredAgents(params, requestContext),
+  });
+};
+
+export const useStoredAgent = (agentId?: string) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['stored-agent', agentId, requestContext],
+    queryFn: () => (agentId ? client.getStoredAgent(agentId).details(requestContext) : null),
     enabled: Boolean(agentId),
   });
 };
 
-/**
- * Hook to fetch all stored agents with pagination
- */
-export const useStoredAgents = (params?: { page?: number; perPage?: number }) => {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['stored-agents', params],
-    queryFn: () => client.listStoredAgents(params),
-  });
-};
-
-/**
- * Hook for stored agent mutations (update, delete)
- */
 export const useStoredAgentMutations = (agentId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
 
-  const updateStoredAgent = useMutation({
-    mutationFn: async (params: UpdateStoredAgentParams) => {
-      if (!agentId) throw new Error('Agent ID is required');
-      return client.getStoredAgent(agentId).update(params);
-    },
+  const createMutation = useMutation({
+    mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
       queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-    },
-    onError: err => {
-      console.error('Error updating stored agent', err);
     },
   });
 
-  const deleteStoredAgent = useMutation({
-    mutationFn: async () => {
-      if (!agentId) throw new Error('Agent ID is required');
-      return client.getStoredAgent(agentId).delete();
+  const updateMutation = useMutation({
+    mutationFn: (params: UpdateStoredAgentParams) => {
+      if (!agentId) throw new Error('agentId is required for update');
+      return client.getStoredAgent(agentId).update(params, requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
       queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      }
     },
-    onError: err => {
-      console.error('Error deleting stored agent', err);
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => {
+      if (!agentId) throw new Error('agentId is required for delete');
+      return client.getStoredAgent(agentId).delete(requestContext);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
     },
   });
 
   return {
-    updateStoredAgent,
-    deleteStoredAgent,
+    createStoredAgent: createMutation,
+    updateStoredAgent: updateMutation,
+    deleteStoredAgent: deleteMutation,
   };
-};
-
-/**
- * Hook to create a new stored agent
- */
-export const useCreateStoredAgent = () => {
-  const client = useMastraClient();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: CreateStoredAgentParams) => {
-      return client.createStoredAgent(params);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-    },
-    onError: err => {
-      console.error('Error creating stored agent', err);
-    },
-  });
 };

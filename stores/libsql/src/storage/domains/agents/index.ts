@@ -28,6 +28,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
+    // Add any new columns that may not exist in older tables
+    await this.#db.alterTable({
+      tableName: TABLE_AGENTS,
+      schema: AGENTS_SCHEMA,
+      ifNotExists: ['ownerId', 'activeVersionId'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -77,6 +83,8 @@ export class AgentsLibSQL extends AgentsStorage {
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
+      ownerId: row.ownerId as string | undefined,
+      activeVersionId: row.activeVersionId as string | undefined,
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -124,6 +132,8 @@ export class AgentsLibSQL extends AgentsStorage {
           memory: agent.memory ?? null,
           scorers: agent.scorers ?? null,
           metadata: agent.metadata ?? null,
+          ownerId: agent.ownerId ?? null,
+          activeVersionId: agent.activeVersionId ?? null,
           createdAt: now,
           updatedAt: now,
         },
@@ -182,6 +192,8 @@ export class AgentsLibSQL extends AgentsStorage {
         // Merge metadata
         data.metadata = { ...existingAgent.metadata, ...updates.metadata };
       }
+      if (updates.ownerId !== undefined) data.ownerId = updates.ownerId;
+      if (updates.activeVersionId !== undefined) data.activeVersionId = updates.activeVersionId;
 
       // Only update if there's more than just updatedAt
       if (Object.keys(data).length > 1) {
@@ -241,7 +253,7 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, ownerId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -260,8 +272,31 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // Get total count
-      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
+      // Build WHERE clause for filtering
+      const whereClauses: string[] = [];
+      const whereValues: any[] = [];
+
+      if (ownerId !== undefined) {
+        whereClauses.push(`"ownerId" = ?`);
+        whereValues.push(ownerId);
+      }
+
+      // Filter by metadata using JSON extraction (SQLite/LibSQL syntax)
+      if (metadata && Object.keys(metadata).length > 0) {
+        for (const [key, value] of Object.entries(metadata)) {
+          whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+          whereValues.push(typeof value === 'string' ? value : JSON.stringify(value));
+        }
+      }
+
+      const whereClause =
+        whereClauses.length > 0 ? { sql: `WHERE ${whereClauses.join(' AND ')}`, args: whereValues } : undefined;
+
+      // Get total count with filters
+      const total = await this.#db.selectTotalCount({
+        tableName: TABLE_AGENTS,
+        whereClause,
+      });
 
       if (total === 0) {
         return {
@@ -273,13 +308,14 @@ export class AgentsLibSQL extends AgentsStorage {
         };
       }
 
-      // Get paginated results
+      // Get paginated results with filters
       const limitValue = perPageInput === false ? total : perPage;
       const rows = await this.#db.selectMany<Record<string, any>>({
         tableName: TABLE_AGENTS,
         orderBy: `"${field}" ${direction}`,
         limit: limitValue,
         offset,
+        whereClause,
       });
 
       const agents = rows.map(row => this.parseRow(row));

@@ -266,6 +266,10 @@ export interface StorageAgentType {
   scorers?: Record<string, StorageScorerConfig>;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -292,6 +296,10 @@ export type StorageUpdateAgentInput = {
   /** Scorer keys with optional sampling config */
   scorers?: Record<string, StorageScorerConfig>;
   metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
 };
 
 export type StorageListAgentsInput = {
@@ -306,6 +314,16 @@ export type StorageListAgentsInput = {
    */
   page?: number;
   orderBy?: StorageOrderBy;
+  /**
+   * Filter agents by owner identifier (indexed for fast lookups).
+   * Only agents with matching ownerId will be returned.
+   */
+  ownerId?: string;
+  /**
+   * Filter agents by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {

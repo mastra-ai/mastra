@@ -130,6 +130,12 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   id: TAgentId;
   /**
+   * Source of the agent configuration.
+   * - 'code': Agent defined in code (default)
+   * - 'stored': Agent loaded from storage
+   */
+  source?: 'code' | 'stored';
+  /**
    * Unique identifier for the agent.
    */
   name: string;

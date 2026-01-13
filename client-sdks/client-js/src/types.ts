@@ -107,6 +107,7 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  source?: 'code' | 'stored';
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -598,6 +599,7 @@ export interface StoredAgentResponse {
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -612,6 +614,8 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  ownerId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -643,6 +647,7 @@ export interface CreateStoredAgentParams {
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -662,6 +667,7 @@ export interface UpdateStoredAgentParams {
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
