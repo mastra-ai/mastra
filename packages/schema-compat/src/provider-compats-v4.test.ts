@@ -156,4 +156,24 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
 
     expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
   });
+
+  it('should preserve typed catchall schemas', () => {
+    // A typed catchall like .catchall(z.string()) produces
+    // additionalProperties: { type: "string" } which IS valid for OpenAI
+    const schema = z
+      .object({
+        name: z.string(),
+        age: z.number(),
+      })
+      .catchall(z.string());
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    // Typed catchall should be preserved and produce valid additionalProperties
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
+
+    // Verify the catchall type is preserved (should have type: "string")
+    expect(jsonSchema.additionalProperties).toEqual({ type: 'string' });
+  });
 });
