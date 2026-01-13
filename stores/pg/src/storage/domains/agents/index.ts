@@ -19,6 +19,7 @@ import type {
   CreateVersionInput,
   ListVersionsInput,
   ListVersionsOutput,
+  StorageMemoryConfig,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -166,7 +167,7 @@ export class AgentsPG extends AgentsStorage {
       agents: this.parseJson(row.agents, 'agents'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: row.memory as string | undefined, // memory is a plain string key, not JSON
+      memory: this.parseJson(row.memory, 'memory') as StorageMemoryConfig | undefined,
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
       ownerId: row.ownerId as string | undefined,
@@ -224,7 +225,7 @@ export class AgentsPG extends AgentsStorage {
           agent.agents ? JSON.stringify(agent.agents) : null,
           agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
           agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
-          agent.memory ?? null, // memory is a plain string key, not JSON
+          agent.memory ? JSON.stringify(agent.memory) : null,
           agent.scorers ? JSON.stringify(agent.scorers) : null,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
           agent.ownerId ?? null,
@@ -326,7 +327,7 @@ export class AgentsPG extends AgentsStorage {
 
       if (updates.memory !== undefined) {
         setClauses.push(`memory = $${paramIndex++}`);
-        values.push(updates.memory); // memory is a plain string key, not JSON
+        values.push(JSON.stringify(updates.memory));
       }
 
       if (updates.scorers !== undefined) {

@@ -237,6 +237,15 @@ export interface StorageScorerConfig {
 }
 
 /**
+ * Storage format for memory configuration.
+ * Uses an object structure to allow future extensibility.
+ */
+export interface StorageMemoryConfig {
+  /** Memory key to resolve from Mastra's memory registry */
+  id: string;
+}
+
+/**
  * Stored agent configuration type.
  * Primitives (tools, workflows, agents, memory, scorers) are stored as references
  * that get resolved from Mastra's registries at runtime.
@@ -260,8 +269,8 @@ export interface StorageAgentType {
   inputProcessors?: Record<string, unknown>[];
   /** Output processor configurations */
   outputProcessors?: Record<string, unknown>[];
-  /** Memory key to resolve from Mastra's memory registry */
-  memory?: string;
+  /** Memory configuration to resolve from Mastra's memory registry */
+  memory?: StorageMemoryConfig;
   /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
   scorers?: Record<string, StorageScorerConfig>;
   /** Additional metadata for the agent */
@@ -313,8 +322,8 @@ export type StorageUpdateAgentInput = {
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  /** Memory key to resolve from Mastra's memory registry */
-  memory?: string;
+  /** Memory configuration to resolve from Mastra's memory registry */
+  memory?: StorageMemoryConfig;
   /** Scorer keys with optional sampling config */
   scorers?: Record<string, StorageScorerConfig>;
   metadata?: Record<string, unknown>;

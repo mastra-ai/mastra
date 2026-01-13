@@ -19,6 +19,7 @@ import type {
   CreateVersionInput,
   ListVersionsInput,
   ListVersionsOutput,
+  StorageMemoryConfig,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -91,7 +92,7 @@ export class AgentsLibSQL extends AgentsStorage {
       agents: this.parseJson(row.agents, 'agents'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: row.memory as string | undefined, // memory is a plain string key, not JSON
+      memory: this.parseJson(row.memory, 'memory') as StorageMemoryConfig | undefined,
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
       ownerId: row.ownerId as string | undefined,
@@ -550,7 +551,7 @@ export class AgentsLibSQL extends AgentsStorage {
         versions,
         total,
         page,
-        perPage: perPageForResponse,
+        perPage: perPageForResponse === false ? total : perPageForResponse,
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {

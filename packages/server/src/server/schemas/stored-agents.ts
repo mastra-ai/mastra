@@ -64,7 +64,12 @@ const storedAgentBaseSchema = z.object({
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
   outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
-  memory: z.string().optional().describe('Memory key to resolve from Mastra registry'),
+  memory: z
+    .object({
+      id: z.string().describe('Memory key to resolve from Mastra registry'),
+    })
+    .optional()
+    .describe('Memory configuration to resolve from Mastra registry'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
   ownerId: z.string().optional().describe('Owner identifier for multi-tenant filtering'),

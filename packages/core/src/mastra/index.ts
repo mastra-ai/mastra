@@ -20,7 +20,13 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type {
+  MastraStorage,
+  WorkflowRuns,
+  StorageAgentType,
+  StorageScorerConfig,
+  StorageMemoryConfig,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -1144,20 +1150,22 @@ export class Mastra<
    * Resolves memory reference from stored configuration to actual memory instance.
    * @private
    */
-  #resolveStoredMemory(storedMemory?: string): MastraMemory | undefined {
-    if (!storedMemory) {
+  #resolveStoredMemory(storedMemory?: StorageMemoryConfig): MastraMemory | undefined {
+    if (!storedMemory?.id) {
       return undefined;
     }
 
+    const memoryId = storedMemory.id;
+
     // Try by key first
     try {
-      return this.getMemory(storedMemory as keyof TMemory);
+      return this.getMemory(memoryId as keyof TMemory);
     } catch {
       // Try by id
       try {
-        return this.getMemoryById(storedMemory);
+        return this.getMemoryById(memoryId);
       } catch {
-        this.#logger?.warn(`Memory "${storedMemory}" referenced in stored agent but not registered in Mastra`);
+        this.#logger?.warn(`Memory "${memoryId}" referenced in stored agent but not registered in Mastra`);
       }
     }
 
