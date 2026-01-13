@@ -1036,7 +1036,11 @@ ${
         }> = [];
         let dimension: number | undefined;
 
-        // Delete old vectors and prepare new embeddings
+        // Track which messages will have new embeddings vs cleared content
+        const messageIdsWithNewEmbeddings = new Set<string>();
+        const messageIdsWithClearedContent = new Set<string>();
+
+        // Prepare new embeddings and track which messages need vector operations
         await Promise.all(
           messagesWithContent.map(async message => {
             const existingMessage = existingMessagesMap.get(message.id);
@@ -1083,34 +1087,43 @@ ${
                   resource_id: existingMessage.resourceId,
                 })),
               });
+              messageIdsWithNewEmbeddings.add(message.id);
+            } else {
+              // Content is empty or has no text - mark for vector deletion only
+              messageIdsWithClearedContent.add(message.id);
             }
           }),
         );
 
-        // Delete old vectors from all existing memory indexes
-        // We need to do this even if there's no new content to embed
-        try {
-          const indexes = await this.vector.listIndexes();
-          const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+        // Delete old vectors from all existing memory indexes for messages that need it:
+        // - Messages with cleared content: vectors must be removed (no new embeddings will replace them)
+        // - Messages with new embeddings: old vectors must be removed before upserting (may be in different indexes if embedding model changed)
+        const messageIdsNeedingDeletion = new Set([...messageIdsWithClearedContent, ...messageIdsWithNewEmbeddings]);
 
-          for (const indexName of memoryIndexes) {
-            for (const message of messagesWithContent) {
-              try {
-                await this.vector.deleteVectors({
-                  indexName,
-                  filter: { message_id: message.id },
-                });
-              } catch {
-                // Ignore errors if vectors don't exist for this message
-                this.logger.debug(
-                  `No existing vectors found for message ${message.id} in ${indexName}, skipping delete`,
-                );
+        if (messageIdsNeedingDeletion.size > 0) {
+          try {
+            const indexes = await this.vector.listIndexes();
+            const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+
+            for (const indexName of memoryIndexes) {
+              for (const messageId of messageIdsNeedingDeletion) {
+                try {
+                  await this.vector.deleteVectors({
+                    indexName,
+                    filter: { message_id: messageId },
+                  });
+                } catch {
+                  // Ignore errors if vectors don't exist for this message
+                  this.logger.debug(
+                    `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
+                  );
+                }
               }
             }
+          } catch {
+            // Ignore errors if no indexes exist yet
+            this.logger.debug(`No memory indexes found to delete from`);
           }
-        } catch {
-          // Ignore errors if no indexes exist yet
-          this.logger.debug(`No memory indexes found to delete from`);
         }
 
         // Upsert new embeddings if any
