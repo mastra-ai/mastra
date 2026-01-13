@@ -22,7 +22,7 @@ describe('ToolStream', () => {
     });
 
     it('should be compatible with partial object streams from structured output', () => {
-      const storyPlanSchema = z.object({
+      const _storyPlanSchema = z.object({
         storyTitle: z.string(),
         chapters: z.array(
           z.object({
@@ -33,7 +33,7 @@ describe('ToolStream', () => {
         ),
       });
 
-      type StoryPlan = z.infer<typeof storyPlanSchema>;
+      type StoryPlan = z.infer<typeof _storyPlanSchema>;
       type PartialStoryPlan = Partial<StoryPlan>;
 
       expectTypeOf<ToolStream>().toExtend<WritableStream<unknown>>();

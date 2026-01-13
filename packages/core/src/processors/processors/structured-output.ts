@@ -1,5 +1,4 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
-import type { ZodSchema } from 'zod';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';

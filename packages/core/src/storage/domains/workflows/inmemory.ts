@@ -215,7 +215,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         if (typeof snapshot === 'string') {
           try {
             snapshot = JSON.parse(snapshot) as WorkflowRunState;
-          } catch (error) {
+          } catch {
             return false;
           }
         } else {

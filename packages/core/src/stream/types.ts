@@ -21,7 +21,6 @@ import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
-import type { OutputSchema } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -260,7 +259,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
     usage: LanguageModelUsage;
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
-    object?: OUTPUT extends undefined ? unknown : OUTPUT;
+    object?: OUTPUT;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -508,7 +507,7 @@ interface NetworkFinishPayload<OUTPUT = undefined> {
   prompt: string;
   result: string;
   /** Structured output object when structuredOutput option is provided */
-  object?: OUTPUT extends undefined ? unknown : OUTPUT;
+  object?: OUTPUT;
   isComplete?: boolean;
   completionReason: string;
   iteration: number;

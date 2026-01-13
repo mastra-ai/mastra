@@ -9,7 +9,7 @@ class MockMCPServer extends MCPServerBase {
     super(config);
   }
 
-  convertTools(tools: any) {
+  convertTools(_tools: any) {
     return {};
   }
   async startStdio() {
