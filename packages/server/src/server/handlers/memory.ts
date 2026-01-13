@@ -41,6 +41,7 @@ import {
   deleteMessagesResponseSchema,
   cloneThreadBodySchema,
   cloneThreadResponseSchema,
+  listMemoryConfigsResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -882,6 +883,7 @@ export const LIST_MEMORY_CONFIGS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/configs',
   responseType: 'json',
+  responseSchema: listMemoryConfigsResponseSchema,
   summary: 'List registered memory configurations',
   description: 'Returns a list of all memory configurations registered with the Mastra instance',
   tags: ['Memory'],
