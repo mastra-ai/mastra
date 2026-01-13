@@ -126,6 +126,12 @@ pnpm build
 
 Using `pnpm turbo watch build` automatically rebuilds packages when you make changes, eliminating the need to manually rebuild after every modification. If you're unsure which packages depend on your changes, run `pnpm turbo watch build` without a filter to watch everything.
 
+> **Note:** If you're testing changes that involve the CLI package, you need to build it separately:
+> ```bash
+> cd packages/cli && pnpm build:lib
+> ```
+> This ensures the CLI is properly built with its tsup configuration.
+
 ### Step 3: Test your changes
 
 Open a new terminal window and navigate to `examples/agent`. Install its dependencies:
