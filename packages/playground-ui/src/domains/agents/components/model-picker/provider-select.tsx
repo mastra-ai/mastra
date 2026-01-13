@@ -130,7 +130,7 @@ export const ProviderSelect = ({
                   {selectedProviderData && (
                     <div
                       className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-                        selectedProviderData.connected ? 'bg-green-500' : 'bg-red-500'
+                        selectedProviderData.connected ? 'bg-accent1' : 'bg-accent2'
                       }`}
                       title={selectedProviderData.connected ? 'Connected' : 'Not connected'}
                     />
@@ -193,7 +193,7 @@ export const ProviderSelect = ({
                   <ProviderLogo providerId={provider.id} size={20} />
                   <div
                     className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                      provider.connected ? 'bg-green-500' : 'bg-red-500'
+                      provider.connected ? 'bg-accent1' : 'bg-accent2'
                     }`}
                     title={provider.connected ? 'Connected' : 'Not connected'}
                   />
@@ -215,9 +215,4 @@ export const ProviderSelect = ({
       </PopoverContent>
     </Popover>
   );
-};
-
-// Export ref handle for parent components to focus the input
-export const useProviderSelectRef = () => {
-  return useRef<HTMLInputElement>(null);
 };

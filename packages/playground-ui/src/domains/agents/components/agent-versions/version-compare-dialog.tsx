@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { ArrowRight, Diff } from 'lucide-react';
+import type { AgentVersionDiff } from '@mastra/client-js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,12 +18,6 @@ interface VersionCompareDialogProps {
   onOpenChange: (open: boolean) => void;
   initialFromVersionId?: string;
   initialToVersionId?: string;
-}
-
-interface VersionDiff {
-  field: string;
-  previousValue: unknown;
-  currentValue: unknown;
 }
 
 /**
@@ -59,7 +54,7 @@ function isComplexValue(value: unknown): boolean {
 /**
  * Determines the change type for a diff entry.
  */
-function getChangeType(diff: VersionDiff): 'added' | 'removed' | 'modified' {
+function getChangeType(diff: AgentVersionDiff): 'added' | 'removed' | 'modified' {
   const prevEmpty = diff.previousValue === null || diff.previousValue === undefined;
   const currEmpty = diff.currentValue === null || diff.currentValue === undefined;
 
@@ -75,7 +70,7 @@ function getChangeType(diff: VersionDiff): 'added' | 'removed' | 'modified' {
 /**
  * Single diff row showing the field name and before/after values.
  */
-function DiffRow({ diff }: { diff: VersionDiff }) {
+function DiffRow({ diff }: { diff: AgentVersionDiff }) {
   const [isJsonDiffOpen, setIsJsonDiffOpen] = useState(false);
   const changeType = getChangeType(diff);
   const previousStr = formatValue(diff.previousValue);
@@ -160,7 +155,7 @@ function DiffRow({ diff }: { diff: VersionDiff }) {
 /**
  * Component to display the diff between two versions.
  */
-function VersionDiffView({ diffs }: { diffs: VersionDiff[] }) {
+function AgentVersionDiffView({ diffs }: { diffs: AgentVersionDiff[] }) {
   if (diffs.length === 0) {
     return <div className="p-8 text-center text-muted-foreground">No differences between these versions.</div>;
   }
@@ -344,7 +339,7 @@ export function VersionCompareDialog({
           ) : compareLoading ? (
             <DiffSkeleton />
           ) : (
-            <VersionDiffView diffs={(compareData?.diffs as VersionDiff[]) || []} />
+            <AgentVersionDiffView diffs={(compareData?.diffs as AgentVersionDiff[]) || []} />
           )}
         </div>
       </DialogContent>

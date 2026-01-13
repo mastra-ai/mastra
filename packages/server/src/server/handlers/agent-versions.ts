@@ -211,18 +211,24 @@ export interface AgentsStoreWithVersions<TAgent = any> {
  * @param agentId - The agent ID to create a version for
  * @param snapshot - The agent configuration snapshot
  * @param changedFields - Array of field names that changed
- * @param changeMessage - Optional description of the changes
- * @param maxRetries - Maximum number of retry attempts (default: 3)
- * @returns The created version and the updated activeVersionId
+ * @param options - Optional settings for the version
+ * @param options.name - Optional vanity name for the version
+ * @param options.changeMessage - Optional description of the changes
+ * @param options.maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns The created version ID and version number
  */
 export async function createVersionWithRetry<TAgent>(
   agentsStore: AgentsStoreWithVersions<TAgent>,
   agentId: string,
   snapshot: TAgent,
   changedFields: string[],
-  changeMessage?: string,
-  maxRetries: number = 3,
+  options: {
+    name?: string;
+    changeMessage?: string;
+    maxRetries?: number;
+  } = {},
 ): Promise<{ versionId: string; versionNumber: number }> {
+  const { name, changeMessage, maxRetries = 3 } = options;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -239,6 +245,7 @@ export async function createVersionWithRetry<TAgent>(
         id: versionId,
         agentId,
         versionNumber,
+        name,
         snapshot,
         changedFields,
         changeMessage,
@@ -293,13 +300,9 @@ export async function handleAutoVersioning<TAgent>(
   }
 
   // Create version with retry logic for race conditions
-  const { versionId } = await createVersionWithRetry(
-    agentsStore,
-    agentId,
-    updatedAgent,
-    changedFields,
-    'Auto-saved after edit',
-  );
+  const { versionId } = await createVersionWithRetry(agentsStore, agentId, updatedAgent, changedFields, {
+    changeMessage: 'Auto-saved after edit',
+  });
 
   // Update the agent's activeVersionId
   const finalAgent = await agentsStore.updateAgent({
@@ -395,26 +398,27 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
 
-      // Get the latest version to determine version number and changed fields
+      // Get the latest version to calculate changed fields
       const latestVersion = await agentsStore.getLatestVersion(agentId);
-      const versionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-      // Calculate changed fields from previous version
       const changedFields = calculateChangedFields(
         latestVersion?.snapshot as Record<string, unknown> | undefined,
         agent as unknown as Record<string, unknown>,
       );
 
-      // Create the new version
-      const version = await agentsStore.createVersion({
-        id: generateVersionId(),
+      // Create the new version with retry logic to handle race conditions
+      const { versionId } = await createVersionWithRetry(
+        agentsStore,
         agentId,
-        versionNumber,
-        name,
-        snapshot: agent,
-        changedFields: changedFields.length > 0 ? changedFields : undefined,
-        changeMessage,
-      });
+        agent,
+        changedFields.length > 0 ? changedFields : [],
+        { name, changeMessage },
+      );
+
+      // Get the created version to return
+      const version = await agentsStore.getVersion(versionId);
+      if (!version) {
+        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+      }
 
       // Enforce retention limit - delete oldest versions if we exceed the max
       await enforceRetentionLimit(agentsStore, agentId, agent.activeVersionId);
@@ -567,8 +571,15 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Update the agent with the snapshot from the version to restore
-      // Exclude id, createdAt, updatedAt from the snapshot
-      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...snapshotData } = versionToRestore.snapshot;
+      // Exclude id, createdAt, updatedAt, and activeVersionId from the snapshot
+      // (activeVersionId from old snapshot may reference a stale/deleted version)
+      const {
+        id: _id,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        activeVersionId: _activeVersionId,
+        ...snapshotData
+      } = versionToRestore.snapshot;
       await agentsStore.updateAgent({
         id: agentId,
         ...snapshotData,
@@ -580,25 +591,39 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve updated agent' });
       }
 
-      // Get the latest version number
+      // Get the latest version to calculate changed fields
       const latestVersion = await agentsStore.getLatestVersion(agentId);
-      const versionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+      const changedFields = calculateChangedFields(
+        latestVersion?.snapshot as Record<string, unknown> | undefined,
+        updatedAgent as unknown as Record<string, unknown>,
+      );
 
-      // Create a new version with the restored snapshot
-      const newVersion = await agentsStore.createVersion({
-        id: generateVersionId(),
+      // Create a new version with retry logic to handle race conditions
+      const { versionId: newVersionId } = await createVersionWithRetry(
+        agentsStore,
         agentId,
-        versionNumber,
-        snapshot: updatedAgent,
-        changedFields: calculateChangedFields(
-          latestVersion?.snapshot as Record<string, unknown> | undefined,
-          updatedAgent as unknown as Record<string, unknown>,
-        ),
-        changeMessage: `Restored from version ${versionToRestore.versionNumber}${versionToRestore.name ? ` (${versionToRestore.name})` : ''}`,
+        updatedAgent,
+        changedFields,
+        {
+          changeMessage: `Restored from version ${versionToRestore.versionNumber}${versionToRestore.name ? ` (${versionToRestore.name})` : ''}`,
+        },
+      );
+
+      // Update the agent's activeVersionId to the new version
+      await agentsStore.updateAgent({
+        id: agentId,
+        activeVersionId: newVersionId,
       });
 
+      // Get the created version to return
+      const newVersion = await agentsStore.getVersion(newVersionId);
+      if (!newVersion) {
+        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+      }
+
       // Enforce retention limit - delete oldest versions if we exceed the max
-      await enforceRetentionLimit(agentsStore, agentId, updatedAgent.activeVersionId);
+      // Use the new version ID as the active version
+      await enforceRetentionLimit(agentsStore, agentId, newVersionId);
 
       return newVersion;
     } catch (error) {

@@ -258,7 +258,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       versions: paginatedVersions,
       total,
       page,
-      perPage: perPageForResponse === false ? total : perPageForResponse,
+      perPage: perPageForResponse,
       hasMore: offset + perPage < total,
     };
   }
