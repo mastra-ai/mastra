@@ -1333,7 +1333,7 @@ describe('Tracing Integration Tests', () => {
         });
 
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { format: 'aisdk' });
+        const result = await method(agent, 'Calculate 5 + 3');
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
