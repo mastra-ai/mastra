@@ -51,6 +51,7 @@ export function createStreamStep<OUTPUT = undefined>({
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
+    // @ts-ignore
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT | undefined>),
     execute: async ({ inputData, tracingContext }) => {
