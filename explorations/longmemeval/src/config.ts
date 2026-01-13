@@ -20,6 +20,12 @@ export interface RunVariant {
   subset?: number;
   /** Number of questions per type for stratified sampling (overrides subset) */
   perTypeCount?: number;
+  /** Comb sampling: number of questions to select per type */
+  combSampleSize?: number;
+  /** Comb sampling: stride between selected questions */
+  combOffset?: number;
+  /** Comb sampling: starting index (default 0) */
+  combStartOffset?: number;
   /** Concurrency for prepare command */
   prepareConcurrency: number;
   /** Concurrency for bench command */
@@ -43,7 +49,7 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     description: 'Full benchmark run with all questions',
     dataset: 'longmemeval_s',
     subset: undefined,
-    prepareConcurrency: 2,
+    prepareConcurrency: 1,
     benchConcurrency: 10,
   },
   rip: {
@@ -59,6 +65,16 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     description: 'Stratified sample: 10 questions per type (60 total)',
     dataset: 'longmemeval_s',
     perTypeCount: 10,
+    prepareConcurrency: 2,
+    benchConcurrency: 10,
+  },
+  'sample-comb': {
+    name: 'sample-comb',
+    description: 'Comb sample: 10 questions per type, spaced throughout (use --comb-offset, --start-offset)',
+    dataset: 'longmemeval_s',
+    combSampleSize: 10,
+    combOffset: 10,
+    combStartOffset: 0,
     prepareConcurrency: 2,
     benchConcurrency: 10,
   },
@@ -107,6 +123,50 @@ export function applyStratifiedSampling<T extends { question_id: string; questio
     const selected = typeQuestions.slice(0, perTypeCount);
     result.push(...selected);
     console.log(`  ${type}: ${selected.length}/${typeQuestions.length} questions`);
+  }
+
+  // Sort final result by question_id for consistent ordering
+  return result.sort((a, b) => a.question_id.localeCompare(b.question_id));
+}
+
+/**
+ * Apply comb sampling to a list of questions.
+ * Selects questions at regular intervals (combOffset) starting from startOffset,
+ * wrapping around to the beginning if needed.
+ */
+export function applyCombSampling<T extends { question_id: string; question_type: string }>(
+  questions: T[],
+  sampleSize: number,
+  combOffset: number,
+  startOffset: number = 0,
+): T[] {
+  // Sort by question_id for deterministic ordering
+  const sorted = [...questions].sort((a, b) => a.question_id.localeCompare(b.question_id));
+
+  // Group by question type
+  const byType = new Map<string, T[]>();
+  for (const q of sorted) {
+    const existing = byType.get(q.question_type) || [];
+    existing.push(q);
+    byType.set(q.question_type, existing);
+  }
+
+  // Comb through each type
+  const result: T[] = [];
+  for (const [type, typeQuestions] of byType) {
+    const total = typeQuestions.length;
+    const selected: T[] = [];
+    const selectedIndices: number[] = [];
+
+    let currentIndex = startOffset % total;
+    for (let i = 0; i < sampleSize && i < total; i++) {
+      selected.push(typeQuestions[currentIndex]);
+      selectedIndices.push(currentIndex);
+      currentIndex = (currentIndex + combOffset) % total;
+    }
+
+    result.push(...selected);
+    console.log(`  ${type}: ${selected.length}/${total} questions (indices: ${selectedIndices.join(', ')})`);
   }
 
   // Sort final result by question_id for consistent ordering
@@ -180,6 +240,12 @@ export interface MemoryConfigDefinition {
 
   /** Enable observation RAG filtering at runtime */
   usesObservationRag?: boolean;
+
+  /** TopK for RAG retrieval (default: 50) */
+  ragTopK?: number;
+
+  /** Enable preference boost queries for RAG (default: false) */
+  ragPreferenceBoost?: boolean;
 }
 
 // --- Shared config values ---
@@ -193,7 +259,7 @@ const semanticRecall = {
 const lastMessages = 10;
 
 // Cerebras GLM model config
-export const CEREBRAS_GLM_MODEL = 'cerebras/zai-glm-4.7';
+export const CEREBRAS_GLM_MODEL = 'cerebras/zai-glm-4.6';
 export const CEREBRAS_GLM_MAX_TOKENS = 200000;
 
 // ============================================================================
@@ -221,6 +287,8 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'om-glm-patterns-tool': 'om-glm-patterns-tool',
   'om-rag': 'om-rag',
   'om-glm-rag': 'om-glm-rag',
+  'om-glm-rag-topk100': 'om-glm-rag-topk100',
+  'om-glm-rag-prefboost': 'om-glm-rag-prefboost',
 
   // Full names (for completeness)
   'semantic-recall': 'semantic-recall',
@@ -262,6 +330,8 @@ export function getConfigAliases(): string[] {
     'om-glm-patterns-tool',
     'om-rag',
     'om-glm-rag',
+    'om-glm-rag-topk100',
+    'om-glm-rag-prefboost',
   ];
 }
 
@@ -610,10 +680,59 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     omMaxInputTokens: null,
     requiresSequential: true,
     agentModel: CEREBRAS_GLM_MODEL,
+    // evalModel: CEREBRAS_GLM_MODEL,
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true,
+    usesObservationRag: true,
+  },
+
+  'om-glm-rag-topk100': {
+    type: 'om-glm-rag-topk100',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: CEREBRAS_GLM_MODEL,
     evalModel: CEREBRAS_GLM_MODEL,
     baseConfig: 'observational-memory',
     readOnlyConfig: true,
     usesObservationRag: true,
+    ragTopK: 100, // Override default topK of 50
+  },
+  'om-glm-rag-prefboost': {
+    type: 'om-glm-rag-prefboost',
+    memoryOptions: {
+      lastMessages: 5,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: CEREBRAS_GLM_MODEL,
+    evalModel: CEREBRAS_GLM_MODEL,
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true,
+    usesObservationRag: true,
+    ragPreferenceBoost: true, // Enable preference boost queries
   },
 };
 

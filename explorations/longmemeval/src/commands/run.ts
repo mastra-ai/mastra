@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
-import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling, type MemoryConfigDefinition } from '../config';
+import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling, applyCombSampling, type MemoryConfigDefinition } from '../config';
 import { DatasetLoader } from '../data/loader';
 import { reconcileQuestion } from './reconcile';
 import { ObservationSemanticFilter } from '../processors';
@@ -49,7 +49,8 @@ async function waitForRateLimit(waitSeconds: number, reason: string): Promise<vo
   }
 
   rateLimiter.isWaiting = true;
-  console.log(chalk.yellow(`\n⏳ ${reason}. Waiting ${waitSeconds}s...`));
+  console.log(chalk.yellow(`
+⏳ ${reason}. Waiting ${waitSeconds}s...`));
 
   rateLimiter.waitPromise = (async () => {
     await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
@@ -134,6 +135,13 @@ export interface RunOptions {
   offset?: number;
   concurrency?: number;
   questionId?: string;
+  questionType?: string;
+  // Comb sampling options
+  combSampleSize?: number;
+  combOffset?: number;
+  combStartOffset?: number;
+  // Skip improved/fixed question evaluation
+  skipFixed?: boolean;
 }
 
 interface PreparedQuestionMeta {
@@ -191,14 +199,13 @@ export class RunCommand {
     console.log();
 
     // For readOnlyConfig, use the base config's prepared data directly
-    const effectiveConfig = configDef.readOnlyConfig && configDef.baseConfig 
-      ? configDef.baseConfig 
-      : options.memoryConfig;
+    const effectiveConfig =
+      configDef.readOnlyConfig && configDef.baseConfig ? configDef.baseConfig : options.memoryConfig;
     const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, effectiveConfig);
-    
+
     // For readOnlyConfig, create a separate output directory for debug files
     // This prevents writing to the base config's prepared data
-    const outputDir = configDef.readOnlyConfig 
+    const outputDir = configDef.readOnlyConfig
       ? join(options.preparedDataDir || this.preparedDataDir, options.dataset, options.memoryConfig)
       : preparedDir;
 
@@ -284,7 +291,7 @@ Please run 'longmemeval prepare' first.`);
     if (reconciledCount > 0) statusParts.push(`${reconciledCount} reconciled`);
     if (skippedCount > 0) statusParts.push(`${skippedCount} incomplete`);
     if (failedCount > 0) statusParts.push(`${failedCount} failed`);
-    
+
     spinner.succeed(
       `Loaded ${preparedQuestions.length} prepared questions${statusParts.length > 0 ? ` (${statusParts.join(', ')})` : ''}`,
     );
@@ -326,9 +333,35 @@ Focusing on question: ${options.questionId}
 `),
       );
     } else {
-      // Apply stratified sampling if perTypeCount is set
-      if (options.perTypeCount) {
-        console.log(chalk.gray(`\nApplying stratified sampling (${options.perTypeCount} per type):`));
+      // Filter by question type(s) if specified (supports comma-separated)
+      if (options.questionType) {
+        const requestedTypes = options.questionType.split(',').map(t => t.trim());
+        const availableTypes = [...new Set(preparedQuestions.map(q => q.questionType))].sort();
+        
+        // Validate all requested types exist
+        const invalidTypes = requestedTypes.filter(t => !availableTypes.includes(t));
+        if (invalidTypes.length > 0) {
+          throw new Error(
+            `Invalid question type(s): ${invalidTypes.join(', ')}. Available types: ${availableTypes.join(', ')}`,
+          );
+        }
+        
+        questionsToProcess = preparedQuestions.filter(q => requestedTypes.includes(q.questionType));
+        if (questionsToProcess.length === 0) {
+          throw new Error(
+            `No questions found with type(s) "${options.questionType}". Available types: ${availableTypes.join(', ')}`,
+          );
+        }
+        console.log(
+          chalk.yellow(`
+Filtering to question type${requestedTypes.length > 1 ? 's' : ''}: ${requestedTypes.join(', ')} (${questionsToProcess.length} questions)
+`),
+        );
+      }
+      // Apply stratified sampling if perTypeCount is set (only if not filtering by type)
+      if (options.perTypeCount && !options.questionType) {
+        console.log(chalk.gray(`
+Applying stratified sampling (${options.perTypeCount} per type):`));
         // Map prepared questions to include question_type for sampling
         const withTypes = preparedQuestions.map(q => ({
           ...q,
@@ -338,25 +371,43 @@ Focusing on question: ${options.questionId}
         const sampled = applyStratifiedSampling(withTypes, options.perTypeCount);
         questionsToProcess = sampled.map(q => {
           const { question_id, question_type, ...rest } = q;
-          return rest as typeof preparedQuestions[0];
+          return rest as (typeof preparedQuestions)[0];
         });
-      } else {
-        // Apply offset and subset if requested
-        const offset = options.offset || 0;
-        if (offset > 0) {
-          questionsToProcess = preparedQuestions.slice(offset);
-          console.log(chalk.gray(`Skipping first ${offset} questions`));
-        }
-        if (options.subset) {
-          questionsToProcess = questionsToProcess.slice(0, options.subset);
-        }
-        if (offset > 0 || options.subset) {
-          console.log(
-            chalk.gray(`
-Processing questions ${offset + 1}-${offset + questionsToProcess.length} of ${preparedQuestions.length} total
+      }
+
+      // Apply comb sampling if combSampleSize is set (works with -t type filter)
+      if (options.combSampleSize) {
+        const combOffset = options.combOffset ?? 10;
+        const startOffset = options.combStartOffset ?? 0;
+        console.log(chalk.gray(`
+Applying comb sampling (${options.combSampleSize} per type, offset=${combOffset}, start=${startOffset}):`));
+        // Map prepared questions to include question_type for sampling
+        const withTypes = questionsToProcess.map(q => ({
+          ...q,
+          question_id: q.questionId,
+          question_type: q.questionType,
+        }));
+        const sampled = applyCombSampling(withTypes, options.combSampleSize, combOffset, startOffset);
+        questionsToProcess = sampled.map(q => {
+          const { question_id, question_type, ...rest } = q;
+          return rest as (typeof preparedQuestions)[0];
+        });
+      }
+
+      // Apply offset and subset
+      const totalBeforeSlice = questionsToProcess.length;
+      const offset = options.offset || 0;
+      if (offset > 0) {
+        questionsToProcess = questionsToProcess.slice(offset);
+      }
+      if (options.subset) {
+        questionsToProcess = questionsToProcess.slice(0, options.subset);
+      }
+      if (offset > 0 || options.subset) {
+        console.log(
+          chalk.gray(`Processing questions ${offset + 1}-${offset + questionsToProcess.length} of ${totalBeforeSlice}${options.questionType ? ` ${options.questionType}` : ''} total
 `),
-          );
-        }
+        );
       }
     }
 
@@ -524,11 +575,11 @@ Active evaluations:`;
     // Save results
     await this.saveResults(runDir, results, metrics, options);
 
-    // Display results
-    this.displayMetrics(metrics, options, configDef);
-
-    // Display uninvestigated failures
+    // Display uninvestigated failures first (questions for investigation)
     this.displayUninvestigatedFailures(results);
+
+    // Display results summary at the end
+    this.displayMetrics(metrics, options, configDef);
 
     return metrics;
   }
@@ -635,12 +686,13 @@ Active evaluations:`;
       const embeddingsCacheDir = join(preparedDir, '..', '.embeddings-cache', 'fastembed-small');
       observationRagFilter = new ObservationSemanticFilter({
         embedder: fastembed.small,
-        topK: 50,
-        minSimilarity: 0.4,
+        topK: configDef.ragTopK ?? 50,
+        // minSimilarity: 0.4,
         includeCurrentTask: false,
         includeSuggestedResponse: false,
-        includePatterns: true,
+        includePatterns: false,
         cacheDir: embeddingsCacheDir,
+        preferenceBoost: configDef.ragPreferenceBoost ?? false,
       });
     }
 
@@ -676,7 +728,8 @@ When answering questions, carefully review the conversation history to identify 
             ]
           : []),
         // prevent openai prompt caching
-        { role: 'system', content: `\ncache: ${Math.random()}` },
+        { role: 'system', content: `
+cache: ${Math.random()}` },
       ],
       // tools: observationalMemory
       //   ? {
@@ -710,12 +763,19 @@ When answering questions, carefully review the conversation history to identify 
                 });
                 const msgToWrite = observationsMsg || omm[0];
                 if (msgToWrite?.content) {
-                  const content = typeof msgToWrite.content === 'string' ? msgToWrite.content : JSON.stringify(msgToWrite.content);
+                  const content =
+                    typeof msgToWrite.content === 'string' ? msgToWrite.content : JSON.stringify(msgToWrite.content);
                   writeFileSync(
                     omDebugPath,
-                    `[Debug: tagged=${taggedCount}, total=${omm.length}, hasObservations=${!!observationsMsg}]\n\n` +
-                    content +
-                      `\n\n${JSON.stringify(args.messageList.get.all.core(), null, 2)}\n\n${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
+                    `[Debug: tagged=${taggedCount}, total=${omm.length}, hasObservations=${!!observationsMsg}]
+
+` +
+                      content +
+                      `
+
+${JSON.stringify(args.messageList.get.all.core(), null, 2)}
+
+${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
                   );
                 }
                 return args.messageList;
@@ -730,7 +790,8 @@ When answering questions, carefully review the conversation history to identify 
               processOutputResult: args => {
                 const responses = args.messageList.get.response.v1();
                 if (existsSync(omDebugPath)) {
-                  appendFileSync(omDebugPath, `\n${JSON.stringify(responses, null, 2)}`);
+                  appendFileSync(omDebugPath, `
+${JSON.stringify(responses, null, 2)}`);
                 }
                 return args.messageList;
               },
@@ -746,7 +807,7 @@ When answering questions, carefully review the conversation history to identify 
 
     let response = await withRateLimitRetry(
       () =>
-        agent.generate(meta.question + `\n${today}`, {
+        agent.generate(meta.question, {
           threadId: evalThreadId,
           resourceId: meta.resourceId,
           modelSettings: {
@@ -770,7 +831,7 @@ When answering questions, carefully review the conversation history to identify 
       name: 'LongMemEval Metric Agent',
       model: evalModelId,
       instructions:
-        'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct.',
+        'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct. If the response contains the answer plus additional information, that is correct too.',
     });
 
     const metric = new LongMemEvalMetric({
@@ -820,14 +881,18 @@ When answering questions, carefully review the conversation history to identify 
     }
     const didRetry = retryCount > 0;
 
-    // Run improved evaluation if improved question OR improved answer exists
+    // Run improved evaluation if improved question OR improved answer exists (unless --no-fixed)
+    let improvedQuestion: string | undefined;
+    let improvedAnswer: string | undefined;
     let improvedHypothesis: string | undefined;
     let improvedIsCorrect: boolean | undefined;
 
-    // Normalize: if only improvedAnswer exists, copy the original question to improvedQuestion
-    // This simplifies the logic - we always run a "fixed" evaluation if either field is set
-    const improvedQuestion = meta.improvedQuestion ?? (meta.improvedAnswer ? meta.question : undefined);
-    const improvedAnswer = meta.improvedAnswer ?? meta.answer;
+    if (!options.skipFixed) {
+      // Normalize: if only improvedAnswer exists, copy the original question to improvedQuestion
+      // This simplifies the logic - we always run a "fixed" evaluation if either field is set
+      improvedQuestion = meta.improvedQuestion ?? (meta.improvedAnswer ? meta.question : undefined);
+      improvedAnswer = meta.improvedAnswer ?? meta.answer;
+    }
 
     if (improvedQuestion) {
       // If the improved question is the same as the original (only answer changed),
@@ -960,6 +1025,23 @@ When answering questions, carefully review the conversation history to identify 
     const resultsPath = join(runDir, 'results.jsonl');
     const resultsContent = results.map(r => JSON.stringify(r)).join('\n');
     await writeFile(resultsPath, resultsContent);
+
+    // Save failures.json for re-preparation
+    const failedQuestionIds = results.filter(r => !r.is_correct).map(r => r.question_id);
+    if (failedQuestionIds.length > 0) {
+      const failuresPath = join(runDir, 'failures.json');
+      const failuresData = {
+        questionIds: failedQuestionIds,
+        runId: runDir.split('/').pop(),
+        config: options.memoryConfig,
+        dataset: options.dataset,
+        timestamp: new Date().toISOString(),
+        totalFailed: failedQuestionIds.length,
+        totalQuestions: results.length,
+      };
+      await writeFile(failuresPath, JSON.stringify(failuresData, null, 2));
+      console.log(chalk.gray(`Failures saved to: ${failuresPath}`));
+    }
 
     // Save metrics
     const metricsPath = join(runDir, 'metrics.json');

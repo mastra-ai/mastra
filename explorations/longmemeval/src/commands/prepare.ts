@@ -24,6 +24,16 @@ import { reconcileQuestion } from './reconcile';
 
 const geminiFlash = makeRetryModel(google('gemini-2.5-flash'));
 
+export interface FailuresFile {
+  questionIds: string[];
+  runId: string;
+  config: MemoryConfigType;
+  dataset: string;
+  timestamp: string;
+  totalFailed: number;
+  totalQuestions: number;
+}
+
 export interface PrepareOptions {
   dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
   memoryConfig: MemoryConfigType;
@@ -36,6 +46,7 @@ export interface PrepareOptions {
   resumeFromMessageId?: string;
   sessionLimit?: number;
   sessionOffset?: number;
+  fromFailures?: string; // Path to failures.json from a benchmark run
 }
 
 export class PrepareCommand {
@@ -88,7 +99,41 @@ export class PrepareCommand {
 
     // Filter by questionId if specified
     let questionsToProcess = questions;
-    if (options.questionId) {
+    let fromFailuresData: FailuresFile | null = null;
+    
+    if (options.fromFailures) {
+      // Load failures.json and filter to those question IDs
+      if (!existsSync(options.fromFailures)) {
+        throw new Error(`Failures file not found: ${options.fromFailures}`);
+      }
+      fromFailuresData = JSON.parse(await readFile(options.fromFailures, 'utf-8')) as FailuresFile;
+      const failedIds = new Set(fromFailuresData.questionIds);
+      questionsToProcess = questions.filter(q => failedIds.has(q.question_id));
+      
+      if (questionsToProcess.length === 0) {
+        throw new Error(`No matching questions found for ${fromFailuresData.questionIds.length} failed IDs`);
+      }
+      
+      console.log(chalk.yellow(`\n🔄 Re-preparing ${questionsToProcess.length} failed questions from: ${options.fromFailures}`));
+      console.log(chalk.gray(`   Run ID: ${fromFailuresData.runId}`));
+      console.log(chalk.gray(`   Original failures: ${fromFailuresData.totalFailed}/${fromFailuresData.totalQuestions}\n`));
+      
+      // Clean existing prepared data for these questions
+      const preparedDir = join(this.baseDir, options.dataset, options.memoryConfig);
+      let cleanedCount = 0;
+      for (const q of questionsToProcess) {
+        const questionDir = join(preparedDir, q.question_id);
+        if (existsSync(questionDir)) {
+          // Remove the directory contents
+          const { rm } = await import('fs/promises');
+          await rm(questionDir, { recursive: true, force: true });
+          cleanedCount++;
+        }
+      }
+      if (cleanedCount > 0) {
+        console.log(chalk.gray(`   Cleaned ${cleanedCount} existing question directories\n`));
+      }
+    } else if (options.questionId) {
       questionsToProcess = questions.filter(q => q.question_id === options.questionId);
       if (questionsToProcess.length === 0) {
         throw new Error(`Question with ID "${options.questionId}" not found in dataset`);

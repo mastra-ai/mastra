@@ -63,7 +63,9 @@ export type MemoryConfigType =
   | 'om-glm-patterns-observed'
   | 'om-glm-patterns-tool'
   | 'om-rag'
-  | 'om-glm-rag';
+  | 'om-glm-rag'
+  | 'om-glm-rag-topk100'
+  | 'om-glm-rag-prefboost';
 
 export interface MemoryConfigOptions {
   type: MemoryConfigType;

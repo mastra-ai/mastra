@@ -310,13 +310,17 @@ program
   .command('run [config]')
   .alias('bench')
   .description('Run LongMemEval benchmark using prepared data')
-  .option('-v, --variant <variant>', 'Run variant (quick, full, rip)', 'quick')
+  .option('-v, --variant <variant>', 'Run variant (quick, full, rip, sample, sample-comb)', 'quick')
   .option('-o, --output <dir>', 'Output directory for results', './results')
   .option('--prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
   .option('--subset <n>', 'Override subset size', parseInt)
   .option('--offset <n>', 'Skip first n questions', parseInt)
   .option('--concurrency <n>', 'Override concurrency', parseInt)
   .option('--question-id <id>', 'Focus on a specific question by ID')
+  .option('-t, --type <type>', 'Filter to a specific question type (e.g., multi-session, knowledge-update)')
+  .option('--comb-offset <n>', 'Comb sampling: stride between questions (for sample-comb variant)', parseInt)
+  .option('--start-offset <n>', 'Comb sampling: starting index (for sample-comb variant)', parseInt)
+  .option('--no-fixed', 'Skip improved/fixed question evaluation')
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
   .option('-c, --memory-config <config>', 'Memory configuration (legacy)')
@@ -359,6 +363,9 @@ program
       // Apply overrides
       const subset = options.subset ?? resolvedVariant.subset;
       const perTypeCount = resolvedVariant.perTypeCount;
+      const combSampleSize = resolvedVariant.combSampleSize;
+      const combOffset = options.combOffset ?? resolvedVariant.combOffset;
+      const combStartOffset = options.startOffset ?? resolvedVariant.combStartOffset;
       const concurrency = options.concurrency ?? resolvedVariant.benchConcurrency;
 
       console.log(chalk.blue('\n🚀 LongMemEval Benchmark Runner\n'));
@@ -366,7 +373,9 @@ program
       console.log(chalk.gray(`Dataset: ${dataset}`));
       console.log(chalk.gray(`Memory Config: ${resolvedConfig}`));
       console.log(chalk.gray(`Concurrency: ${concurrency}`));
-      if (perTypeCount) {
+      if (combSampleSize) {
+        console.log(chalk.gray(`Comb Sample: ${combSampleSize} per type (offset=${combOffset}, start=${combStartOffset})`));
+      } else if (perTypeCount) {
         console.log(chalk.gray(`Stratified Sample: ${perTypeCount} per type`));
       } else if (subset) {
         console.log(chalk.gray(`Subset: ${subset} questions`));
@@ -401,11 +410,16 @@ program
         memoryConfig: resolvedConfig as MemoryConfigType,
         preparedDataDir: options.preparedData,
         outputDir: options.output,
-        subset: perTypeCount ? undefined : subset, // Don't use subset if using perTypeCount
+        subset: combSampleSize || perTypeCount ? undefined : subset, // Don't use subset if using sampling
         perTypeCount,
+        combSampleSize,
+        combOffset,
+        combStartOffset,
         offset: options.offset,
         concurrency,
         questionId: options.questionId,
+        questionType: options.type,
+        skipFixed: options.fixed === false, // --no-fixed sets options.fixed to false
       });
 
       // Force exit after completion
