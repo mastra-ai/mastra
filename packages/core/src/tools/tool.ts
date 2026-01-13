@@ -2,7 +2,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions } from '../workflows';
-import type { ToolAction, ToolAnnotations, ToolExecutionContext } from './types';
+import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
@@ -122,33 +122,24 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
-   * MCP tool annotations for describing tool behavior and UI presentation.
-   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
-   * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+   * Optional MCP-specific properties including annotations and metadata.
+   * Only relevant when the tool is being used in an MCP context.
    * @example
    * ```typescript
-   * annotations: {
-   *   title: 'Weather Lookup',
-   *   readOnlyHint: true,
-   *   destructiveHint: false
+   * mcp: {
+   *   annotations: {
+   *     title: 'Weather Lookup',
+   *     readOnlyHint: true,
+   *     destructiveHint: false
+   *   },
+   *   _meta: {
+   *     version: '1.0.0',
+   *     author: 'team@example.com'
+   *   }
    * }
    * ```
    */
-  annotations?: ToolAnnotations;
-
-  /**
-   * Arbitrary metadata that will be passed through to MCP clients.
-   * This field allows custom metadata to be attached to tools for
-   * client-specific functionality.
-   * @example
-   * ```typescript
-   * _meta: {
-   *   version: '1.0.0',
-   *   author: 'team@example.com'
-   * }
-   * ```
-   */
-  _meta?: Record<string, unknown>;
+  mcp?: MCPToolProperties;
 
   /**
    * Creates a new Tool instance with input validation wrapper.
@@ -174,8 +165,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
-    this.annotations = opts.annotations;
-    this._meta = opts._meta;
+    this.mcp = opts.mcp;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data

@@ -36,7 +36,7 @@ export const tool = createTool({
 
 ## Example with MCP Annotations
 
-When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool:
+When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from "@mastra/core/tools";
@@ -48,18 +48,21 @@ export const weatherTool = createTool({
   inputSchema: z.object({
     location: z.string().describe("City name or coordinates"),
   }),
-  // MCP annotations for client behavior hints
-  annotations: {
-    title: "Weather Lookup",           // Human-readable display name
-    readOnlyHint: true,                // Tool doesn't modify environment
-    destructiveHint: false,            // Tool doesn't perform destructive updates
-    idempotentHint: true,              // Same args = same result
-    openWorldHint: true,               // Interacts with external API
-  },
-  // Custom metadata for client-specific functionality
-  _meta: {
-    version: "1.0.0",
-    category: "weather",
+  // MCP-specific properties
+  mcp: {
+    // Annotations for client behavior hints
+    annotations: {
+      title: "Weather Lookup",           // Human-readable display name
+      readOnlyHint: true,                // Tool doesn't modify environment
+      destructiveHint: false,            // Tool doesn't perform destructive updates
+      idempotentHint: true,              // Same args = same result
+      openWorldHint: true,               // Interacts with external API
+    },
+    // Custom metadata for client-specific functionality
+    _meta: {
+      version: "1.0.0",
+      category: "weather",
+    },
   },
   execute: async (inputData) => {
     const weather = await fetchWeather(inputData.location);
@@ -121,17 +124,10 @@ export const weatherTool = createTool({
       isOptional: true,
     },
     {
-      name: "annotations",
-      type: "ToolAnnotations",
+      name: "mcp",
+      type: "MCPToolProperties",
       description:
-        "MCP tool annotations for describing tool behavior and UI presentation. These are exposed via MCP protocol and used by clients like OpenAI Apps SDK. Includes fields like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`.",
-      isOptional: true,
-    },
-    {
-      name: "_meta",
-      type: "Record<string, unknown>",
-      description:
-        "Arbitrary metadata that will be passed through to MCP clients. This field allows custom metadata to be attached to tools for client-specific functionality.",
+        "MCP-specific properties for tools exposed via Model Context Protocol. Includes `annotations` (tool behavior hints like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) and `_meta` (arbitrary metadata passed through to MCP clients).",
       isOptional: true,
     },
     {
@@ -351,6 +347,15 @@ Hook errors are caught and logged automatically, but do not prevent tool executi
 ## MCP Tool Annotations
 
 When exposing tools via the Model Context Protocol (MCP), you can provide annotations that describe tool behavior. These annotations help MCP clients like OpenAI Apps SDK understand how to present and handle your tools.
+
+MCP-specific properties are grouped under the `mcp` property, which includes `annotations` and `_meta`:
+
+```typescript
+mcp: {
+  annotations: { /* behavior hints */ },
+  _meta: { /* custom metadata */ },
+}
+```
 
 ### ToolAnnotations Properties
 

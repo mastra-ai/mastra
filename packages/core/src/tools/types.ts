@@ -148,6 +148,18 @@ export interface MCPToolProperties {
    * If not specified, it defaults to a regular tool.
    */
   toolType?: MCPToolType;
+  /**
+   * MCP tool annotations for describing tool behavior and UI presentation.
+   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
+   * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+   */
+  annotations?: ToolAnnotations;
+  /**
+   * Arbitrary metadata that will be passed through to MCP clients.
+   * This field allows custom metadata to be attached to tools for
+   * client-specific functionality.
+   */
+  _meta?: Record<string, unknown>;
 }
 
 /**
@@ -176,15 +188,6 @@ export type CoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
-  /**
-   * MCP tool annotations for describing tool behavior and UI presentation.
-   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
-   */
-  annotations?: ToolAnnotations;
-  /**
-   * Arbitrary metadata that will be passed through to MCP clients.
-   */
-  _meta?: Record<string, unknown>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -217,15 +220,6 @@ export type InternalCoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
-  /**
-   * MCP tool annotations for describing tool behavior and UI presentation.
-   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
-   */
-  annotations?: ToolAnnotations;
-  /**
-   * Arbitrary metadata that will be passed through to MCP clients.
-   */
-  _meta?: Record<string, unknown>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -277,17 +271,10 @@ export interface ToolAction<
   suspendSchema?: SchemaWithValidation<TSuspend>;
   resumeSchema?: SchemaWithValidation<TResume>;
   /**
-   * MCP tool annotations for describing tool behavior and UI presentation.
-   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
-   * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+   * Optional MCP-specific properties.
+   * Only populated when the tool is being used in an MCP context.
    */
-  annotations?: ToolAnnotations;
-  /**
-   * Arbitrary metadata that will be passed through to MCP clients.
-   * This field allows custom metadata to be attached to tools for
-   * client-specific functionality.
-   */
-  _meta?: Record<string, unknown>;
+  mcp?: MCPToolProperties;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata

@@ -7,7 +7,7 @@
  * - annotations: { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint }
  * - _meta: arbitrary metadata passthrough
  *
- * These fields are now supported in Mastra's ToolAction interface and MCPServer.
+ * These fields are supported under the `mcp` property of Mastra tools and exposed via MCPServer.
  */
 import http from 'node:http';
 import { createTool } from '@mastra/core/tools';
@@ -33,16 +33,18 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
       inputSchema: z.object({
         query: z.string().describe('The query to process'),
       }),
-      annotations: {
-        title: 'Annotated Query Tool',
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-      _meta: {
-        customField: 'custom-value',
-        version: '1.0.0',
+      mcp: {
+        annotations: {
+          title: 'Annotated Query Tool',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        _meta: {
+          customField: 'custom-value',
+          version: '1.0.0',
+        },
       },
       execute: async ({ query }) => {
         return { result: `Processed: ${query}` };
