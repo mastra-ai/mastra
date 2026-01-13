@@ -480,7 +480,18 @@ export class LibSQLDB extends MastraBase {
       args: [...(whereClause?.args ?? []), ...(args ?? [])],
     });
 
-    return result.rows as R[];
+    // Parse JSON columns (same as select())
+    return result.rows.map(row => {
+      return Object.fromEntries(
+        Object.entries(row || {}).map(([k, v]) => {
+          try {
+            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
+          } catch {
+            return [k, v];
+          }
+        }),
+      );
+    }) as R[];
   }
 
   /**

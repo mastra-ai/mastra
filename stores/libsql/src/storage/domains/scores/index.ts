@@ -14,6 +14,7 @@ import {
 import type { StoragePagination } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { buildSelectColumns } from '../../db/utils';
 
 export class ScoresLibSQL extends ScoresStorage {
   #db: LibSQLDB;
@@ -75,7 +76,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [runId, limitValue, start],
       });
 
@@ -168,7 +169,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
@@ -207,7 +208,7 @@ export class ScoresLibSQL extends ScoresStorage {
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     const result = await this.#client.execute({
-      sql: `SELECT * FROM ${TABLE_SCORERS} WHERE id = ?`,
+      sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE id = ?`,
       args: [id],
     });
     return result.rows?.[0] ? this.transformScoreRow(result.rows[0]) : null;
@@ -299,7 +300,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [entityId, entityType, limitValue, start],
       });
 
@@ -351,7 +352,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [traceId, spanId, limitValue, start],
       });
 

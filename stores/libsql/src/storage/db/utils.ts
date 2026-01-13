@@ -5,6 +5,24 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
+ * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()
+ * to convert binary JSONB to TEXT.
+ *
+ * @param tableName - The table name to get the schema for
+ * @returns A comma-separated column list with json() wrappers for JSONB columns
+ */
+export function buildSelectColumns(tableName: TABLE_NAMES): string {
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.keys(schema)
+    .map(col => {
+      const colDef = schema[col];
+      const parsedCol = parseSqlIdentifier(col, 'column name');
+      return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
+    })
+    .join(', ');
+}
+
+/**
  * Checks if an error is a SQLite lock/busy error that should be retried
  */
 export function isLockError(error: any): boolean {
@@ -81,13 +99,19 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
   const schema = TABLE_SCHEMAS[tableName];
   const columnNames = Object.keys(record);
   const columns = columnNames.map(col => parseSqlIdentifier(col, 'column name'));
-  const values = Object.values(record).map(v => {
+  const values = columnNames.map((col, i) => {
+    const v = Object.values(record)[i];
     if (typeof v === `undefined` || v === null) {
       // returning an undefined value will cause libsql to throw
       return null;
     }
     if (v instanceof Date) {
       return v.toISOString();
+    }
+    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    const colDef = schema[col];
+    if (colDef?.type === 'jsonb') {
+      return JSON.stringify(v);
     }
     return typeof v === 'object' ? JSON.stringify(v) : v;
   });
@@ -122,7 +146,15 @@ export function prepareUpdateStatement({
   // Prepare SET clause
   const updateColumnNames = Object.keys(updates);
   const updateColumns = updateColumnNames.map(col => parseSqlIdentifier(col, 'column name'));
-  const updateValues = Object.values(updates).map(transformToSqlValue);
+  const updateValues = updateColumnNames.map((col, i) => {
+    const colDef = schema[col];
+    const v = Object.values(updates)[i];
+    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    if (colDef?.type === 'jsonb') {
+      return transformToSqlValue(v, true);
+    }
+    return transformToSqlValue(v, false);
+  });
   const setClause = updateColumns
     .map((col, i) => {
       const colDef = schema[updateColumnNames[i]!];
@@ -138,12 +170,16 @@ export function prepareUpdateStatement({
   };
 }
 
-export function transformToSqlValue(value: any): InValue {
+export function transformToSqlValue(value: any, forceJsonStringify: boolean = false): InValue {
   if (typeof value === 'undefined' || value === null) {
     return null;
   }
   if (value instanceof Date) {
     return value.toISOString();
+  }
+  // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+  if (forceJsonStringify) {
+    return JSON.stringify(value);
   }
   return typeof value === 'object' ? JSON.stringify(value) : value;
 }

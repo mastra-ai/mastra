@@ -611,7 +611,7 @@ export class MemoryLibSQL extends MemoryStorage {
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: JSON.stringify(resource.metadata),
+        // metadata is handled by prepareStatement which stringifies jsonb columns
       },
     });
 
@@ -802,7 +802,7 @@ export class MemoryLibSQL extends MemoryStorage {
         tableName: TABLE_THREADS,
         record: {
           ...thread,
-          metadata: JSON.stringify(thread.metadata),
+          // metadata is handled by prepareStatement which stringifies jsonb columns
         },
       });
 
