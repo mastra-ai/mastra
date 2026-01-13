@@ -21,11 +21,7 @@
 
 import { embed, embedMany } from 'ai';
 import type { EmbeddingModel } from 'ai';
-import type {
-  Processor,
-  ProcessInputStepArgs,
-  ProcessOutputResultArgs,
-} from '@mastra/core/processors';
+import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -129,6 +125,26 @@ export interface ObservationSemanticFilterConfig {
    * @default 0.4
    */
   mediumScoreThreshold?: number;
+
+  /**
+   * Enable preference boost queries.
+   * Runs additional searches for "user prefers", "user preference", etc.
+   * to ensure user preferences are always included in context.
+   * @default true
+   */
+  preferenceBoost?: boolean;
+
+  /**
+   * TopK for preference boost queries
+   * @default 50
+   */
+  preferenceBoostTopK?: number;
+
+  /**
+   * Minimum similarity for preference boost queries (lower than main query)
+   * @default 0.35
+   */
+  preferenceBoostMinSimilarity?: number;
 }
 
 /**
@@ -262,8 +278,7 @@ export function parseObservationLines(observations: string): ParsedObservation[]
     if (!line) continue;
 
     // Check for thread headers
-    const threadMatch = line.match(/^<thread\s+id="([^"]+)"/i) || 
-                        line.match(/^<other-conversation\s+id="([^"]+)"/i);
+    const threadMatch = line.match(/^<thread\s+id="([^"]+)"/i) || line.match(/^<other-conversation\s+id="([^"]+)"/i);
     if (threadMatch) {
       currentThreadId = threadMatch[1];
       continue;
@@ -320,19 +335,19 @@ export function parseObservationLines(observations: string): ParsedObservation[]
  * Rebuild observations with thread and date structure from retrieved chunks
  */
 export function rebuildObservationsWithStructure(
-  chunks: Array<{ metadata: ObservationChunkMetadata & { threadId: string; dateGroup: string } }>
+  chunks: Array<{ metadata: ObservationChunkMetadata & { threadId: string; dateGroup: string } }>,
 ): string {
   // Group by thread, then by date
   const threadGroups = new Map<string, Map<string, string[]>>();
 
   for (const chunk of chunks) {
     const { threadId, dateGroup, content } = chunk.metadata;
-    
+
     if (!threadGroups.has(threadId)) {
       threadGroups.set(threadId, new Map());
     }
     const dateGroups = threadGroups.get(threadId)!;
-    
+
     if (!dateGroups.has(dateGroup)) {
       dateGroups.set(dateGroup, []);
     }
@@ -341,18 +356,18 @@ export function rebuildObservationsWithStructure(
 
   // Build output with structure
   const parts: string[] = [];
-  
+
   for (const [threadId, dateGroups] of Array.from(threadGroups.entries())) {
     // Add thread wrapper if not default
     if (threadId !== 'default') {
       parts.push(`<thread id="${threadId}">`);
     }
-    
+
     for (const [dateGroup, observations] of Array.from(dateGroups.entries())) {
       parts.push(dateGroup);
       parts.push(...observations);
     }
-    
+
     if (threadId !== 'default') {
       parts.push('</thread>');
     }
@@ -401,12 +416,12 @@ export function getLatestUserMessage(messages: MastraDBMessage[]): string | null
     const msg = messages[i];
     if (msg.role === 'user') {
       const content = msg.content;
-      
+
       // Handle string content (legacy format)
       if (typeof content === 'string') {
         return content;
       }
-      
+
       // Handle MastraMessageContentV2 format (format: 2 with parts array)
       if (content && typeof content === 'object' && 'format' in content && content.format === 2) {
         // First check if there's a direct content string
@@ -416,18 +431,24 @@ export function getLatestUserMessage(messages: MastraDBMessage[]): string | null
         // Otherwise extract from parts
         if (Array.isArray(content.parts)) {
           const textParts = content.parts
-            .filter((p): p is { type: 'text'; text: string } => p && typeof p === 'object' && p.type === 'text' && typeof p.text === 'string')
+            .filter(
+              (p): p is { type: 'text'; text: string } =>
+                p && typeof p === 'object' && p.type === 'text' && typeof p.text === 'string',
+            )
             .map(p => p.text);
           if (textParts.length > 0) {
             return textParts.join(' ');
           }
         }
       }
-      
+
       // Handle plain array content (older format)
       if (Array.isArray(content)) {
         const textParts = content
-          .filter((p): p is { type: 'text'; text: string } => p && typeof p === 'object' && p.type === 'text' && typeof p.text === 'string')
+          .filter(
+            (p): p is { type: 'text'; text: string } =>
+              p && typeof p === 'object' && p.type === 'text' && typeof p.text === 'string',
+          )
           .map(p => p.text);
         return textParts.join(' ') || null;
       }
@@ -460,12 +481,17 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
   private cacheDir?: string;
   private hasher = xxhash();
   private embeddingCache = new Map<string, number[]>(); // hash -> embedding
-  
+
   // Context expansion settings
   private expandContext: boolean;
   private highScoreThreshold: number;
   private mediumScoreThreshold: number;
-  
+
+  // Preference boost settings
+  private preferenceBoost: boolean;
+  private preferenceBoostTopK: number;
+  private preferenceBoostMinSimilarity: number;
+
   // Store all parsed observations for neighbor lookup during expansion
   private allParsedObservations: ParsedObservation[] = [];
 
@@ -481,6 +507,9 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
     this.expandContext = config.expandContext ?? true;
     this.highScoreThreshold = config.highScoreThreshold ?? 0.6;
     this.mediumScoreThreshold = config.mediumScoreThreshold ?? 0.4;
+    this.preferenceBoost = config.preferenceBoost ?? true;
+    this.preferenceBoostTopK = config.preferenceBoostTopK ?? 50;
+    this.preferenceBoostMinSimilarity = config.preferenceBoostMinSimilarity ?? 0.35;
 
     // Ensure cache directory exists
     if (this.cacheDir && !existsSync(this.cacheDir)) {
@@ -588,17 +617,20 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
 
     // Get the user's query for similarity matching
     // Debug: log all messages to understand the structure
-    console.log('[RAG Filter] Messages:', messages.map(m => {
-      const content = m.content as unknown;
-      let preview = 'unknown';
-      if (typeof content === 'string') {
-        preview = (content as string).slice(0, 50);
-      } else if (Array.isArray(content)) {
-        preview = `array[${(content as unknown[]).length}]`;
-      }
-      return { role: m.role, contentType: typeof content, contentPreview: preview };
-    }));
-    
+    console.log(
+      '[RAG Filter] Messages:',
+      messages.map(m => {
+        const content = m.content as unknown;
+        let preview = 'unknown';
+        if (typeof content === 'string') {
+          preview = (content as string).slice(0, 50);
+        } else if (Array.isArray(content)) {
+          preview = `array[${(content as unknown[]).length}]`;
+        }
+        return { role: m.role, contentType: typeof content, contentPreview: preview };
+      }),
+    );
+
     const userQuery = getLatestUserMessage(messages);
     console.log('[RAG Filter] User query found:', !!userQuery, 'messages count:', messages.length);
     if (!userQuery) {
@@ -619,7 +651,7 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
     // Embed the user query
     const { embedding: queryEmbedding } = await embed({
       model: this.embedder,
-      value: userQuery,
+      value: userQuery.endsWith(`?`) ? `User asked ${userQuery}` : `User stated ${userQuery}`,
     });
     console.log('[RAG Filter] Query embedded, searching...');
 
@@ -629,10 +661,49 @@ export class ObservationSemanticFilter implements Processor<'observation-semanti
       minSimilarity: this.minSimilarity,
     });
     console.log('[RAG Filter] Found', results.length, 'relevant chunks out of', this.vectorStore.size, 'total');
-    console.log('[RAG Filter] Top 3 similarities:', results.slice(0, 3).map(r => r.similarity.toFixed(3)).join(', '));
+    console.log(
+      '[RAG Filter] Top 3 similarities:',
+      results
+        .slice(0, 3)
+        .map(r => r.similarity.toFixed(3))
+        .join(', '),
+    );
+
+    // Preference boost: run additional queries for user preferences
+    // This ensures critical user preferences are always included in context
+    let allResults = [...results];
+    if (this.preferenceBoost) {
+      const preferenceQueries = ['user prefers', 'user preference', 'user likes', 'user wants', "user's favorite"];
+
+      const seenChunkIds = new Set(results.map(r => r.chunk.id));
+      let preferenceHits = 0;
+
+      for (const prefQuery of preferenceQueries) {
+        const { embedding: prefEmbedding } = await embed({
+          model: this.embedder,
+          value: prefQuery,
+        });
+
+        const prefResults = this.vectorStore.query(prefEmbedding, {
+          topK: this.preferenceBoostTopK,
+          minSimilarity: this.preferenceBoostMinSimilarity,
+        });
+
+        // Add unique results (not already in main results)
+        for (const result of prefResults) {
+          if (!seenChunkIds.has(result.chunk.id)) {
+            seenChunkIds.add(result.chunk.id);
+            allResults.push(result);
+            preferenceHits++;
+          }
+        }
+      }
+
+      console.log('[RAG Filter] Preference boost added', preferenceHits, 'unique chunks');
+    }
 
     // Expand results based on similarity score (high score = more context)
-    const expandedChunks = this.expandResults(results);
+    const expandedChunks = this.expandResults(allResults);
 
     // Build filtered observations with preserved structure (thread + date grouping)
     const filteredObservations = rebuildObservationsWithStructure(expandedChunks);
@@ -689,6 +760,8 @@ ${filteredObservations}
     state.ragStats = {
       originalLines: this.allParsedObservations.length,
       matchedLines: results.length,
+      preferenceBoostHits: allResults.length - results.length,
+      totalMatches: allResults.length,
       expandedLines: expandedChunks.length,
       topSimilarity: results[0]?.similarity ?? 0,
       query: userQuery.slice(0, 100),
@@ -700,13 +773,10 @@ ${filteredObservations}
   /**
    * Index observations into the vector store with content-based caching
    */
-  private async indexObservations(
-    observations: string,
-    state: Record<string, unknown>,
-  ): Promise<void> {
+  private async indexObservations(observations: string, state: Record<string, unknown>): Promise<void> {
     const parsedObs = parseObservationLines(observations);
     if (parsedObs.length === 0) return;
-    
+
     // Store all parsed observations for neighbor lookup during expansion
     this.allParsedObservations = parsedObs;
 
@@ -721,7 +791,7 @@ ${filteredObservations}
     for (const obs of parsedObs) {
       const hash = await this.hashContent(obs.line);
       obsHashes.push(hash);
-      
+
       const cachedEmbedding = this.getCachedEmbedding(hash);
       if (cachedEmbedding) {
         // Use cached embedding
@@ -750,7 +820,7 @@ ${filteredObservations}
       const batchSize = 25;
       for (let b = 0; b < uncachedObs.length; b += batchSize) {
         const batch = uncachedObs.slice(b, b + batchSize);
-        
+
         const { embeddings } = await embedMany({
           model: this.embedder,
           values: batch.map(l => l.line),
@@ -792,7 +862,7 @@ ${filteredObservations}
    * Low score (<0.4): Just the matched line
    */
   private expandResults(
-    results: Array<{ chunk: ObservationChunk; similarity: number }>
+    results: Array<{ chunk: ObservationChunk; similarity: number }>,
   ): Array<{ metadata: ObservationChunkMetadata & { threadId: string; dateGroup: string } }> {
     if (!this.expandContext || this.allParsedObservations.length === 0) {
       // Return results as-is without expansion
@@ -808,7 +878,7 @@ ${filteredObservations}
       }
       obsLookup.get(key)!.push(obs);
     }
-    
+
     // Sort each thread's observations by lineIndex
     for (const [, obsList] of Array.from(obsLookup.entries())) {
       obsList.sort((a, b) => a.lineIndex - b.lineIndex);
@@ -821,7 +891,7 @@ ${filteredObservations}
     for (const result of results) {
       const { chunk, similarity } = result;
       const { threadId, lineIndex, resourceId } = chunk.metadata;
-      
+
       // Determine expansion range based on score
       let range = 0;
       if (similarity >= this.highScoreThreshold) {
@@ -876,8 +946,10 @@ ${filteredObservations}
       return a.metadata.lineIndex - b.metadata.lineIndex;
     });
 
-    console.log(`[RAG Filter] Context expansion: ${results.length} matches → ${expandedChunks.length} lines (range based on score)`);
-    
+    console.log(
+      `[RAG Filter] Context expansion: ${results.length} matches → ${expandedChunks.length} lines (range based on score)`,
+    );
+
     return expandedChunks;
   }
 
@@ -902,8 +974,6 @@ ${filteredObservations}
 /**
  * Create an ObservationSemanticFilter processor
  */
-export function createObservationSemanticFilter(
-  config: ObservationSemanticFilterConfig,
-): ObservationSemanticFilter {
+export function createObservationSemanticFilter(config: ObservationSemanticFilterConfig): ObservationSemanticFilter {
   return new ObservationSemanticFilter(config);
 }
