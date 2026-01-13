@@ -849,6 +849,22 @@ export class Mastra<
       return null;
     }
 
+    // If an active version is set, resolve from that version's snapshot
+    if (storedAgent.activeVersionId) {
+      const activeVersion = await agentsStore.getVersion(storedAgent.activeVersionId);
+      if (activeVersion) {
+        // Merge activeVersionId into the snapshot for consistency
+        const snapshotWithActiveVersion = {
+          ...activeVersion.snapshot,
+          activeVersionId: storedAgent.activeVersionId,
+        };
+        if (options?.raw) {
+          return snapshotWithActiveVersion;
+        }
+        return this.#createAgentFromStoredConfig(snapshotWithActiveVersion);
+      }
+    }
+
     if (options?.raw) {
       return storedAgent;
     }

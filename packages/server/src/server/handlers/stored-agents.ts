@@ -12,6 +12,7 @@ import {
 } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { generateVersionId, calculateChangedFields, enforceRetentionLimit } from './agent-versions';
 import { handleError } from './error';
 
 // ============================================================================
@@ -243,6 +244,32 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         metadata,
         ownerId,
       });
+
+      // Auto-create a version if there are meaningful changes
+      const changedFields = calculateChangedFields(
+        existing as unknown as Record<string, unknown>,
+        agent as unknown as Record<string, unknown>,
+      );
+
+      // Only create version if there are actual changes (excluding metadata timestamps)
+      if (changedFields.length > 0) {
+        // Get the latest version number
+        const latestVersion = await agentsStore.getLatestVersion(storedAgentId);
+        const versionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+        // Create a new version snapshot
+        await agentsStore.createVersion({
+          id: generateVersionId(),
+          agentId: storedAgentId,
+          versionNumber,
+          snapshot: agent,
+          changedFields,
+          changeMessage: `Auto-saved after edit`,
+        });
+
+        // Enforce retention limit
+        await enforceRetentionLimit(agentsStore, storedAgentId, agent.activeVersionId);
+      }
 
       return agent;
     } catch (error) {

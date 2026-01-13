@@ -18,16 +18,16 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // Default maximum versions per agent (can be made configurable in the future)
-const DEFAULT_MAX_VERSIONS_PER_AGENT = 50;
+export const DEFAULT_MAX_VERSIONS_PER_AGENT = 50;
 
 // ============================================================================
-// Helper Functions
+// Helper Functions (exported for use in stored-agents.ts)
 // ============================================================================
 
 /**
  * Generates a unique ID for a version using crypto.randomUUID()
  */
-function generateVersionId(): string {
+export function generateVersionId(): string {
   return crypto.randomUUID();
 }
 
@@ -35,7 +35,7 @@ function generateVersionId(): string {
  * Compares two agent snapshots and returns an array of field names that changed.
  * Performs deep comparison for nested objects.
  */
-function calculateChangedFields(
+export function calculateChangedFields(
   previous: Record<string, unknown> | null | undefined,
   current: Record<string, unknown>,
 ): string[] {
@@ -67,7 +67,7 @@ function calculateChangedFields(
 /**
  * Deep equality comparison for detecting changes between values.
  */
-function deepEqual(a: unknown, b: unknown): boolean {
+export function deepEqual(a: unknown, b: unknown): boolean {
   // Handle identical references and primitives
   if (a === b) return true;
 
@@ -143,7 +143,7 @@ function computeVersionDiffs(
  * @param activeVersionId - The active version ID (will never be deleted)
  * @param maxVersions - Maximum number of versions to keep (default: 50)
  */
-async function enforceRetentionLimit(
+export async function enforceRetentionLimit(
   agentsStore: {
     listVersions: (params: {
       agentId: string;
