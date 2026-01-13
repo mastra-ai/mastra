@@ -1,6 +1,6 @@
 # Telephony Module
 
-The telephony module provides utilities for building AI-powered phone call applications with Mastra. It handles the complexities of audio format conversion, turn-taking, and orchestrating between telephony providers (like Twilio) and AI voice providers (like OpenAI Realtime).
+The telephony module provides utilities for building AI-powered phone call applications with Mastra. It handles the complexities of audio format conversion, turn-taking, and orchestrating between telephony providers (like Twilio) and voice-enabled agents.
 
 ## Installation
 
@@ -19,41 +19,40 @@ Building phone-based AI agents involves two distinct concerns:
 
 This module provides:
 
-- **`TelephonySession`** - Orchestrates the connection between telephony and AI providers
+- **`TelephonySession`** - Orchestrates the connection between telephony providers and voice-enabled agents
 - **Audio Codecs** - Convert between telephony formats (μ-law, A-law) and AI formats (PCM) using the [`alawmulaw`](https://www.npmjs.com/package/alawmulaw) library
 
 ## Quick Start
 
 ```typescript
-import { TelephonySession } from '@mastra/core/voice';
 import { Agent } from '@mastra/core/agent';
+import { TelephonySession, CompositeVoice } from '@mastra/core/voice';
 import { openai } from '@ai-sdk/openai';
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import { TwilioVoice } from '@mastra/voice-twilio';
 
-// 1. Create your AI agent
+// 1. Create a voice-enabled agent
 const agent = new Agent({
   name: 'Phone Support Agent',
   model: openai('gpt-4o'),
   instructions: `You are a helpful phone support agent. 
     Be concise - phone conversations should be natural and brief.
     Ask clarifying questions when needed.`,
+  voice: new CompositeVoice({
+    realtime: new OpenAIRealtimeVoice({
+      model: 'gpt-4o-realtime-preview',
+    }),
+  }),
 });
 
-// 2. Create your voice providers
-// - telephonyProvider: Your MastraVoice implementation for the phone network
-// - aiProvider: A realtime AI voice provider like OpenAI Realtime
-const telephonyProvider = createMyTelephonyProvider(websocket);
-const aiProvider = new OpenAIRealtimeVoice({ model: 'gpt-4o-realtime' });
-
-// 3. Create and start the session
+// 2. Create the telephony session
 const session = new TelephonySession({
-  telephony: telephonyProvider,
-  ai: aiProvider,
-  agent: agent,
+  agent,
+  telephony: new TwilioVoice(),
   bargeIn: true, // Allow user to interrupt AI
 });
 
-// 4. Handle events
+// 3. Handle events
 session.on('ready', ({ callSid }) => {
   console.log(`Call connected: ${callSid}`);
 });
@@ -74,26 +73,23 @@ session.on('ended', ({ reason }) => {
   console.log(`Call ended: ${reason}`);
 });
 
-// 5. Start the session
+// 4. Start the session (in your WebSocket handler)
 await session.start();
 ```
 
 ## TelephonySession
 
-The `TelephonySession` class orchestrates the connection between your telephony provider and AI voice provider.
+The `TelephonySession` class orchestrates the connection between your telephony provider and the agent's voice.
 
 ### Configuration
 
 ```typescript
 interface TelephonySessionConfig {
-  // Required: Voice providers
-  telephony: MastraVoice; // Telephony provider (e.g., Twilio)
-  ai: MastraVoice; // AI voice provider (e.g., OpenAI Realtime)
+  // Required
+  agent: Agent; // Voice-enabled agent (must have voice configured)
+  telephony: MastraVoice; // Telephony provider (e.g., TwilioVoice)
 
-  // Optional: Agent integration
-  agent?: Agent; // Mastra agent for tools and instructions
-
-  // Optional: Behavior
+  // Optional
   codec?: 'mulaw' | 'alaw' | 'pcm'; // Audio codec (default: 'mulaw')
   bargeIn?: boolean; // Allow interrupting AI (default: true)
   speechThreshold?: number; // Energy threshold for speech detection (default: 0.01)
@@ -128,6 +124,9 @@ session.getState(); // 'idle' | 'connecting' | 'active' | 'ended'
 
 // Get who's currently speaking
 session.getSpeaker(); // 'none' | 'user' | 'agent'
+
+// Get the agent
+session.getAgent();
 ```
 
 ## Audio Codecs
@@ -160,98 +159,6 @@ const alawAudio = pcmToAlaw(pcmInt16); // Int16Array → Buffer
 const converted = convertAudio(audio, 'mulaw', 'pcm');
 ```
 
-### Usage Example
-
-```typescript
-// Receiving audio from phone (Twilio sends mulaw)
-twilioVoice.on('audio-received', (mulawBuffer: Buffer) => {
-  const pcmAudio = mulawToPcm(mulawBuffer);
-  aiVoice.send(pcmAudio);
-});
-
-// Sending audio to phone (Twilio expects mulaw)
-aiVoice.on('audio', (pcmAudio: Int16Array) => {
-  const mulawBuffer = pcmToMulaw(pcmAudio);
-  twilioVoice.sendRaw(streamSid, mulawBuffer);
-});
-```
-
-## Building a Telephony Provider
-
-To integrate with a telephony service (Twilio, Vonage, Telnyx, etc.), create a class that extends `MastraVoice`:
-
-```typescript
-import { MastraVoice, mulawToPcm, pcmToMulaw } from '@mastra/core/voice';
-
-export class MyTelephonyVoice extends MastraVoice {
-  constructor(config: MyConfig) {
-    super({ name: 'my-telephony' });
-    // Setup...
-  }
-
-  // Handle incoming WebSocket messages from your provider
-  handleMessage(message: string | Buffer): void {
-    const data = JSON.parse(message.toString());
-
-    if (data.type === 'audio') {
-      // Convert to PCM and emit for TelephonySession
-      const pcm = mulawToPcm(Buffer.from(data.payload, 'base64'));
-      this.emit('audio-received', pcm);
-    }
-
-    if (data.type === 'call-start') {
-      this.emit('call-started', { callSid: data.callSid });
-    }
-  }
-
-  // Send audio back to the phone
-  sendAudio(streamId: string, pcmAudio: Int16Array): void {
-    const mulaw = pcmToMulaw(pcmAudio);
-    const payload = mulaw.toString('base64');
-
-    this.ws.send(
-      JSON.stringify({
-        type: 'audio',
-        streamId,
-        payload,
-      }),
-    );
-  }
-
-  // Required MastraVoice methods
-  async speak(input: string | NodeJS.ReadableStream): Promise<void> {
-    // TTS handled by AI provider in TelephonySession
-  }
-
-  async listen(audio: NodeJS.ReadableStream): Promise<string> {
-    // STT handled by AI provider in TelephonySession
-    return '';
-  }
-
-  // Event handling
-  on(event: string, callback: Function): void {
-    /* ... */
-  }
-  off(event: string, callback: Function): void {
-    /* ... */
-  }
-  close(): void {
-    /* ... */
-  }
-}
-```
-
-### Required Events
-
-Your telephony provider should emit these events for `TelephonySession`:
-
-| Event            | Payload                    | When                       |
-| ---------------- | -------------------------- | -------------------------- |
-| `call-started`   | `{ callSid?, streamSid? }` | Call connected             |
-| `audio-received` | `Int16Array`               | Audio received from caller |
-| `call-ended`     | `{ callSid? }`             | Call disconnected          |
-| `error`          | `Error`                    | Error occurred             |
-
 ## Architecture
 
 ```
@@ -261,7 +168,7 @@ Your telephony provider should emit these events for `TelephonySession`:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              Telephony Provider (e.g., Twilio)                   │
+│              Telephony Provider (e.g., TwilioVoice)              │
 │                                                                  │
 │  - WebSocket connection to phone network                        │
 │  - Audio in μ-law/A-law format                                  │
@@ -273,19 +180,18 @@ Your telephony provider should emit these events for `TelephonySession`:
 │                     TelephonySession                             │
 │                                                                  │
 │  - Audio format conversion (μ-law ↔ PCM)                        │
-│  - Routes audio between telephony ↔ AI                          │
+│  - Routes audio between telephony ↔ agent.voice                 │
 │  - Turn-taking detection                                         │
 │  - Barge-in handling (user interrupts AI)                       │
-│  - Agent tools/instructions integration                          │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│               AI Voice Provider (e.g., OpenAI Realtime)          │
+│                    Agent with Voice                              │
 │                                                                  │
-│  - Speech-to-speech processing                                   │
-│  - Tool calling                                                  │
-│  - Natural language understanding                                │
+│  - agent.voice (CompositeVoice with realtime provider)          │
+│  - Tools and instructions automatically configured               │
+│  - Speech-to-speech processing via realtime provider            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -323,8 +229,8 @@ Barge-in allows users to interrupt the AI mid-sentence, creating more natural co
 
 ```typescript
 const session = new TelephonySession({
+  agent,
   telephony,
-  ai,
   bargeIn: true, // Enable barge-in
   speechThreshold: 0.01, // Sensitivity (0-1)
 });
@@ -336,14 +242,15 @@ session.on('barge-in', () => {
 });
 ```
 
-## Integration with Mastra Agents
+## Setting Up Your Agent
 
-When you provide an `agent` to `TelephonySession`, it automatically:
-
-1. **Adds tools** - Makes agent tools available for the AI voice to call
-2. **Adds instructions** - Provides the agent's system prompt to guide responses
+The agent must have a voice configured with a realtime provider:
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+
 const agent = new Agent({
   name: 'Support Agent',
   model: openai('gpt-4o'),
@@ -353,17 +260,16 @@ const agent = new Agent({
       description: 'Look up an order by ID',
       parameters: z.object({ orderId: z.string() }),
       execute: async ({ orderId }) => {
-        // ... lookup logic
         return { status: 'shipped', eta: '2 days' };
       },
     }),
   },
-});
-
-const session = new TelephonySession({
-  telephony,
-  ai,
-  agent, // Tools and instructions are automatically added
+  // Voice configuration - tools and instructions are automatically added
+  voice: new CompositeVoice({
+    realtime: new OpenAIRealtimeVoice({
+      model: 'gpt-4o-realtime-preview',
+    }),
+  }),
 });
 ```
 
@@ -399,6 +305,7 @@ const agent = new Agent({
     - Keep responses under 2-3 sentences
     - Ask one question at a time
     - Confirm understanding before proceeding`,
+  // ...
 });
 ```
 
@@ -429,32 +336,13 @@ session.on('ended', ({ reason }) => {
 session.end('completed');
 ```
 
-### 4. Logging
-
-`TelephonySession` extends `MastraBase`, so logging is controlled via the Mastra logging configuration:
-
-```typescript
-const session = new TelephonySession({
-  telephony,
-  ai,
-  name: 'customer-support', // Optional name for log identification
-});
-```
-
 ## Supported Providers
 
-### Telephony Providers (Build Your Own)
+### Telephony Providers
 
-Use this module's utilities to build integrations with:
+- `@mastra/voice-twilio` - Twilio Media Streams
 
-- Twilio Media Streams
-- Vonage
-- Telnyx
-- Bandwidth
-- SignalWire
-- Any WebSocket-based telephony API
-
-### AI Voice Providers
+### AI Voice Providers (for agent.voice)
 
 Works with Mastra's realtime voice providers:
 
@@ -474,6 +362,7 @@ class TelephonySession {
 
   getState(): 'idle' | 'connecting' | 'active' | 'ended';
   getSpeaker(): 'none' | 'user' | 'agent';
+  getAgent(): Agent;
 
   on<K extends keyof TelephonySessionEvents>(event: K, callback: (data: TelephonySessionEvents[K]) => void): void;
 

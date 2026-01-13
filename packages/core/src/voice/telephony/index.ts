@@ -2,24 +2,34 @@
  * Telephony utilities for Mastra voice
  *
  * Provides:
- * - `TelephonySession` - Orchestrates telephony and AI voice providers
+ * - `TelephonySession` - Orchestrates telephony providers with voice-enabled agents
  * - Audio codec utilities for telephony formats (μ-law, A-law, PCM)
  *
  * @example
  * ```typescript
- * import { TelephonySession, mulawToPcm, pcmToMulaw } from '@mastra/core/voice';
+ * import { Agent } from '@mastra/core/agent';
+ * import { TelephonySession, CompositeVoice } from '@mastra/core/voice';
  * import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+ * import { TwilioVoice } from '@mastra/voice-twilio';
  *
- * // Create session to orchestrate telephony and AI providers
+ * // Create a voice-enabled agent
+ * const agent = new Agent({
+ *   name: 'Phone Agent',
+ *   model: openai('gpt-4o'),
+ *   instructions: 'You are a helpful assistant.',
+ *   voice: new CompositeVoice({
+ *     realtime: new OpenAIRealtimeVoice(),
+ *   }),
+ * });
+ *
+ * // Create session to connect telephony with the agent
  * const session = new TelephonySession({
- *   telephony: myTelephonyProvider,  // Your MastraVoice implementation
- *   ai: new OpenAIRealtimeVoice(),
- *   agent: myAgent,
+ *   agent,
+ *   telephony: new TwilioVoice(),
  *   bargeIn: true,
  * });
  *
  * session.on('ready', () => console.log('Call connected'));
- * session.on('barge-in', () => console.log('User interrupted'));
  * await session.start();
  * ```
  */

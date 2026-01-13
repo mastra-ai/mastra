@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import { TelephonySession } from './telephony-session';
+import type { Agent, ToolsInput } from '../../agent';
+import type { CompositeVoice } from '../composite-voice';
 import type { MastraVoice } from '../voice';
+
+import { TelephonySession } from './telephony-session';
 
 // Mock voice provider for testing
 function createMockVoice(): MastraVoice & {
@@ -39,20 +42,32 @@ function createMockVoice(): MastraVoice & {
   return mock;
 }
 
+// Mock agent for testing
+function createMockAgent(voice: MastraVoice): Agent<string, ToolsInput> {
+  return {
+    name: 'test-agent',
+    getVoice: vi.fn().mockResolvedValue(voice),
+    listTools: vi.fn().mockResolvedValue({}),
+    getInstructions: vi.fn().mockResolvedValue('Test instructions'),
+  } as unknown as Agent<string, ToolsInput>;
+}
+
 describe('TelephonySession', () => {
   let telephonyVoice: ReturnType<typeof createMockVoice>;
-  let aiVoice: ReturnType<typeof createMockVoice>;
+  let agentVoice: ReturnType<typeof createMockVoice>;
+  let mockAgent: Agent<string, ToolsInput>;
 
   beforeEach(() => {
     telephonyVoice = createMockVoice();
-    aiVoice = createMockVoice();
+    agentVoice = createMockVoice();
+    mockAgent = createMockAgent(agentVoice as unknown as CompositeVoice);
   });
 
   describe('constructor', () => {
     it('should create a session with required config', () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       expect(session.getState()).toBe('idle');
@@ -61,8 +76,8 @@ describe('TelephonySession', () => {
 
     it('should accept optional config', () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
         codec: 'alaw',
         bargeIn: false,
         speechThreshold: 0.05,
@@ -74,22 +89,23 @@ describe('TelephonySession', () => {
   });
 
   describe('start', () => {
-    it('should connect AI provider', async () => {
+    it('should get voice from agent and connect', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
 
-      expect(aiVoice.connect).toHaveBeenCalled();
+      expect(mockAgent.getVoice).toHaveBeenCalled();
+      expect(agentVoice.connect).toHaveBeenCalled();
       expect(session.getState()).toBe('connecting');
     });
 
     it('should throw if started when not idle', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
@@ -98,8 +114,8 @@ describe('TelephonySession', () => {
 
     it('should wire up telephony events', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
@@ -110,27 +126,27 @@ describe('TelephonySession', () => {
       expect(telephonyVoice.on).toHaveBeenCalledWith('error', expect.any(Function));
     });
 
-    it('should wire up AI events', async () => {
+    it('should wire up voice events', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
 
-      expect(aiVoice.on).toHaveBeenCalledWith('audio', expect.any(Function));
-      expect(aiVoice.on).toHaveBeenCalledWith('speaking.done', expect.any(Function));
-      expect(aiVoice.on).toHaveBeenCalledWith('writing', expect.any(Function));
-      expect(aiVoice.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(agentVoice.on).toHaveBeenCalledWith('audio', expect.any(Function));
+      expect(agentVoice.on).toHaveBeenCalledWith('speaking.done', expect.any(Function));
+      expect(agentVoice.on).toHaveBeenCalledWith('writing', expect.any(Function));
+      expect(agentVoice.on).toHaveBeenCalledWith('error', expect.any(Function));
     });
 
-    it('should emit error and reset state on AI connect failure', async () => {
+    it('should emit error and reset state on voice connect failure', async () => {
       const error = new Error('Connection failed');
-      (aiVoice.connect as ReturnType<typeof vi.fn>).mockRejectedValueOnce(error);
+      (agentVoice.connect as ReturnType<typeof vi.fn>).mockRejectedValueOnce(error);
 
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const errorHandler = vi.fn();
@@ -145,8 +161,8 @@ describe('TelephonySession', () => {
   describe('end', () => {
     it('should close providers and emit ended', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
@@ -156,7 +172,7 @@ describe('TelephonySession', () => {
 
       session.end('test-reason');
 
-      expect(aiVoice.close).toHaveBeenCalled();
+      expect(agentVoice.close).toHaveBeenCalled();
       expect(telephonyVoice.close).toHaveBeenCalled();
       expect(endedHandler).toHaveBeenCalledWith({ reason: 'test-reason' });
       expect(session.getState()).toBe('ended');
@@ -164,8 +180,8 @@ describe('TelephonySession', () => {
 
     it('should not emit ended twice', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
@@ -180,11 +196,22 @@ describe('TelephonySession', () => {
     });
   });
 
+  describe('getAgent', () => {
+    it('should return the agent', () => {
+      const session = new TelephonySession({
+        agent: mockAgent,
+        telephony: telephonyVoice,
+      });
+
+      expect(session.getAgent()).toBe(mockAgent);
+    });
+  });
+
   describe('events', () => {
     it('should emit ready when call starts', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const readyHandler = vi.fn();
@@ -199,8 +226,8 @@ describe('TelephonySession', () => {
 
     it('should emit ended when call ends', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const endedHandler = vi.fn();
@@ -214,8 +241,8 @@ describe('TelephonySession', () => {
 
     it('should emit user:speaking on audio with energy above threshold', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
         speechThreshold: 0.01,
       });
 
@@ -232,10 +259,10 @@ describe('TelephonySession', () => {
       expect(session.getSpeaker()).toBe('user');
     });
 
-    it('should emit agent:speaking when AI sends audio', async () => {
+    it('should emit agent:speaking when voice sends audio', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const speakingHandler = vi.fn();
@@ -243,16 +270,16 @@ describe('TelephonySession', () => {
 
       await session.start();
 
-      aiVoice.mockEmit('audio', new Int16Array([1000, -1000]));
+      agentVoice.mockEmit('audio', new Int16Array([1000, -1000]));
 
       expect(speakingHandler).toHaveBeenCalled();
       expect(session.getSpeaker()).toBe('agent');
     });
 
-    it('should emit agent:stopped when AI finishes speaking', async () => {
+    it('should emit agent:stopped when voice finishes speaking', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const stoppedHandler = vi.fn();
@@ -261,9 +288,9 @@ describe('TelephonySession', () => {
       await session.start();
 
       // First, agent starts speaking
-      aiVoice.mockEmit('audio', new Int16Array([1000, -1000]));
+      agentVoice.mockEmit('audio', new Int16Array([1000, -1000]));
       // Then, agent stops
-      aiVoice.mockEmit('speaking.done');
+      agentVoice.mockEmit('speaking.done');
 
       expect(stoppedHandler).toHaveBeenCalled();
       expect(session.getSpeaker()).toBe('none');
@@ -273,8 +300,8 @@ describe('TelephonySession', () => {
   describe('barge-in', () => {
     it('should emit barge-in when user speaks during agent speech', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
         bargeIn: true,
         speechThreshold: 0.01,
       });
@@ -285,7 +312,7 @@ describe('TelephonySession', () => {
       await session.start();
 
       // Agent starts speaking
-      aiVoice.mockEmit('audio', new Int16Array([1000, -1000]));
+      agentVoice.mockEmit('audio', new Int16Array([1000, -1000]));
 
       // User speaks over the agent (loud audio)
       const loudAudio = new Int16Array([5000, -5000, 5000, -5000]);
@@ -297,8 +324,8 @@ describe('TelephonySession', () => {
 
     it('should not emit barge-in when disabled', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
         bargeIn: false,
         speechThreshold: 0.01,
       });
@@ -309,7 +336,7 @@ describe('TelephonySession', () => {
       await session.start();
 
       // Agent starts speaking
-      aiVoice.mockEmit('audio', new Int16Array([1000, -1000]));
+      agentVoice.mockEmit('audio', new Int16Array([1000, -1000]));
 
       // User speaks over the agent
       const loudAudio = new Int16Array([5000, -5000, 5000, -5000]);
@@ -320,8 +347,8 @@ describe('TelephonySession', () => {
 
     it('should not emit barge-in for quiet audio', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
         bargeIn: true,
         speechThreshold: 0.1, // High threshold
       });
@@ -332,7 +359,7 @@ describe('TelephonySession', () => {
       await session.start();
 
       // Agent starts speaking
-      aiVoice.mockEmit('audio', new Int16Array([1000, -1000]));
+      agentVoice.mockEmit('audio', new Int16Array([1000, -1000]));
 
       // Very quiet audio (below threshold)
       const quietAudio = new Int16Array([10, -10, 10, -10]);
@@ -343,10 +370,10 @@ describe('TelephonySession', () => {
   });
 
   describe('audio routing', () => {
-    it('should send telephony audio to AI provider', async () => {
+    it('should send telephony audio to voice provider', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
@@ -354,13 +381,13 @@ describe('TelephonySession', () => {
       const pcmAudio = new Int16Array([1000, -1000, 500, -500]);
       telephonyVoice.mockEmit('audio-received', pcmAudio);
 
-      expect(aiVoice.send).toHaveBeenCalledWith(pcmAudio);
+      expect(agentVoice.send).toHaveBeenCalledWith(pcmAudio);
     });
 
     it('should handle audio received as object with audio property', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       await session.start();
@@ -368,15 +395,15 @@ describe('TelephonySession', () => {
       const pcmAudio = new Int16Array([1000, -1000, 500, -500]);
       telephonyVoice.mockEmit('audio-received', { audio: pcmAudio, streamSid: 'MZ123' });
 
-      expect(aiVoice.send).toHaveBeenCalledWith(pcmAudio);
+      expect(agentVoice.send).toHaveBeenCalledWith(pcmAudio);
     });
   });
 
   describe('event handler management', () => {
     it('should register and call event handlers', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const handler1 = vi.fn();
@@ -394,8 +421,8 @@ describe('TelephonySession', () => {
 
     it('should remove event handlers with off', async () => {
       const session = new TelephonySession({
+        agent: mockAgent,
         telephony: telephonyVoice,
-        ai: aiVoice,
       });
 
       const handler = vi.fn();

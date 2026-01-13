@@ -1,23 +1,35 @@
 /**
- * TelephonySession - Orchestrates telephony and AI voice providers
+ * TelephonySession - Orchestrates telephony providers with voice-enabled agents
  *
  * Handles:
- * - Audio routing between telephony (phone) and AI providers
+ * - Audio routing between telephony (phone) and agent's voice provider
  * - Turn-taking detection (when user finishes speaking)
  * - Barge-in (interrupting AI when user speaks)
- * - Call ↔ agent mapping
  *
  * @example
  * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { TelephonySession } from '@mastra/core/voice';
+ * import { CompositeVoice } from '@mastra/core/voice';
+ * import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+ * import { TwilioVoice } from '@mastra/voice-twilio';
+ *
+ * const agent = new Agent({
+ *   name: 'Phone Agent',
+ *   model: openai('gpt-4o'),
+ *   instructions: 'You are a helpful phone assistant.',
+ *   voice: new CompositeVoice({
+ *     realtime: new OpenAIRealtimeVoice(),
+ *   }),
+ * });
+ *
  * const session = new TelephonySession({
- *   telephony: twilioVoice,
- *   ai: openaiRealtimeVoice,
- *   agent: myAgent,
- *   bargeIn: true,
+ *   agent,
+ *   telephony: new TwilioVoice(),
  * });
  *
  * session.on('ready', () => console.log('Call connected'));
- * session.start();
+ * await session.start();
  * ```
  */
 
@@ -26,6 +38,7 @@ import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { RegisteredLogger } from '../../logger';
 
+import type { CompositeVoice } from '../composite-voice';
 import type { MastraVoice } from '../voice';
 
 import { mulawToPcm, pcmToMulaw, type AudioCodec } from './audio-codecs';
@@ -35,22 +48,16 @@ import { mulawToPcm, pcmToMulaw, type AudioCodec } from './audio-codecs';
  */
 export interface TelephonySessionConfig {
   /**
+   * The voice-enabled agent to use for the call.
+   * The agent must have a voice configured with a realtime provider.
+   */
+  agent: Agent<string, ToolsInput>;
+
+  /**
    * Telephony voice provider (e.g., TwilioVoice)
    * Handles phone call connection and audio transport
    */
   telephony: MastraVoice;
-
-  /**
-   * AI voice provider (e.g., OpenAIRealtimeVoice)
-   * Handles speech-to-speech AI processing
-   */
-  ai: MastraVoice;
-
-  /**
-   * Optional Mastra agent for context
-   * Tools and instructions will be added to the AI voice
-   */
-  agent?: Agent<string, ToolsInput>;
 
   /**
    * Audio codec used by telephony provider
@@ -111,12 +118,15 @@ export interface TelephonySessionEvents {
 type EventCallback = (...args: unknown[]) => void;
 
 /**
- * Orchestrates telephony and AI voice providers for phone calls
+ * Orchestrates telephony providers with voice-enabled agents for phone calls.
+ *
+ * The session connects a telephony provider (like Twilio) with the agent's
+ * voice provider, handling audio routing, format conversion, and turn-taking.
  */
 export class TelephonySession extends MastraBase {
+  private agent: Agent<string, ToolsInput>;
   private telephony: MastraVoice;
-  private ai: MastraVoice;
-  private agent?: Agent<string, ToolsInput>;
+  private voice?: CompositeVoice;
   private codec: AudioCodec;
   private bargeInEnabled: boolean;
   private speechThreshold: number;
@@ -132,12 +142,11 @@ export class TelephonySession extends MastraBase {
   constructor(config: TelephonySessionConfig) {
     super({
       component: RegisteredLogger.VOICE,
-      name: config.name,
+      name: config.name ?? config.agent.name,
     });
 
-    this.telephony = config.telephony;
-    this.ai = config.ai;
     this.agent = config.agent;
+    this.telephony = config.telephony;
     this.codec = config.codec || 'mulaw';
     this.bargeInEnabled = config.bargeIn ?? true;
     this.speechThreshold = config.speechThreshold ?? 0.01;
@@ -146,9 +155,9 @@ export class TelephonySession extends MastraBase {
   /**
    * Start the telephony session
    *
-   * This wires up the telephony and AI providers:
-   * - Phone audio → AI for processing
-   * - AI audio → Phone for playback
+   * This wires up the telephony provider and agent's voice:
+   * - Phone audio → Agent's voice for processing
+   * - Agent's voice audio → Phone for playback
    * - Handles barge-in detection
    */
   async start(): Promise<void> {
@@ -164,26 +173,31 @@ export class TelephonySession extends MastraBase {
     this.state = 'connecting';
     this.logger.debug('Starting telephony session...');
 
-    // Add agent tools and instructions to AI voice
-    if (this.agent) {
-      await this.setupAgentContext();
+    // Get the voice from the agent (already has tools and instructions configured)
+    this.voice = (await this.agent.getVoice()) as CompositeVoice;
+
+    if (!this.voice) {
+      throw new MastraError({
+        id: 'TELEPHONY_SESSION_NO_VOICE',
+        text: 'Agent does not have a voice configured. Set agent.voice with a CompositeVoice that has a realtime provider.',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
 
-    // Wire up telephony → AI (phone audio to AI)
-    this.setupTelephonyToAI();
+    // Wire up telephony → voice (phone audio to AI)
+    this.setupTelephonyToVoice();
 
-    // Wire up AI → telephony (AI audio to phone)
-    this.setupAIToTelephony();
+    // Wire up voice → telephony (AI audio to phone)
+    this.setupVoiceToTelephony();
 
     // Handle call lifecycle
     this.setupCallLifecycle();
 
-    // Connect AI provider
+    // Connect the voice provider
     try {
-      if (this.ai.connect) {
-        await this.ai.connect();
-      }
-      this.logger.debug('AI provider connected');
+      await this.voice.connect();
+      this.logger.debug('Voice provider connected');
     } catch (error) {
       this.emit('error', error as Error);
       this.state = 'idle';
@@ -201,7 +215,7 @@ export class TelephonySession extends MastraBase {
     this.state = 'ended';
 
     // Close providers
-    if (this.ai.close) this.ai.close();
+    if (this.voice?.close) this.voice.close();
     if (this.telephony.close) this.telephony.close();
 
     this.emit('ended', { reason });
@@ -219,6 +233,13 @@ export class TelephonySession extends MastraBase {
    */
   getSpeaker(): Speaker {
     return this.speaker;
+  }
+
+  /**
+   * Get the agent being used
+   */
+  getAgent(): Agent<string, ToolsInput> {
+    return this.agent;
   }
 
   /**
@@ -249,41 +270,18 @@ export class TelephonySession extends MastraBase {
         try {
           handler(data);
         } catch (error) {
-          this.logger.error(`Error in ${event} handler:`, { error });
+          this.logger.error(`Error in ${event} handler`, { error });
         }
       });
     }
   }
 
   /**
-   * Add agent tools and instructions to the AI voice provider
+   * Wire telephony audio to agent's voice provider
    */
-  private async setupAgentContext(): Promise<void> {
-    if (!this.agent) return;
+  private setupTelephonyToVoice(): void {
+    if (!this.voice) return;
 
-    // Add tools
-    if (this.ai.addTools) {
-      const tools = await this.agent.listTools();
-      if (tools && Object.keys(tools).length > 0) {
-        this.ai.addTools(tools);
-        this.logger.debug(`Added ${Object.keys(tools).length} tools from agent`);
-      }
-    }
-
-    // Add instructions
-    if (this.ai.addInstructions) {
-      const instructions = await this.agent.getInstructions();
-      if (typeof instructions === 'string') {
-        this.ai.addInstructions(instructions);
-        this.logger.debug('Added agent instructions');
-      }
-    }
-  }
-
-  /**
-   * Wire telephony audio to AI provider
-   */
-  private setupTelephonyToAI(): void {
     // Listen for audio from phone
     this.telephony.on('audio-received', (data: unknown) => {
       // Handle different data formats from providers
@@ -316,8 +314,8 @@ export class TelephonySession extends MastraBase {
           this.emit('barge-in');
 
           // Interrupt AI (if supported)
-          if (this.ai.answer) {
-            void this.ai.answer({ interrupt: true });
+          if (this.voice?.answer) {
+            void this.voice.answer({ interrupt: true });
           }
         }
       }
@@ -331,19 +329,21 @@ export class TelephonySession extends MastraBase {
         }
       }
 
-      // Send audio to AI provider
-      if (this.ai.send) {
-        void this.ai.send(pcmAudio);
+      // Send audio to voice provider
+      if (this.voice?.send) {
+        void this.voice.send(pcmAudio);
       }
     });
   }
 
   /**
-   * Wire AI audio to telephony provider
+   * Wire agent's voice audio to telephony provider
    */
-  private setupAIToTelephony(): void {
-    // Listen for audio from AI
-    this.ai.on('audio', (data: unknown) => {
+  private setupVoiceToTelephony(): void {
+    if (!this.voice) return;
+
+    // Listen for audio from voice
+    this.voice.on('audio', (data: unknown) => {
       this.agentSpeaking = true;
 
       if (this.speaker !== 'agent') {
@@ -378,8 +378,8 @@ export class TelephonySession extends MastraBase {
       this.sendToTelephony(pcmAudio);
     });
 
-    // Track when AI stops speaking
-    this.ai.on('speaking.done', () => {
+    // Track when agent stops speaking
+    this.voice.on('speaking.done', () => {
       this.agentSpeaking = false;
       if (this.speaker === 'agent') {
         this.speaker = 'none';
@@ -388,7 +388,7 @@ export class TelephonySession extends MastraBase {
     });
 
     // Handle transcription events
-    this.ai.on('writing', (data: unknown) => {
+    this.voice.on('writing', (data: unknown) => {
       if (typeof data === 'object' && data !== null && 'role' in data) {
         const writeData = data as { text: string; role: string };
         if (writeData.role === 'user' && writeData.text === '\n') {
@@ -423,9 +423,11 @@ export class TelephonySession extends MastraBase {
       this.emit('error', error as Error);
     });
 
-    this.ai.on('error', (error: unknown) => {
-      this.emit('error', error as Error);
-    });
+    if (this.voice) {
+      this.voice.on('error', (error: unknown) => {
+        this.emit('error', error as Error);
+      });
+    }
   }
 
   /**
@@ -449,15 +451,13 @@ export class TelephonySession extends MastraBase {
     // Send via telephony provider
     // Different providers have different methods
     const tel = this.telephony as unknown as {
-      sendAudio?: (streamSid: string, audio: Int16Array) => void;
+      sendAudio?: (audio: Int16Array) => void;
       send?: (audio: Int16Array | Buffer) => void;
     };
 
-    if (tel.sendAudio && this.streamSid) {
-      // TwilioVoice style
-      tel.sendAudio(this.streamSid, pcm);
+    if (tel.sendAudio) {
+      tel.sendAudio(pcm);
     } else if (tel.send) {
-      // Generic style
       void tel.send(encoded as unknown as Int16Array);
     }
   }
