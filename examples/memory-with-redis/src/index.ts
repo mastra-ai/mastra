@@ -47,8 +47,6 @@ async function main() {
 
   await logRes(
     await agent.stream(log('What did we cook before I went to my friends house?'), {
-      threadId,
-      resourceId,
       memory: {
         thread: threadId,
         resource: resourceId,
