@@ -987,7 +987,7 @@ describe('Named Vectors Support', () => {
 
     class ExtendedQdrantVector extends QdrantVector {
       // This compiles because client is protected
-      async customQuery(indexName: string, queryVector: number[], namedVector: string) {
+      async customQuery(_indexName: string, _queryVector: number[], _namedVector: string) {
         // Access to this.client works because it's protected
         const client = this.client;
         expect(client).toBeDefined();
