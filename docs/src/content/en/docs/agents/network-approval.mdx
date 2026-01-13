@@ -115,17 +115,17 @@ const confirmationTool = createTool({
   resumeSchema: z.object({
     confirmed: z.boolean()
   }),
-  execute: async ({ action }, { agent } = {}) => {
-    const { resumeData, suspend } = agent ?? {};
+  execute: async (inputData, context) => {
+    const { resumeData, suspend } = context?.agent ?? {};
 
     if (!resumeData?.confirmed) {
       return suspend?.({
-        message: `Please confirm: ${action}`,
-        action
+        message: `Please confirm: ${inputData.action}`,
+        action: inputData.action
       });
     }
 
-    return { confirmed: true, action };
+    return { confirmed: true, action: inputData.action };
   }
 });
 ```
