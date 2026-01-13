@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Diff } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Button } from '@/ds/components/Button';
 import { useAgentVersions, useCompareAgentVersions } from '../../hooks/use-agent-versions';
+import { JsonDiffModal } from './json-diff-modal';
 
 interface VersionCompareDialogProps {
   agentId: string;
@@ -47,6 +49,16 @@ function formatValue(value: unknown): string {
 /**
  * Determines the change type for a diff entry.
  */
+/**
+ * Checks if a value is a complex type (object or array) that would benefit from a JSON diff view.
+ */
+function isComplexValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  return typeof value === 'object';
+}
+
 function getChangeType(diff: VersionDiff): 'added' | 'removed' | 'modified' {
   const prevEmpty = diff.previousValue === null || diff.previousValue === undefined;
   const currEmpty = diff.currentValue === null || diff.currentValue === undefined;
@@ -64,27 +76,39 @@ function getChangeType(diff: VersionDiff): 'added' | 'removed' | 'modified' {
  * Single diff row showing the field name and before/after values.
  */
 function DiffRow({ diff }: { diff: VersionDiff }) {
+  const [isJsonDiffOpen, setIsJsonDiffOpen] = useState(false);
   const changeType = getChangeType(diff);
   const previousStr = formatValue(diff.previousValue);
   const currentStr = formatValue(diff.currentValue);
   const isLongContent =
     previousStr.length > 100 || currentStr.length > 100 || previousStr.includes('\n') || currentStr.includes('\n');
 
+  // Show JSON diff button if either value is a complex object/array
+  const showJsonDiffButton = isComplexValue(diff.previousValue) || isComplexValue(diff.currentValue);
+
   return (
     <div className="p-4 border-b border-border1 last:border-b-0">
       {/* Field name and change type badge */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className="font-medium text-sm">{diff.field}</span>
-        <span
-          className={cn(
-            'text-xs px-1.5 py-0.5 rounded font-medium',
-            changeType === 'added' && 'bg-green-500/20 text-green-400',
-            changeType === 'removed' && 'bg-red-500/20 text-red-400',
-            changeType === 'modified' && 'bg-yellow-500/20 text-yellow-400',
-          )}
-        >
-          {changeType}
-        </span>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm">{diff.field}</span>
+          <span
+            className={cn(
+              'text-xs px-1.5 py-0.5 rounded font-medium',
+              changeType === 'added' && 'bg-green-500/20 text-green-400',
+              changeType === 'removed' && 'bg-red-500/20 text-red-400',
+              changeType === 'modified' && 'bg-yellow-500/20 text-yellow-400',
+            )}
+          >
+            {changeType}
+          </span>
+        </div>
+        {showJsonDiffButton && (
+          <Button variant="ghost" size="md" onClick={() => setIsJsonDiffOpen(true)} title="View JSON Diff">
+            <Diff className="w-4 h-4 mr-1.5" />
+            View Diff
+          </Button>
+        )}
       </div>
 
       {/* Side-by-side diff view */}
@@ -118,6 +142,17 @@ function DiffRow({ diff }: { diff: VersionDiff }) {
           </pre>
         </div>
       </div>
+
+      {/* JSON Diff Modal */}
+      {showJsonDiffButton && (
+        <JsonDiffModal
+          open={isJsonDiffOpen}
+          onOpenChange={setIsJsonDiffOpen}
+          fieldName={diff.field}
+          previousValue={diff.previousValue}
+          currentValue={diff.currentValue}
+        />
+      )}
     </div>
   );
 }

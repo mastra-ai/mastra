@@ -9,6 +9,7 @@ import { Check, GitCompare, RotateCcw, Trash2 } from 'lucide-react';
 import type { AgentVersionResponse } from '@mastra/client-js';
 import { useAgentVersions, useActivateAgentVersion, useDeleteAgentVersion } from '../../hooks/use-agent-versions';
 import { SaveVersionDialog } from './save-version-dialog';
+import { VersionCompareDialog } from './version-compare-dialog';
 import { toast } from '@/lib/toast';
 
 interface AgentVersionsListProps {
@@ -66,6 +67,7 @@ function VersionListItem({ version, isActive, onActivate, onDelete }: VersionLis
 
 export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsListProps) {
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [isCompareDialogOpen, setIsCompareDialogOpen] = useState(false);
   const [page, setPage] = useState(0);
 
   const { data, isLoading } = useAgentVersions({ agentId, params: { page, perPage: 10 } });
@@ -115,9 +117,16 @@ export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsLis
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-border1 flex items-center justify-between">
         <h3 className="text-sm font-medium text-icon6">Versions ({total})</h3>
-        <Button size="md" onClick={() => setIsSaveDialogOpen(true)}>
-          Save Version
-        </Button>
+        <div className="flex items-center gap-2">
+          {versions.length >= 2 && (
+            <Button variant="ghost" size="md" onClick={() => setIsCompareDialogOpen(true)} title="Compare Versions">
+              <GitCompare className="w-4 h-4" />
+            </Button>
+          )}
+          <Button size="md" onClick={() => setIsSaveDialogOpen(true)}>
+            Save Version
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -161,6 +170,7 @@ export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsLis
       )}
 
       <SaveVersionDialog agentId={agentId} open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen} />
+      <VersionCompareDialog agentId={agentId} open={isCompareDialogOpen} onOpenChange={setIsCompareDialogOpen} />
     </div>
   );
 }
