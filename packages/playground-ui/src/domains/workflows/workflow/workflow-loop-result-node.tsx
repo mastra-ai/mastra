@@ -25,7 +25,7 @@ export function WorkflowLoopResultNode({ data }: NodeProps<LoopResultNode>) {
       <div className="p-2">
         <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2">
           {result ? <CircleCheck className="text-current w-4 h-4" /> : <CircleX className="text-current w-4 h-4" />}
-          <Txt variant="ui-xs" weight="medium" className="text-mastra-el-6 capitalize">
+          <Txt variant="ui-xs" className="text-mastra-el-6 capitalize">
             {String(result)}
           </Txt>
         </div>
