@@ -66,7 +66,7 @@ function VersionListItem({ version, isActive, onActivate, onDelete }: VersionLis
 
 export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsListProps) {
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
 
   const { data, isLoading } = useAgentVersions({ agentId, params: { page, perPage: 10 } });
   const { mutate: activateVersion, isPending: isActivating } = useActivateAgentVersion({ agentId });
@@ -143,17 +143,17 @@ export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsLis
 
       {totalPages > 1 && (
         <div className="p-4 border-t border-border1 flex items-center justify-between">
-          <Button variant="ghost" size="md" onClick={() => setPage(p => p - 1)} disabled={page === 1 || isDeleting}>
+          <Button variant="ghost" size="md" onClick={() => setPage(p => p - 1)} disabled={page === 0 || isDeleting}>
             Previous
           </Button>
           <span className="text-xs text-icon3">
-            Page {page} of {totalPages}
+            Page {page + 1} of {totalPages}
           </span>
           <Button
             variant="ghost"
             size="md"
             onClick={() => setPage(p => p + 1)}
-            disabled={page === totalPages || isDeleting}
+            disabled={page >= totalPages - 1 || isDeleting}
           >
             Next
           </Button>
