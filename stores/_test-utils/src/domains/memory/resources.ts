@@ -218,10 +218,12 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       };
 
       const savedResource = await memoryStorage.saveResource({ resource });
-      expect(!!savedResource.metadata).toBe(false);
+      // With DEFAULT '{}' and serializeMetadata, undefined becomes {}
+      expect(savedResource.metadata).toEqual({});
 
       const retrievedResource = await memoryStorage.getResourceById({ resourceId: resource.id });
-      expect(!!retrievedResource?.metadata).toBe(false);
+      // parseMetadata ensures we always get {} for null/undefined/empty
+      expect(retrievedResource?.metadata).toEqual({});
     });
 
     it('should handle complex metadata structures', async () => {

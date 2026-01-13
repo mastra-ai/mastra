@@ -2,10 +2,16 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed DEFAULT constraint for thread metadata column when using JSONB type.
+Fixed metadata handling across all tables to prevent empty string crashes and ensure consistent behavior.
 
-**What changed:** The DEFAULT '{}' constraint is now properly applied to the metadata column for both 'text' and 'jsonb' column types. Previously, the constraint was only applied when the schema specified 'text', causing new ClickHouse installations with 'jsonb' metadata columns to lack database-level protection against empty strings.
+**What changed:**
+- Applied DEFAULT '{}' constraint to metadata columns for both 'text' and 'jsonb' types across all tables (threads, resources, scorers, spans, agents)
+- Updated resources to use `serializeMetadata()` and `parseMetadata()` helper functions for safe JSON handling
+- Previously, only threads had this protection, while resources used unsafe `JSON.parse()` that could crash on empty strings
 
-**Impact:** While the application-level `parseMetadata()` function already handles empty strings gracefully (added in beta.0), this fix provides defense-in-depth by ensuring the database itself defaults to '{}' for new table installations. Existing tables and older versions are unaffected.
+**Impact:**
+- Provides defense-in-depth with both database-level (DEFAULT constraint) and application-level (helper functions) protection
+- All metadata columns now consistently handle null/undefined/empty strings by converting to `{}`
+- Prevents potential crashes across all storage domains, not just threads
 
 Related to #11882
