@@ -680,9 +680,10 @@ export class AgentsPG extends AgentsStorage {
 
       // Get paginated results
       const fieldColumn = field === 'createdAt' ? '"createdAt"' : '"versionNumber"';
+      const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#db.client.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY ${fieldColumn} ${direction} LIMIT $2 OFFSET $3`,
-        [agentId, perPage, offset],
+        [agentId, limitValue, offset],
       );
 
       const versions = (dataResult || []).map(row => this.parseVersionRow(row));
@@ -692,7 +693,7 @@ export class AgentsPG extends AgentsStorage {
         total,
         page,
         perPage: perPageForResponse === false ? total : perPageForResponse,
-        hasMore: offset + perPage < total,
+        hasMore: perPageInput === false ? false : offset + limitValue < total,
       };
     } catch (error) {
       throw new MastraError(
