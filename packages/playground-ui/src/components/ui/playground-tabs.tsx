@@ -86,11 +86,16 @@ export const Tab = ({ children, value, onClick, onClose }: TabProps) => {
 export interface TabContentProps {
   children: React.ReactNode;
   value: string;
+  forceMount?: true;
 }
 
-export const TabContent = ({ children, value }: TabContentProps) => {
+export const TabContent = ({ children, value, forceMount }: TabContentProps) => {
   return (
-    <TabsContent value={value} className="h-full overflow-auto flex flex-col">
+    <TabsContent
+      value={value}
+      className="h-full overflow-auto flex flex-col data-[state=inactive]:hidden"
+      forceMount={forceMount}
+    >
       {children}
     </TabsContent>
   );

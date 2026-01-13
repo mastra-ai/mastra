@@ -8,8 +8,38 @@ import { z, ZodType } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import { ToolExecutor } from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from '@/lib/toast';
+
+// Module-level caches to ensure schema stability across re-renders
+const inputSchemaCache = new Map<string, ZodType>();
+const requestContextSchemaCache = new Map<string, ZodType>();
+
+function getOrCreateInputSchema(toolId: string, serializedSchema: string): ZodType {
+  const cached = inputSchemaCache.get(toolId);
+  if (cached) {
+    console.log('[InputSchema] Cache HIT for toolId:', toolId);
+    return cached;
+  }
+
+  console.log('[InputSchema] Cache MISS for toolId:', toolId);
+  const parsed = resolveSerializedZodOutput(jsonSchemaToZod(parse(serializedSchema)));
+  inputSchemaCache.set(toolId, parsed);
+  return parsed;
+}
+
+function getOrCreateRequestContextSchema(toolId: string, serializedSchema: string): ZodType {
+  const cached = requestContextSchemaCache.get(toolId);
+  if (cached) {
+    console.log('[RequestContextSchema] Cache HIT for toolId:', toolId);
+    return cached;
+  }
+
+  console.log('[RequestContextSchema] Cache MISS for toolId:', toolId);
+  const parsed = resolveSerializedZodOutput(jsonSchemaToZod(parse(serializedSchema)));
+  requestContextSchemaCache.set(toolId, parsed);
+  return parsed;
+}
 
 export interface ToolPanelProps {
   toolId: string;
@@ -17,7 +47,7 @@ export interface ToolPanelProps {
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const { data: agents = {} } = useAgents();
-  const [requestContextFormData, setRequestContextFormData] = useState<Record<string, any>>({});
+  const requestContextFormDataRef = useRef<Record<string, any>>({});
 
   // Check if tool exists in any agent's tools
   const agentTool = useMemo(() => {
@@ -47,41 +77,64 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  // Parse requestContextSchema if it exists
+  // Stringify schema to ensure stable dependency comparison
+  const requestContextSchemaStr = tool?.requestContextSchema ? JSON.stringify(tool.requestContextSchema) : null;
+
+  // Parse requestContextSchema if it exists - use cache for stability
   const zodRequestContextSchema: ZodType | undefined = useMemo(() => {
-    if (!tool?.requestContextSchema) return undefined;
+    if (!requestContextSchemaStr || !tool?.id) return undefined;
     try {
-      return resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.requestContextSchema)));
+      return getOrCreateRequestContextSchema(tool.id, tool.requestContextSchema);
     } catch (e) {
       console.error('Error parsing requestContextSchema:', e);
       return undefined;
     }
-  }, [tool?.requestContextSchema]);
+  }, [tool?.id, requestContextSchemaStr]);
 
-  const handleExecuteTool = async (data: any) => {
-    if (!tool) return;
+  const handleExecuteTool = useCallback(
+    async (data: any) => {
+      if (!tool) return;
 
-    // Merge playground requestContext with form-based requestContext
-    // Form values take precedence
-    const mergedRequestContext = {
-      ...playgroundRequestContext,
-      ...requestContextFormData,
-    };
+      // Merge playground requestContext with form-based requestContext
+      // Form values take precedence
+      const mergedRequestContext = {
+        ...playgroundRequestContext,
+        ...requestContextFormDataRef.current,
+      };
 
-    return executeTool({
-      toolId: tool.id,
-      input: data,
-      requestContext: mergedRequestContext,
-    });
-  };
+      return executeTool({
+        toolId: tool.id,
+        input: data,
+        requestContext: mergedRequestContext,
+      });
+    },
+    [tool, playgroundRequestContext, executeTool],
+  );
 
-  const zodInputSchema = tool?.inputSchema
-    ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
-    : z.object({});
+  const handleRequestContextChange = useCallback((data: Record<string, any>) => {
+    requestContextFormDataRef.current = data;
+  }, []);
 
-  if (isLoading || error) return null;
+  // Stringify schema to ensure stable dependency comparison
+  const inputSchemaStr = tool?.inputSchema ? JSON.stringify(tool.inputSchema) : null;
 
-  if (!tool)
+  // Use cache for input schema stability as well
+  const zodInputSchema = useMemo(() => {
+    if (!inputSchemaStr || !tool?.id) return z.object({});
+    return getOrCreateInputSchema(tool.id, tool.inputSchema);
+  }, [tool?.id, inputSchemaStr]);
+
+  // Store tool in a ref to prevent unmounting during refetches
+  const toolRef = useRef(tool);
+  if (tool) {
+    toolRef.current = tool;
+  }
+  const stableTool = toolRef.current;
+
+  // Show loading/error only on initial load, not during refetches
+  if (!stableTool) {
+    if (isLoading) return null;
+    if (error) return null;
     return (
       <div className="py-12 text-center px-6">
         <Txt variant="header-md" className="text-icon3">
@@ -89,6 +142,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
         </Txt>
       </div>
     );
+  }
 
   return (
     <ToolExecutor
@@ -97,10 +151,10 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       zodInputSchema={zodInputSchema}
       zodRequestContextSchema={zodRequestContextSchema}
       initialRequestContextValues={playgroundRequestContext}
-      onRequestContextChange={setRequestContextFormData}
+      onRequestContextChange={handleRequestContextChange}
       handleExecuteTool={handleExecuteTool}
-      toolDescription={tool.description}
-      toolId={tool.id}
+      toolDescription={stableTool.description}
+      toolId={stableTool.id}
     />
   );
 };

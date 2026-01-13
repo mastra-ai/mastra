@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useForm, FormProvider, DefaultValues } from 'react-hook-form';
 import { parseSchema, getDefaultValues } from '@autoform/core';
 import { AutoFormProps, AutoFormProvider } from '@autoform/react';
@@ -17,7 +17,8 @@ export function CustomAutoForm<T extends Record<string, any>>({
   onFormInit = () => {},
   formProps = {},
 }: AutoFormProps<T>) {
-  const parsedSchema = parseSchema(schema);
+  // Memoize parsedSchema to prevent field remounts on re-renders
+  const parsedSchema = useMemo(() => parseSchema(schema), [schema]);
   const methods = useForm<T>({
     defaultValues: {
       ...(getDefaultValues(schema) as Partial<T>),

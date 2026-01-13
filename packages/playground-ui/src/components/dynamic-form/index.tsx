@@ -48,7 +48,12 @@ function DynamicFormInternal<T extends z.ZodSchema>({
   hideSubmitButton,
   children,
 }: DynamicFormProps<T> & { schema: NonNullable<DynamicFormProps<T>['schema']> }) {
-  const isNotZodObject = !(schema instanceof ZodObject);
+  // Store the initial schema in a ref to prevent remounting when parent re-renders
+  // with a new schema reference that has the same structure
+  const schemaRef = useRef(schema);
+  const stableSchema = schemaRef.current;
+
+  const isNotZodObject = !(stableSchema instanceof ZodObject);
 
   // Use refs to store callbacks so they don't cause re-renders
   const onChangeRef = useRef(onChange);
@@ -57,6 +62,7 @@ function DynamicFormInternal<T extends z.ZodSchema>({
   onSubmitRef.current = onSubmit;
 
   // Memoize the schema provider to prevent form remounting
+  // Uses stableSchema from ref to maintain consistent reference
   const schemaProvider = useMemo(() => {
     const normalizedSchema = (s: z.ZodSchema) => {
       if (isEmptyZodObject(s)) {
@@ -70,8 +76,9 @@ function DynamicFormInternal<T extends z.ZodSchema>({
       }
       return s;
     };
-    return new CustomZodProvider(normalizedSchema(schema) as any);
-  }, [schema]);
+    return new CustomZodProvider(normalizedSchema(stableSchema) as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Memoize onFormInit to prevent useEffect re-runs in CustomAutoForm
   const onFormInit = useCallback(

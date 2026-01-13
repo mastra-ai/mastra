@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useCallback, memo, useMemo } from 'react';
 import { DynamicForm } from '@/components/dynamic-form';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ZodType } from 'zod';
@@ -14,6 +14,29 @@ import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { CopyIcon } from 'lucide-react';
 
+// Isolated request context form component to prevent remounting
+interface RequestContextFormProps {
+  schema: ZodType;
+  defaultValues?: Record<string, any>;
+  onChange?: (values: unknown) => void;
+}
+
+const RequestContextForm = memo(function RequestContextForm({
+  schema,
+  defaultValues,
+  onChange,
+}: RequestContextFormProps) {
+  return (
+    <DynamicForm
+      schema={schema}
+      defaultValues={defaultValues}
+      onChange={onChange}
+      hideSubmitButton={true}
+      className="h-auto"
+    />
+  );
+});
+
 interface ToolExecutorProps {
   isExecutingTool: boolean;
   zodInputSchema: ZodType;
@@ -28,7 +51,7 @@ interface ToolExecutorProps {
   toolType?: MCPToolType;
 }
 
-const ToolExecutor = ({
+const ToolExecutorComponent = ({
   isExecutingTool,
   zodInputSchema,
   zodRequestContextSchema,
@@ -43,14 +66,32 @@ const ToolExecutor = ({
 }: ToolExecutorProps) => {
   const theme = useCodemirrorTheme();
   const code = JSON.stringify(result ?? {}, null, 2);
-  const hasRequestContextSchema = Boolean(zodRequestContextSchema);
+
+  // Store the request context schema in a ref to prevent unmounting when it momentarily becomes undefined
+  const requestContextSchemaRef = useRef<ZodType | undefined>(zodRequestContextSchema);
+  // Only update the ref if we receive a valid schema (don't clear it)
+  if (zodRequestContextSchema) {
+    requestContextSchemaRef.current = zodRequestContextSchema;
+  }
+  const stableRequestContextSchema = requestContextSchemaRef.current;
+  const hasRequestContextSchema = Boolean(stableRequestContextSchema);
 
   // Use a ref to track the current request context value for the copy button
   const requestContextValueRef = useRef<Record<string, unknown>>(initialRequestContextValues || {});
 
-  const handleCopyRequestContext = () => {
+  // Store onRequestContextChange in a ref to avoid creating new callbacks
+  const onRequestContextChangeRef = useRef(onRequestContextChange);
+  onRequestContextChangeRef.current = onRequestContextChange;
+
+  const handleCopyRequestContext = useCallback(() => {
     navigator.clipboard.writeText(JSON.stringify(requestContextValueRef.current, null, 2));
-  };
+  }, []);
+
+  // Memoize the onChange handler to prevent DynamicForm re-renders
+  const handleRequestContextFormChange = useCallback((values: unknown) => {
+    requestContextValueRef.current = values as Record<string, unknown>;
+    onRequestContextChangeRef.current?.(values as Record<string, any>);
+  }, []);
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
@@ -77,7 +118,7 @@ const ToolExecutor = ({
             </TabContent>
 
             {hasRequestContextSchema && (
-              <TabContent value="request-context">
+              <TabContent value="request-context" forceMount>
                 <div className="p-5">
                   <div className="flex justify-between items-center mb-4">
                     <Txt as="p" variant="ui-sm" className="text-icon3">
@@ -89,15 +130,10 @@ const ToolExecutor = ({
                       </Icon>
                     </Button>
                   </div>
-                  <DynamicForm
-                    schema={zodRequestContextSchema!}
+                  <RequestContextForm
+                    schema={stableRequestContextSchema!}
                     defaultValues={initialRequestContextValues}
-                    onChange={(values: unknown) => {
-                      requestContextValueRef.current = values as Record<string, unknown>;
-                      onRequestContextChange?.(values as Record<string, any>);
-                    }}
-                    hideSubmitButton={true}
-                    className="h-auto"
+                    onChange={handleRequestContextFormChange}
                   />
                 </div>
               </TabContent>
@@ -114,5 +150,7 @@ const ToolExecutor = ({
     </MainContentContent>
   );
 };
+
+const ToolExecutor = memo(ToolExecutorComponent);
 
 export { ToolExecutor };
