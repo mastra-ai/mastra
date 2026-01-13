@@ -128,7 +128,8 @@ export class ClickhouseDB extends MastraBase {
           }
           const constraints = [];
           // Add DEFAULT '{}' for metadata columns to prevent empty string issues
-          if (name === 'metadata' && def.type === 'text' && isNullable) {
+          // Support both 'text' and 'jsonb' types for backwards compatibility
+          if (name === 'metadata' && (def.type === 'text' || def.type === 'jsonb') && isNullable) {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
