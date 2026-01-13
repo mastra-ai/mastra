@@ -93,7 +93,6 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     id: 'update-working-memory',
     description,
     inputSchema,
-    // @ts-ignore TODO fix type inference
     execute: async (inputData, context) => {
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;

@@ -2126,7 +2126,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
-          // @ts-ignore
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });

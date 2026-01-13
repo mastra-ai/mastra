@@ -96,7 +96,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema as any),
+        zodToJsonSchema(workflow.inputSchema),
       )}`;
     })
     .join('\n');

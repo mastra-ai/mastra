@@ -824,7 +824,6 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        // @ts-ignore TODO fix type inference
         execute: async (inputData, context) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
