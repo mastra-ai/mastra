@@ -45,6 +45,12 @@ const storageRest = new CloudflareStore({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
+    {
       name: "bindings",
       type: "Record<string, KVNamespace>",
       description: "Cloudflare Workers KV bindings (for Workers runtime)",

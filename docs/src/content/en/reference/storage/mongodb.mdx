@@ -36,6 +36,12 @@ const storage = new MongoDBStore({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
+    {
       name: "uri",
       type: "string",
       description:
@@ -78,12 +84,14 @@ import { MongoDBStore } from "@mastra/mongodb";
 
 // Basic connection without custom options
 const store1 = new MongoDBStore({
+  id: 'mongodb-storage-01',
   uri: "mongodb+srv://user:password@cluster.mongodb.net",
   dbName: "mastra_storage",
 });
 
 // Using connection string with options
 const store2 = new MongoDBStore({
+  id: 'mongodb-storage-02',
   uri: "mongodb+srv://user:password@cluster.mongodb.net",
   dbName: "mastra_storage",
   options: {
@@ -118,6 +126,7 @@ import { Mastra } from "@mastra/core";
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
+  id: 'mongodb-storage',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });

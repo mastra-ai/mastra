@@ -190,7 +190,8 @@ const result = await workflow.runById(runId);
 // Or with options for performance optimization:
 const result = await workflow.runById(runId, {
   fields: ['status', 'result'],  // Only fetch specific fields
-  withNestedWorkflows: false,     // Skip expensive nested workflow data
+  withNestedWorkflows: false,    // Skip expensive nested workflow data
+  requestContext: { userId: 'user-123' }, // Optional request context
 });
 ```
 

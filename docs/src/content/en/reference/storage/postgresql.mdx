@@ -33,6 +33,13 @@ const storage = new PostgresStore({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description:
+        "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
+    {
       name: "connectionString",
       type: "string",
       description:
