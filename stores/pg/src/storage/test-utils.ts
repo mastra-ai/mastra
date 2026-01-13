@@ -776,9 +776,10 @@ export function pgTests() {
         const foundRun = runs.find((r: any) => r.workflowName === workflowName);
         expect(foundRun).toBeDefined();
         expect(foundRun.snapshot.userMessage).toBe('Ótimo, já entendi! Vamos lá então.');
-        // Verify the null character is preserved (no data loss)
-        expect(foundRun.snapshot.problematicContent).toBe('Text with null char: \u0000 and accented: áéíóú');
-        expect(foundRun.snapshot.problematicContent.includes('\u0000')).toBe(true);
+        // Verify the null character is sanitized (removed) to allow jsonb storage
+        // PostgreSQL jsonb type does not support null characters, so they are stripped during insertion
+        expect(foundRun.snapshot.problematicContent).toBe('Text with null char:  and accented: áéíóú');
+        expect(foundRun.snapshot.problematicContent.includes('\u0000')).toBe(false);
       });
 
       it('should handle unpaired Unicode surrogates in snapshot when filtering by status', async () => {
