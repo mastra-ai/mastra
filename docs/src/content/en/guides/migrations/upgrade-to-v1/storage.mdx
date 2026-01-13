@@ -468,12 +468,6 @@ ALTER COLUMN metadata TYPE jsonb
 USING metadata::jsonb;
 ```
 
-#### What happens if you don't migrate?
-
-- Your application will continue to work (the JSON stringify/parse pattern works with both TEXT and JSONB)
-- New tables will use JSONB automatically
-- JSONB-specific features (native operators like `metadata ? 'key'`, GIN indexing) won't work until you migrate
-
 ### Workflow snapshot column (TEXT → JSONB)
 
 The `snapshot` column in the `mastra_workflow_snapshot` table has been changed from `TEXT` to `JSONB`.
