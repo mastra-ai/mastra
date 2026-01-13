@@ -43,7 +43,7 @@
     "typescript": "catalog:",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
-    "hono": "^4.11.3",
+    "hono": "^4.11.4",
     "@hono/node-server": "^1.19.6",
     "@hono/swagger-ui": "^0.5.2",
     "@ai-sdk/openai": "^2.0.62",
