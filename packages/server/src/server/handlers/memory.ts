@@ -868,6 +868,27 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
   },
 });
 
+export const LIST_MEMORY_CONFIGS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/configs',
+  responseType: 'json',
+  summary: 'List registered memory configurations',
+  description: 'Returns a list of all memory configurations registered with the Mastra instance',
+  tags: ['Memory'],
+  handler: async ({ mastra }) => {
+    try {
+      const memoryRegistry = mastra.listMemory();
+      const configs = Object.entries(memoryRegistry || {}).map(([key, memory]) => ({
+        id: key,
+        name: (memory as MastraMemory).id || key,
+      }));
+      return { configs };
+    } catch (error) {
+      return handleError(error, 'Error listing memory configs');
+    }
+  },
+});
+
 // Network routes (same handlers with /network/ prefix)
 export const GET_MEMORY_STATUS_NETWORK_ROUTE = createRoute({
   method: 'GET',

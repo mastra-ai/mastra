@@ -757,6 +757,19 @@ export interface CompareVersionsResponse {
 }
 
 // ============================================================================
+// Memory Config Types
+// ============================================================================
+
+export interface MemoryConfigItem {
+  id: string;
+  name?: string;
+}
+
+export interface ListMemoryConfigsResponse {
+  configs: MemoryConfigItem[];
+}
+
+// ============================================================================
 // System Types
 // ============================================================================
 
