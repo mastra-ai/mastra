@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';

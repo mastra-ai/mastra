@@ -16,7 +16,13 @@ import type { TABLE_NAMES } from '@mastra/core/storage';
 export function getKey(tableName: TABLE_NAMES, keys: Record<string, unknown>): string {
   const keyParts = Object.entries(keys)
     .filter(([_, value]) => value !== undefined)
-    .map(([key, value]) => `${key}:${value}`);
+    .map(([key, value]) => {
+      if (value && typeof value === 'object') {
+        return `${key}:${JSON.stringify(value)}`;
+      }
+
+      return `${key}:${value}`;
+    });
 
   return `${tableName}:${keyParts.join(':')}`;
 }
