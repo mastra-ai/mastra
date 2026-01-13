@@ -548,8 +548,8 @@ export type ToolStep<
   TSchemaOut,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-  inputSchema: TSchemaIn;
-  outputSchema: TSchemaOut;
+  inputSchema: SchemaWithValidation<TSchemaIn>;
+  outputSchema: SchemaWithValidation<TSchemaOut>;
   execute: (input: TSchemaIn, context?: TContext) => Promise<any>;
 };
 
