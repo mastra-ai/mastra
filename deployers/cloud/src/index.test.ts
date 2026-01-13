@@ -275,8 +275,8 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('mastra.storage.init()');
       expect(entry).toContain('new LibSQLStore');
       expect(entry).toContain('new LibSQLVector');
-      // Check for server creation (default: playground disabled)
-      expect(entry).toContain('playground: false');
+      // Check for server creation (default: studio disabled)
+      expect(entry).toContain('studio: false');
       expect(entry).toContain('swaggerUI: false');
       expect(entry).toContain('tools: getToolExports(tools)');
 
@@ -299,21 +299,21 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('type: "READINESS"');
     });
 
-    it('should include playground: true when studio is enabled', () => {
+    it('should include studio: true when studio is enabled', () => {
       const studioDeployer = new CloudDeployer({ studio: true });
       // @ts-ignore - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
-      expect(entry).toContain('playground: true');
+      expect(entry).toContain('studio: true');
       expect(entry).toContain('swaggerUI: false');
     });
 
-    it('should include playground: false when studio is disabled', () => {
+    it('should include studio: false when studio is disabled', () => {
       const studioDeployer = new CloudDeployer({ studio: false });
       // @ts-ignore - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
-      expect(entry).toContain('playground: false');
+      expect(entry).toContain('studio: false');
     });
   });
 

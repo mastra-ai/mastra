@@ -1,5 +1,86 @@
 # @mastra/inngest
 
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- Added `createServe` factory function to support multiple web framework adapters for Inngest workflows. ([#11667](https://github.com/mastra-ai/mastra/pull/11667))
+
+  Previously, the `serve` function only supported Hono. Now you can use any framework adapter provided by the Inngest package (Express, Fastify, Koa, Next.js, and more).
+
+  **Before (Hono only)**
+
+  ```typescript
+  import { serve } from '@mastra/inngest';
+
+  // Only worked with Hono
+  app.all('/api/inngest', c => serve({ mastra, inngest })(c));
+  ```
+
+  **After (any framework)**
+
+  ```typescript
+  import { createServe } from '@mastra/inngest';
+  import { serve as expressAdapter } from 'inngest/express';
+  import { serve as fastifyAdapter } from 'inngest/fastify';
+
+  // Express
+  app.use('/api/inngest', createServe(expressAdapter)({ mastra, inngest }));
+
+  // Fastify
+  fastify.route({
+    method: ['GET', 'POST', 'PUT'],
+    url: '/api/inngest',
+    handler: createServe(fastifyAdapter)({ mastra, inngest }),
+  });
+  ```
+
+  The existing `serve` export remains available for backward compatibility with Hono.
+
+  Fixes #10053
+
+### Patch Changes
+
+- Add additional context to workflow `onFinish` and `onError` callbacks ([#11705](https://github.com/mastra-ai/mastra/pull/11705))
+
+  The `onFinish` and `onError` lifecycle callbacks now receive additional properties:
+  - `runId` - The unique identifier for the workflow run
+  - `workflowId` - The workflow's identifier
+  - `resourceId` - Optional resource identifier (if provided when creating the run)
+  - `getInitData()` - Function that returns the initial input data passed to the workflow
+  - `mastra` - The Mastra instance (if workflow is registered with Mastra)
+  - `requestContext` - Request-scoped context data
+  - `logger` - The workflow's logger instance
+  - `state` - The workflow's current state object
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'order-processing',
+    inputSchema: z.object({ orderId: z.string() }),
+    outputSchema: z.object({ status: z.string() }),
+    options: {
+      onFinish: async ({ runId, workflowId, getInitData, logger, state, mastra }) => {
+        const inputData = getInitData();
+        logger.info(`Workflow ${workflowId} run ${runId} completed`, {
+          orderId: inputData.orderId,
+          finalState: state,
+        });
+
+        // Access other Mastra components if needed
+        const agent = mastra?.getAgent('notification-agent');
+      },
+      onError: async ({ runId, workflowId, error, logger, requestContext }) => {
+        logger.error(`Workflow ${workflowId} run ${runId} failed: ${error?.message}`);
+        // Access request context for additional debugging
+        const userId = requestContext.get('userId');
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
 ## 1.0.0-beta.11
 
 ### Patch Changes

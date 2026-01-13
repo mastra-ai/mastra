@@ -160,7 +160,7 @@ export function getAgentMemoryTests({
         url: dbFile,
       });
       const vector = new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: 'test-vector',
       });
 
@@ -261,7 +261,7 @@ export function getAgentMemoryTests({
         url: dbFile,
       }),
       vector: new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: 'test-vector',
       }),
       embedder: fastembed,
@@ -606,7 +606,7 @@ export function getAgentMemoryTests({
         lastMessages: 10,
       },
       storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
+      vector: new LibSQLVector({ url: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentWithTitle = new Agent({
@@ -646,7 +646,7 @@ export function getAgentMemoryTests({
         lastMessages: 10,
       },
       storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
+      vector: new LibSQLVector({ url: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentNoTitle = new Agent({
@@ -774,7 +774,7 @@ export function getAgentMemoryTests({
         url: dbFile,
       }),
       vector: new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: 'processor-vector',
       }),
       options: {
@@ -910,7 +910,7 @@ export function getAgentMemoryTests({
         url: dbFile,
       });
       const vector = new LibSQLVector({
-        connectionUrl: dbFile,
+        url: dbFile,
         id: 'test-vector-wm',
       });
 
@@ -1322,7 +1322,7 @@ export function getAgentMemoryTests({
       url: dbFile,
     });
     const cloneVector = new LibSQLVector({
-      connectionUrl: dbFile,
+      url: dbFile,
       id: 'clone-vector',
     });
     const cloneMemory = new Memory({

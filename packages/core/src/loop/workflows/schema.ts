@@ -92,9 +92,9 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extend
 // Zod schemas for common types used in validation
 
 const languageModelUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
 });

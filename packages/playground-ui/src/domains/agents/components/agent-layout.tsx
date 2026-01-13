@@ -51,7 +51,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLay
             id="right-slot"
             minSize={300}
             maxSize={'50%'}
-            defaultSize={300}
+            defaultSize="30%"
             collapsedSize={60}
             collapsible={true}
           >
