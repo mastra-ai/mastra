@@ -1154,11 +1154,11 @@ export class Workflow<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
     string,
-    any,
-    any,
-    any,
-    any,
-    any,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
     TEngineType
   >[],
   TWorkflowId extends string = string,
@@ -2321,11 +2321,11 @@ export class Run<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
     string,
-    any,
-    any,
-    any,
-    any,
-    any,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
     TEngineType
   >[],
   TState = unknown,
@@ -2405,7 +2405,7 @@ export class Run<
     return this.#mastra;
   }
 
-  protected streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: SchemaWithValidation<TState>;

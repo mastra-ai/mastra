@@ -3,6 +3,7 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
 import type { MastraStorage } from '../storage';
+import type { SchemaWithValidation } from '../stream';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 
@@ -36,8 +37,8 @@ export interface IAction<
 > {
   id: TId;
   description?: string;
-  inputSchema?: TInput;
-  outputSchema?: TOutput;
+  inputSchema?: SchemaWithValidation<TInput>;
+  outputSchema?: SchemaWithValidation<TOutput>;
   // execute must remain optional because ITools extends IAction and tools may need execute to be optional
   // when forwarding tool calls to the client or to a queue instead of executing them in the same process
   execute?: (context: TContext, options?: TOptions) => Promise<TOutput>;

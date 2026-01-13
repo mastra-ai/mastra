@@ -212,14 +212,14 @@ export class InngestRun<
   }
 
   async start(
-    args: (TInput extends unknown
+    args: ([TInput] extends [unknown]
       ? {
           inputData?: TInput;
         }
       : {
           inputData: TInput;
         }) &
-      (TState extends unknown
+      ([TState] extends [unknown]
         ? {
             initialState?: TState;
           }
@@ -247,14 +247,14 @@ export class InngestRun<
    * Use this when you don't need to wait for the result or want to avoid polling failures.
    */
   async startAsync(
-    args: (TInput extends unknown
+    args: ([TInput] extends [unknown]
       ? {
           inputData?: TInput;
         }
       : {
           inputData: TInput;
         }) &
-      (TState extends unknown
+      ([TState] extends [unknown]
         ? {
             initialState?: TState;
           }

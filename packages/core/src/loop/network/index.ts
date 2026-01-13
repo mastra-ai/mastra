@@ -2088,7 +2088,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   });
 
   return new MastraAgentNetworkStream({
-    // @ts-ignore
     run,
     createStream: () => {
       if (resumeDataToUse) {
