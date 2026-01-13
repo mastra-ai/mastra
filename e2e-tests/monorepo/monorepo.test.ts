@@ -95,6 +95,21 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
     });
+
+    it('should resolve directory imports from workspace packages', async () => {
+      const res = await fetch(`http://localhost:${port}/directory-import`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toHaveProperty('bold');
+      expect(body).toHaveProperty('colorful');
+    });
+
+    it('should resolve path aliases', async () => {
+      const res = await fetch(`http://localhost:${port}/path-alias`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Formatted: Hello from path alias' });
+    });
   }
 
   describe.sequential('dev', async () => {

@@ -66,6 +66,7 @@ export async function getInputOptions(
         plugins.push(
           tsConfigPaths({
             localResolve: true,
+            workspacePackages: workspaceMap,
           }),
         );
         return;

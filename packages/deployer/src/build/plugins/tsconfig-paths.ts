@@ -5,10 +5,14 @@ import type { Plugin } from 'rollup';
 import stripJsonComments from 'strip-json-comments';
 import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
+import { getPackageName } from '../utils';
 
 const PLUGIN_NAME = 'tsconfig-paths';
 
-export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean };
+export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & {
+  localResolve?: boolean;
+  workspacePackages?: Set<string>;
+};
 
 /**
  * Check if a tsconfig file has path mappings configured.
@@ -27,7 +31,12 @@ export function hasPaths(tsConfigPath: string): boolean {
   }
 }
 
-export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }: PluginOptions = {}): Plugin {
+export function tsConfigPaths({
+  tsConfigPath,
+  respectCoreModule,
+  localResolve,
+  workspacePackages,
+}: PluginOptions = {}): Plugin {
   const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
 
   // Find tsconfig.json file starting from a directory and walking up
@@ -135,9 +144,15 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
           importerMeta = importerInfo?.meta || {};
 
           if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
+            // Extract package name from the request
+            const packageName = getPackageName(request);
+
+            // Check if this is a workspace package - if so, don't mark as external
+            const isWorkspacePackage = workspacePackages && packageName && workspacePackages.has(packageName);
+
             return {
               ...resolved,
-              external: !request.startsWith('hono/') && request !== 'hono',
+              external: !isWorkspacePackage && !request.startsWith('hono/') && request !== 'hono',
             };
           }
         }
