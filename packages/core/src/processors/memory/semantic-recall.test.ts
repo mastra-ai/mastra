@@ -2150,9 +2150,16 @@ describe('SemanticRecall', () => {
           return Array.from(createdIndexes.keys());
         }),
         createIndex: vi.fn().mockImplementation(async ({ indexName, dimension, metric }) => {
-          if (!createdIndexes.has(indexName)) {
-            createdIndexes.set(indexName, { dimension, metric, vectors: [] });
+          if (createdIndexes.has(indexName)) {
+            const existing = createdIndexes.get(indexName)!;
+            if (existing.dimension !== dimension) {
+              throw new Error(
+                `Index "${indexName}" already exists with ${existing.dimension} dimensions, but ${dimension} dimensions were requested`,
+              );
+            }
+            return;
           }
+          createdIndexes.set(indexName, { dimension, metric, vectors: [] });
         }),
         upsert: vi.fn().mockImplementation(async ({ indexName, vectors }) => {
           const index = createdIndexes.get(indexName);
@@ -2292,141 +2299,6 @@ describe('SemanticRecall', () => {
       // createIndex should have thrown, preventing query from happening
       expect(mockVector.query).not.toHaveBeenCalled();
       expect(result).toBe(messageList2);
-    });
-
-    it('should throw error when switching embedders with different dimensions on same index', async () => {
-      // Tests that createIndex validates dimensions and throws on mismatch
-      const customIndexName = 'atlas_project_memories';
-      const createdIndexes = new Map<string, { dimension: number; metric: string }>();
-
-      const mockVector = {
-        listIndexes: vi.fn().mockImplementation(async () => {
-          return Array.from(createdIndexes.keys());
-        }),
-        createIndex: vi.fn().mockImplementation(async ({ indexName, dimension, metric }) => {
-          if (createdIndexes.has(indexName)) {
-            const existing = createdIndexes.get(indexName)!;
-            if (existing.dimension !== dimension) {
-              throw new Error(
-                `Index "${indexName}" already exists with ${existing.dimension} dimensions, but ${dimension} dimensions were requested`,
-              );
-            }
-            return;
-          }
-          createdIndexes.set(indexName, { dimension, metric });
-        }),
-        describeIndex: vi.fn().mockImplementation(async ({ indexName }) => {
-          const index = createdIndexes.get(indexName);
-          if (!index) {
-            throw new Error(`Index "${indexName}" does not exist`);
-          }
-          return {
-            dimension: index.dimension,
-            metric: index.metric,
-            count: 0,
-          };
-        }),
-        query: vi.fn().mockResolvedValue([]),
-        upsert: vi.fn().mockResolvedValue([]),
-      } as any;
-
-      const mockStorage = {
-        listMessages: vi.fn().mockResolvedValue({
-          messages: [],
-          total: 0,
-          page: 1,
-          perPage: false,
-          hasMore: false,
-        }),
-      } as any;
-
-      const fastembedEmbedder = {
-        doEmbed: vi.fn().mockResolvedValue({
-          embeddings: [Array(384).fill(0.1)],
-        }),
-        modelId: 'fastembed-base',
-      } as any;
-
-      const fastembedProcessor = new SemanticRecall({
-        storage: mockStorage,
-        vector: mockVector,
-        embedder: fastembedEmbedder,
-        indexName: customIndexName,
-        topK: 3,
-      });
-
-      const requestContext = new RequestContext();
-      requestContext.set('MastraMemory', {
-        thread: { id: 'thread-1' },
-        resourceId: 'resource-1',
-      });
-
-      const inputMessage: MastraDBMessage = {
-        id: 'msg-1',
-        role: 'user',
-        content: {
-          format: 2,
-          content: 'Hello world',
-          parts: [{ type: 'text', text: 'Hello world' }],
-        },
-        createdAt: new Date(),
-      };
-
-      const messageList1 = new MessageList();
-      messageList1.add([inputMessage], 'input');
-
-      await fastembedProcessor.processInput({
-        messages: [inputMessage],
-        messageList: messageList1,
-        abort: vi.fn() as any,
-        requestContext,
-      });
-
-      expect(mockVector.createIndex).toHaveBeenCalledWith({
-        indexName: customIndexName,
-        dimension: 384,
-        metric: 'cosine',
-      });
-      expect(createdIndexes.get(customIndexName)?.dimension).toBe(384);
-
-      const openaiEmbedder = {
-        doEmbed: vi.fn().mockResolvedValue({
-          embeddings: [Array(1536).fill(0.1)],
-        }),
-        modelId: 'text-embedding-3-small',
-      } as any;
-
-      const openaiProcessor = new SemanticRecall({
-        storage: mockStorage,
-        vector: mockVector,
-        embedder: openaiEmbedder,
-        indexName: customIndexName,
-        topK: 3,
-      });
-
-      const inputMessage2: MastraDBMessage = {
-        id: 'msg-2',
-        role: 'user',
-        content: {
-          format: 2,
-          content: 'What is the weather?',
-          parts: [{ type: 'text', text: 'What is the weather?' }],
-        },
-        createdAt: new Date(),
-      };
-
-      const messageList2 = new MessageList();
-      messageList2.add([inputMessage2], 'input');
-
-      // Should throw dimension mismatch error
-      await expect(
-        openaiProcessor.processInput({
-          messages: [inputMessage2],
-          messageList: messageList2,
-          abort: vi.fn() as any,
-          requestContext,
-        }),
-      ).rejects.toThrow(/already exists with 384 dimensions.*1536 dimensions/i);
     });
 
     it('should succeed when using same embedder dimensions on existing index', async () => {
