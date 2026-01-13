@@ -146,9 +146,10 @@ export class DatadogExporter extends BaseExporter {
     super(config);
 
     // Resolve configuration from config object and environment variables
-    const mlApp = config.mlApp || process.env.DD_LLMOBS_ML_APP;
-    const apiKey = config.apiKey || process.env.DD_API_KEY;
-    const site = config.site || process.env.DD_SITE || 'datadoghq.com';
+    const mlApp = config.mlApp ?? process.env.DD_LLMOBS_ML_APP;
+    const apiKey = config.apiKey ?? process.env.DD_API_KEY;
+    const site = config.site ?? process.env.DD_SITE ?? 'datadoghq.com';
+    const env = config.env ?? process.env.DD_ENV;
 
     // Default to agentless mode (true) for consistency with other Mastra exporters
     // Only disable if explicitly set to false via config or env var
@@ -157,18 +158,20 @@ export class DatadogExporter extends BaseExporter {
 
     // Validate required configuration
     if (!mlApp) {
-      this.setDisabled('Missing required mlApp (set config.mlApp or DD_LLMOBS_ML_APP)');
+      this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
       this.config = config as any;
       return;
     }
 
     if (agentless && !apiKey) {
-      this.setDisabled('Missing required apiKey (set config.apiKey or DD_API_KEY)');
+      this.setDisabled(
+        `Missing required apiKey for agentless mode. Set DD_API_KEY environment variable or pass apiKey in config.`,
+      );
       this.config = config as any;
       return;
     }
 
-    this.config = { ...config, mlApp, site, apiKey, agentless };
+    this.config = { ...config, mlApp, site, apiKey, agentless, env };
 
     // Initialize tracer and enable LLM Observability
     ensureTracer({
@@ -177,7 +180,7 @@ export class DatadogExporter extends BaseExporter {
       apiKey,
       agentless,
       service: config.service,
-      env: config.env,
+      env,
       integrationsEnabled: config.integrationsEnabled,
     });
 

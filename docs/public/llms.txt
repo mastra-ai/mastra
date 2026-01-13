@@ -169,7 +169,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 69+ AI providers and 1750+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 69+ AI providers and 1751+ models through Mastra's model router.
 - [Abacus | Models | Mastra](https://mastra.ai/en/models/providers/abacus): Use Abacus models with Mastra. 52 models available.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
@@ -233,7 +233,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [submodel | Models | Mastra](https://mastra.ai/en/models/providers/submodel): Use submodel models with Mastra. 9 models available.
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 25 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 10 models available.
-- [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
+- [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 3 models available.
 - [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 23 models available.
 - [Vivgrid | Models | Mastra](https://mastra.ai/en/models/providers/vivgrid): Use Vivgrid models with Mastra. 1 model available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.

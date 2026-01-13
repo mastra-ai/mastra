@@ -70,7 +70,7 @@ async function getRoutingAgent({
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema((tool as any).inputSchema || z.object({})),
+        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
       )}`;
     })
     .join('\n');
@@ -351,7 +351,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
       const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
@@ -547,7 +547,7 @@ export async function createNetworkLoop({
 
       // Get memory context from initData to pass to sub-agents
       // This ensures sub-agents can access the same thread/resource for memory operations
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const threadId = initData?.threadId || runId;
       const resourceId = initData?.threadResourceId || networkName;
 
@@ -916,7 +916,7 @@ export async function createNetworkLoop({
       });
 
       const memory = await agent.getMemory({ requestContext: requestContext });
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       await memory?.saveMessages({
         messages: [
           {
@@ -1028,8 +1028,13 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
+    resumeSchema: z.object({
+      approved: z
+        .boolean()
+        .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
+    }),
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
 
       const agentTools = await agent.listTools({ requestContext });
