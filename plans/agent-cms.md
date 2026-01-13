@@ -1,8 +1,103 @@
 # AgentCMS - Implementation Plan (Phase 1)
 
-> **Status**: Ready for Implementation  
+> **Status**: IN PROGRESS  
 > **Created**: January 2025  
+> **Updated**: January 12, 2025  
 > **Feature**: Full CRUD for Agents from Mastra Studio UI
+
+---
+
+## Progress Summary
+
+### ✅ Completed Tasks - Phase 1A Foundation
+
+| Task        | Description                                        | PR/Commit |
+| ----------- | -------------------------------------------------- | --------- |
+| **Task 1**  | Add `source` field to Agent schema & response      | PR #11848 |
+| **Task 1+** | Add `ownerId` field for multi-tenant filtering     | PR #11848 |
+| **Task 1+** | Add schema migration for `ownerId` column          | PR #11848 |
+| **Task 2**  | Create stored agent hooks (`use-stored-agents.ts`) | PR #11847 |
+| **Task 2+** | Update client SDK stored-agent methods             | PR #11847 |
+| **Task 4**  | Create Multi-Select Picker component               | PR #11850 |
+| **Task 5**  | Create Form Validation schema                      | PR #11851 |
+| **Task 3**  | Create Model Picker component                      | PR #11852 |
+| **Task 6**  | Create Agent Form component                        | PR #11857 |
+| **Task 8**  | Create Agent Dialog                                | PR #11860 |
+| **Task 9**  | Edit Agent Dialog                                  | PR #11859 |
+| **Task 10** | Delete Agent Confirmation                          | PR #11859 |
+
+### ✅ Completed Tasks - Phase 1B Versioning Foundation
+
+| Task        | Description                                       | PR/Commit |
+| ----------- | ------------------------------------------------- | --------- |
+| **V1**      | Add `TABLE_AGENT_VERSIONS` schema constant        | PR #11849 |
+| **V6**      | Add `activeVersionId` to agents schema            | PR #11849 |
+| **V6+**     | Add schema migration for `activeVersionId` column | PR #11849 |
+| **V2**      | Create `AgentVersionsStorage` base class          | PR #11858 |
+| **V3**      | Create in-memory implementation                   | PR #11858 |
+| **V4**      | Create PostgreSQL implementation                  | PR #11858 |
+| **V5**      | Add version server routes & handlers              | PR #11863 |
+| **Task 11** | Update Agents Table with source badge             | PR #11864 |
+| **Task 12** | Update Empty State with Create CTA                | PR #11864 |
+| **Task 13** | Update Agents page with create button             | PR #11864 |
+| **Task 14** | Add Edit button to Agent Header                   | PR #11864 |
+| **Task 15** | Export new components                             | PR #11864 |
+
+### 🔲 Remaining Tasks - Phase 1A UI Components
+
+| Task       | Description                     | Status |
+| ---------- | ------------------------------- | ------ |
+| **Task 7** | Add Memory Configs API endpoint | TODO   |
+
+### 🔲 Remaining Tasks - Phase 1B Versioning
+
+| Task    | Description                                    | Status |
+| ------- | ---------------------------------------------- | ------ |
+| **V7**  | Update `getStoredAgent` for version resolution | TODO   |
+| **V8**  | Add version methods to client SDK              | TODO   |
+| **V9**  | Create `useAgentVersions` hooks                | TODO   |
+| **V10** | Create `AgentVersions` list component          | TODO   |
+| **V11** | Create `SaveVersionDialog` component           | TODO   |
+| **V12** | Create `VersionCompareDialog` with diff view   | TODO   |
+| **V13** | Add "Versions" tab to `AgentInformation`       | TODO   |
+| **V14** | Add version badge to `AgentEntityHeader`       | TODO   |
+| **V15** | Implement retention enforcement                | TODO   |
+
+---
+
+## Progress Summary
+
+### Completed Tasks
+
+| Task        | Description                                    | Status  | PR/Commit              |
+| ----------- | ---------------------------------------------- | ------- | ---------------------- |
+| **Task 1**  | Add `source` field to Agent schema & response  | ✅ DONE | PR #11848              |
+| **Task 1+** | Add `ownerId` field for multi-tenant filtering | ✅ DONE | PR #11848              |
+| **Task 1+** | Add schema migration for `ownerId` column      | ✅ DONE | PR #11848              |
+| **Task 2**  | Create stored agent hooks                      | ✅ DONE | `use-stored-agents.ts` |
+| **Task 2+** | Update client SDK stored-agent methods         | ✅ DONE | `stored-agent.ts`      |
+
+### In Progress Tasks
+
+| Task        | Description                           | Status  | Assignee |
+| ----------- | ------------------------------------- | ------- | -------- |
+| **Task 3**  | Create Model Picker component         | 🔲 TODO | Worker B |
+| **Task 4**  | Create Multi-Select Picker component  | 🔲 TODO | Worker B |
+| **Task 5**  | Create Form Validation schema         | 🔲 TODO | Worker B |
+| **Task 6**  | Create Agent Form component           | 🔲 TODO | Worker B |
+| **Task 7**  | Add Memory Configs API endpoint       | 🔲 TODO | Worker A |
+| **Task 8**  | Create Agent Dialog                   | 🔲 TODO | Worker B |
+| **Task 9**  | Edit Agent Dialog                     | 🔲 TODO | Worker B |
+| **Task 10** | Delete Agent Confirmation             | 🔲 TODO | Worker B |
+| **Task 11** | Update Agents Table with source badge | 🔲 TODO | Worker E |
+| **Task 12** | Update Empty State with Create CTA    | 🔲 TODO | Worker E |
+| **Task 13** | Update Agents page with create button | 🔲 TODO | Worker E |
+| **Task 14** | Add Edit button to Agent Header       | 🔲 TODO | Worker E |
+| **Task 15** | Export new components                 | 🔲 TODO | Any      |
+
+### Versioning Tasks (Phase 1B)
+
+All versioning tasks (V1-V15) are pending, blocked on Phase 1A completion.
 
 ---
 

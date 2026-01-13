@@ -2,7 +2,7 @@
 
 > **Role**: All versioning UI components  
 > **Priority**: MEDIUM - Depends on Worker C backend  
-> **Estimated Time**: 6-8 hours
+> **Status**: BLOCKED (waiting on Worker C V8)
 
 ---
 
@@ -14,8 +14,8 @@ Worker D builds all the UI components for agent versioning: version list, save d
 
 ## Dependencies
 
-- **Worker C (V8)**: Need client SDK version methods for hooks
-- **Worker A (Task 1)**: Need `source` field to show versions tab only for stored agents
+- **Worker C (V8)**: 🔲 WAITING - Need client SDK version methods for hooks
+- **Worker A (Task 1)**: ✅ COMPLETE - `source` field available
 
 **Can start immediately**: V10, V11 UI shells (no backend dependency for layout)
 

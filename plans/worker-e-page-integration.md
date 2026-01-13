@@ -2,7 +2,7 @@
 
 > **Role**: Integrating components into existing pages  
 > **Priority**: MEDIUM - Final assembly work  
-> **Estimated Time**: 4-6 hours
+> **Status**: BLOCKED (waiting on Worker B dialogs)
 
 ---
 
@@ -14,8 +14,8 @@ Worker E integrates all the components built by Workers B and D into the existin
 
 ## Dependencies
 
-- **Worker A (Task 1)**: Need `source` field for distinguishing stored agents
-- **Worker B (Tasks 8-10)**: Need dialogs (Create, Edit, Delete) for integration
+- **Worker A (Task 1)**: ✅ COMPLETE - `source` field available
+- **Worker B (Tasks 8-10)**: 🔲 WAITING - Need dialogs (Create, Edit, Delete) for integration
 - **Worker D (V13, V14)**: Coordinate on header/information panel changes
 
 ---

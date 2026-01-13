@@ -2,7 +2,7 @@
 
 > **Role**: Schema changes + Memory API  
 > **Priority**: HIGH - Foundation tasks block other workers  
-> **Estimated Time**: 4-6 hours
+> **Status**: MOSTLY COMPLETE
 
 ---
 
@@ -12,11 +12,11 @@ Worker A is responsible for the foundational schema changes that all other worke
 
 ---
 
-## Tasks
+## ✅ COMPLETED Tasks
 
-### Task 1: Add `source` Field to Agent Schema & Response
+### Task 1: Add `source` Field to Agent Schema & Response ✅
 
-**Priority**: CRITICAL - Blocks Workers B, D, E
+**Status**: COMPLETE (PR #11848)
 
 **Goal**: Distinguish stored agents from code-defined agents in API responses.
 
@@ -55,16 +55,24 @@ Worker A is responsible for the foundational schema changes that all other worke
    source?: 'code' | 'stored';
    ```
 
-**Verification**:
+**Verification**: ✅ PASSED
 
 - Build passes: `pnpm build:core && pnpm build`
 - Type check passes: `pnpm typecheck`
 
+**Additional work completed in PR #11848**:
+
+- Added `ownerId` field for multi-tenant filtering
+- Added schema migration for `ownerId` column in all storage adapters (pg, libsql, mongodb)
+
 ---
+
+## 🔲 REMAINING Tasks
 
 ### Task 7: Add Memory Configs API Endpoint & Hook
 
 **Priority**: MEDIUM - Enables memory picker in UI
+**Status**: TODO
 
 **Goal**: Expose registered memory configurations for the agent form picker.
 
@@ -168,10 +176,10 @@ After completing Task 7:
 
 ## Testing Checklist
 
-- [ ] `pnpm build` passes
-- [ ] `pnpm typecheck` passes
-- [ ] `source` field appears in `/api/agents` response
-- [ ] `source: 'stored'` appears for stored agents
-- [ ] `source: 'code'` (or undefined) for code-defined agents
+- [x] `pnpm build` passes
+- [x] `pnpm typecheck` passes
+- [x] `source` field appears in `/api/agents` response
+- [x] `source: 'stored'` appears for stored agents
+- [x] `source: 'code'` (or undefined) for code-defined agents
 - [ ] `/api/memory/configs` returns list of registered memory configs
 - [ ] Client SDK `listMemoryConfigs()` works

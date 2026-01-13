@@ -2,7 +2,7 @@
 
 > **Role**: All versioning backend infrastructure  
 > **Priority**: HIGH - Enables version history feature  
-> **Estimated Time**: 8-10 hours
+> **Status**: IN PROGRESS
 
 ---
 
@@ -14,18 +14,18 @@ Worker C builds the entire backend infrastructure for agent versioning: database
 
 ## Dependencies
 
-- **None for V1, V6**: Can start immediately with schema
-- **V2-V4**: Depend on V1, V6 (schema)
+- **V1, V6**: ✅ COMPLETE
+- **V2-V4**: Ready to start (schema complete)
 - **V5, V7**: Depend on V2-V4 (storage domain)
 - **V8**: Depends on V5 (server routes)
 
 ---
 
-## Tasks
+## ✅ COMPLETED Tasks
 
-### Task V1: Add `TABLE_AGENT_VERSIONS` Schema
+### Task V1: Add `TABLE_AGENT_VERSIONS` Schema ✅
 
-**Priority**: CRITICAL - Foundation for all versioning
+**Status**: COMPLETE (PR #11849)
 
 **File**: `packages/core/src/storage/constants.ts`
 
@@ -76,9 +76,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
 
 ---
 
-### Task V6: Add `activeVersionId` to Agents Schema
+### Task V6: Add `activeVersionId` to Agents Schema ✅
 
-**Priority**: CRITICAL - Links agents to their active version
+**Status**: COMPLETE (PR #11849)
 
 **File**: `packages/core/src/storage/constants.ts`
 
@@ -106,9 +106,9 @@ export interface StorageAgentType {
 
 ---
 
-### Task V2: Create AgentVersionsStorage Base Class
+### Task V2: Create AgentVersionsStorage Base Class ✅
 
-**Priority**: HIGH
+**Status**: COMPLETE (PR #11858)
 
 **New file**: `packages/core/src/storage/domains/agent-versions/base.ts`
 
@@ -176,9 +176,9 @@ export * from './inmemory';
 
 ---
 
-### Task V3: Create In-Memory Implementation
+### Task V3: Create In-Memory Implementation ✅
 
-**Priority**: HIGH
+**Status**: COMPLETE (PR #11858)
 
 **New file**: `packages/core/src/storage/domains/agent-versions/inmemory.ts`
 
@@ -273,9 +273,9 @@ export class InMemoryAgentVersionsStorage extends AgentVersionsStorage {
 
 ---
 
-### Task V4: Create PostgreSQL Implementation
+### Task V4: Create PostgreSQL Implementation ✅
 
-**Priority**: HIGH
+**Status**: COMPLETE (PR #11858)
 
 **New file**: `stores/pg/src/storage/domains/agent-versions/index.ts`
 
@@ -412,10 +412,9 @@ export class PgAgentVersionsStorage extends AgentVersionsStorage {
 
 ---
 
-### Task V5: Add Version Server Routes & Handlers
+### Task V5: Add Version Server Routes & Handlers ✅
 
-**Priority**: HIGH  
-**Depends on**: V2-V4
+**Status**: COMPLETE (PR #11863)
 
 **New file**: `packages/server/src/server/schemas/agent-versions.ts`
 
@@ -473,7 +472,8 @@ Implement routes:
 
 ### Task V7: Update `getStoredAgent` for Version Resolution
 
-**Priority**: HIGH  
+**Priority**: HIGH
+**Status**: TODO
 **Depends on**: V2-V4
 
 **File**: `packages/core/src/mastra/index.ts`
@@ -511,7 +511,8 @@ public async getStoredAgent(
 
 ### Task V8: Add Version Methods to Client SDK
 
-**Priority**: HIGH  
+**Priority**: HIGH
+**Status**: TODO
 **Depends on**: V5
 
 **File**: `client-sdks/client-js/src/types.ts`
@@ -607,9 +608,11 @@ After completing V8:
 
 ## Testing Checklist
 
-- [ ] `TABLE_AGENT_VERSIONS` schema is correct
-- [ ] In-memory storage passes unit tests
-- [ ] PostgreSQL storage passes integration tests
+- [x] `TABLE_AGENT_VERSIONS` schema is correct
+- [x] `activeVersionId` added to agents schema
+- [x] Schema migration for `activeVersionId` in storage adapters
+- [x] In-memory storage implementation complete
+- [x] PostgreSQL storage implementation complete
 - [ ] `POST /api/stored/agents/:id/versions` creates version
 - [ ] `GET /api/stored/agents/:id/versions` lists versions
 - [ ] `GET /api/stored/agents/:id/versions/:versionId` returns version

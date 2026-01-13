@@ -2,7 +2,7 @@
 
 > **Role**: All reusable UI components and form logic  
 > **Priority**: HIGH - Core user-facing features  
-> **Estimated Time**: 8-10 hours
+> **Status**: IN PROGRESS
 
 ---
 
@@ -14,23 +14,38 @@ Worker B builds all the reusable UI components for creating and editing agents. 
 
 ## Dependencies
 
-- **Task 1** (Worker A): Need `source` field for stored agent detection
-- **Task 7** (Worker A): Need `listMemoryConfigs()` for memory picker
+- **Task 1** (Worker A): ✅ COMPLETE - `source` field available
+- **Task 7** (Worker A): 🔲 TODO - Need `listMemoryConfigs()` for memory picker
 
-**Can start immediately**: Tasks 3, 4, 5 (no dependencies)
+**Can start immediately**: Tasks 3, 4, 5, 6, 8, 9, 10 (Task 1 dependency satisfied)
 
 ---
 
-## Tasks
+## ✅ COMPLETED Tasks
 
-### Task 2: Create Stored Agent Hooks
+### Task 2: Create Stored Agent Hooks ✅
 
-**Priority**: HIGH  
-**Depends on**: Task 1 (Worker A)
+**Status**: COMPLETE (PR #11847)
 
 **Goal**: React Query mutations for stored agent CRUD.
 
-**New file**: `packages/playground-ui/src/domains/agents/hooks/use-stored-agents.ts`
+**File**: `packages/playground-ui/src/domains/agents/hooks/use-stored-agents.ts`
+
+Implemented:
+
+- `useStoredAgents(params?)` - List stored agents with filtering
+- `useStoredAgent(agentId?)` - Get single stored agent details
+- `useStoredAgentMutations(agentId?)` - Create, update, delete mutations
+
+---
+
+## 🔲 REMAINING Tasks
+
+### Task 3: Create Model Picker Component
+
+**Priority**: HIGH  
+**Status**: TODO
+**Depends on**: None (can start immediately)
 
 ```typescript
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -81,10 +96,9 @@ export const useDeleteStoredAgent = (agentId: string) => {
 
 ---
 
-### Task 3: Create Model Picker Component
+### Task 3: Create Model Picker Component ✅
 
-**Priority**: HIGH  
-**Depends on**: None (can start immediately)
+**Status**: COMPLETE (PR #11852)
 
 **Goal**: Reusable provider + model selector.
 
@@ -119,10 +133,9 @@ interface ModelPickerProps {
 
 ---
 
-### Task 4: Create Multi-Select Picker Component
+### Task 4: Create Multi-Select Picker Component ✅
 
-**Priority**: HIGH  
-**Depends on**: None (can start immediately)
+**Status**: COMPLETE (PR #11850)
 
 **Goal**: Generic multi-select for tools, workflows, sub-agents, memory.
 
@@ -173,10 +186,9 @@ interface MultiSelectPickerProps<T> {
 
 ---
 
-### Task 5: Create Form Validation Schema
+### Task 5: Create Form Validation Schema ✅
 
-**Priority**: HIGH  
-**Depends on**: None (can start immediately)
+**Status**: COMPLETE (PR #11851)
 
 **Goal**: Zod schema and validation helpers.
 
@@ -265,10 +277,9 @@ export function getProviderWarning(provider: string, providers: Provider[]): str
 
 ---
 
-### Task 6: Create Agent Form Component
+### Task 6: Create Agent Form Component ✅
 
-**Priority**: HIGH  
-**Depends on**: Tasks 3, 4, 5
+**Status**: COMPLETE (PR #11857)
 
 **Goal**: Shared form for create and edit modes.
 
@@ -315,10 +326,9 @@ const [showAdvanced, setShowAdvanced] = useState(false);
 
 ---
 
-### Task 8: Create Agent Dialog
+### Task 8: Create Agent Dialog ✅
 
-**Priority**: HIGH  
-**Depends on**: Task 6
+**Status**: COMPLETE (PR #11860)
 
 **Goal**: Dialog wrapper for creating new agents.
 
@@ -373,10 +383,9 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
 
 ---
 
-### Task 9: Edit Agent Dialog
+### Task 9: Edit Agent Dialog ✅
 
-**Priority**: HIGH  
-**Depends on**: Task 6
+**Status**: COMPLETE (PR #11859)
 
 **Goal**: Dialog for editing stored agents.
 
@@ -404,10 +413,9 @@ interface EditAgentDialogProps {
 
 ---
 
-### Task 10: Delete Agent Confirmation
+### Task 10: Delete Agent Confirmation ✅
 
-**Priority**: MEDIUM  
-**Depends on**: Task 9
+**Status**: COMPLETE (PR #11859)
 
 **Goal**: Confirmation dialog before deleting an agent.
 
@@ -473,12 +481,15 @@ After completing Tasks 8, 9, 10:
 
 ## Testing Checklist
 
+- [x] Stored agent hooks work (useStoredAgents, useStoredAgent, useStoredAgentMutations)
 - [ ] Model Picker renders and allows selection
 - [ ] Model Picker shows provider connection status
-- [ ] Multi-Select Picker works for tools/workflows/agents
-- [ ] Multi-Select Picker single-select mode works for memory
-- [ ] Form validation shows errors for required fields
-- [ ] Form validation warns about disconnected providers
+- [x] Multi-Select Picker works for tools/workflows/agents
+- [x] Multi-Select Picker single-select mode works for memory
+- [x] Form validation shows errors for required fields
+- [x] Form validation warns about disconnected providers
+- [x] Model Picker renders and allows selection
+- [x] Model Picker shows provider connection status
 - [ ] Agent Form renders in create mode
 - [ ] Agent Form renders in edit mode with pre-filled values
 - [ ] Advanced options collapsible works

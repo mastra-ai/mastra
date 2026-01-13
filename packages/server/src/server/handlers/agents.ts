@@ -313,12 +313,14 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 
   let agent;
 
+  // First, try to get code-defined agent
   try {
     agent = mastra.getAgentById(agentId);
   } catch (error) {
     logger.debug('Error getting agent from mastra, searching agents for agent', error);
   }
 
+  // If not found, look through sub-agents
   if (!agent) {
     logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
     const agents = mastra.listAgents();
@@ -335,6 +337,16 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
           logger.debug('Error getting agent from agent', error);
         }
       }
+    }
+  }
+
+  // If still not found, try to get stored agent
+  if (!agent) {
+    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
     }
   }
 
@@ -473,26 +485,49 @@ export const LIST_AGENTS_ROUTE = createRoute({
   }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
-  description: 'Returns a list of all available agents in the system',
+  description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const agents = mastra.listAgents();
+      const codeAgents = mastra.listAgents();
 
       const isPartial = partial === 'true';
-      const serializedAgentsMap = await Promise.all(
-        Object.entries(agents).map(async ([id, agent]) => {
+
+      // Serialize code-defined agents
+      const serializedCodeAgentsMap = await Promise.all(
+        Object.entries(codeAgents).map(async ([id, agent]) => {
           return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
-      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
         (acc, { id, ...rest }) => {
           acc[id] = { id, ...rest };
           return acc;
         },
         {},
       );
+
+      // Also fetch and include stored agents
+      try {
+        const storedAgentsResult = await mastra.listStoredAgents();
+        if (storedAgentsResult?.agents) {
+          const serializedStoredAgentsMap = await Promise.all(
+            storedAgentsResult.agents.map(async agent => {
+              return formatAgentList({ id: agent.id, mastra, agent, requestContext, partial: isPartial });
+            }),
+          );
+
+          for (const { id, ...rest } of serializedStoredAgentsMap) {
+            // Don't overwrite code-defined agents with same ID
+            if (!serializedAgents[id]) {
+              serializedAgents[id] = { id, ...rest };
+            }
+          }
+        }
+      } catch {
+        // Storage not configured or doesn't support agents - ignore
+      }
 
       return serializedAgents;
     } catch (error) {
