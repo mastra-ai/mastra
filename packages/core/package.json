@@ -212,6 +212,7 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
+    "alawmulaw": "^6.0.0",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.0",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.12",

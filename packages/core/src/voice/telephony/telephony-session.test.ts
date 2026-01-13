@@ -66,7 +66,7 @@ describe('TelephonySession', () => {
         codec: 'alaw',
         bargeIn: false,
         speechThreshold: 0.05,
-        debug: true,
+        name: 'test-session',
       });
 
       expect(session.getState()).toBe('idle');
