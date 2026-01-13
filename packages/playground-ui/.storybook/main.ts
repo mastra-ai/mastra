@@ -28,7 +28,6 @@ const config: StorybookConfig = {
           __dirname,
           '../node_modules/@radix-ui/react-alert-dialog/dist/index.js',
         ),
-        '@radix-ui/react-avatar': resolve(__dirname, '../node_modules/@radix-ui/react-avatar/dist/index.js'),
         '@radix-ui/react-checkbox': resolve(__dirname, '../node_modules/@radix-ui/react-checkbox/dist/index.js'),
         '@radix-ui/react-collapsible': resolve(__dirname, '../node_modules/@radix-ui/react-collapsible/dist/index.js'),
         '@radix-ui/react-dialog': resolve(__dirname, '../node_modules/@radix-ui/react-dialog/dist/index.js'),
@@ -38,10 +37,8 @@ const config: StorybookConfig = {
         '@radix-ui/react-scroll-area': resolve(__dirname, '../node_modules/@radix-ui/react-scroll-area/dist/index.js'),
         '@radix-ui/react-select': resolve(__dirname, '../node_modules/@radix-ui/react-select/dist/index.js'),
         '@radix-ui/react-slider': resolve(__dirname, '../node_modules/@radix-ui/react-slider/dist/index.js'),
-        '@radix-ui/react-slot': resolve(__dirname, '../node_modules/@radix-ui/react-slot/dist/index.js'),
         '@radix-ui/react-switch': resolve(__dirname, '../node_modules/@radix-ui/react-switch/dist/index.js'),
         '@radix-ui/react-tabs': resolve(__dirname, '../node_modules/@radix-ui/react-tabs/dist/index.js'),
-        '@radix-ui/react-toggle': resolve(__dirname, '../node_modules/@radix-ui/react-toggle/dist/index.js'),
         '@radix-ui/react-tooltip': resolve(__dirname, '../node_modules/@radix-ui/react-tooltip/dist/index.js'),
         '@radix-ui/react-visually-hidden': resolve(
           __dirname,
@@ -60,7 +57,6 @@ const config: StorybookConfig = {
         // Radix UI packages used in playground-ui
         '@radix-ui/react-hover-card',
         '@radix-ui/react-alert-dialog',
-        '@radix-ui/react-avatar',
         '@radix-ui/react-checkbox',
         '@radix-ui/react-collapsible',
         '@radix-ui/react-dialog',
@@ -70,10 +66,8 @@ const config: StorybookConfig = {
         '@radix-ui/react-scroll-area',
         '@radix-ui/react-select',
         '@radix-ui/react-slider',
-        '@radix-ui/react-slot',
         '@radix-ui/react-switch',
         '@radix-ui/react-tabs',
-        '@radix-ui/react-toggle',
         '@radix-ui/react-tooltip',
         '@radix-ui/react-visually-hidden',
         // Other dependencies

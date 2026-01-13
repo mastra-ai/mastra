@@ -724,6 +724,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
         });
 
+        // @ts-ignore
         const nestedPrevStep = getStep(step.step, timeTravelParams.executionPath);
         const nestedPrevResult = timeTravelParams.stepResults[nestedPrevStep?.id ?? 'input'];
 

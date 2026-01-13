@@ -13,7 +13,7 @@ const memory = new Memory({
   }),
   vector: new LibSQLVector({
     id: "learning-memory-vector",
-    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+    url: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }),
 });
 ```

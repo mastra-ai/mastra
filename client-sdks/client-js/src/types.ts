@@ -23,7 +23,7 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRun, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
+import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -180,9 +180,7 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
-export type GetWorkflowRunByIdResponse = WorkflowRun;
-
-export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
+export type GetWorkflowRunByIdResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;

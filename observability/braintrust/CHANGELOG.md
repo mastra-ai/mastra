@@ -1,5 +1,70 @@
 # @mastra/braintrust
 
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- feat(observability): add zero-config environment variable support for all exporters ([#11686](https://github.com/mastra-ai/mastra/pull/11686))
+
+  All observability exporters now support zero-config setup via environment variables. Set the appropriate environment variables and instantiate exporters with no configuration:
+  - **Langfuse**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`
+  - **Braintrust**: `BRAINTRUST_API_KEY`, `BRAINTRUST_ENDPOINT`
+  - **PostHog**: `POSTHOG_API_KEY`, `POSTHOG_HOST`
+  - **Arize/Phoenix**: `ARIZE_SPACE_ID`, `ARIZE_API_KEY`, `ARIZE_PROJECT_NAME`, `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`, `PHOENIX_PROJECT_NAME`
+  - **OTEL Providers**:
+    - Dash0: `DASH0_API_KEY`, `DASH0_ENDPOINT`, `DASH0_DATASET`
+    - SigNoz: `SIGNOZ_API_KEY`, `SIGNOZ_REGION`, `SIGNOZ_ENDPOINT`
+    - New Relic: `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_ENDPOINT`
+    - Traceloop: `TRACELOOP_API_KEY`, `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT`
+    - Laminar: `LMNR_PROJECT_API_KEY`, `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID`
+
+  Example usage:
+
+  ```typescript
+  // Zero-config - reads from environment variables
+  new LangfuseExporter();
+  new BraintrustExporter();
+  new PosthogExporter();
+  new ArizeExporter();
+  new OtelExporter({ provider: { signoz: {} } });
+  ```
+
+  Explicit configuration still works and takes precedence over environment variables.
+
+### Patch Changes
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
+## 1.0.0-beta.11
+
+### Minor Changes
+
+- Formats messages in MODEL_GENERATION spans properly so the Thread view renders correctly. ([#11613](https://github.com/mastra-ai/mastra/pull/11613))
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Improves AI SDK message conversion for Braintrust Thread view: ([#11673](https://github.com/mastra-ai/mastra/pull/11673))
+  - Adds support for non-text content types (images, files, reasoning) with informative placeholders
+  - Handles both AI SDK v4 `result` and v5 `output` fields for tool results
+  - Gracefully handles empty content arrays and unknown content types
+  - Adds comprehensive TypeScript type definitions for message conversion
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`8a6734a`](https://github.com/mastra-ai/mastra/commit/8a6734a9b3eb192ada1f723d248b08b2258dd6b3), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+  - @mastra/observability@1.0.0-beta.10
+
 ## 1.0.0-beta.10
 
 ### Patch Changes

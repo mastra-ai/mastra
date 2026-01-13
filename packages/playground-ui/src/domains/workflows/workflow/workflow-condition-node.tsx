@@ -2,8 +2,7 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { Fragment, useState } from 'react';
 
-import { Text } from '@/components/ui/text';
-
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 import type { Condition } from './utils';
@@ -180,10 +179,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Text size={'xs'} className=" text-mastra-el-3 flex-1">
+                        <Txt variant="ui-xs" className=" text-mastra-el-3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
-                        </Text>
+                        </Txt>
                       </div>
                     ) : null}
                   </Fragment>

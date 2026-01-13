@@ -2,8 +2,7 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { useState } from 'react';
 
-import { Text } from '@/components/ui/text';
-
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -45,9 +44,9 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
         {steps.map(step => (
           <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2" key={step}>
             <Footprints className="text-current w-4 h-4" />
-            <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
+            <Txt variant="ui-xs" className="text-mastra-el-6 capitalize">
               {step}
-            </Text>
+            </Txt>
           </div>
         ))}
       </CollapsibleContent>

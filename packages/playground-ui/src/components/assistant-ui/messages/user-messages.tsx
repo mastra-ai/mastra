@@ -1,5 +1,3 @@
-'use client';
-
 import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 

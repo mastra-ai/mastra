@@ -9,7 +9,7 @@ const memory = new Memory({
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }),
   vector: new LibSQLVector({
-    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+    url: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }),
   embedder: openai.embedding("text-embedding-3-small"),
   options: {

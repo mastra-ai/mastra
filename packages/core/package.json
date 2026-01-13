@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.19",
+  "version": "1.0.0-beta.21",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -171,6 +171,16 @@
         "default": "./dist/agent/message-list/index.cjs"
       }
     },
+    "./loop/server": {
+      "import": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.js"
+      },
+      "require": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.cjs"
+      }
+    },
     "./storage/constants": {
       "import": {
         "types": "./dist/storage/constants.d.ts",
@@ -212,10 +222,10 @@
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@sindresorhus/slugify": "^2.2.1",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.2.3",
     "hono": "^4.11.3",
     "hono-openapi": "^1.1.1",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.2",
     "p-map": "^7.0.3",

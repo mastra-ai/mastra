@@ -57,8 +57,12 @@ export enum EntityType {
   EVAL = 'eval',
   /** Input Processor */
   INPUT_PROCESSOR = 'input_processor',
+  /** Input Step Processor */
+  INPUT_STEP_PROCESSOR = 'input_step_processor',
   /** Output Processor */
   OUTPUT_PROCESSOR = 'output_processor',
+  /** Output Step Processor */
+  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
   /** Workflow Step */
   WORKFLOW_STEP = 'workflow_step',
   /** Tool */
@@ -233,8 +237,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
-  /** Processor type (input or output) */
-  processorType: 'input' | 'output';
+  /** Processor executor type (workflow or legacy) */
+  processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
   /** MessageList mutations performed by this processor */
@@ -368,6 +372,14 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // Span Interfaces
 // ============================================================================
 
+export interface SpanErrorInfo {
+  message: string;
+  id?: string;
+  domain?: string;
+  category?: string;
+  details?: Record<string, any>;
+}
+
 /**
  * Base Span interface
  */
@@ -401,13 +413,7 @@ interface BaseSpan<TType extends SpanType> {
   /** Output generated at the end of the span */
   output?: any;
   /** Error information if span failed */
-  errorInfo?: {
-    message: string;
-    id?: string;
-    domain?: string;
-    category?: string;
-    details?: Record<string, any>;
-  };
+  errorInfo?: SpanErrorInfo;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
 }
