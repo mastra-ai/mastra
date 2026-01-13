@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { BaseNode } from '../schema';
 

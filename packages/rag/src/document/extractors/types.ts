@@ -1,6 +1,6 @@
-import type { z } from 'zod';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import type { z } from 'zod';
 import type {
   KeywordExtractPrompt,
   QuestionExtractPrompt,
