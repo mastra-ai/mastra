@@ -885,3 +885,66 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     expect(layer.shouldApply()).toBe(false);
   });
 });
+
+describe('OpenAISchemaCompatLayer - Passthrough/LooseObject Schemas', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o-mini',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should produce valid additionalProperties for passthrough schemas', () => {
+    // This is the pattern used by vectorQueryTool in @mastra/rag
+    const schema = z
+      .object({
+        queryText: z.string().describe('The query text'),
+        topK: z.coerce.number().describe('Number of results'),
+      })
+      .passthrough();
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // Convert to JSON Schema
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    // OpenAI requires additionalProperties to be either:
+    // - false (no additional properties allowed)
+    // - true (any additional properties allowed)
+    // - an object with a "type" key (typed additional properties)
+    // An empty object {} is NOT valid for OpenAI
+    const additionalProps = jsonSchema.additionalProperties;
+
+    if (typeof additionalProps === 'object' && additionalProps !== null) {
+      // If it's an object, it must have a 'type' key
+      expect(additionalProps).toHaveProperty('type');
+    } else {
+      // Otherwise it should be a boolean (true or false)
+      expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
+    }
+  });
+
+  it('should handle partial().passthrough() pattern', () => {
+    // This pattern is also used in some tools
+    const schema = z
+      .object({
+        City: z.string(),
+        Name: z.string(),
+        Slug: z.string(),
+      })
+      .partial()
+      .passthrough();
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    const additionalProps = jsonSchema.additionalProperties;
+
+    if (typeof additionalProps === 'object' && additionalProps !== null) {
+      expect(additionalProps).toHaveProperty('type');
+    } else {
+      expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
+    }
+  });
+});
