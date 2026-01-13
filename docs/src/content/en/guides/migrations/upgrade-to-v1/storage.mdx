@@ -13,10 +13,21 @@ Run these SQL migrations through your normal migration process (e.g., Prisma Mig
 
 ### Scorers table column rename
 
-If you use `@mastra/pg` or `@mastra/libsql` with evals/scoring (the `mastra_scorers` table exists in your database), rename the `runtimeContext` column:
+The `runtimeContext` column in `mastra_scorers` was renamed to `requestContext`.
+
+:::note[Who needs this migration]
+Only if you use `@mastra/pg` or `@mastra/libsql` with evals/scoring and have existing data in the `runtimeContext` column.
+:::
+
+:::important[What breaks without it]
+Existing score records won't have their request context data accessible.
+:::
+
+After deploying v1 (which adds the new `requestContext` column on init), copy the data and drop the old column:
 
 ```sql
-ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
+UPDATE mastra_scorers SET "requestContext" = "runtimeContext" WHERE "runtimeContext" IS NOT NULL;
+ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
 ```
 
 ### JSON columns (TEXT → JSONB)
