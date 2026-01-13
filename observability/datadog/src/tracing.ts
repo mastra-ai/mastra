@@ -24,7 +24,7 @@ import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
 import { formatUsageMetrics } from './metrics';
-import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './utils';
+import { ensureTracer, kindFor, toDate, formatInput, formatOutput, sanitizeLabel } from './utils';
 import type { DatadogSpanKind } from './utils';
 
 /**
@@ -53,6 +53,7 @@ interface TraceContext {
 type TraceState = {
   buffer: Map<string, AnyExportedSpan>;
   contexts: Map<string, { ddSpan: any; exported?: { traceId: string; spanId: string } }>;
+  submittedEvaluationKeys: Set<string>;
   rootEnded: boolean;
   treeEmitted: boolean; // Whether the initial span tree has been emitted
   createdAt: number;
@@ -212,7 +213,7 @@ export class DatadogExporter extends BaseExporter {
           return;
 
         case 'span_updated':
-          // No-op: completion-only pattern ignores mid-span updates
+          this.flushOrBufferSpanScores(span);
           return;
 
         case 'span_ended':
@@ -392,6 +393,7 @@ export class DatadogExporter extends BaseExporter {
     const created: TraceState = {
       buffer: new Map<string, AnyExportedSpan>(),
       contexts: new Map<string, { ddSpan: any; exported?: { traceId: string; spanId: string } }>(),
+      submittedEvaluationKeys: new Set<string>(),
       rootEnded: false,
       treeEmitted: false,
       createdAt: Date.now(),
@@ -604,6 +606,9 @@ export class DatadogExporter extends BaseExporter {
       const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
       state.contexts.set(span.id, { ddSpan, exported });
 
+      // Submit evaluation scores from span.scores
+      this.submitScoresForSpan(span, state);
+
       // Recursively emit children INSIDE this span's callback
       // This is the key to establishing proper parent-child relationships
       for (const child of node.children) {
@@ -633,12 +638,84 @@ export class DatadogExporter extends BaseExporter {
 
         const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
         state.contexts.set(span.id, { ddSpan, exported });
+
+        // Submit evaluation scores from span.scores
+        this.submitScoresForSpan(span, state);
       });
 
     if (parent) {
       tracer.scope().activate(parent, runTrace);
     } else {
       runTrace();
+    }
+  }
+
+  /**
+   * Submit evaluation scores from span.scores to Datadog LLM Observability.
+   * Called after span emission to link scores to the exported span.
+   */
+  private submitScoresForSpan(span: AnyExportedSpan, state: TraceState): void {
+    if (!span.scores?.length) return;
+
+    const context = state.contexts.get(span.id);
+    if (!context?.exported) {
+      this.logger.warn('Cannot submit scores: span not exported', {
+        spanId: span.id,
+        traceId: span.traceId,
+      });
+      return;
+    }
+
+    for (const score of span.scores) {
+      try {
+        const evaluationKey = `${span.id}:${score.scorerId}:${score.timestamp}`;
+        if (state.submittedEvaluationKeys.has(evaluationKey)) {
+          continue;
+        }
+        tracer.llmobs.submitEvaluation(context.exported, {
+          label: sanitizeLabel(score.scorerName),
+          metricType: 'score',
+          mlApp: this.config.mlApp,
+          value: score.score,
+          // Include reason and metadata as tags for searchability
+          tags: {
+            scorerId: score.scorerId,
+            ...(score.metadata ? score.metadata : {}),
+            ...(score.reason ? { reason: score.reason } : {}),
+          },
+        });
+
+        state.submittedEvaluationKeys.add(evaluationKey);
+      } catch (error) {
+        this.logger.error('Datadog exporter: Error submitting evaluation', {
+          error,
+          traceId: span.traceId,
+          spanId: span.id,
+          scorerName: score.scorerName,
+        });
+      }
+    }
+  }
+  /**
+   * Flush or buffer span scores.
+   * If the span has been exported, submit the scores immediately.
+   * If the span has not been exported, update the buffered span scores for later submission.
+   */
+  private flushOrBufferSpanScores(span: AnyExportedSpan): void {
+    if (!span.scores?.length) return;
+
+    const state = this.traceState.get(span.traceId);
+    if (!state) return;
+
+    const ctx = state.contexts.get(span.id);
+    if (ctx?.exported) {
+      this.submitScoresForSpan(span, state);
+      return;
+    }
+
+    const buffered = state.buffer.get(span.id);
+    if (buffered) {
+      buffered.scores = span.scores;
     }
   }
 }

@@ -68,7 +68,7 @@ export function createOnScorerHook(mastra: Mastra) {
       await validateAndSaveScore(storage, payload);
 
       // Add score to span and trigger update event so it gets exported
-      if (currentSpan && currentSpan.isValid && typeof currentSpan.addScore === 'function') {
+      if (currentSpan && spanId && traceId) {
         try {
           currentSpan.addScore({
             scorerId: scorerToUse.scorer.id,
@@ -76,19 +76,14 @@ export function createOnScorerHook(mastra: Mastra) {
             score: runResult.score as number,
             reason: runResult.reason as string,
             metadata: {
-              preprocessStepResult: runResult.preprocessStepResult,
-              preprocessPrompt: runResult.preprocessPrompt,
-              analyzeStepResult: runResult.analyzeStepResult,
-              analyzePrompt: runResult.analyzePrompt,
-              generateScorePrompt: runResult.generateScorePrompt,
-              generateReasonPrompt: runResult.generateReasonPrompt,
+              ...(runResult.preprocessStepResult ? { preprocessStepResult: runResult.preprocessStepResult } : {}),
+              ...(runResult.analyzeStepResult ? { analyzeStepResult: runResult.analyzeStepResult } : {}),
             },
           });
 
           // Trigger a span update event so the score gets exported
-          if (typeof currentSpan.update === 'function') {
-            currentSpan.update({});
-          }
+
+          currentSpan.update({});
         } catch (addScoreError) {
           mastra.getLogger()?.warn(`Failed to add score to span: ${addScoreError}`);
         }
