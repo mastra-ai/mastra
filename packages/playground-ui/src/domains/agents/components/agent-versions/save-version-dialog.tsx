@@ -1,0 +1,104 @@
+'use client';
+
+import { useState } from 'react';
+import { useCreateAgentVersion } from '../../hooks/use-agent-versions';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/ds/components/Button';
+import { Label } from '@/components/ui/label';
+import { toast } from '@/lib/toast';
+
+interface SaveVersionDialogProps {
+  agentId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function SaveVersionDialog({ agentId, open, onOpenChange }: SaveVersionDialogProps) {
+  const [name, setName] = useState('');
+  const [changeMessage, setChangeMessage] = useState('');
+
+  const { mutateAsync: createVersion, isPending } = useCreateAgentVersion({ agentId });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createVersion({
+        name: name.trim() || undefined,
+        changeMessage: changeMessage.trim() || undefined,
+      });
+      setName('');
+      setChangeMessage('');
+      onOpenChange(false);
+      toast.success('Version saved successfully');
+    } catch (error) {
+      toast.error(`Failed to save version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleClose = () => {
+    if (!isPending) {
+      setName('');
+      setChangeMessage('');
+      onOpenChange(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Save as Version</DialogTitle>
+          <DialogDescription>Create a snapshot of the current agent configuration.</DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="version-name" className="text-icon5">
+              Version Name (optional)
+            </Label>
+            <input
+              id="version-name"
+              type="text"
+              placeholder="e.g., Production v1, Experiment with GPT-4"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              maxLength={100}
+              className="flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors border-sm border-border1 placeholder:text-icon3 px-[13px] py-2 text-[calc(13_/_16_*_1rem)] disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="change-message" className="text-icon5">
+              Description (optional)
+            </Label>
+            <textarea
+              id="change-message"
+              placeholder="What changed in this version?"
+              value={changeMessage}
+              onChange={e => setChangeMessage(e.target.value)}
+              maxLength={500}
+              rows={3}
+              className="flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors border-sm border-border1 placeholder:text-icon3 px-[13px] py-2 text-[calc(13_/_16_*_1rem)] resize-y min-h-[80px] disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending || (!name.trim() && !changeMessage.trim())}>
+              {isPending ? 'Saving...' : 'Save Version'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
