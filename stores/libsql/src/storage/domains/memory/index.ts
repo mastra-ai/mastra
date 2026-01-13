@@ -660,7 +660,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     if (metadata) {
-      updates.push('metadata = ?');
+      updates.push('metadata = jsonb(?)');
       values.push(JSON.stringify(updatedResource.metadata));
     }
 
@@ -857,7 +857,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
         args: [title, JSON.stringify(updatedThread.metadata), id],
       });
 
@@ -1009,7 +1009,7 @@ export class MemoryLibSQL extends MemoryStorage {
         // Insert the new thread
         await tx.execute({
           sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
-                VALUES (?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
           args: [
             newThread.id,
             newThread.resourceId,

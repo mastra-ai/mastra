@@ -78,7 +78,9 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
   args: InValue[];
 } {
   const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-  const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
+  const schema = TABLE_SCHEMAS[tableName];
+  const columnNames = Object.keys(record);
+  const columns = columnNames.map(col => parseSqlIdentifier(col, 'column name'));
   const values = Object.values(record).map(v => {
     if (typeof v === `undefined` || v === null) {
       // returning an undefined value will cause libsql to throw
@@ -89,7 +91,12 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
     }
     return typeof v === 'object' ? JSON.stringify(v) : v;
   });
-  const placeholders = values.map(() => '?').join(', ');
+  const placeholders = columnNames
+    .map(col => {
+      const colDef = schema[col];
+      return colDef?.type === 'jsonb' ? 'jsonb(?)' : '?';
+    })
+    .join(', ');
 
   return {
     sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
@@ -113,9 +120,15 @@ export function prepareUpdateStatement({
   const schema = TABLE_SCHEMAS[tableName];
 
   // Prepare SET clause
-  const updateColumns = Object.keys(updates).map(col => parseSqlIdentifier(col, 'column name'));
+  const updateColumnNames = Object.keys(updates);
+  const updateColumns = updateColumnNames.map(col => parseSqlIdentifier(col, 'column name'));
   const updateValues = Object.values(updates).map(transformToSqlValue);
-  const setClause = updateColumns.map(col => `${col} = ?`).join(', ');
+  const setClause = updateColumns
+    .map((col, i) => {
+      const colDef = schema[updateColumnNames[i]!];
+      return colDef?.type === 'jsonb' ? `${col} = jsonb(?)` : `${col} = ?`;
+    })
+    .join(', ');
 
   const whereClause = prepareWhereClause(keys, schema);
 

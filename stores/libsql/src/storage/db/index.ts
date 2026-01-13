@@ -375,6 +375,16 @@ export class LibSQLDB extends MastraBase {
    */
   async select<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const schema = TABLE_SCHEMAS[tableName];
+
+    // Build column list, wrapping jsonb columns with json() to get TEXT back
+    const columns = Object.keys(schema)
+      .map(col => {
+        const colDef = schema[col];
+        const parsedCol = parseSqlIdentifier(col, 'column name');
+        return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
+      })
+      .join(', ');
 
     const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
 
@@ -382,7 +392,7 @@ export class LibSQLDB extends MastraBase {
     const values = Object.values(keys);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${parsedTableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
+      sql: `SELECT ${columns} FROM ${parsedTableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
       args: values,
     });
 
@@ -436,8 +446,18 @@ export class LibSQLDB extends MastraBase {
     args?: any[];
   }): Promise<R[]> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const schema = TABLE_SCHEMAS[tableName];
 
-    let statement = `SELECT * FROM ${parsedTableName}`;
+    // Build column list, wrapping jsonb columns with json() to get TEXT back
+    const columns = Object.keys(schema)
+      .map(col => {
+        const colDef = schema[col];
+        const parsedCol = parseSqlIdentifier(col, 'column name');
+        return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
+      })
+      .join(', ');
+
+    let statement = `SELECT ${columns} FROM ${parsedTableName}`;
 
     if (whereClause?.sql) {
       statement += ` ${whereClause.sql}`;
@@ -508,10 +528,8 @@ export class LibSQLDB extends MastraBase {
         return 'REAL'; // SQLite's floating point type
       case 'boolean':
         return 'INTEGER'; // SQLite uses 0/1 for booleans
-      case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
       default:
-        return getSqlType(type); // text, integer, uuid all map to TEXT/INTEGER correctly
+        return getSqlType(type); // text, integer, uuid, jsonb all map correctly
     }
   }
 
