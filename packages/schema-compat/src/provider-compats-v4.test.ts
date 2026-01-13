@@ -97,6 +97,20 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     supportsStructuredOutputs: false,
   };
 
+  // OpenAI requires additionalProperties to be either:
+  // - false (no additional properties allowed)
+  // - true (any additional properties allowed)
+  // - an object with a "type" key (typed additional properties)
+  // An empty object {} is NOT valid for OpenAI and will cause error:
+  // "Invalid schema for function: In context=('additionalProperties',), schema must have a 'type' key."
+  function expectValidOpenAIAdditionalProperties(additionalProps: unknown) {
+    if (typeof additionalProps === 'object' && additionalProps !== null) {
+      expect(additionalProps).toHaveProperty('type');
+    } else {
+      expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
+    }
+  }
+
   it('should produce valid additionalProperties for passthrough schemas', () => {
     // This is the pattern used by vectorQueryTool in @mastra/rag
     // See GitHub issue #11823
@@ -108,26 +122,9 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
       .passthrough();
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-
-    // Convert to JSON Schema
     const jsonSchema = layer.processToJSONSchema(schema);
 
-    // OpenAI requires additionalProperties to be either:
-    // - false (no additional properties allowed)
-    // - true (any additional properties allowed)
-    // - an object with a "type" key (typed additional properties)
-    // An empty object {} is NOT valid for OpenAI and will cause error:
-    // "Invalid schema for function: In context=('additionalProperties',), schema must have a 'type' key."
-    const additionalProps = jsonSchema.additionalProperties;
-
-    // Check that additionalProperties is valid for OpenAI
-    if (typeof additionalProps === 'object' && additionalProps !== null) {
-      // If it's an object, it must have a 'type' key
-      expect(additionalProps).toHaveProperty('type');
-    } else {
-      // Otherwise it should be a boolean (true or false) or undefined
-      expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
-    }
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
   });
 
   it('should produce valid additionalProperties for looseObject schemas', () => {
@@ -138,17 +135,9 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     });
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-
-    // Convert to JSON Schema
     const jsonSchema = layer.processToJSONSchema(schema);
 
-    const additionalProps = jsonSchema.additionalProperties;
-
-    if (typeof additionalProps === 'object' && additionalProps !== null) {
-      expect(additionalProps).toHaveProperty('type');
-    } else {
-      expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
-    }
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
   });
 
   it('should handle partial().passthrough() pattern', () => {
@@ -163,15 +152,8 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
       .passthrough();
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-
     const jsonSchema = layer.processToJSONSchema(schema);
 
-    const additionalProps = jsonSchema.additionalProperties;
-
-    if (typeof additionalProps === 'object' && additionalProps !== null) {
-      expect(additionalProps).toHaveProperty('type');
-    } else {
-      expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
-    }
+    expectValidOpenAIAdditionalProperties(jsonSchema.additionalProperties);
   });
 });
