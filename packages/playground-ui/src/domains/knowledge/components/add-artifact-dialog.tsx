@@ -198,7 +198,7 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
               <Textarea
                 id="content"
                 value={content}
-                onChange={e => setContent(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
                 placeholder="Enter text content..."
                 rows={6}
                 required
@@ -289,7 +289,7 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
             <Textarea
               id="metadata"
               value={metadataStr}
-              onChange={e => {
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                 setMetadataStr(e.target.value);
                 setMetadataError(null);
               }}
