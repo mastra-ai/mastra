@@ -33,6 +33,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params, requestContext),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
     },
   });
 
@@ -43,8 +44,10 @@ export const useStoredAgentMutations = (agentId?: string) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       if (agentId) {
         queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
       }
     },
   });
@@ -56,6 +59,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
     },
   });
 
