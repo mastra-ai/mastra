@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useId } from 'react';
 import { ChevronsUpDown, Search, X } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
@@ -48,6 +49,7 @@ export function MultiSelectPicker<T>({
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
+  const uid = useId();
 
   const filteredOptions = React.useMemo(() => {
     if (!search) return options;
@@ -205,14 +207,14 @@ export function MultiSelectPicker<T>({
                 onKeyDown={handleKeyDown}
                 role="combobox"
                 aria-autocomplete="list"
-                aria-controls="multi-select-options"
+                aria-controls={`${uid}-options`}
                 aria-expanded={open}
               />
             </div>
             <ScrollArea maxHeight="240px">
               <div
                 ref={listRef}
-                id="multi-select-options"
+                id={`${uid}-options`}
                 role="listbox"
                 aria-multiselectable={!singleSelect}
                 className="p-1"

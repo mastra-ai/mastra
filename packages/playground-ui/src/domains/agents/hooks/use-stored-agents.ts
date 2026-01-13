@@ -32,8 +32,9 @@ export const useStoredAgentMutations = (agentId?: string) => {
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      // Invalidate both stored-agents list and the merged agents list
       queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 
@@ -43,11 +44,13 @@ export const useStoredAgentMutations = (agentId?: string) => {
       return client.getStoredAgent(agentId).update(params, requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      // Invalidate lists
       queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      // Invalidate specific agent details
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       }
     },
   });
@@ -58,8 +61,14 @@ export const useStoredAgentMutations = (agentId?: string) => {
       return client.getStoredAgent(agentId).delete(requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      // Invalidate lists
       queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      // Invalidate specific agent details
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      }
     },
   });
 

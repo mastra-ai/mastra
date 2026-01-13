@@ -1,6 +1,7 @@
 'use client';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from '@/lib/toast';
 
 import { AgentForm } from './agent-form';
 import type { AgentFormValues } from './form-validation';
@@ -17,19 +18,23 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
 
   const handleSubmit = async (values: AgentFormValues) => {
     const agentId = crypto.randomUUID();
-    await createStoredAgent.mutateAsync({
-      id: agentId,
-      name: values.name,
-      description: values.description,
-      instructions: values.instructions,
-      model: values.model as Record<string, unknown>,
-      tools: values.tools,
-      workflows: values.workflows,
-      agents: values.agents,
-      memory: values.memory,
-    });
-    onOpenChange(false);
-    onSuccess?.(agentId);
+    try {
+      await createStoredAgent.mutateAsync({
+        id: agentId,
+        name: values.name,
+        description: values.description,
+        instructions: values.instructions,
+        model: values.model as Record<string, unknown>,
+        tools: values.tools,
+        workflows: values.workflows,
+        agents: values.agents,
+        memory: values.memory,
+      });
+      onOpenChange(false);
+      onSuccess?.(agentId);
+    } catch (error) {
+      toast.error(`Failed to create agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleCancel = () => {

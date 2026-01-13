@@ -152,7 +152,7 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
                     key={`${model.provider}-${model.model}`}
                     data-model-highlighted={isHighlighted}
                     className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${
-                      isHighlighted ? 'outline outline-2 outline-blue-500' : ''
+                      isHighlighted ? 'outline outline-2 outline-accent5' : ''
                     } ${isSelected ? 'bg-surface5' : ''}`}
                     onMouseDown={e => {
                       e.preventDefault();

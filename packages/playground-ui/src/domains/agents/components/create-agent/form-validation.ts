@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Provider } from '@mastra/client-js';
+import { cleanProviderId } from '../agent-metadata/utils';
 
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
@@ -64,12 +65,14 @@ export function validateReferences(
 }
 
 export function isProviderConnected(provider: string, providers: Provider[]): boolean {
-  const found = providers.find(p => p.id === provider || p.id.startsWith(provider));
+  const cleanedProvider = cleanProviderId(provider);
+  const found = providers.find(p => cleanProviderId(p.id) === cleanedProvider);
   return found?.connected ?? false;
 }
 
 export function getProviderWarning(provider: string, providers: Provider[]): string | null {
-  const found = providers.find(p => p.id === provider || p.id.startsWith(provider));
+  const cleanedProvider = cleanProviderId(provider);
+  const found = providers.find(p => cleanProviderId(p.id) === cleanedProvider);
   if (found && !found.connected) {
     const envVar = Array.isArray(found.envVar) ? found.envVar.join(', ') : found.envVar;
     return `Provider "${found.name}" is not connected. Set ${envVar} to use this provider.`;
