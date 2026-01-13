@@ -480,6 +480,9 @@ export class InMemoryMemory extends MemoryStorage {
       threads = threads.filter((t: any) => t.resourceId === filter.resourceId);
     }
 
+    // Validate metadata keys before filtering
+    this.validateMetadataKeys(filter?.metadata);
+
     // Apply metadata filter if provided (AND logic - all key-value pairs must match)
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
       threads = threads.filter(thread => {
