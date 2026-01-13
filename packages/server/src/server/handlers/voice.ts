@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
-import { Agent } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
-import { Mastra } from '@mastra/core/mastra';
+import type { Mastra } from '@mastra/core/mastra';
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
