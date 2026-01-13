@@ -25,7 +25,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
     <AgentInformationLayout agentId={agentId}>
       <AgentEntityHeader agentId={agentId} />
 
-      <AgentInformationTabLayout agentId={agentId} isStoredAgent={isStoredAgent}>
+      <AgentInformationTabLayout agentId={agentId}>
         <TabList>
           <Tab value="overview">Overview</Tab>
           <Tab value="model-settings">Model Settings</Tab>
@@ -128,7 +128,6 @@ export const AgentInformationLayout = ({ children, agentId }: AgentInformationLa
 export interface AgentInformationTabLayoutProps {
   children: React.ReactNode;
   agentId: string;
-  isStoredAgent?: boolean;
 }
 export const AgentInformationTabLayout = ({ children, agentId }: AgentInformationTabLayoutProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);

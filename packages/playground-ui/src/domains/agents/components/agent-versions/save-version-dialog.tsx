@@ -70,7 +70,7 @@ export function SaveVersionDialog({ agentId, open, onOpenChange }: SaveVersionDi
               value={name}
               onChange={e => setName(e.target.value)}
               maxLength={100}
-              className="flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors border-sm border-border1 placeholder:text-icon3 px-[13px] py-2 text-[calc(13_/_16_*_1rem)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors border-sm border-border1 placeholder:text-icon3 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
@@ -85,7 +85,7 @@ export function SaveVersionDialog({ agentId, open, onOpenChange }: SaveVersionDi
               onChange={e => setChangeMessage(e.target.value)}
               maxLength={500}
               rows={3}
-              className="flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors border-sm border-border1 placeholder:text-icon3 px-[13px] py-2 text-[calc(13_/_16_*_1rem)] resize-y min-h-[80px] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors border-sm border-border1 placeholder:text-icon3 px-3 py-2 text-sm resize-y min-h-20 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
@@ -93,7 +93,7 @@ export function SaveVersionDialog({ agentId, open, onOpenChange }: SaveVersionDi
             <Button type="button" variant="outline" onClick={handleClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || (!name.trim() && !changeMessage.trim())}>
+            <Button type="submit" disabled={isPending}>
               {isPending ? 'Saving...' : 'Save Version'}
             </Button>
           </DialogFooter>

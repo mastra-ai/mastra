@@ -65,42 +65,6 @@
 
 ---
 
-## Progress Summary
-
-### Completed Tasks
-
-| Task        | Description                                    | Status  | PR/Commit              |
-| ----------- | ---------------------------------------------- | ------- | ---------------------- |
-| **Task 1**  | Add `source` field to Agent schema & response  | ✅ DONE | PR #11848              |
-| **Task 1+** | Add `ownerId` field for multi-tenant filtering | ✅ DONE | PR #11848              |
-| **Task 1+** | Add schema migration for `ownerId` column      | ✅ DONE | PR #11848              |
-| **Task 2**  | Create stored agent hooks                      | ✅ DONE | `use-stored-agents.ts` |
-| **Task 2+** | Update client SDK stored-agent methods         | ✅ DONE | `stored-agent.ts`      |
-
-### In Progress Tasks
-
-| Task        | Description                           | Status  | Assignee |
-| ----------- | ------------------------------------- | ------- | -------- |
-| **Task 3**  | Create Model Picker component         | 🔲 TODO | Worker B |
-| **Task 4**  | Create Multi-Select Picker component  | 🔲 TODO | Worker B |
-| **Task 5**  | Create Form Validation schema         | 🔲 TODO | Worker B |
-| **Task 6**  | Create Agent Form component           | 🔲 TODO | Worker B |
-| **Task 7**  | Add Memory Configs API endpoint       | 🔲 TODO | Worker A |
-| **Task 8**  | Create Agent Dialog                   | 🔲 TODO | Worker B |
-| **Task 9**  | Edit Agent Dialog                     | 🔲 TODO | Worker B |
-| **Task 10** | Delete Agent Confirmation             | 🔲 TODO | Worker B |
-| **Task 11** | Update Agents Table with source badge | 🔲 TODO | Worker E |
-| **Task 12** | Update Empty State with Create CTA    | 🔲 TODO | Worker E |
-| **Task 13** | Update Agents page with create button | 🔲 TODO | Worker E |
-| **Task 14** | Add Edit button to Agent Header       | 🔲 TODO | Worker E |
-| **Task 15** | Export new components                 | 🔲 TODO | Any      |
-
-### Versioning Tasks (Phase 1B)
-
-All versioning tasks (V1-V15) are pending, blocked on Phase 1A completion.
-
----
-
 ## Overview
 
 **Feature**: Full CRUD for Agents from Mastra Studio UI

@@ -41,61 +41,6 @@ Implemented:
 
 ## 🔲 REMAINING Tasks
 
-### Task 3: Create Model Picker Component
-
-**Priority**: HIGH  
-**Status**: TODO
-**Depends on**: None (can start immediately)
-
-```typescript
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
-import type { CreateStoredAgentParams, UpdateStoredAgentParams } from '@mastra/client-js';
-
-export const useCreateStoredAgent = () => {
-  const client = useMastraClient();
-  const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
-
-  return useMutation({
-    mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params, requestContext),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
-    },
-  });
-};
-
-export const useUpdateStoredAgent = (agentId: string) => {
-  const client = useMastraClient();
-  const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
-
-  return useMutation({
-    mutationFn: (params: UpdateStoredAgentParams) => client.getStoredAgent(agentId).update(params, requestContext),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
-    },
-  });
-};
-
-export const useDeleteStoredAgent = (agentId: string) => {
-  const client = useMastraClient();
-  const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
-
-  return useMutation({
-    mutationFn: () => client.getStoredAgent(agentId).delete(requestContext),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
-    },
-  });
-};
-```
-
----
-
 ### Task 3: Create Model Picker Component ✅
 
 **Status**: COMPLETE (PR #11852)
@@ -482,14 +427,12 @@ After completing Tasks 8, 9, 10:
 ## Testing Checklist
 
 - [x] Stored agent hooks work (useStoredAgents, useStoredAgent, useStoredAgentMutations)
-- [ ] Model Picker renders and allows selection
-- [ ] Model Picker shows provider connection status
+- [x] Model Picker renders and allows selection
+- [x] Model Picker shows provider connection status
 - [x] Multi-Select Picker works for tools/workflows/agents
 - [x] Multi-Select Picker single-select mode works for memory
 - [x] Form validation shows errors for required fields
 - [x] Form validation warns about disconnected providers
-- [x] Model Picker renders and allows selection
-- [x] Model Picker shows provider connection status
 - [ ] Agent Form renders in create mode
 - [ ] Agent Form renders in edit mode with pre-filled values
 - [ ] Advanced options collapsible works

@@ -92,7 +92,6 @@ export class StoredAgent extends BaseResource {
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);
-    const separator = queryString ? (contextString ? '&' : '') : '';
     return this.request(
       `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
     );

@@ -36,29 +36,29 @@ import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
 import type { ListAgentVersionsParams, CreateAgentVersionParams } from '@mastra/client-js';
 
-export const useAgentVersions = (agentId: string, params?: ListAgentVersionsParams) => {
+export const useAgentVersions = ({ agentId, params }: { agentId: string; params?: ListAgentVersionsParams }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['agent-versions', agentId, params],
+    queryKey: ['agent-versions', agentId, params, requestContext],
     queryFn: () => client.getStoredAgent(agentId).listVersions(params, requestContext),
     enabled: !!agentId,
   });
 };
 
-export const useAgentVersion = (agentId: string, versionId: string) => {
+export const useAgentVersion = ({ agentId, versionId }: { agentId: string; versionId: string }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['agent-version', agentId, versionId],
+    queryKey: ['agent-version', agentId, versionId, requestContext],
     queryFn: () => client.getStoredAgent(agentId).getVersion(versionId, requestContext),
     enabled: !!agentId && !!versionId,
   });
 };
 
-export const useCreateAgentVersion = (agentId: string) => {
+export const useCreateAgentVersion = ({ agentId }: { agentId: string }) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { requestContext } = usePlaygroundStore();
@@ -155,9 +155,9 @@ export function AgentVersions({ agentId, activeVersionId }: AgentVersionsProps) 
   const [compareVersions, setCompareVersions] = useState<{ from: string; to: string } | null>(null);
   const [selectedForCompare, setSelectedForCompare] = useState<string | null>(null);
 
-  const { data, isLoading } = useAgentVersions(agentId);
-  const { mutate: activateVersion } = useActivateAgentVersion(agentId);
-  const { mutate: deleteVersion } = useDeleteAgentVersion(agentId);
+  const { data, isLoading } = useAgentVersions({ agentId });
+  const { mutate: activateVersion } = useActivateAgentVersion({ agentId });
+  const { mutate: deleteVersion } = useDeleteAgentVersion({ agentId });
 
   if (isLoading) {
     return (
@@ -710,9 +710,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const isStoredAgent = agent?.source === 'stored';
 
   // Only fetch versions for stored agents
-  const { data: versionsData } = useAgentVersions(agentId, { perPage: 1 }, {
-    enabled: isStoredAgent,
-  });
+  const { data: versionsData } = useAgentVersions({ agentId, params: { perPage: 1 } });
 
   const activeVersion = versionsData?.versions?.find(v => v.id === agent?.activeVersionId);
 
