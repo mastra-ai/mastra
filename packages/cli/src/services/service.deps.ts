@@ -36,6 +36,7 @@ export class DepsService {
       case 'yarn.lock':
         return 'yarn';
       case 'bun.lock':
+      case 'bun.lockb':
         return 'bun';
       default:
         return 'npm';
