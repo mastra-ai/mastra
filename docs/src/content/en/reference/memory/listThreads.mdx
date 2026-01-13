@@ -7,11 +7,11 @@ packages:
 
 # Memory.listThreads()
 
-The `listThreads()` method returns all thread and supports filtering by `resourceId` or `metadata` or a combination of both.
+The `listThreads()` method retrieves threads with pagination support and optional filtering by `resourceId`, `metadata`, or both.
 
 ## Usage Examples
 
-### List all threads (no filter)
+### List all threads with pagination
 
 ```typescript
 const result = await memory.listThreads({
@@ -20,7 +20,18 @@ const result = await memory.listThreads({
 });
 ```
 
-### Filter by resourceId only
+### Fetch all threads without pagination
+
+Use `perPage: false` to retrieve all matching threads at once.
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  perPage: false,
+});
+```
+
+### Filter by resourceId
 
 ```typescript
 const result = await memory.listThreads({
@@ -30,7 +41,7 @@ const result = await memory.listThreads({
 });
 ```
 
-### Filter by metadata only
+### Filter by metadata
 
 ```typescript
 const result = await memory.listThreads({
@@ -160,32 +171,6 @@ await memory.listThreads({
     },
   },
 });
-```
-
-## Migration from listThreadsByResourceId()
-
-If you're migrating from the deprecated `listThreadsByResourceId()` method:
-
-```typescript
-// Old API (deprecated)
-await memory.listThreadsByResourceId({
-  resourceId: "user-123",
-  page: 0,
-  perPage: 10,
-});
-
-// New API
-await memory.listThreads({
-  filter: { resourceId: "user-123" },
-  page: 0,
-  perPage: 10,
-});
-```
-
-A codemod is available to automate this migration:
-
-```bash
-npx @mastra/codemod@latest list-threads-by-resource-to-list-threads
 ```
 
 ## Related

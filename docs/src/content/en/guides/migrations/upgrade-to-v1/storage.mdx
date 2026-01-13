@@ -152,20 +152,32 @@ To migrate, call `getStore()` with the domain name, then call methods on the ret
 
 ### `getThreadsByResourceId` to `listThreads`
 
-The `getThreadsByResourceId()` method has been replaced with `listThreads()`. `listThreads()` supports filtering by `resourceId` or `metadata` or a combination of both.
+The `getThreadsByResourceId()` method has been replaced with `listThreads()`. The new method adds pagination support and filtering by `resourceId`, `metadata`, or both.
 
-To migrate, use the memory store and the new `listThreads()` method with an optional filter object.
+**Important:** The old `getThreadsByResourceId()` returned all matching threads without pagination. The new `listThreads()` requires pagination parameters. To preserve the old behavior of fetching all threads, use `perPage: false`.
+
+To migrate, use the memory store and the new `listThreads()` method with pagination and an optional filter object.
 
 ```diff
 - const threads = await storage.getThreadsByResourceId({
 -   resourceId: 'res-123',
 - });
 + const memoryStore = await storage.getStore('memory');
-+ const threads = await memoryStore?.listThreads({
++
++ // Paginated (recommended for large datasets)
++ const result = await memoryStore?.listThreads({
 +   filter: { resourceId: 'res-123' },
 +   page: 0,
 +   perPage: 20,
 + });
++ const threads = result?.threads;
++
++ // Or fetch all threads like before (use perPage: false)
++ const allResult = await memoryStore?.listThreads({
++   filter: { resourceId: 'res-123' },
++   perPage: false,
++ });
++ const allThreads = allResult?.threads;
 ```
 
 The new method also supports:
@@ -200,7 +212,7 @@ await memoryStore?.listThreads({
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/list-threads-by-resource-to-list-threads .
+npx @mastra/codemod@beta v1/storage-list-threads-by-resource-to-list-threads .
 ```
 
 :::

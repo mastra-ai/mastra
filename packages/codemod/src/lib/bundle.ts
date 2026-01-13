@@ -36,5 +36,6 @@ export const BUNDLE = [
   'v1/storage-postgres-schema-name',
   'v1/storage-get-messages-paginated',
   'v1/storage-list-workflow-runs',
+  'v1/storage-list-threads-by-resource-to-list-threads',
   'v1/vector-pg-constructor',
 ];
