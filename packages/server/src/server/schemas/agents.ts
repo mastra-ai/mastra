@@ -436,3 +436,17 @@ export const enhanceInstructionsResponseSchema = z.object({
   explanation: z.string().describe('Explanation of the changes made'),
   new_prompt: z.string().describe('The enhanced instructions'),
 });
+
+/**
+ * Body schema for generic enhance instructions (without requiring an agent)
+ */
+export const enhanceInstructionsGenericBodySchema = z.object({
+  instructions: z.string().describe('The current instructions to enhance'),
+  comment: z.string().describe('User comment describing how to enhance the instructions'),
+  model: z
+    .object({
+      provider: z.string().describe('The provider ID (e.g., "openai", "anthropic")'),
+      modelId: z.string().describe('The model ID (e.g., "gpt-4o", "claude-3-5-sonnet")'),
+    })
+    .describe('The model to use for enhancement'),
+});

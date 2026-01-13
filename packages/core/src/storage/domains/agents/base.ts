@@ -175,6 +175,38 @@ export abstract class AgentsStorage extends StorageDomain {
   }
 
   /**
+   * Lists all agents with version resolution.
+   * For each agent that has an activeVersionId, the config is resolved from the version snapshot.
+   *
+   * @param args - Pagination and ordering options
+   * @returns Paginated list of resolved agents
+   */
+  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+    const result = await this.listAgents(args);
+
+    // Resolve each agent's active version
+    const resolvedAgents = await Promise.all(
+      result.agents.map(async agent => {
+        if (agent.activeVersionId) {
+          const activeVersion = await this.getVersion(agent.activeVersionId);
+          if (activeVersion) {
+            return {
+              ...activeVersion.snapshot,
+              activeVersionId: agent.activeVersionId,
+            };
+          }
+        }
+        return agent;
+      }),
+    );
+
+    return {
+      ...result,
+      agents: resolvedAgents,
+    };
+  }
+
+  /**
    * Creates a new agent in storage.
    * @param agent - The agent data to create
    * @returns The created agent with timestamps

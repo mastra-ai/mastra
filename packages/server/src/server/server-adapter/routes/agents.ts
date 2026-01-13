@@ -15,6 +15,7 @@ import {
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
   ENHANCE_INSTRUCTIONS_ROUTE,
+  ENHANCE_INSTRUCTIONS_GENERIC_ROUTE,
   STREAM_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_DEPRECATED_ROUTE,
@@ -80,6 +81,7 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   // ============================================================================
   // Instruction Enhancement Routes
   // ============================================================================
+  ENHANCE_INSTRUCTIONS_GENERIC_ROUTE, // Must be before ENHANCE_INSTRUCTIONS_ROUTE to avoid path conflict
   ENHANCE_INSTRUCTIONS_ROUTE,
 
   // ============================================================================

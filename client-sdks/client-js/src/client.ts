@@ -158,6 +158,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Enhances instructions using AI without requiring an existing agent.
+   * Useful when creating new agents.
+   * @param params - Enhancement parameters
+   * @returns Promise containing the enhanced instructions and explanation
+   */
+  public enhanceInstructions(params: {
+    instructions: string;
+    comment: string;
+    model: { provider: string; modelId: string };
+  }): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request('/api/agents/instructions/enhance', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
    * Creates a new memory thread
    * @param params - Parameters for creating the memory thread including optional request context
    * @returns Promise containing the created memory thread

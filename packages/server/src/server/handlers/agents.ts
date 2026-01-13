@@ -33,6 +33,7 @@ import {
   modelConfigIdPathParams,
   enhanceInstructionsBodySchema,
   enhanceInstructionsResponseSchema,
+  enhanceInstructionsGenericBodySchema,
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
@@ -1206,6 +1207,48 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
         }
         modelToUse = connectedModel;
       }
+
+      const systemPromptAgent = new Agent({
+        id: 'system-prompt-enhancer',
+        name: 'system-prompt-enhancer',
+        instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
+        model: modelToUse,
+      });
+
+      const result = await systemPromptAgent.generate(
+        `We need to improve the system prompt.
+Current: ${instructions}
+${comment ? `User feedback: ${comment}` : ''}`,
+        {
+          structuredOutput: {
+            schema: enhanceInstructionsResponseSchema,
+          },
+        },
+      );
+
+      return (await result.object) as unknown as EnhanceInstructionsResponse;
+    } catch (error) {
+      return handleError(error, 'Error enhancing instructions');
+    }
+  },
+});
+
+/**
+ * Generic enhance instructions endpoint that doesn't require an agent.
+ * Useful for creating new agents where no agent exists yet.
+ */
+export const ENHANCE_INSTRUCTIONS_GENERIC_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/instructions/enhance',
+  responseType: 'json',
+  bodySchema: enhanceInstructionsGenericBodySchema,
+  responseSchema: enhanceInstructionsResponseSchema,
+  summary: 'Enhance instructions (generic)',
+  description: 'Uses AI to enhance instructions without requiring an existing agent. Model must be specified.',
+  tags: ['Agents'],
+  handler: async ({ instructions, comment, model: requestedModel }) => {
+    try {
+      const modelToUse = `${requestedModel.provider}/${requestedModel.modelId}`;
 
       const systemPromptAgent = new Agent({
         id: 'system-prompt-enhancer',

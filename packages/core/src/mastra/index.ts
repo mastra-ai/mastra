@@ -959,7 +959,8 @@ export class Mastra<
       throw error;
     }
 
-    const result = await agentsStore.listAgents({
+    // Use listAgentsResolved to get version-resolved configs
+    const result = await agentsStore.listAgentsResolved({
       page: args?.page,
       perPage: args?.perPage,
       orderBy: args?.orderBy,
