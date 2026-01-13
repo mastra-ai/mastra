@@ -2136,7 +2136,6 @@ export async function networkLoop<OUTPUT = undefined>({
   });
 
   return new MastraAgentNetworkStream({
-    // @ts-ignore
     run,
     createStream: () => {
       if (resumeDataToUse) {

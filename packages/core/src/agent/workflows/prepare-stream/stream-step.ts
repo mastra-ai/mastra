@@ -5,7 +5,6 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
