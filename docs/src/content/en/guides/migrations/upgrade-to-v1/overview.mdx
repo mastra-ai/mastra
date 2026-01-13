@@ -49,6 +49,10 @@ npx @mastra/codemod@beta v1
 
 :::
 
+:::note[Database Migration Required]
+If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#database-migration) for details.
+:::
+
 ## Breaking Changes by Area
 
 - **[Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
@@ -63,6 +67,7 @@ npx @mastra/codemod@beta v1
 - **[Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
 - **[Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
 - **[CLI](/guides/v1/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
+- **[Deployment](/guides/v1/migrations/upgrade-to-v1/deployment)** - CloudflareDeployer configuration updated to use standard wrangler.json property names.
 - **[Client SDKs](/guides/v1/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
 - **[Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
 

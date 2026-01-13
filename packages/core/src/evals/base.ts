@@ -455,7 +455,7 @@ class MastraScorer<
         outputSchema: z.any(),
         execute: async ({ inputData, getInitData, tracingContext }) => {
           const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
-          const { run } = getInitData();
+          const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
           const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
 
@@ -514,7 +514,6 @@ class MastraScorer<
 
     let chainedWorkflow = workflow;
     for (const step of workflowSteps) {
-      // @ts-ignore - Complain about the type mismatch when we chain the steps
       chainedWorkflow = chainedWorkflow.then(step);
     }
 

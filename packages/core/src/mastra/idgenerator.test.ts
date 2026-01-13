@@ -725,7 +725,7 @@ describe('Mastra ID Generator', () => {
         const result = await agentMemory.saveMessages({
           messages: [
             {
-              // Omit id to let saveMessages/memory generate it using the custom generator
+              id: agentMemory.generateId(),
               threadId: thread.id,
               resourceId: 'workflow-resource',
               content: {
@@ -778,6 +778,259 @@ describe('Mastra ID Generator', () => {
       });
 
       expect(customIdGenerator).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Context-Aware ID Generator (Feature Request #8131)
+   *
+   * These tests verify the context-aware ID generation feature that allows users
+   * to generate deterministic IDs based on context (e.g., agent, workflow, etc.)
+   * that can be used/shared with external applications like external databases.
+   *
+   * The idGenerator signature is: (context?: IdGeneratorContext) => string
+   *
+   * Where IdGeneratorContext contains information about:
+   * - idType: 'thread' | 'message' | 'run' | 'step' | 'generic'
+   * - source: 'agent' | 'workflow' | 'memory'
+   * - entityId: the id of the agent, workflow, or other entity
+   * - Additional contextual information (threadId, resourceId, role, stepType)
+   */
+  describe('Context-Aware ID Generator (Feature Request #8131)', () => {
+    it('should pass context to idGenerator for deterministic ID generation', async () => {
+      const receivedContexts: Array<{
+        idType?: string;
+        source?: string;
+        entityId?: string;
+        threadId?: string;
+        resourceId?: string;
+      }> = [];
+
+      // Users can now generate IDs based on context
+      const contextAwareIdGenerator = vi.fn(
+        (context?: { idType?: string; source?: string; entityId?: string; threadId?: string; resourceId?: string }) => {
+          receivedContexts.push(context || {});
+
+          // Generate deterministic IDs based on context
+          if (context?.idType === 'message' && context?.threadId) {
+            return `msg-${context.threadId}-${Date.now()}`;
+          }
+          if (context?.idType === 'run' && context?.source === 'agent' && context?.entityId) {
+            return `run-${context.entityId}-${Date.now()}`;
+          }
+          if (context?.idType === 'thread') {
+            return `thread-${context.resourceId || 'unknown'}-${Date.now()}`;
+          }
+          return `generic-${Date.now()}`;
+        },
+      );
+
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'context-test-agent',
+        name: 'Context Test Agent',
+        instructions: 'You are a test agent for context-aware ID generation',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Test response',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+        agents: { contextTestAgent: agent },
+      });
+
+      // Trigger agent generation which should call idGenerator with context
+      await agent.generateLegacy('Hello', {
+        threadId: 'test-thread-123',
+        resourceId: 'user-456',
+      });
+
+      // ASSERT: The idGenerator should have been called with context information
+      expect(contextAwareIdGenerator).toHaveBeenCalled();
+
+      // Check that at least one call received context with idType
+      const hasContextWithIdType = receivedContexts.some(ctx => ctx.idType !== undefined);
+      expect(hasContextWithIdType).toBe(true);
+
+      // Check that context includes source information
+      const hasContextWithSource = receivedContexts.some(ctx => ctx.source !== undefined);
+      expect(hasContextWithSource).toBe(true);
+
+      // Check that context includes entity information when applicable
+      const hasContextWithEntityId = receivedContexts.some(ctx => ctx.entityId !== undefined);
+      expect(hasContextWithEntityId).toBe(true);
+    });
+
+    it('should provide thread context when generating thread IDs', async () => {
+      const receivedContexts: Array<{ idType?: string; resourceId?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; resourceId?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const memory = new MockMemory();
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+      });
+
+      memory.__registerMastra(_mastra);
+
+      // Create a thread - should pass context with idType='thread'
+      await memory.createThread({
+        resourceId: 'user-789',
+        title: 'Test Thread',
+      });
+
+      // ASSERT: idGenerator should receive context with idType='thread'
+      const threadContext = receivedContexts.find(ctx => ctx.idType === 'thread');
+      expect(threadContext).toBeDefined();
+      expect(threadContext?.resourceId).toBe('user-789');
+    });
+
+    it('should provide message context when generating message IDs', async () => {
+      const receivedContexts: Array<{ idType?: string; threadId?: string; role?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; threadId?: string; role?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+      });
+
+      const messageList = new MessageList({
+        threadId: 'thread-abc',
+        resourceId: 'user-xyz',
+        generateMessageId: mastra.generateId.bind(mastra),
+      });
+
+      // Add a message - should pass context with idType='message'
+      messageList.add('Hello world', 'user');
+
+      // ASSERT: idGenerator should receive context with idType='message'
+      const messageContext = receivedContexts.find(ctx => ctx.idType === 'message');
+      expect(messageContext).toBeDefined();
+      expect(messageContext?.threadId).toBe('thread-abc');
+    });
+
+    it('should provide workflow context when generating run IDs', async () => {
+      const receivedContexts: Array<{ idType?: string; source?: string; entityId?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; source?: string; entityId?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const { createWorkflow, createStep } = await import('../workflows');
+      const { z } = await import('zod');
+
+      const testStep = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: inputData.value }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'context-test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(testStep)
+        .commit();
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+        workflows: { 'context-test-workflow': workflow },
+      });
+
+      // Create a run - should pass context with idType='run' and source='workflow'
+      await workflow.createRun();
+
+      // ASSERT: idGenerator should receive context with idType='run' and source='workflow'
+      const runContext = receivedContexts.find(ctx => ctx.idType === 'run' && ctx.source === 'workflow');
+      expect(runContext).toBeDefined();
+      expect(runContext?.entityId).toBe('context-test-workflow');
+    });
+
+    it('should provide correct source for agent runs', async () => {
+      const receivedContexts: Array<{ idType?: string; source?: string; entityId?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; source?: string; entityId?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'source-test-agent',
+        name: 'Source Test Agent',
+        instructions: 'Test agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Test response',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+        agents: { sourceTestAgent: agent },
+      });
+
+      await agent.generateLegacy('Hello');
+
+      // ASSERT: idGenerator should receive context with source='agent'
+      const agentRunContext = receivedContexts.find(ctx => ctx.idType === 'run' && ctx.source === 'agent');
+      expect(agentRunContext).toBeDefined();
+      expect(agentRunContext?.entityId).toBe('source-test-agent');
+    });
+
+    it('should provide correct source for memory operations', async () => {
+      const receivedContexts: Array<{ idType?: string; source?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; source?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const memory = new MockMemory();
+
+      const mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+      });
+
+      memory.__registerMastra(mastra);
+
+      // Create a thread - should have source='memory'
+      await memory.createThread({
+        resourceId: 'test-user',
+        title: 'Test Thread',
+      });
+
+      // ASSERT: thread creation should have source='memory'
+      const memoryContext = receivedContexts.find(ctx => ctx.idType === 'thread' && ctx.source === 'memory');
+      expect(memoryContext).toBeDefined();
     });
   });
 });

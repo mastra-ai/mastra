@@ -6,7 +6,7 @@ import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import type { ExecuteFunction } from '../step';
+import type { ExecuteFunction, InnerOutput } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
@@ -92,7 +92,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         getStepResult: getStepResult.bind(null, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
+        bail: (() => {}) as () => InnerOutput,
         abort: () => {
           abortController?.abort();
         },
@@ -208,7 +208,7 @@ export async function executeSleepUntil(
         getStepResult: getStepResult.bind(null, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
+        bail: (() => {}) as () => InnerOutput,
         abort: () => {
           abortController?.abort();
         },
