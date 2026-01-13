@@ -48,7 +48,14 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   let runIdToUse = runId;
 
   if (!runIdToUse) {
-    runIdToUse = idGenerator?.() || crypto.randomUUID();
+    runIdToUse =
+      idGenerator?.({
+        idType: 'run',
+        source: 'agent',
+        entityId: agentId,
+        threadId: _internal?.threadId,
+        resourceId: _internal?.resourceId,
+      }) || crypto.randomUUID();
   }
 
   const internalToUse: StreamInternal = {

@@ -702,7 +702,16 @@ export class AgentLegacyHandler {
         `[Agent:${this.capabilities.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
       );
     }
-    const runId = args.runId || this.capabilities.mastra?.generateId() || randomUUID();
+    const runId =
+      args.runId ||
+      this.capabilities.mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.capabilities.id,
+        threadId: threadFromArgs?.id,
+        resourceId,
+      }) ||
+      randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
     const llm = await this.capabilities.getLLM({ requestContext });
 
