@@ -14,7 +14,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
 } from '../../types';
-import { filterByDateRange, safelyParseJSON } from '../../utils';
+import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
@@ -487,7 +487,7 @@ export class InMemoryMemory extends MemoryStorage {
     if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
       threads = threads.filter(thread => {
         if (!thread.metadata) return false;
-        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+        return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(thread.metadata![key], value));
       });
     }
 
