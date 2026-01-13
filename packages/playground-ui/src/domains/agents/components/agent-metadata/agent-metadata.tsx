@@ -2,7 +2,7 @@ import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
@@ -54,6 +54,53 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
   );
 };
 
+export interface AgentMetadataInstructionsProps {
+  instructions: GetAgentResponse['instructions'];
+}
+
+const formatInstructions = (instructions: GetAgentResponse['instructions']): string => {
+  if (typeof instructions === 'string') {
+    return instructions;
+  }
+
+  if (Array.isArray(instructions)) {
+    return instructions
+      .map(item => {
+        if (typeof item === 'string') {
+          return item;
+        }
+        if (typeof item === 'object' && item !== null) {
+          if ('content' in item && typeof item.content === 'string') {
+            return item.content;
+          }
+          if ('text' in item && typeof item.text === 'string') {
+            return item.text;
+          }
+        }
+        return JSON.stringify(item);
+      })
+      .join('\n');
+  }
+
+  if (typeof instructions === 'object' && instructions !== null) {
+    if ('content' in instructions && typeof instructions.content === 'string') {
+      return instructions.content;
+    }
+    if ('text' in instructions && typeof (instructions as { text?: unknown }).text === 'string') {
+      return (instructions as { text: string }).text;
+    }
+    return JSON.stringify(instructions, null, 2);
+  }
+
+  return String(instructions);
+};
+
+export const AgentMetadataInstructions = ({ instructions }: AgentMetadataInstructionsProps) => {
+  const formattedInstructions = formatInstructions(instructions);
+
+  return <p className="text-sm text-muted-foreground whitespace-pre-wrap">{formattedInstructions}</p>;
+};
+
 export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -85,6 +132,11 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       {agent?.description && (
         <AgentMetadataSection title="Description">
           <p className="text-sm text-muted-foreground">{agent.description}</p>
+        </AgentMetadataSection>
+      )}
+      {agent?.instructions && (
+        <AgentMetadataSection title="Instructions">
+          <AgentMetadataInstructions instructions={agent.instructions} />
         </AgentMetadataSection>
       )}
       {agent.modelList ? (
