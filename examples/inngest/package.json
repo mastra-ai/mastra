@@ -35,7 +35,8 @@
       "@mastra/observability": "link:../../observability/mastra",
       "@mastra/core": "link:../../packages/core",
       "@mastra/deployer": "link:../../packages/deployer",
-      "@mastra/server": "link:../../packages/server"
+      "@mastra/server": "link:../../packages/server",
+      "mastra": "link:../../packages/cli"
     }
   }
 }
