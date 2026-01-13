@@ -321,7 +321,7 @@ export class BenchmarkStore extends MastraStorage {
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
-    const { page = 0, perPage: perPageInput, filter } = args;
+    const { page = 0, perPage: perPageInput, filter, orderBy } = args;
     let allThreads: StorageThreadType[] = Array.from(this.data.mastra_threads.values());
 
     // Apply resourceId filter if provided
@@ -336,6 +336,20 @@ export class BenchmarkStore extends MastraStorage {
         return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
       });
     }
+
+    // Apply ordering - default to DESC by createdAt
+    const sortField = orderBy?.field || 'createdAt';
+    const sortDirection = orderBy?.direction || 'DESC';
+    const direction = sortDirection === 'ASC' ? 1 : -1;
+
+    allThreads.sort((a: any, b: any) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      if (aVal instanceof Date && bVal instanceof Date) {
+        return direction * (aVal.getTime() - bVal.getTime());
+      }
+      return direction * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0);
+    });
 
     // Handle perPage: false (fetch all results)
     const fetchAll = perPageInput === false;
