@@ -209,6 +209,35 @@ const fullName = useMemo(() => {
 const fullName = `${firstName} ${lastName}`;
 ```
 
+### Side Effects
+
+- **REQUIRED**: Isolate every `useEffect` into a custom hook
+- Direct `useEffect` usage in components creates noise and reduces readability
+- Custom hooks encapsulate side effects and make components cleaner
+
+```tsx
+// ✅ Good - useEffect isolated in custom hook
+function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+}
+
+export function AgentPage({ agent }: AgentPageProps) {
+  useDocumentTitle(`Agent: ${agent.name}`);
+  return <div>{agent.name}</div>;
+}
+
+// ❌ Bad - useEffect directly in component
+export function AgentPage({ agent }: AgentPageProps) {
+  useEffect(() => {
+    document.title = `Agent: ${agent.name}`;
+  }, [agent.name]);
+
+  return <div>{agent.name}</div>;
+}
+```
+
 ---
 
 ## Key Principles
