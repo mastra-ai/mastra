@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
 import { Icon } from '@/ds/icons';
 import { GripVertical } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Switch } from '@/ds/components/Switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 

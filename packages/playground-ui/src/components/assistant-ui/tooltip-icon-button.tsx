@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 
 import { Button, ButtonProps } from '@/ds/components/Button/Button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import { cn } from '@/lib/utils';
 

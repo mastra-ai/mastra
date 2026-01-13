@@ -3,8 +3,8 @@ import { Button } from '@/ds/components/Button/Button';
 import { CodeEditor, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Label } from '@/ds/components/Label';
 import { Loader2 } from 'lucide-react';
 
 import { ZodSchema } from 'zod';

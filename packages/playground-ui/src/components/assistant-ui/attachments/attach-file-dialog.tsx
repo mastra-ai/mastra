@@ -1,10 +1,10 @@
 import { useComposerRuntime } from '@assistant-ui/react';
 
-import { Dialog, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogHeader, DialogTitle, DialogContent } from '@/ds/components/Dialog';
 import { FormEvent } from 'react';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/ds/components/Input';
 import { Button } from '@/ds/components/Button';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/ds/components/Label';
 import { Icon } from '@/ds/icons';
 import { CloudUpload, Link } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';

@@ -6,11 +6,11 @@ import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs
 import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from 'date-fns';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Badge } from '@/ds/components/Badge';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { useInView } from '@/hooks';
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
 
 export interface WorkflowRunListProps {

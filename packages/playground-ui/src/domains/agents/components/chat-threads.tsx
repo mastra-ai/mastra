@@ -3,9 +3,9 @@ import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { Plus } from 'lucide-react';
 import { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 export interface ChatThreadsProps {

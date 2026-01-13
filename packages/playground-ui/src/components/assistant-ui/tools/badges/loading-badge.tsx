@@ -1,6 +1,6 @@
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { BadgeWrapper } from './badge-wrapper';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { IconColors } from '@/ds/tokens';
 
 export const LoadingBadge = () => {

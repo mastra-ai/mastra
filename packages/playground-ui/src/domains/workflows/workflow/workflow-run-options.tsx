@@ -1,7 +1,7 @@
 import { Txt } from '@/ds/components/Txt';
 import { useContext } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from '@/ds/components/Checkbox';
 
 export const WorkflowRunOptions = () => {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
