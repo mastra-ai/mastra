@@ -49,29 +49,8 @@ npx @mastra/codemod@beta v1
 
 :::
 
-### Database Migration
-
-If you're using PostgreSQL or LibSQL storage, you'll need to update your database schema to rename a column in the `mastra_scorers` table.
-
-**Important:** Run this SQL through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process). Do not run it directly on production databases without proper review.
-
-**PostgreSQL:**
-```sql
-ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
-```
-
-**LibSQL:**
-```sql
-ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
-```
-
-This migration:
-- Is idempotent (safe to run multiple times)
-- Only affects the `mastra_scorers` table
-- Renames the column used for request context tracking
-
-:::tip[Migration Safety]
-The column rename is a safe operation that doesn't affect data. However, if you have active connections querying the old column name, those queries will fail until you update your code. Coordinate this migration with your code deployment.
+:::note[Database Migration Required]
+If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#database-migration) for details.
 :::
 
 ## Breaking Changes by Area
