@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "1.0.0-beta.5",
+  "version": "1.0.0-beta.6",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -76,7 +76,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

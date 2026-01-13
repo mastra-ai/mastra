@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turbopuffer",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "Turbopuffer vector store provider for Mastra",
   "type": "module",
   "files": [
@@ -23,8 +23,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/turbopuffer",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/turbopuffer",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
@@ -44,7 +44,7 @@
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

@@ -1,6 +1,4 @@
-'use client';
-
-import { Button, ButtonProps } from '@/components/ui/button';
+import { Button as DSButton, ButtonProps as DSButtonProps } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
@@ -20,7 +18,7 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: ButtonProps['variant'];
+  variant?: DSButtonProps['variant'];
 };
 
 export function Combobox({
@@ -118,18 +116,17 @@ export function Combobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <DSButton
           ref={triggerRef}
-          variant={variant}
           role="combobox"
           aria-expanded={open}
+          variant={variant}
           className={cn('w-full justify-between', className)}
           disabled={disabled}
-          size="sm"
         >
           <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+        </DSButton>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-fit" align="start">
         <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">

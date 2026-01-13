@@ -28,7 +28,7 @@ import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
-import type { MastraIdGenerator } from '../types';
+import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
@@ -88,9 +88,9 @@ function createUndefinedPrimitiveError(
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
     string,
-    Workflow<any, any, any, any, any, any>
+    Workflow<any, any, any, any, any, any, any>
   >,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
@@ -146,11 +146,17 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability } from '@mastra/observability';
+   * import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
-   *     default: { enabled: true }
+   *     configs: {
+   *       default: {
+   *         serviceName: 'mastra',
+   *         exporters: [new DefaultExporter(), new CloudExporter()],
+   *         spanOutputProcessors: [new SensitiveDataFilter()],
+   *       },
+   *     },
    *   })
    * })
    * ```
@@ -302,9 +308,9 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
+  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
     string,
-    Workflow<any, any, any, any, any, any>
+    Workflow<any, any, any, any, any, any, any>
   >,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
@@ -378,6 +384,10 @@ export class Mastra<
    * This method is used internally by Mastra for creating unique IDs for various entities
    * like workflow runs, agent conversations, and other resources that need unique identification.
    *
+   * @param context - Optional context information about what type of ID is being generated
+   *                  and where it's being requested from. This allows custom ID generators
+   *                  to create deterministic IDs based on context.
+   *
    * @throws {MastraError} When the custom ID generator returns an empty string
    *
    * @example
@@ -385,11 +395,18 @@ export class Mastra<
    * const mastra = new Mastra();
    * const id = mastra.generateId();
    * console.log(id); // "550e8400-e29b-41d4-a716-446655440000"
+   *
+   * // With context for deterministic IDs
+   * const messageId = mastra.generateId({
+   *   idType: 'message',
+   *   source: 'agent',
+   *   threadId: 'thread-123'
+   * });
    * ```
    */
-  public generateId(): string {
+  public generateId(context?: IdGeneratorContext): string {
     if (this.#idGenerator) {
-      const id = this.#idGenerator();
+      const id = this.#idGenerator(context);
       if (!id) {
         const error = new MastraError({
           id: 'MASTRA_ID_GENERATOR_RETURNED_EMPTY_STRING',
@@ -445,7 +462,9 @@ export class Mastra<
    *     connectionString: process.env.DATABASE_URL
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
-   *   observability: { default: { enabled: true }},
+   *   observability: new Observability({
+   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *   }),
    * });
    * ```
    */
@@ -515,8 +534,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
@@ -1065,12 +1084,12 @@ export class Mastra<
    * Resolves workflow references from stored configuration to actual workflow instances.
    * @private
    */
-  #resolveStoredWorkflows(storedWorkflows?: string[]): Record<string, Workflow<any, any, any, any, any, any>> {
+  #resolveStoredWorkflows(storedWorkflows?: string[]): Record<string, Workflow<any, any, any, any, any, any, any>> {
     if (!storedWorkflows || storedWorkflows.length === 0) {
       return {};
     }
 
-    const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any>> = {};
+    const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any, any>> = {};
 
     for (const workflowKey of storedWorkflows) {
       // Try to find the workflow in registered workflows
@@ -2357,12 +2376,12 @@ export class Mastra<
    * mastra.addWorkflow(newWorkflow, 'customKey'); // Uses custom key
    * ```
    */
-  public addWorkflow<W extends Workflow<any, any, any, any, any, any>>(workflow: W, key?: string): void {
+  public addWorkflow(workflow: Workflow<any, any, any, any, any, any, any>, key?: string): void {
     if (!workflow) {
       throw createUndefinedPrimitiveError('workflow', workflow, key);
     }
     const workflowKey = key || workflow.id;
-    const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any>>;
+    const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any, any>>;
     if (workflows[workflowKey]) {
       const logger = this.getLogger();
       logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",
@@ -19,8 +19,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/duckdb",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/duckdb",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint .",
@@ -41,7 +41,7 @@
     "eslint": "^9.37.0",
     "rimraf": "^5.0.7",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

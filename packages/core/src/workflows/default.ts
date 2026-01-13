@@ -153,9 +153,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns The index if condition is truthy, null otherwise
    */
   async evaluateCondition(
-    conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
+    conditionFn: ConditionFunction<any, any, any, any, any, DefaultEngineType>,
     index: number,
-    context: ConditionFunctionParams<any, any, any, any, DefaultEngineType>,
+    context: ConditionFunctionParams<any, any, any, any, any, DefaultEngineType>,
     operationId: string,
   ): Promise<number | null> {
     return this.wrapDurableOperation(operationId, async () => {
@@ -632,7 +632,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         if (lastOutput.result.status !== 'paused') {
           // Invoke lifecycle callbacks before returning
-          await this.invokeLifecycleCallbacks(result);
+          await this.invokeLifecycleCallbacks({
+            status: result.status,
+            result: result.result,
+            error: result.error,
+            steps: result.steps,
+            tripwire: result.tripwire,
+            runId,
+            workflowId,
+            resourceId,
+            input,
+            requestContext: currentRequestContext,
+            state: lastState,
+          });
         }
 
         if (lastOutput.result.status === 'paused') {
@@ -705,7 +717,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    await this.invokeLifecycleCallbacks(result);
+    await this.invokeLifecycleCallbacks({
+      status: result.status,
+      result: result.result,
+      error: result.error,
+      steps: result.steps,
+      tripwire: result.tripwire,
+      runId,
+      workflowId,
+      resourceId,
+      input,
+      requestContext: currentRequestContext,
+      state: lastState,
+    });
 
     if (params.outputOptions?.includeState) {
       return { ...result, state: lastState };

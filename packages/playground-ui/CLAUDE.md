@@ -4,6 +4,24 @@ Standards and conventions for building components in `packages/playground-ui`.
 
 ---
 
+## Commands
+
+### Local Commands (run from `packages/playground-ui`)
+
+- `pnpm build`: TypeCheck and build the package with Vite
+- `pnpm dev`: Build in watch mode
+- `pnpm test`: Run tests with Vitest
+- `pnpm preview`: Preview the production build
+- `pnpm storybook`: Start Storybook dev server on port 6006
+- `pnpm build-storybook`: Build Storybook for production
+
+### Root Commands (run from monorepo root)
+
+- `pnpm dev:playground`: Start dev servers for playground, playground-ui, and react client SDK
+- `pnpm build:cli`: Build the CLI (includes playground and playground-ui as dependencies)
+
+---
+
 ## Package Architecture
 
 ### Scope
@@ -154,6 +172,78 @@ export function App({ a, b }: AppProps) {
 }
 ```
 
+### Memoization & Performance
+
+- **FORBIDDEN**: Using `useCallback` or `useMemo` for typical operations
+- Only use `useCallback`/`useMemo` as a **last resort** for very expensive computations (e.g., processing 200+ entries)
+- **REQUIRED**: Use React 19.2's `useEffectEvent` instead of `useCallback` for event handlers
+
+```tsx
+// ✅ Good - useEffectEvent for event handlers (React 19.2+)
+import { useEffectEvent } from 'react';
+
+export function App() {
+  const onSubmit = useEffectEvent((data: FormData) => {
+    // handle submission
+  });
+
+  return <Form onSubmit={onSubmit} />;
+}
+
+// ❌ Bad - useCallback for simple event handlers
+export function App() {
+  const onSubmit = useCallback((data: FormData) => {
+    // handle submission
+  }, []);
+
+  return <Form onSubmit={onSubmit} />;
+}
+```
+
+```tsx
+// ✅ Good - useMemo ONLY for expensive computations (200+ items)
+const sortedItems = useMemo(() => {
+  return hugeDataset.sort((a, b) => a.value - b.value);
+}, [hugeDataset]); // hugeDataset has 500+ entries
+
+// ❌ Bad - useMemo for simple derivations
+const fullName = useMemo(() => {
+  return `${firstName} ${lastName}`;
+}, [firstName, lastName]);
+
+// ✅ Good - derive directly instead
+const fullName = `${firstName} ${lastName}`;
+```
+
+### Side Effects
+
+- **REQUIRED**: Isolate every `useEffect` into a custom hook
+- Direct `useEffect` usage in components creates noise and reduces readability
+- Custom hooks encapsulate side effects and make components cleaner
+
+```tsx
+// ✅ Good - useEffect isolated in custom hook
+function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+}
+
+export function AgentPage({ agent }: AgentPageProps) {
+  useDocumentTitle(`Agent: ${agent.name}`);
+  return <div>{agent.name}</div>;
+}
+
+// ❌ Bad - useEffect directly in component
+export function AgentPage({ agent }: AgentPageProps) {
+  useEffect(() => {
+    document.title = `Agent: ${agent.name}`;
+  }, [agent.name]);
+
+  return <div>{agent.name}</div>;
+}
+```
+
 ---
 
 ## Key Principles
@@ -164,3 +254,8 @@ export function App({ a, b }: AppProps) {
 - Prioritize design system tokens for consistency
 - Minimize side effects and state management
 - Use TanStack Query for all server state
+
+
+## E2E Testing (MUST DO)
+
+On every change to this package, you MUST use the `e2e-frontend-validation` skill

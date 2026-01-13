@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { WorkflowInputData } from './workflow-input-data';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { Txt } from '@/ds/components/Txt';
@@ -226,12 +226,24 @@ export const WorkflowTimeTravelForm = ({
 
     try {
       const parsed = parse(stepDefinition.inputSchema);
-      return { schema: resolveSerializedZodOutput(jsonSchemaToZod(parsed as any)), schemaError: null };
+      const zodStateSchema = workflow?.stateSchema
+        ? resolveSerializedZodOutput(jsonSchemaToZod(parse(workflow.stateSchema)))
+        : null;
+
+      const zodStepSchema = resolveSerializedZodOutput(jsonSchemaToZod(parsed as any));
+
+      const schemaToUse = zodStateSchema
+        ? z.object({
+            inputData: zodStepSchema,
+            initialState: zodStateSchema.optional(),
+          })
+        : zodStepSchema;
+      return { schema: schemaToUse, schemaError: null };
     } catch (err) {
       console.error('Failed to parse step schema', err);
       return { schema: z.record(z.string(), z.any()) };
     }
-  }, [stepDefinition?.inputSchema]);
+  }, [stepDefinition?.inputSchema, workflow?.stateSchema]);
 
   const handleSubmit = async (data: Record<string, any>) => {
     setFormError(null);
@@ -241,12 +253,15 @@ export const WorkflowTimeTravelForm = ({
       const parsedResume = resumeData.trim() ? JSON.parse(resumeData) : {};
       const parsedContext = contextValue.trim() ? JSON.parse(contextValue) : {};
       const parsedNestedContext = nestedContextValue.trim() ? JSON.parse(nestedContextValue) : {};
+      const { initialState, inputData: dataInputData } = data ?? {};
+      const inputData = workflow?.stateSchema ? dataInputData : data;
 
       const payload = {
         runId: prevRunId,
         workflowId,
         step: stepKey,
-        inputData: data,
+        inputData,
+        initialState,
         resumeData: Object.keys(parsedResume)?.length > 0 ? parsedResume : undefined,
         context: Object.keys(parsedContext)?.length > 0 ? parsedContext : undefined,
         nestedStepsContext: Object.keys(parsedNestedContext)?.length > 0 ? parsedNestedContext : undefined,

@@ -46,7 +46,7 @@ export type BaseChunkOptions = {
   maxSize?: number;
   overlap?: number;
   lengthFunction?: (text: string) => number;
-  keepSeparator?: boolean | 'start' | 'end';
+  separatorPosition?: 'start' | 'end';
   addStartIndex?: boolean;
   stripWhitespace?: boolean;
 };

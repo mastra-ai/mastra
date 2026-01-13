@@ -1,5 +1,124 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.21
+
+### Patch Changes
+
+- Replace deprecated client.getTraces with a client.listTraces ([#11711](https://github.com/mastra-ai/mastra/pull/11711))
+
+- Make initialState optional in studio ([#11744](https://github.com/mastra-ai/mastra/pull/11744))
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`3bf08bf`](https://github.com/mastra-ai/mastra/commit/3bf08bf9c7c73818ac937b5a69d90e205653115f), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+  - @mastra/schema-compat@1.0.0-beta.6
+  - @mastra/ai-sdk@1.0.0-beta.14
+  - @mastra/client-js@1.0.0-beta.21
+  - @mastra/react@0.1.0-beta.21
+
+## 7.0.0-beta.20
+
+### Patch Changes
+
+- dependencies updates: ([#11404](https://github.com/mastra-ai/mastra/pull/11404))
+  - Updated dependency [`zustand@^5.0.9` ↗︎](https://www.npmjs.com/package/zustand/v/5.0.9) (from `^5.0.8`, in `dependencies`)
+
+- dependencies updates: ([#11588](https://github.com/mastra-ai/mastra/pull/11588))
+  - Updated dependency [`zustand@^5.0.9` ↗︎](https://www.npmjs.com/package/zustand/v/5.0.9) (from `^5.0.8`, in `dependencies`)
+
+- Add missing loading state handlers to TanStack Query hooks. Components now properly show skeleton/loading UI instead of returning null or rendering incomplete states while data is being fetched. ([#11681](https://github.com/mastra-ai/mastra/pull/11681))
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Dedupe Avatar component by removing UI avatar and using DS Avatar with size variants ([#11637](https://github.com/mastra-ai/mastra/pull/11637))
+
+- Consolidate date picker components by removing duplicate DatePicker and Calendar components. DateField now uses the DayPicker wrapper from date-time-picker folder directly. ([#11649](https://github.com/mastra-ai/mastra/pull/11649))
+
+- Consolidate tabs components: remove redundant implementations and add onClose prop support ([#11650](https://github.com/mastra-ai/mastra/pull/11650))
+
+- Use the same Button component every where. Remove duplicates. ([#11635](https://github.com/mastra-ai/mastra/pull/11635))
+
+- Add initial state input to workflow form in studio ([#11560](https://github.com/mastra-ai/mastra/pull/11560))
+
+- Remove unused files and dependencies identified by Knip ([#11677](https://github.com/mastra-ai/mastra/pull/11677))
+
+- Fix react/react-DOM version mismatch. ([#11620](https://github.com/mastra-ai/mastra/pull/11620))
+
+- Adds thread cloning to create independent copies of conversations that can diverge. ([#11517](https://github.com/mastra-ai/mastra/pull/11517))
+
+  ```typescript
+  // Clone a thread
+  const { thread, clonedMessages } = await memory.cloneThread({
+    sourceThreadId: 'thread-123',
+    title: 'My Clone',
+    options: {
+      messageLimit: 10, // optional: only copy last N messages
+    },
+  });
+
+  // Check if a thread is a clone
+  if (memory.isClone(thread)) {
+    const source = await memory.getSourceThread(thread.id);
+  }
+
+  // List all clones of a thread
+  const clones = await memory.listClones('thread-123');
+  ```
+
+  Includes:
+  - Storage implementations for InMemory, PostgreSQL, LibSQL, Upstash
+  - API endpoint: `POST /api/memory/threads/:threadId/clone`
+  - Embeddings created for cloned messages (semantic recall)
+  - Clone button in playground UI Memory tab
+
+- Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers ([#11562](https://github.com/mastra-ai/mastra/pull/11562))
+
+- Unified `getWorkflowRunById` and `getWorkflowRunExecutionResult` into a single API that returns `WorkflowState` with both metadata and execution state. ([#11429](https://github.com/mastra-ai/mastra/pull/11429))
+
+  **What changed:**
+  - `getWorkflowRunById` now returns a unified `WorkflowState` object containing metadata (runId, workflowName, resourceId, createdAt, updatedAt) along with processed execution state (status, result, error, payload, steps)
+  - Added optional `fields` parameter to request only specific fields for better performance
+  - Added optional `withNestedWorkflows` parameter to control nested workflow step inclusion
+  - Removed `getWorkflowRunExecutionResult` - use `getWorkflowRunById` instead (breaking change)
+  - Removed `/execution-result` API endpoints from server (breaking change)
+  - Removed `runExecutionResult()` method from client SDK (breaking change)
+  - Removed `GetWorkflowRunExecutionResultResponse` type from client SDK (breaking change)
+
+  **Before:**
+
+  ```typescript
+  // Had to call two different methods for different data
+  const run = await workflow.getWorkflowRunById(runId); // Returns raw WorkflowRun with snapshot
+  const result = await workflow.getWorkflowRunExecutionResult(runId); // Returns processed execution state
+  ```
+
+  **After:**
+
+  ```typescript
+  // Single method returns everything
+  const run = await workflow.getWorkflowRunById(runId);
+  // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+
+  // Request only specific fields for better performance (avoids expensive step fetching)
+  const status = await workflow.getWorkflowRunById(runId, { fields: ['status'] });
+
+  // Skip nested workflow steps for faster response
+  const run = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+  ```
+
+  **Why:** The previous API required calling two separate methods to get complete workflow run information. This unification simplifies the API surface and gives users control over performance - fetching all steps (especially nested workflows) can be expensive, so the `fields` and `withNestedWorkflows` options let users request only what they need.
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`2b7aede`](https://github.com/mastra-ai/mastra/commit/2b7aede89494efaf7c28efe264a86cad8ee1cee6), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`106c960`](https://github.com/mastra-ai/mastra/commit/106c960df5d110ec15ac8f45de8858597fb90ad5), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+  - @mastra/client-js@1.0.0-beta.20
+  - @mastra/ai-sdk@1.0.0-beta.13
+  - @mastra/react@0.1.0-beta.20
+
 ## 7.0.0-beta.19
 
 ### Patch Changes

@@ -205,6 +205,78 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(name).toBe('Dero Israel');
       }, 500000);
 
+      it('should call findUserWorkflow with requireToolApproval on workflow', async () => {
+        const findUserStep = createStep({
+          id: 'find-user-step',
+          description: 'This is a test step that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          outputSchema: z.object({
+            name: z.string(),
+            email: z.string(),
+          }),
+          execute: async ({ inputData }) => {
+            return mockFindUser(inputData) as Promise<Record<string, any>>;
+          },
+        });
+
+        const findUserWorkflow = createWorkflow({
+          id: 'find-user-workflow',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          outputSchema: z.object({
+            name: z.string(),
+            email: z.string(),
+          }),
+        })
+          .then(findUserStep)
+          .commit();
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserWorkflow.',
+          model: openaiModel,
+          workflows: { findUserWorkflow },
+          defaultOptions: {
+            requireToolApproval: true,
+          },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        let toolCall;
+        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        let toolCallId = '';
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-approval') {
+            toolCallId = _chunk.payload.toolCallId;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+        for await (const _chunk of resumeStream.fullStream) {
+        }
+
+        const toolResults = await resumeStream.toolResults;
+
+        toolCall = toolResults?.find((result: any) => result.payload.toolName === 'workflow-findUserWorkflow')?.payload;
+
+        const name = toolCall?.result?.result?.name;
+
+        expect(mockFindUser).toHaveBeenCalled();
+        expect(name).toBe('Dero Israel');
+      }, 500000);
+
       it('should call findUserTool with requireToolApproval on tool and resume via stream when autoResumeSuspendedTools is true', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
@@ -887,7 +959,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             message: z.string(),
           }),
           resumeSchema: z.object({
-            age: z.number(),
+            noOfYears: z.number(),
           }),
           outputSchema: z.object({
             name: z.string(),
@@ -902,7 +974,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             return {
               name: inputData?.name,
               email: 'test@test.com',
-              age: resumeData?.age,
+              age: resumeData?.noOfYears,
             };
           },
         });

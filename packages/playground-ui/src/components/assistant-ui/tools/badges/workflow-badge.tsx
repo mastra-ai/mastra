@@ -16,7 +16,7 @@ import { MastraUIMessage } from '@mastra/react';
 import { LoadingBadge } from './loading-badge';
 import { useWorkflow } from '@/hooks';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { SyntaxHighlighter } from '@/components/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
@@ -24,6 +24,7 @@ export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   isStreaming?: boolean;
   metadata?: MastraUIMessage['metadata'];
   suspendPayload?: any;
+  toolCalled?: boolean;
 }
 
 export const WorkflowBadge = ({
@@ -34,6 +35,9 @@ export const WorkflowBadge = ({
   toolCallId,
   toolApprovalMetadata,
   suspendPayload,
+  toolName,
+  isNetwork,
+  toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
@@ -52,7 +56,7 @@ export const WorkflowBadge = ({
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
-      <SyntaxHighlighter data={suspendPayload} data-testid="tool-suspend-payload" />
+      <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
 
   if (isWorkflowLoading || !workflow) return <LoadingBadge />;
@@ -72,13 +76,6 @@ export const WorkflowBadge = ({
         )
       }
     >
-      {suspendPayloadSlot !== undefined && suspendPayload && (
-        <div>
-          <p className="font-medium pb-2">Tool suspend payload</p>
-          {suspendPayloadSlot}
-        </div>
-      )}
-
       {!isStreaming && !isLoading && (
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
@@ -87,7 +84,20 @@ export const WorkflowBadge = ({
 
       {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
 
-      <ToolApprovalButtons toolCalled={!!status} toolCallId={toolCallId} toolApprovalMetadata={toolApprovalMetadata} />
+      {suspendPayloadSlot !== undefined && suspendPayload && (
+        <div>
+          <p className="font-medium pb-2">Workflow suspend payload</p>
+          {suspendPayloadSlot}
+        </div>
+      )}
+
+      <ToolApprovalButtons
+        toolCalled={toolCalled ?? !!status}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        toolName={toolName}
+        isNetwork={isNetwork}
+      />
     </BadgeWrapper>
   );
 };

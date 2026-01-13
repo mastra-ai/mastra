@@ -54,7 +54,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
       vector = new LibSQLVector({
         id: 'processor-test-vector',
-        connectionUrl: `file:${dbPath}`,
+        url: `file:${dbPath}`,
       });
 
       // Initialize memory with the in-memory database
@@ -720,7 +720,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
       vector = new LibSQLVector({
         id: 'chunk-test-vector',
-        connectionUrl: `file:${dbPath}`,
+        url: `file:${dbPath}`,
       });
     });
 

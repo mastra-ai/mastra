@@ -6,10 +6,8 @@ import { z } from 'zod';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { Button } from '@/ds/components/Button';
-import { CodeBlockDemo } from '@/components/ui/code-block';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text } from '@/components/ui/text';
 
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
@@ -18,7 +16,7 @@ import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
-import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
@@ -46,12 +44,14 @@ export interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
+    initialState,
     requestContext,
     perStep,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
+    initialState?: Record<string, unknown>;
     requestContext: Record<string, unknown>;
     perStep?: boolean;
   }) => Promise<void>;
@@ -100,6 +100,7 @@ export function WorkflowTrigger({
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const triggerSchema = workflow?.inputSchema;
+  const stateSchema = workflow?.stateSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -115,8 +116,11 @@ export function WorkflowTrigger({
       setRunId?.(run.runId);
       setInnerRunId(run.runId);
       setContextRunId(run.runId);
+      const { initialState, inputData: dataInputData } = data ?? {};
 
-      streamWorkflow({ workflowId, runId: run.runId, inputData: data, requestContext });
+      const inputData = stateSchema ? dataInputData : data;
+
+      streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -192,6 +196,14 @@ export function WorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
+  const zodStateSchema = stateSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stateSchema))) : null;
+
+  const zodSchemaToUse = zodStateSchema
+    ? z.object({
+        inputData: zodInputSchema,
+        initialState: zodStateSchema.optional(),
+      })
+    : zodInputSchema;
 
   const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
@@ -212,9 +224,9 @@ export function WorkflowTrigger({
 
         {!isSuspendedSteps && (
           <>
-            {zodInputSchema ? (
+            {zodSchemaToUse ? (
               <WorkflowInputData
-                schema={zodInputSchema}
+                schema={zodSchemaToUse}
                 defaultValues={payload}
                 isSubmitLoading={isStreamingWorkflow}
                 submitButtonLabel="Run"
@@ -254,15 +266,15 @@ export function WorkflowTrigger({
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4" key={step.stepId}>
-                <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                <Txt variant="ui-xs" className="text-mastra-el-3">
                   {step.stepId}
-                </Text>
+                </Txt>
                 {step.suspendPayload && (
                   <div data-testid="suspended-payload">
-                    <CodeBlockDemo
+                    <CodeEditor
+                      data={step.suspendPayload}
                       className="w-full overflow-x-auto p-2"
-                      code={JSON.stringify(step.suspendPayload, null, 2)}
-                      language="json"
+                      showCopyButton={false}
                     />
                   </div>
                 )}
@@ -314,9 +326,9 @@ export function WorkflowTrigger({
           <>
             <hr className="border-border1 border-sm my-5" />
             <div className="flex flex-col gap-2">
-              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+              <Txt variant="ui-xs" className="px-4 text-mastra-el-3">
                 Status
-              </Text>
+              </Txt>
               <div className="px-4 flex flex-col gap-4">
                 {Object.entries(workflowActivePaths)
                   .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
@@ -394,7 +406,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
           <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-surface2">
             <DialogTitle>Workflow Execution (JSON)</DialogTitle>
             <div className="w-full h-full overflow-x-scroll">
-              <SyntaxHighlighter data={result} className="p-4" />
+              <CodeEditor data={result} className="p-4" />
             </div>
           </DialogContent>
         </DialogPortal>

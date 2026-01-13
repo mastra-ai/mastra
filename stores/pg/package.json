@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.0.0-beta.11",
+  "version": "1.0.0-beta.12",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -19,9 +19,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/pg",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/pg",
+    "build:watch": "pnpm build:lib --watch",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",
     "pretest:perf": "docker compose -f docker-compose.perf.yaml up -d && (for i in $(seq 1 30); do docker compose -f docker-compose.perf.yaml exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
@@ -45,12 +45,12 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.13.17",
-    "@types/pg": "^8.15.6",
+    "@types/pg": "^8.16.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

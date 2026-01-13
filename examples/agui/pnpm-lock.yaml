@@ -10,6 +10,7 @@ overrides:
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/memory': link:../../packages/memory
   mastra: link:../../packages/cli
+  jws: ^4.0.1
 
 importers:
 
@@ -17,7 +18,7 @@ importers:
     dependencies:
       '@ag-ui/mastra':
         specifier: latest
-        version: 0.2.0(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@copilotkit/runtime@1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3))(@mastra/core@..+packages+core)(zod@3.25.76)
+        version: 0.2.0(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@copilotkit/runtime@1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3))(@mastra/core@..+packages+core)(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
@@ -29,7 +30,7 @@ importers:
         version: 1.10.6(@types/react@19.2.7)(graphql@16.12.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@copilotkit/runtime':
         specifier: ^1.8.10
-        version: 1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3)
+        version: 1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3)
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -68,11 +69,11 @@ importers:
         specifier: ^19.1.7
         version: 19.2.3(@types/react@19.2.7)
       '@typescript-eslint/eslint-plugin':
-        specifier: ^8.38.0
-        version: 8.48.0(@typescript-eslint/parser@8.48.0(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)
+        specifier: ^8.51.0
+        version: 8.51.0(@typescript-eslint/parser@8.51.0(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)
       '@typescript-eslint/parser':
-        specifier: ^8.38.0
-        version: 8.48.0(eslint@9.39.1)(typescript@5.9.3)
+        specifier: ^8.51.0
+        version: 8.51.0(eslint@9.39.1)(typescript@5.9.3)
       '@vitejs/plugin-react':
         specifier: ^5.0.4
         version: 5.1.1(vite@7.2.4(@types/node@24.10.1)(yaml@2.8.1))
@@ -80,8 +81,8 @@ importers:
         specifier: ^9.37.0
         version: 9.39.1
       eslint-plugin-react-hooks:
-        specifier: ^5.2.0
-        version: 5.2.0(eslint@9.39.1)
+        specifier: ^7.0.1
+        version: 7.0.1(eslint@9.39.1)
       eslint-plugin-react-refresh:
         specifier: ^0.4.24
         version: 0.4.24(eslint@9.39.1)
@@ -89,7 +90,7 @@ importers:
         specifier: ^16.0.0
         version: 16.5.0
       typescript:
-        specifier: ^5.8.3
+        specifier: ^5.9.3
         version: 5.9.3
       vite:
         specifier: ^7.1.9
@@ -1731,63 +1732,63 @@ packages:
   '@types/validator@13.15.10':
     resolution: {integrity: sha512-T8L6i7wCuyoK8A/ZeLYt1+q0ty3Zb9+qbSSvrIVitzT3YjZqkTZ40IbRsPanlB4h1QB3JVL1SYCdR6ngtFYcuA==}
 
-  '@typescript-eslint/eslint-plugin@8.48.0':
-    resolution: {integrity: sha512-XxXP5tL1txl13YFtrECECQYeZjBZad4fyd3cFV4a19LkAY/bIp9fev3US4S5fDVV2JaYFiKAZ/GRTOLer+mbyQ==}
+  '@typescript-eslint/eslint-plugin@8.51.0':
+    resolution: {integrity: sha512-XtssGWJvypyM2ytBnSnKtHYOGT+4ZwTnBVl36TA4nRO2f4PRNGz5/1OszHzcZCvcBMh+qb7I06uoCmLTRdR9og==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
-      '@typescript-eslint/parser': ^8.48.0
+      '@typescript-eslint/parser': ^8.51.0
       eslint: ^8.57.0 || ^9.0.0
       typescript: '>=4.8.4 <6.0.0'
 
-  '@typescript-eslint/parser@8.48.0':
-    resolution: {integrity: sha512-jCzKdm/QK0Kg4V4IK/oMlRZlY+QOcdjv89U2NgKHZk1CYTj82/RVSx1mV/0gqCVMJ/DA+Zf/S4NBWNF8GQ+eqQ==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      eslint: ^8.57.0 || ^9.0.0
-      typescript: '>=4.8.4 <6.0.0'
-
-  '@typescript-eslint/project-service@8.48.0':
-    resolution: {integrity: sha512-Ne4CTZyRh1BecBf84siv42wv5vQvVmgtk8AuiEffKTUo3DrBaGYZueJSxxBZ8fjk/N3DrgChH4TOdIOwOwiqqw==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      typescript: '>=4.8.4 <6.0.0'
-
-  '@typescript-eslint/scope-manager@8.48.0':
-    resolution: {integrity: sha512-uGSSsbrtJrLduti0Q1Q9+BF1/iFKaxGoQwjWOIVNJv0o6omrdyR8ct37m4xIl5Zzpkp69Kkmvom7QFTtue89YQ==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@typescript-eslint/tsconfig-utils@8.48.0':
-    resolution: {integrity: sha512-WNebjBdFdyu10sR1M4OXTt2OkMd5KWIL+LLfeH9KhgP+jzfDV/LI3eXzwJ1s9+Yc0Kzo2fQCdY/OpdusCMmh6w==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      typescript: '>=4.8.4 <6.0.0'
-
-  '@typescript-eslint/type-utils@8.48.0':
-    resolution: {integrity: sha512-zbeVaVqeXhhab6QNEKfK96Xyc7UQuoFWERhEnj3mLVnUWrQnv15cJNseUni7f3g557gm0e46LZ6IJ4NJVOgOpw==}
+  '@typescript-eslint/parser@8.51.0':
+    resolution: {integrity: sha512-3xP4XzzDNQOIqBMWogftkwxhg5oMKApqY0BAflmLZiFYHqyhSOxv/cd/zPQLTcCXr4AkaKb25joocY0BD1WC6A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0
       typescript: '>=4.8.4 <6.0.0'
 
-  '@typescript-eslint/types@8.48.0':
-    resolution: {integrity: sha512-cQMcGQQH7kwKoVswD1xdOytxQR60MWKM1di26xSUtxehaDs/32Zpqsu5WJlXTtTTqyAVK8R7hvsUnIXRS+bjvA==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@typescript-eslint/typescript-estree@8.48.0':
-    resolution: {integrity: sha512-ljHab1CSO4rGrQIAyizUS6UGHHCiAYhbfcIZ1zVJr5nMryxlXMVWS3duFPSKvSUbFPwkXMFk1k0EMIjub4sRRQ==}
+  '@typescript-eslint/project-service@8.51.0':
+    resolution: {integrity: sha512-Luv/GafO07Z7HpiI7qeEW5NW8HUtZI/fo/kE0YbtQEFpJRUuR0ajcWfCE5bnMvL7QQFrmT/odMe8QZww8X2nfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       typescript: '>=4.8.4 <6.0.0'
 
-  '@typescript-eslint/utils@8.48.0':
-    resolution: {integrity: sha512-yTJO1XuGxCsSfIVt1+1UrLHtue8xz16V8apzPYI06W0HbEbEWHxHXgZaAgavIkoh+GeV6hKKd5jm0sS6OYxWXQ==}
+  '@typescript-eslint/scope-manager@8.51.0':
+    resolution: {integrity: sha512-JhhJDVwsSx4hiOEQPeajGhCWgBMBwVkxC/Pet53EpBVs7zHHtayKefw1jtPaNRXpI9RA2uocdmpdfE7T+NrizA==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@typescript-eslint/tsconfig-utils@8.51.0':
+    resolution: {integrity: sha512-Qi5bSy/vuHeWyir2C8u/uqGMIlIDu8fuiYWv48ZGlZ/k+PRPHtaAu7erpc7p5bzw2WNNSniuxoMSO4Ar6V9OXw==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      typescript: '>=4.8.4 <6.0.0'
+
+  '@typescript-eslint/type-utils@8.51.0':
+    resolution: {integrity: sha512-0XVtYzxnobc9K0VU7wRWg1yiUrw4oQzexCG2V2IDxxCxhqBMSMbjB+6o91A+Uc0GWtgjCa3Y8bi7hwI0Tu4n5Q==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0
       typescript: '>=4.8.4 <6.0.0'
 
-  '@typescript-eslint/visitor-keys@8.48.0':
-    resolution: {integrity: sha512-T0XJMaRPOH3+LBbAfzR2jalckP1MSG/L9eUtY0DEzUyVaXJ/t6zN0nR7co5kz0Jko/nkSYCBRkz1djvjajVTTg==}
+  '@typescript-eslint/types@8.51.0':
+    resolution: {integrity: sha512-TizAvWYFM6sSscmEakjY3sPqGwxZRSywSsPEiuZF6d5GmGD9Gvlsv0f6N8FvAAA0CD06l3rIcWNbsN1e5F/9Ag==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@typescript-eslint/typescript-estree@8.51.0':
+    resolution: {integrity: sha512-1qNjGqFRmlq0VW5iVlcyHBbCjPB7y6SxpBkrbhNWMy/65ZoncXCEPJxkRZL8McrseNH6lFhaxCIaX+vBuFnRng==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      typescript: '>=4.8.4 <6.0.0'
+
+  '@typescript-eslint/utils@8.51.0':
+    resolution: {integrity: sha512-11rZYxSe0zabiKaCP2QAwRf/dnmgFgvTmeDTtZvUvXG3UuAdg/GU02NExmmIXzz3vLGgMdtrIosI84jITQOxUA==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      eslint: ^8.57.0 || ^9.0.0
+      typescript: '>=4.8.4 <6.0.0'
+
+  '@typescript-eslint/visitor-keys@8.51.0':
+    resolution: {integrity: sha512-mM/JRQOzhVN1ykejrvwnBRV3+7yTKK8tVANVN3o1O0t0v7o+jqdVu9crPy5Y9dov15TJk/FTIgoUGHrTOVL3Zg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@ungap/structured-clone@1.3.0':
@@ -2196,9 +2197,9 @@ packages:
     resolution: {integrity: sha512-/veY75JbMK4j1yjvuUxuVsiS/hr/4iHs9FTT6cgTexxdE0Ly/glccBAkloH/DofkjRbZU3bnoj38mOmhkZ0lHw==}
     engines: {node: '>=12'}
 
-  eslint-plugin-react-hooks@5.2.0:
-    resolution: {integrity: sha512-+f15FfK64YQwZdJNELETdn5ibXEUQmW1DZL6KXhNnc2heoy/sg9VJJeT7n8TlMWouzWqSWavFkIhHyIbIAEapg==}
-    engines: {node: '>=10'}
+  eslint-plugin-react-hooks@7.0.1:
+    resolution: {integrity: sha512-O0d0m04evaNzEPoSW+59Mezf8Qt0InfgGIBJnpC0h3NH/WjUAR7BIKUfysC6todmtiZ/A0oUVS8Gce0WhBrHsA==}
+    engines: {node: '>=18'}
     peerDependencies:
       eslint: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0 || ^9.0.0
 
@@ -2433,9 +2434,6 @@ packages:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
 
-  graphemer@1.4.0:
-    resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
-
   graphql-query-complexity@0.12.0:
     resolution: {integrity: sha512-fWEyuSL6g/+nSiIRgIipfI6UXTI7bAxrpPlCY1c0+V3pAEUo1ybaKmSBgNr1ed2r+agm1plJww8Loig9y6s2dw==}
     peerDependencies:
@@ -2517,6 +2515,12 @@ packages:
 
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
+
+  hermes-estree@0.25.1:
+    resolution: {integrity: sha512-0wUoCcLp+5Ev5pDW2OriHC2MJCbwLwuRx+gAqMTOkGKJJiBCLjtrvy4PWUGn6MIVefecRpzoOZ/UV6iGdOr+Cw==}
+
+  hermes-parser@0.25.1:
+    resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
@@ -2685,17 +2689,11 @@ packages:
     resolution: {integrity: sha512-PRp66vJ865SSqOlgqS8hujT5U4AOgMfhrwYIuIhfKaoSCZcirrmASQr8CX7cUg+RMih+hgznrjp99o+W4pJLHQ==}
     engines: {node: '>=12', npm: '>=6'}
 
-  jwa@1.4.2:
-    resolution: {integrity: sha512-eeH5JO+21J78qMvTIDdBXidBd6nG2kZjg5Ohz/1fpa28Z4CcsWUzJ1ZZyFq/3z3N17aZy+ZuBoHljASbL1WfOw==}
-
   jwa@2.0.1:
     resolution: {integrity: sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==}
 
-  jws@3.2.2:
-    resolution: {integrity: sha512-YHlZCB6lMTllWDtSPHz/ZXTsi8S00usEV6v1tjq8tOUZzw7DpSDWVXjXDre6ed1w/pd495ODpHZYSdkRTsa0HA==}
-
-  jws@4.0.0:
-    resolution: {integrity: sha512-KDncfTmOZoOMTFG4mBlG0qUIOlc03fmzH+ru6RgYVZhPkyiy/92Owlt/8UEN+a4TXR1FQetfIpJE8ApdvdVxTg==}
+  jws@4.0.1:
+    resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
 
   katex@0.16.25:
     resolution: {integrity: sha512-woHRUZ/iF23GBP1dkDQMh1QBad9dmr8/PAwNA54VrSOVYgI12MAcE14TqnDdQOdzyEonGzMepYnqBMYdsoAr8Q==}
@@ -3624,8 +3622,8 @@ packages:
   trough@2.2.0:
     resolution: {integrity: sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==}
 
-  ts-api-utils@2.1.0:
-    resolution: {integrity: sha512-CUgTZL1irw8u29bzrOD/nH85jqyc74D6SshFgujOIA7osm2Rz7dYH77agkx7H4FBNxDq7Cjf+IjaX/8zwFW+ZQ==}
+  ts-api-utils@2.4.0:
+    resolution: {integrity: sha512-3TaVTaAv2gTiMB35i3FiGJaRfwb3Pyn/j3m/bfAvGe8FB7CF6u+LMYqYlDh7reQf7UNvoTvdfAqHGmPGOSsPmA==}
     engines: {node: '>=18.12'}
     peerDependencies:
       typescript: '>=4.8.4'
@@ -3917,6 +3915,12 @@ packages:
     peerDependencies:
       zod: ^3.25 || ^4
 
+  zod-validation-error@4.0.2:
+    resolution: {integrity: sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
@@ -3957,10 +3961,10 @@ snapshots:
       '@ag-ui/core': 0.0.41
       '@ag-ui/proto': 0.0.41
 
-  '@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@ag-ui/client': 0.0.41
-      '@ag-ui/core': 0.0.37
+      '@ag-ui/core': 0.0.41
       '@langchain/core': 0.3.79(openai@4.104.0(ws@8.18.3)(zod@3.25.76))
       '@langchain/langgraph-sdk': 0.1.10(@langchain/core@0.3.79(openai@4.104.0(ws@8.18.3)(zod@3.25.76)))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       partial-json: 0.1.7
@@ -3973,12 +3977,12 @@ snapshots:
       - react
       - react-dom
 
-  '@ag-ui/mastra@0.2.0(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@copilotkit/runtime@1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3))(@mastra/core@..+packages+core)(zod@3.25.76)':
+  '@ag-ui/mastra@0.2.0(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@copilotkit/runtime@1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3))(@mastra/core@..+packages+core)(zod@3.25.76)':
     dependencies:
       '@ag-ui/client': 0.0.41
-      '@ag-ui/core': 0.0.37
+      '@ag-ui/core': 0.0.41
       '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
-      '@copilotkit/runtime': 1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3)
+      '@copilotkit/runtime': 1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3)
       '@mastra/client-js': 0.15.2(zod@3.25.76)
       '@mastra/core': link:../../packages/core
       rxjs: 7.8.1
@@ -4725,12 +4729,12 @@ snapshots:
       - encoding
       - graphql
 
-  '@copilotkit/runtime@1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3)':
+  '@copilotkit/runtime@1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.940.0)(@aws-sdk/client-bedrock-runtime@3.940.0)(@aws-sdk/client-kendra@3.940.0)(@aws-sdk/credential-provider-node@3.940.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.57.0)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2(debug@4.4.3))(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.57.0)(react@19.2.0)(weaviate-client@3.9.0)(ws@8.18.3)':
     dependencies:
       '@ag-ui/client': 0.0.41
-      '@ag-ui/core': 0.0.37
+      '@ag-ui/core': 0.0.41
       '@ag-ui/encoder': 0.0.41
-      '@ag-ui/langgraph': 0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.37)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@ag-ui/langgraph': 0.0.19(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@ag-ui/proto': 0.0.41
       '@anthropic-ai/sdk': 0.57.0
       '@copilotkit/shared': 1.10.6
@@ -5952,96 +5956,95 @@ snapshots:
 
   '@types/validator@13.15.10': {}
 
-  '@typescript-eslint/eslint-plugin@8.48.0(@typescript-eslint/parser@8.48.0(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)':
+  '@typescript-eslint/eslint-plugin@8.51.0(@typescript-eslint/parser@8.51.0(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@typescript-eslint/parser': 8.48.0(eslint@9.39.1)(typescript@5.9.3)
-      '@typescript-eslint/scope-manager': 8.48.0
-      '@typescript-eslint/type-utils': 8.48.0(eslint@9.39.1)(typescript@5.9.3)
-      '@typescript-eslint/utils': 8.48.0(eslint@9.39.1)(typescript@5.9.3)
-      '@typescript-eslint/visitor-keys': 8.48.0
+      '@typescript-eslint/parser': 8.51.0(eslint@9.39.1)(typescript@5.9.3)
+      '@typescript-eslint/scope-manager': 8.51.0
+      '@typescript-eslint/type-utils': 8.51.0(eslint@9.39.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 8.51.0(eslint@9.39.1)(typescript@5.9.3)
+      '@typescript-eslint/visitor-keys': 8.51.0
       eslint: 9.39.1
-      graphemer: 1.4.0
       ignore: 7.0.5
       natural-compare: 1.4.0
-      ts-api-utils: 2.1.0(typescript@5.9.3)
+      ts-api-utils: 2.4.0(typescript@5.9.3)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/parser@8.48.0(eslint@9.39.1)(typescript@5.9.3)':
+  '@typescript-eslint/parser@8.51.0(eslint@9.39.1)(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/scope-manager': 8.48.0
-      '@typescript-eslint/types': 8.48.0
-      '@typescript-eslint/typescript-estree': 8.48.0(typescript@5.9.3)
-      '@typescript-eslint/visitor-keys': 8.48.0
+      '@typescript-eslint/scope-manager': 8.51.0
+      '@typescript-eslint/types': 8.51.0
+      '@typescript-eslint/typescript-estree': 8.51.0(typescript@5.9.3)
+      '@typescript-eslint/visitor-keys': 8.51.0
       debug: 4.4.3
       eslint: 9.39.1
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/project-service@8.48.0(typescript@5.9.3)':
+  '@typescript-eslint/project-service@8.51.0(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/tsconfig-utils': 8.48.0(typescript@5.9.3)
-      '@typescript-eslint/types': 8.48.0
+      '@typescript-eslint/tsconfig-utils': 8.51.0(typescript@5.9.3)
+      '@typescript-eslint/types': 8.51.0
       debug: 4.4.3
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/scope-manager@8.48.0':
+  '@typescript-eslint/scope-manager@8.51.0':
     dependencies:
-      '@typescript-eslint/types': 8.48.0
-      '@typescript-eslint/visitor-keys': 8.48.0
+      '@typescript-eslint/types': 8.51.0
+      '@typescript-eslint/visitor-keys': 8.51.0
 
-  '@typescript-eslint/tsconfig-utils@8.48.0(typescript@5.9.3)':
+  '@typescript-eslint/tsconfig-utils@8.51.0(typescript@5.9.3)':
     dependencies:
       typescript: 5.9.3
 
-  '@typescript-eslint/type-utils@8.48.0(eslint@9.39.1)(typescript@5.9.3)':
+  '@typescript-eslint/type-utils@8.51.0(eslint@9.39.1)(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/types': 8.48.0
-      '@typescript-eslint/typescript-estree': 8.48.0(typescript@5.9.3)
-      '@typescript-eslint/utils': 8.48.0(eslint@9.39.1)(typescript@5.9.3)
+      '@typescript-eslint/types': 8.51.0
+      '@typescript-eslint/typescript-estree': 8.51.0(typescript@5.9.3)
+      '@typescript-eslint/utils': 8.51.0(eslint@9.39.1)(typescript@5.9.3)
       debug: 4.4.3
       eslint: 9.39.1
-      ts-api-utils: 2.1.0(typescript@5.9.3)
+      ts-api-utils: 2.4.0(typescript@5.9.3)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/types@8.48.0': {}
+  '@typescript-eslint/types@8.51.0': {}
 
-  '@typescript-eslint/typescript-estree@8.48.0(typescript@5.9.3)':
+  '@typescript-eslint/typescript-estree@8.51.0(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/project-service': 8.48.0(typescript@5.9.3)
-      '@typescript-eslint/tsconfig-utils': 8.48.0(typescript@5.9.3)
-      '@typescript-eslint/types': 8.48.0
-      '@typescript-eslint/visitor-keys': 8.48.0
+      '@typescript-eslint/project-service': 8.51.0(typescript@5.9.3)
+      '@typescript-eslint/tsconfig-utils': 8.51.0(typescript@5.9.3)
+      '@typescript-eslint/types': 8.51.0
+      '@typescript-eslint/visitor-keys': 8.51.0
       debug: 4.4.3
       minimatch: 9.0.5
       semver: 7.7.3
       tinyglobby: 0.2.15
-      ts-api-utils: 2.1.0(typescript@5.9.3)
+      ts-api-utils: 2.4.0(typescript@5.9.3)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@8.48.0(eslint@9.39.1)(typescript@5.9.3)':
+  '@typescript-eslint/utils@8.51.0(eslint@9.39.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/eslint-utils': 4.9.0(eslint@9.39.1)
-      '@typescript-eslint/scope-manager': 8.48.0
-      '@typescript-eslint/types': 8.48.0
-      '@typescript-eslint/typescript-estree': 8.48.0(typescript@5.9.3)
+      '@typescript-eslint/scope-manager': 8.51.0
+      '@typescript-eslint/types': 8.51.0
+      '@typescript-eslint/typescript-estree': 8.51.0(typescript@5.9.3)
       eslint: 9.39.1
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/visitor-keys@8.48.0':
+  '@typescript-eslint/visitor-keys@8.51.0':
     dependencies:
-      '@typescript-eslint/types': 8.48.0
+      '@typescript-eslint/types': 8.51.0
       eslint-visitor-keys: 4.2.1
 
   '@ungap/structured-clone@1.3.0': {}
@@ -6440,9 +6443,16 @@ snapshots:
 
   escape-string-regexp@5.0.0: {}
 
-  eslint-plugin-react-hooks@5.2.0(eslint@9.39.1):
+  eslint-plugin-react-hooks@7.0.1(eslint@9.39.1):
     dependencies:
+      '@babel/core': 7.28.5
+      '@babel/parser': 7.28.5
       eslint: 9.39.1
+      hermes-parser: 0.25.1
+      zod: 3.25.76
+      zod-validation-error: 4.0.2(zod@3.25.76)
+    transitivePeerDependencies:
+      - supports-color
 
   eslint-plugin-react-refresh@0.4.24(eslint@9.39.1):
     dependencies:
@@ -6714,7 +6724,7 @@ snapshots:
       gaxios: 5.1.3
       gcp-metadata: 5.3.0
       gtoken: 6.1.2
-      jws: 4.0.0
+      jws: 4.0.1
       lru-cache: 6.0.0
     transitivePeerDependencies:
       - encoding
@@ -6725,8 +6735,6 @@ snapshots:
       node-forge: 1.3.2
 
   gopd@1.2.0: {}
-
-  graphemer@1.4.0: {}
 
   graphql-query-complexity@0.12.0(graphql@16.12.0):
     dependencies:
@@ -6781,7 +6789,7 @@ snapshots:
     dependencies:
       gaxios: 5.1.3
       google-p12-pem: 4.0.1
-      jws: 4.0.0
+      jws: 4.0.1
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -6884,6 +6892,12 @@ snapshots:
       space-separated-tokens: 2.0.2
 
   help-me@5.0.0: {}
+
+  hermes-estree@0.25.1: {}
+
+  hermes-parser@0.25.1:
+    dependencies:
+      hermes-estree: 0.25.1
 
   highlight.js@10.7.3: {}
 
@@ -7031,7 +7045,7 @@ snapshots:
 
   jsonwebtoken@9.0.2:
     dependencies:
-      jws: 3.2.2
+      jws: 4.0.1
       lodash.includes: 4.3.0
       lodash.isboolean: 3.0.3
       lodash.isinteger: 4.0.4
@@ -7042,24 +7056,13 @@ snapshots:
       ms: 2.1.3
       semver: 7.7.3
 
-  jwa@1.4.2:
-    dependencies:
-      buffer-equal-constant-time: 1.0.1
-      ecdsa-sig-formatter: 1.0.11
-      safe-buffer: 5.2.1
-
   jwa@2.0.1:
     dependencies:
       buffer-equal-constant-time: 1.0.1
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
 
-  jws@3.2.2:
-    dependencies:
-      jwa: 1.4.2
-      safe-buffer: 5.2.1
-
-  jws@4.0.0:
+  jws@4.0.1:
     dependencies:
       jwa: 2.0.1
       safe-buffer: 5.2.1
@@ -8368,7 +8371,7 @@ snapshots:
 
   trough@2.2.0: {}
 
-  ts-api-utils@2.1.0(typescript@5.9.3):
+  ts-api-utils@2.4.0(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
 
@@ -8638,6 +8641,10 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   zod-to-json-schema@3.25.0(zod@3.25.76):
+    dependencies:
+      zod: 3.25.76
+
+  zod-validation-error@4.0.2(zod@3.25.76):
     dependencies:
       zod: 3.25.76
 

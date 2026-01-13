@@ -32,6 +32,6 @@
   "devDependencies": {
     "mastra": "beta",
     "@types/node": "22.13.17",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

@@ -9,6 +9,9 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -23,6 +26,7 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
   #client: Client;
@@ -608,7 +612,7 @@ export class MemoryLibSQL extends MemoryStorage {
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: JSON.stringify(resource.metadata),
+        // metadata is handled by prepareStatement which stringifies jsonb columns
       },
     });
 
@@ -657,7 +661,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     if (metadata) {
-      updates.push('metadata = ?');
+      updates.push('metadata = jsonb(?)');
       values.push(JSON.stringify(updatedResource.metadata));
     }
 
@@ -758,7 +762,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_THREADS)} ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
 
@@ -799,7 +803,7 @@ export class MemoryLibSQL extends MemoryStorage {
         tableName: TABLE_THREADS,
         record: {
           ...thread,
-          metadata: JSON.stringify(thread.metadata),
+          // metadata is handled by prepareStatement which stringifies jsonb columns
         },
       });
 
@@ -854,7 +858,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
         args: [title, JSON.stringify(updatedThread.metadata), id],
       });
 
@@ -894,6 +898,189 @@ export class MemoryLibSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
+        },
+        error,
+      );
+    }
+  }
+
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    // Get the source thread
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('LIBSQL', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('LIBSQL', 'CLONE_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    try {
+      // Build message query with filters
+      let messageQuery = `SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
+                          FROM "${TABLE_MESSAGES}" WHERE thread_id = ?`;
+      const messageParams: InValue[] = [sourceThreadId];
+
+      // Apply date filters
+      if (options?.messageFilter?.startDate) {
+        messageQuery += ` AND "createdAt" >= ?`;
+        messageParams.push(
+          options.messageFilter.startDate instanceof Date
+            ? options.messageFilter.startDate.toISOString()
+            : options.messageFilter.startDate,
+        );
+      }
+      if (options?.messageFilter?.endDate) {
+        messageQuery += ` AND "createdAt" <= ?`;
+        messageParams.push(
+          options.messageFilter.endDate instanceof Date
+            ? options.messageFilter.endDate.toISOString()
+            : options.messageFilter.endDate,
+        );
+      }
+
+      // Apply message ID filter
+      if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
+        messageQuery += ` AND id IN (${options.messageFilter.messageIds.map(() => '?').join(', ')})`;
+        messageParams.push(...options.messageFilter.messageIds);
+      }
+
+      messageQuery += ` ORDER BY "createdAt" ASC`;
+
+      // Apply message limit (from most recent, so we need to reverse order for limit then sort back)
+      if (options?.messageLimit && options.messageLimit > 0) {
+        const limitQuery = `SELECT * FROM (${messageQuery.replace('ORDER BY "createdAt" ASC', 'ORDER BY "createdAt" DESC')} LIMIT ?) ORDER BY "createdAt" ASC`;
+        messageParams.push(options.messageLimit);
+        messageQuery = limitQuery;
+      }
+
+      const sourceMessagesResult = await this.#client.execute({ sql: messageQuery, args: messageParams });
+      const sourceMessages = sourceMessagesResult.rows || [];
+
+      const now = new Date();
+      const nowStr = now.toISOString();
+
+      // Determine the last message ID for clone metadata
+      const lastMessageId =
+        sourceMessages.length > 0 ? (sourceMessages[sourceMessages.length - 1]!.id as string) : undefined;
+
+      // Create clone metadata
+      const cloneMetadata: ThreadCloneMetadata = {
+        sourceThreadId,
+        clonedAt: now,
+        ...(lastMessageId && { lastMessageId }),
+      };
+
+      // Create the new thread
+      const newThread: StorageThreadType = {
+        id: newThreadId,
+        resourceId: resourceId || sourceThread.resourceId,
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+        metadata: {
+          ...metadata,
+          clone: cloneMetadata,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Use transaction for consistency
+      const tx = await this.#client.transaction('write');
+
+      try {
+        // Insert the new thread
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
+          args: [
+            newThread.id,
+            newThread.resourceId,
+            newThread.title || null,
+            JSON.stringify(newThread.metadata),
+            nowStr,
+            nowStr,
+          ],
+        });
+
+        // Clone messages with new IDs
+        const clonedMessages: MastraDBMessage[] = [];
+        const targetResourceId = resourceId || sourceThread.resourceId;
+
+        for (const sourceMsg of sourceMessages) {
+          const newMessageId = crypto.randomUUID();
+          const contentStr = sourceMsg.content as string;
+          let parsedContent: MastraDBMessage['content'];
+          try {
+            parsedContent = JSON.parse(contentStr);
+          } catch {
+            // use content as is - wrap in format 2 structure if needed
+            parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
+          }
+
+          await tx.execute({
+            sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
+                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              newMessageId,
+              newThreadId,
+              contentStr,
+              sourceMsg.role as string,
+              (sourceMsg.type as string) || 'v2',
+              sourceMsg.createdAt as string,
+              targetResourceId,
+            ],
+          });
+
+          clonedMessages.push({
+            id: newMessageId,
+            threadId: newThreadId,
+            content: parsedContent,
+            role: sourceMsg.role as MastraDBMessage['role'],
+            type: (sourceMsg.type as string) || undefined,
+            createdAt: new Date(sourceMsg.createdAt as string),
+            resourceId: targetResourceId,
+          });
+        }
+
+        await tx.commit();
+
+        return {
+          thread: newThread,
+          clonedMessages,
+        };
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'CLONE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
         },
         error,
       );

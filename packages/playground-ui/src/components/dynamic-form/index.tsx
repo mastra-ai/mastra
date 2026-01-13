@@ -1,5 +1,3 @@
-'use client';
-
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../ds/components/Button';
 import { AutoForm } from '@/components/ui/autoform';

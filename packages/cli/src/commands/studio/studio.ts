@@ -28,7 +28,7 @@ export async function studio(
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(__dirname, 'playground');
+    const distPath = join(__dirname, 'studio');
 
     if (!existsSync(distPath)) {
       logger.error(`Studio distribution not found at ${distPath}.`);

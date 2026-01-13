@@ -30,6 +30,17 @@ interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter
   documentFilter?: MongoDBVectorFilter;
 }
 
+export interface MongoDBVectorConfig {
+  /** Unique identifier for this vector store instance */
+  id: string;
+  /** MongoDB connection string */
+  uri: string;
+  /** Name of the MongoDB database to use */
+  dbName: string;
+  /** Optional MongoDB client options */
+  options?: MongoClientOptions;
+}
+
 export interface MongoDBIndexReadyParams {
   indexName: string;
   timeoutMs?: number;
@@ -59,8 +70,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ id, uri, dbName, options }: { id: string; uri: string; dbName: string; options?: MongoClientOptions }) {
+  constructor({ id, uri, dbName, options }: MongoDBVectorConfig) {
     super({ id });
+
+    if (!uri) {
+      throw new Error('MongoDBVector requires a connection string. Provide "uri" in the constructor options.');
+    }
+
     const client = new MongoClient(uri, {
       ...options,
       driverInfo: {

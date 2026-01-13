@@ -88,6 +88,14 @@ export const agent = new Agent({
       defaultValue: "10",
     },
     {
+      name: "readOnly",
+      type: "boolean",
+      description:
+        "When true, prevents memory from saving new messages. Useful for read-only operations like previews or internal routing agents.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
       name: "semanticRecall",
       type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
       description:
@@ -145,7 +153,7 @@ export const agent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'test-agent-vector',
-      connectionUrl: "file:./vector-memory.db",
+      url: "file:./vector-memory.db",
     }),
     options: {
       lastMessages: 10,
@@ -219,3 +227,5 @@ export const agent = new Agent({
 - [getThreadById](/reference/v1/memory/getThreadById)
 - [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
 - [deleteMessages](/reference/v1/memory/deleteMessages)
+- [cloneThread](/reference/v1/memory/cloneThread)
+- [Clone Utility Methods](/reference/v1/memory/clone-utilities)
