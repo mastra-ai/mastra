@@ -823,6 +823,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     let thread2: StorageThreadType;
     let thread3: StorageThreadType;
     let thread4: StorageThreadType;
+    let testThread: StorageThreadType;
 
     // Clear all thread data before this test block to ensure isolation
     beforeAll(async () => {
@@ -836,6 +837,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       if (thread2?.id) await memoryStorage.deleteThread({ threadId: thread2.id }).catch(() => {});
       if (thread3?.id) await memoryStorage.deleteThread({ threadId: thread3.id }).catch(() => {});
       if (thread4?.id) await memoryStorage.deleteThread({ threadId: thread4.id }).catch(() => {});
+      if (testThread?.id) await memoryStorage.deleteThread({ threadId: testThread.id }).catch(() => {});
     });
 
     beforeEach(async () => {
@@ -1038,7 +1040,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     it('should return consistent timestamps from getThreadById and listThreads', async () => {
       // Save and update a thread
-      const testThread = createSampleThread();
+      testThread = createSampleThread();
       await memoryStorage.saveThread({ thread: testThread });
 
       await new Promise(resolve => setTimeout(resolve, 50));
