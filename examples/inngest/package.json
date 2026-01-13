@@ -26,6 +26,17 @@
     "@mastra/observability": "1.0.0-beta.10",
     "inngest": "^3.49.0",
     "mastra": "1.0.0-beta.13",
-    "zod": "^4.3.5"
+    "zod": "^3.25.76"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/inngest": "link:../../workflows/inngest",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/deployer": "link:../../packages/deployer",
+      "@mastra/server": "link:../../packages/server"
+    }
   }
 }
