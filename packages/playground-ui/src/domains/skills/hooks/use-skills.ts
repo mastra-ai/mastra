@@ -180,3 +180,22 @@ export const useSearchSkills = () => {
     },
   });
 };
+
+/**
+ * Hook to get a specific skill from an agent (agent-specific skills)
+ */
+export const useAgentSkill = (agentId: string, skillName: string, options?: { enabled?: boolean }) => {
+  const client = useMastraClient();
+  const baseUrl = getBaseUrl(client);
+
+  return useQuery({
+    queryKey: ['agents', agentId, 'skills', skillName],
+    queryFn: async (): Promise<Skill> => {
+      return skillsRequest(
+        baseUrl,
+        `/api/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillName)}`,
+      );
+    },
+    enabled: options?.enabled !== false && !!agentId && !!skillName,
+  });
+};

@@ -49,6 +49,7 @@ import Knowledge from './pages/knowledge';
 import KnowledgeNamespaceDetail from './pages/knowledge/[namespace]';
 import Skills from './pages/skills';
 import SkillDetailPage from './pages/skills/[skillName]';
+import { AgentSkillDetailPage } from './pages/agents/skills/[skillName]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -156,6 +157,7 @@ function App() {
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
+                <Route path="/agents/:agentId/skills/:skillName" element={<AgentSkillDetailPage />} />
                 <Route
                   path="/agents/:agentId"
                   element={

@@ -1,5 +1,4 @@
 import type { MastraSkills } from '@mastra/core/skills';
-import type { InputProcessor, InputProcessorOrWorkflow } from '@mastra/core/processors';
 import { HTTPException } from '../http-exception';
 import { agentSkillPathParams } from '../schemas/agents';
 import {
@@ -236,60 +235,6 @@ export const SEARCH_SKILLS_ROUTE = createRoute({
 // Agent Skill Routes
 // ============================================================================
 
-/**
- * Get skills from an agent's input processors.
- * Skills come from SkillsProcessor instances that have a listSkills method.
- */
-function getAgentSkills(
-  inputProcessors: (InputProcessor | InputProcessorOrWorkflow)[],
-): Array<{ name: string; description: string; license?: string; allowedTools?: string[] }> {
-  const allSkills: Array<{ name: string; description: string; license?: string; allowedTools?: string[] }> = [];
-
-  for (const processor of inputProcessors) {
-    if ('listSkills' in processor && typeof processor.listSkills === 'function') {
-      try {
-        const skills = processor.listSkills();
-        if (Array.isArray(skills)) {
-          allSkills.push(...skills);
-        }
-      } catch {
-        // Processor may not have skills available
-      }
-    }
-  }
-
-  return allSkills;
-}
-
-/**
- * Get full skill details from an agent's SkillsProcessor.
- * Returns the skill instance that provides access to full skill data.
- */
-function getAgentSkillsInstance(inputProcessors: (InputProcessor | InputProcessorOrWorkflow)[]): MastraSkills | null {
-  for (const processor of inputProcessors) {
-    // Try to get skills from the processor's skills property
-    if ('skills' in processor) {
-      try {
-        const skills = processor.skills;
-        if (skills) {
-          return skills as MastraSkills;
-        }
-      } catch {
-        // Skills getter might throw if no skills are configured
-      }
-    }
-    // Also check getSkillsInstance method
-    if ('getSkillsInstance' in processor && typeof processor.getSkillsInstance === 'function') {
-      try {
-        return processor.getSkillsInstance() as MastraSkills;
-      } catch {
-        // Continue to next processor
-      }
-    }
-  }
-  return null;
-}
-
 export const GET_AGENT_SKILL_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/:agentId/skills/:skillName',
@@ -299,7 +244,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+  handler: async ({ mastra, agentId, skillName }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
@@ -310,46 +255,30 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Skill name is required' });
       }
 
-      // Get the agent's raw configured input processors (before combining into workflow)
-      // This preserves access to processor-specific methods like listSkills()
-      const inputProcessors = await agent.listConfiguredInputProcessors(requestContext);
+      // Get skills directly from agent (resolves agent-specific or inherited from Mastra)
+      const skills = agent.getSkills();
+      if (!skills) {
+        throw new HTTPException(404, { message: 'No skills configured for this agent' });
+      }
 
-      // First check if the skill exists in the agent's skills
-      const agentSkills = getAgentSkills(inputProcessors);
-      const skillMetadata = agentSkills.find(s => s.name === skillName);
-
-      if (!skillMetadata) {
+      const skill = skills.get(skillName);
+      if (!skill) {
         throw new HTTPException(404, { message: `Skill "${skillName}" not found for this agent` });
       }
 
-      // Try to get full skill details from the SkillsProcessor
-      const skillsInstance = getAgentSkillsInstance(inputProcessors);
-      if (skillsInstance) {
-        const skill = skillsInstance.get(skillName);
-        if (skill) {
-          return {
-            name: skill.name,
-            description: skill.description,
-            license: skill.license,
-            compatibility: skill.compatibility,
-            metadata: skill.metadata,
-            allowedTools: skill.allowedTools,
-            path: skill.path,
-            instructions: skill.instructions,
-            source: skill.source,
-            references: skill.references,
-            scripts: skill.scripts,
-            assets: skill.assets,
-          };
-        }
-      }
-
-      // Fallback to basic metadata if full skill not available
       return {
-        name: skillMetadata.name,
-        description: skillMetadata.description,
-        license: skillMetadata.license,
-        allowedTools: skillMetadata.allowedTools,
+        name: skill.name,
+        description: skill.description,
+        license: skill.license,
+        compatibility: skill.compatibility,
+        metadata: skill.metadata,
+        allowedTools: skill.allowedTools,
+        path: skill.path,
+        instructions: skill.instructions,
+        source: skill.source,
+        references: skill.references,
+        scripts: skill.scripts,
+        assets: skill.assets,
       };
     } catch (error) {
       return handleError(error, 'Error getting agent skill');
