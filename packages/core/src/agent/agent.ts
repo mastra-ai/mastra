@@ -422,8 +422,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         const processor = processorOrWorkflow;
         // @ts-ignore - TODO: fix types
         processor.processorIndex = index;
-        // TODO fix types
-        step = createStep(processor as Processor<string, unknown>);
+        step = createStep(processor);
       }
       workflow = workflow.then(step);
     }
@@ -2136,7 +2135,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
-              // @ts-ignore
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),
