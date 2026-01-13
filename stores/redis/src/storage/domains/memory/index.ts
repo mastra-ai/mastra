@@ -163,7 +163,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         error,
       );
       this.logger?.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.error(mastraError.toString());
       return {
         threads: [],
         total: 0,
@@ -194,7 +194,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         error,
       );
       this.logger?.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
   }
@@ -228,6 +228,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: new Date(),
     };
 
     try {
@@ -340,22 +341,11 @@ export class StoreMemoryRedis extends MemoryStorage {
           const createdAtScore = new Date(message.createdAt).getTime();
           const score = message._index !== undefined ? message._index : createdAtScore;
 
-          const existingKeyPattern = getMessageKey('*', message.id);
-          const keys = await this.db.scanKeys(existingKeyPattern);
-
-          if (keys.length > 0) {
-            const existingMessagesData = await this.client.mGet(keys);
-            for (const data of existingMessagesData) {
-              if (!data) {
-                continue;
-              }
-              const existingMessage = JSON.parse(data) as MastraDBMessage;
-              if (existingMessage && existingMessage.threadId !== message.threadId) {
-                const existingMessageKey = getMessageKey(existingMessage.threadId!, existingMessage.id);
-                multi.del(existingMessageKey);
-                multi.zRem(getThreadMessagesKey(existingMessage.threadId!), existingMessage.id);
-              }
-            }
+          const existingThreadId = await this.getThreadIdForMessage(message.id);
+          if (existingThreadId && existingThreadId !== message.threadId) {
+            const existingMessageKey = getMessageKey(existingThreadId, message.id);
+            multi.del(existingMessageKey);
+            multi.zRem(getThreadMessagesKey(existingThreadId), message.id);
           }
 
           multi.set(key, JSON.stringify(message));
@@ -568,7 +558,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         {
           id: createStorageErrorId('REDIS', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
@@ -720,7 +710,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         },
         error,
       );
-      this.logger.error(mastraError.toString());
+      this.logger?.error(mastraError.toString());
       this.logger?.trackException(mastraError);
       return {
         messages: [],
