@@ -268,6 +268,8 @@ export interface StorageAgentType {
   metadata?: Record<string, unknown>;
   /** Owner identifier for multi-tenant filtering */
   ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -296,6 +298,8 @@ export type StorageUpdateAgentInput = {
   metadata?: Record<string, unknown>;
   /** Owner identifier for multi-tenant filtering */
   ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
 };
 
 export type StorageListAgentsInput = {

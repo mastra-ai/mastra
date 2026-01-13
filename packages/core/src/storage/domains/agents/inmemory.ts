@@ -85,6 +85,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
         metadata: { ...existingAgent.metadata, ...updates.metadata },
       }),
       ...(updates.ownerId !== undefined && { ownerId: updates.ownerId }),
+      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
       updatedAt: new Date(),
     };
 

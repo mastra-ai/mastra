@@ -32,7 +32,7 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['ownerId'],
+      ifNotExists: ['ownerId', 'activeVersionId'],
     });
   }
 
@@ -84,6 +84,7 @@ export class AgentsLibSQL extends AgentsStorage {
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
       ownerId: row.ownerId as string | undefined,
+      activeVersionId: row.activeVersionId as string | undefined,
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -132,6 +133,7 @@ export class AgentsLibSQL extends AgentsStorage {
           scorers: agent.scorers ?? null,
           metadata: agent.metadata ?? null,
           ownerId: agent.ownerId ?? null,
+          activeVersionId: agent.activeVersionId ?? null,
           createdAt: now,
           updatedAt: now,
         },
@@ -191,6 +193,7 @@ export class AgentsLibSQL extends AgentsStorage {
         data.metadata = { ...existingAgent.metadata, ...updates.metadata };
       }
       if (updates.ownerId !== undefined) data.ownerId = updates.ownerId;
+      if (updates.activeVersionId !== undefined) data.activeVersionId = updates.activeVersionId;
 
       // Only update if there's more than just updatedAt
       if (Object.keys(data).length > 1) {
