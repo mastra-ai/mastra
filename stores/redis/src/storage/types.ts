@@ -73,7 +73,6 @@ export type RedisConfig = {
   | {
       /**
        * Redis host address.
-       * @default 'localhost'
        */
       host: string;
       /**

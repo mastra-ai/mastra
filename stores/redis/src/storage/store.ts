@@ -114,13 +114,25 @@ export class RedisStore extends MastraStorage {
       throw new Error('RedisStore: host is required and cannot be empty.');
     }
 
-    const url = config.password
-      ? `redis://:${config.password}@${config.host}:${config.port || 6379}/${config.db || 0}`
-      : `redis://${config.host}:${config.port || 6379}/${config.db || 0}`;
+    const url = this.createClientUrl({
+      ...config,
+      db: config.db ?? 0,
+      port: config.port ?? 6379,
+    });
 
     return {
       client: createClient({ url }) as RedisClient,
       shouldManageConnection: true,
     };
+  }
+
+  private createClientUrl(config: { host: string; password?: string; port: number; db: number }): string {
+    const encodedPassword = config.password ? encodeURIComponent(config.password) : null;
+
+    if (config.password) {
+      return `redis://:${encodedPassword}@${config.host}:${config.port || 6379}/${config.db || 0}`;
+    }
+
+    return `redis://${config.host}:${config.port || 6379}/${config.db || 0}`;
   }
 }
