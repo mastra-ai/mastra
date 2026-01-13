@@ -166,7 +166,7 @@ export class AgentsPG extends AgentsStorage {
       agents: this.parseJson(row.agents, 'agents'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: this.parseJson(row.memory, 'memory'),
+      memory: row.memory as string | undefined, // memory is a plain string key, not JSON
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
       ownerId: row.ownerId as string | undefined,
