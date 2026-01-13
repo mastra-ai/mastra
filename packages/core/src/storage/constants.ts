@@ -115,7 +115,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
     resourceId: { type: 'text', nullable: true },
     snapshot: {
-      type: 'text',
+      type: 'jsonb',
     },
     createdAt: {
       type: 'timestamp',

@@ -473,3 +473,44 @@ USING metadata::jsonb;
 - Your application will continue to work (the JSON stringify/parse pattern works with both TEXT and JSONB)
 - New tables will use JSONB automatically
 - JSONB-specific features (native operators like `metadata ? 'key'`, GIN indexing) won't work until you migrate
+
+### Workflow snapshot column (TEXT → JSONB)
+
+The `snapshot` column in the `mastra_workflow_snapshot` table has been changed from `TEXT` to `JSONB`.
+
+**PostgreSQL users with existing tables must migrate the column type.** Other databases do not require migration.
+
+#### Option 1: Use the helper method (Recommended)
+
+```typescript
+import { PostgresStore } from '@mastra/pg';
+
+const store = new PostgresStore({
+  id: 'my-store',
+  connectionString: process.env.DATABASE_URL,
+});
+
+await store.init();
+
+// Run the migration
+const result = await store.migrateWorkflowSnapshotToJsonb();
+if (result.migrated) {
+  console.log(`Migrated snapshot column from ${result.previousType} to JSONB`);
+}
+```
+
+#### Option 2: Run SQL directly
+
+```sql
+ALTER TABLE mastra_workflow_snapshot
+ALTER COLUMN snapshot TYPE jsonb
+USING snapshot::jsonb;
+```
+
+If using a custom schema:
+
+```sql
+ALTER TABLE "your_schema".mastra_workflow_snapshot
+ALTER COLUMN snapshot TYPE jsonb
+USING snapshot::jsonb;
+```

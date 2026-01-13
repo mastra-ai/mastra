@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage, TABLE_THREADS } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import {
@@ -256,6 +256,72 @@ export class PostgresStore extends MastraStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'MIGRATE_THREADS_METADATA', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName, columnName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Migrates the workflow_snapshot table snapshot column from TEXT to JSONB.
+   *
+   * This migration is required for users upgrading from versions where
+   * TABLE_WORKFLOW_SNAPSHOT.snapshot was stored as TEXT. The migration converts
+   * the column type and preserves all existing JSON data.
+   *
+   * @returns Object indicating migration status:
+   *   - `migrated: true` if the column was converted from TEXT to JSONB
+   *   - `migrated: false` if no migration was needed (already JSONB or column doesn't exist)
+   *   - `previousType` the column type before migration (if migration occurred)
+   *
+   * @example
+   * ```typescript
+   * const store = new PostgresStore({ connectionString: '...' });
+   * await store.init();
+   *
+   * const result = await store.migrateWorkflowSnapshotToJsonb();
+   * if (result.migrated) {
+   *   console.log(`Migrated snapshot column from ${result.previousType} to JSONB`);
+   * }
+   * ```
+   */
+  async migrateWorkflowSnapshotToJsonb(): Promise<{ migrated: boolean; previousType?: string }> {
+    const tableName = TABLE_WORKFLOW_SNAPSHOT;
+    const columnName = 'snapshot';
+    const fullTableName = this.schema === 'public' ? tableName : `"${this.schema}".${tableName}`;
+
+    try {
+      const currentType = await this.getColumnType(tableName, columnName);
+
+      // Column doesn't exist - nothing to migrate
+      if (!currentType) {
+        return { migrated: false };
+      }
+
+      // Already JSONB - no migration needed
+      if (currentType === 'jsonb') {
+        return { migrated: false };
+      }
+
+      // Migrate TEXT to JSONB
+      if (currentType === 'text') {
+        await this.#db.none(
+          `ALTER TABLE ${fullTableName}
+           ALTER COLUMN "${columnName}" TYPE jsonb
+           USING "${columnName}"::jsonb`,
+        );
+        return { migrated: true, previousType: currentType };
+      }
+
+      // Unexpected type - don't migrate, let user handle it
+      return { migrated: false, previousType: currentType };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'MIGRATE_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName, columnName },
