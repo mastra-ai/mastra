@@ -3,6 +3,7 @@ import { serve as inngestServe } from '@mastra/inngest';
 import { PinoLogger } from '@mastra/loggers';
 import { Observability, ConsoleExporter, DefaultExporter } from '@mastra/observability';
 import { activityPlanningWorkflow, inngest } from './workflows/inngest-workflow';
+import { defaultActivityPlanningWorkflow } from './workflows/default-workflow';
 import { planningAgent } from './agents/planning-agent';
 import { LibSQLStore } from '@mastra/libsql';
 
@@ -30,6 +31,7 @@ const observability = new Observability({
 export const mastra = new Mastra({
   workflows: {
     activityPlanningWorkflow,
+    defaultActivityPlanningWorkflow,
   },
   agents: {
     planningAgent,

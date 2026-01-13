@@ -219,7 +219,7 @@ export class DefaultExporter extends BaseExporter {
           const createRecord = this.buildCreateRecord(event.exportedSpan);
           this.buffer.creates.push(createRecord);
           this.buffer.seenSpans.add(spanKey);
-          // Track this span as created persistently
+          // Track this span as created persistently (by spanId)
           this.allCreatedSpans.add(spanKey);
         }
         // insert-only ignores SPAN_STARTED

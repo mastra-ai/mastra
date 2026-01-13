@@ -8,8 +8,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "mastra:dev": "mastra dev",
-    "start:inngest:server": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
-    "run:inngest:workflow": "bun run src/mastra/exec.ts"
+    "start:inngest:server": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest"
   },
   "keywords": [],
   "author": "",
