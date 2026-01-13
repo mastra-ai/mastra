@@ -5,6 +5,31 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
+ * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()
+ * to convert binary JSONB to TEXT.
+ *
+ * The json() function handles both:
+ * - Binary JSONB data (converts to TEXT)
+ * - Legacy TEXT JSON data (returns as-is)
+ *
+ * Note: json_valid() was considered for guarding against malformed legacy TEXT,
+ * but it doesn't work correctly with binary JSONB data (returns false for valid JSONB blobs).
+ *
+ * @param tableName - The table name to get the schema for
+ * @returns A comma-separated column list with json() wrappers for JSONB columns
+ */
+export function buildSelectColumns(tableName: TABLE_NAMES): string {
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.keys(schema)
+    .map(col => {
+      const colDef = schema[col];
+      const parsedCol = parseSqlIdentifier(col, 'column name');
+      return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
+    })
+    .join(', ');
+}
+
+/**
  * Checks if an error is a SQLite lock/busy error that should be retried
  */
 export function isLockError(error: any): boolean {
@@ -78,18 +103,32 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
   args: InValue[];
 } {
   const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-  const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-  const values = Object.values(record).map(v => {
+  const schema = TABLE_SCHEMAS[tableName];
+  const columnNames = Object.keys(record);
+  const columns = columnNames.map(col => parseSqlIdentifier(col, 'column name'));
+  const values = columnNames.map(col => {
+    const v = record[col];
     if (typeof v === `undefined` || v === null) {
       // returning an undefined value will cause libsql to throw
       return null;
+    }
+    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+    const colDef = schema[col];
+    if (colDef?.type === 'jsonb') {
+      return JSON.stringify(v);
     }
     if (v instanceof Date) {
       return v.toISOString();
     }
     return typeof v === 'object' ? JSON.stringify(v) : v;
   });
-  const placeholders = values.map(() => '?').join(', ');
+  const placeholders = columnNames
+    .map(col => {
+      const colDef = schema[col];
+      return colDef?.type === 'jsonb' ? 'jsonb(?)' : '?';
+    })
+    .join(', ');
 
   return {
     sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
@@ -113,9 +152,23 @@ export function prepareUpdateStatement({
   const schema = TABLE_SCHEMAS[tableName];
 
   // Prepare SET clause
-  const updateColumns = Object.keys(updates).map(col => parseSqlIdentifier(col, 'column name'));
-  const updateValues = Object.values(updates).map(transformToSqlValue);
-  const setClause = updateColumns.map(col => `${col} = ?`).join(', ');
+  const updateColumnNames = Object.keys(updates);
+  const updateColumns = updateColumnNames.map(col => parseSqlIdentifier(col, 'column name'));
+  const updateValues = updateColumnNames.map(col => {
+    const colDef = schema[col];
+    const v = updates[col];
+    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    if (colDef?.type === 'jsonb') {
+      return transformToSqlValue(v, true);
+    }
+    return transformToSqlValue(v, false);
+  });
+  const setClause = updateColumns
+    .map((col, i) => {
+      const colDef = schema[updateColumnNames[i]!];
+      return colDef?.type === 'jsonb' ? `${col} = jsonb(?)` : `${col} = ?`;
+    })
+    .join(', ');
 
   const whereClause = prepareWhereClause(keys, schema);
 
@@ -125,9 +178,14 @@ export function prepareUpdateStatement({
   };
 }
 
-export function transformToSqlValue(value: any): InValue {
+export function transformToSqlValue(value: any, forceJsonStringify: boolean = false): InValue {
   if (typeof value === 'undefined' || value === null) {
     return null;
+  }
+  // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+  // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+  if (forceJsonStringify) {
+    return JSON.stringify(value);
   }
   if (value instanceof Date) {
     return value.toISOString();

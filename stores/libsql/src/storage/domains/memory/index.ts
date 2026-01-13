@@ -26,6 +26,7 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
   #client: Client;
@@ -611,7 +612,7 @@ export class MemoryLibSQL extends MemoryStorage {
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: JSON.stringify(resource.metadata),
+        // metadata is handled by prepareStatement which stringifies jsonb columns
       },
     });
 
@@ -660,7 +661,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     if (metadata) {
-      updates.push('metadata = ?');
+      updates.push('metadata = jsonb(?)');
       values.push(JSON.stringify(updatedResource.metadata));
     }
 
@@ -800,7 +801,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_THREADS)} ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
 
@@ -844,7 +845,7 @@ export class MemoryLibSQL extends MemoryStorage {
         tableName: TABLE_THREADS,
         record: {
           ...thread,
-          metadata: JSON.stringify(thread.metadata),
+          // metadata is handled by prepareStatement which stringifies jsonb columns
         },
       });
 
@@ -899,7 +900,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
         args: [title, JSON.stringify(updatedThread.metadata), id],
       });
 
@@ -1051,7 +1052,7 @@ export class MemoryLibSQL extends MemoryStorage {
         // Insert the new thread
         await tx.execute({
           sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
-                VALUES (?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
           args: [
             newThread.id,
             newThread.resourceId,
