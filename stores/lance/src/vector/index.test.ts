@@ -105,7 +105,7 @@ describe('Lance vector store tests', () => {
             numPartitions: 1,
             numSubVectors: 1,
           },
-        } as any);
+        });
 
         const stats = await vectorDB.describeIndex({ indexName: 'vector_idx' });
         expect(stats).toBeDefined();
@@ -1792,7 +1792,7 @@ describe('Lance vector store tests', () => {
           indexName,
           dimension: 3,
           metric: 'cosine',
-        } as any);
+        });
 
         // Verify table was created
         const tables = await vectorDB.listTables();
@@ -1821,7 +1821,7 @@ describe('Lance vector store tests', () => {
           dimension: 3,
           metric: 'cosine',
           indexConfig: { type: 'ivfflat', numPartitions: 1, numSubVectors: 1 },
-        } as any);
+        });
 
         // Should not throw - index created on existing table
         const tables = await vectorDB.listTables();
@@ -1841,7 +1841,7 @@ describe('Lance vector store tests', () => {
           indexName,
           queryVector: [0.1, 0.2, 0.3],
           topK: 5,
-        } as any);
+        });
 
         // Should return empty array, not throw
         expect(results).toEqual([]);
@@ -1864,7 +1864,7 @@ describe('Lance vector store tests', () => {
           indexName,
           queryVector: [0.1, 0.2, 0.3],
           topK: 5,
-        } as any);
+        });
 
         expect(results.length).toBeGreaterThan(0);
 
@@ -1882,7 +1882,7 @@ describe('Lance vector store tests', () => {
           indexName,
           dimension: 3,
           metric: 'cosine',
-        } as any);
+        });
 
         // Then upsert without tableName
         const ids = await vectorDB.upsert({
@@ -1892,7 +1892,7 @@ describe('Lance vector store tests', () => {
             [0.4, 0.5, 0.6],
           ],
           metadata: [{ message_id: 'msg1' }, { message_id: 'msg2' }],
-        } as any);
+        });
 
         expect(ids).toHaveLength(2);
 
@@ -1901,7 +1901,7 @@ describe('Lance vector store tests', () => {
           indexName,
           queryVector: [0.1, 0.2, 0.3],
           topK: 5,
-        } as any);
+        });
 
         expect(results.length).toBe(2);
 
@@ -1919,14 +1919,14 @@ describe('Lance vector store tests', () => {
           indexName,
           dimension: 3,
           metric: 'cosine',
-        } as any);
+        });
 
         // Then query (recall) - should return empty, not throw
         const results = await vectorDB.query({
           indexName,
           queryVector: [0.1, 0.2, 0.3],
           topK: 5,
-        } as any);
+        });
 
         expect(results).toEqual([]);
 
@@ -1942,7 +1942,7 @@ describe('Lance vector store tests', () => {
           indexName,
           dimension: 3,
           metric: 'cosine',
-        } as any);
+        });
 
         // 2. upsert (Memory saves messages)
         await vectorDB.upsert({
@@ -1957,14 +1957,14 @@ describe('Lance vector store tests', () => {
             { message_id: 'msg2', thread_id: 'thread1' },
             { message_id: 'msg3', thread_id: 'thread1' },
           ],
-        } as any);
+        });
 
         // 3. query (Memory recalls similar messages)
         const results = await vectorDB.query({
           indexName,
           queryVector: [0.1, 0.2, 0.3],
           topK: 2,
-        } as any);
+        });
 
         expect(results.length).toBe(2);
         expect(results[0].id).toBeDefined();

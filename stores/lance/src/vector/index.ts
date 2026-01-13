@@ -344,6 +344,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
         if (rowCount === 0 && extraColumns.length > 0) {
           // Empty table with extra columns in data - recreate it with the correct schema
+          // Note: This operation is not atomic. Concurrent upserts during table recreation
+          // may fail and should be retried by the caller.
           this.logger.debug(
             `Table ${resolvedTableName} is empty and data has extra columns ${extraColumns.join(', ')}. Recreating with new schema.`,
           );
@@ -561,7 +563,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Table doesn't exist - create an empty table with the proper schema.
         // LanceDB requires at least one row to infer schema, so we create a dummy row
         // and immediately delete it. This leaves an empty table with the correct schema.
-        // Note: There's a brief window where the '__init__' row is visible to concurrent queries.
+        // Race condition note: There's a brief window between createTable and delete where
+        // the '__init__' row could appear in concurrent query results. In practice this window
+        // is very short (single-digit milliseconds). Callers needing strict consistency should
+        // filter out id='__init__' or ensure exclusive access during table creation.
         this.logger.debug(
           `Table ${resolvedTableName} does not exist. Creating empty table with dimension ${dimension}.`,
         );
