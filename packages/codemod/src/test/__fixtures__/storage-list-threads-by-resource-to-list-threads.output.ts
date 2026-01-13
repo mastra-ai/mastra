@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Memory } from '@mastra/memory';
+import { Memory as AliasedMemory } from '@mastra/memory';
 
 const storage: any = undefined;
 const memoryStore: any = undefined;
@@ -54,3 +55,14 @@ const other = {
   },
 };
 const result5 = await other.listThreadsByResourceId({ resourceId: 'do-not-touch' });
+
+// Aliased import: should transform
+const aliasedMemory = new AliasedMemory({ storage });
+const result6 = await aliasedMemory.listThreads({
+  filter: {
+    resourceId: 'aliased-user-123'
+  },
+
+  page: 0,
+  perPage: 15
+});

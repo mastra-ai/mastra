@@ -23,8 +23,8 @@ import { trackClassInstances } from '../lib/utils';
 export default createTransformer((fileInfo: FileInfo, api: API, options: Options, context) => {
   const { j, root } = context;
 
-  // Track Memory class instances
-  const memoryInstances = trackClassInstances(j, root, 'Memory');
+  // Track Memory class instances (including aliased imports like `import { Memory as AliasedMemory }`)
+  const memoryInstances = trackClassInstances(j, root, 'Memory', '@mastra/memory');
 
   // Also track variables assigned from methods that might return memory stores
   // e.g., const memoryStore = await storage.getStore('memory');
