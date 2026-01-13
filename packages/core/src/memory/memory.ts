@@ -241,7 +241,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any>> {
     return {};
   }
 

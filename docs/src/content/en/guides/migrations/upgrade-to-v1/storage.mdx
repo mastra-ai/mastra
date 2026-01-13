@@ -7,6 +7,34 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 
 Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
 
+## Database Migration
+
+If you're using PostgreSQL or LibSQL storage with evals/scoring features, you need to update your database schema to rename a column in the `mastra_scorers` table.
+
+:::important[Who needs this migration]
+Only if you use `@mastra/pg` or `@mastra/libsql` with evals/scoring (the `mastra_scorers` table exists in your database). If you don't use scoring or the table doesn't exist, skip this migration.
+:::
+
+:::important[What breaks without it]
+New score records won't be saved correctly, and querying scores by request context will fail.
+:::
+
+:::important[Deployment order]
+Deploy your v1 code first, then run this migration. The v1 code is compatible during the transition.
+:::
+
+Run this SQL through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process):
+
+**PostgreSQL:**
+```sql
+ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
+```
+
+**LibSQL:**
+```sql
+ALTER TABLE mastra_scorers RENAME COLUMN "runtimeContext" TO "requestContext";
+```
+
 ## Added
 
 ### Storage composition in MastraStorage

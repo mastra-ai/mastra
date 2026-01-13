@@ -18,6 +18,7 @@ export function CopyButton({
   copyMessage,
   tooltip = 'Copy to clipboard',
   iconSize = 'default',
+  className,
 }: CopyButtonProps) {
   const { handleCopy } = useCopyToClipboard({
     text: content,
@@ -27,7 +28,7 @@ export function CopyButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button onClick={handleCopy} type="button">
+        <button onClick={handleCopy} type="button" className={className}>
           <Icon className="transition-colors hover:bg-surface4 rounded-lg text-icon3 hover:text-icon6" size={iconSize}>
             <CopyIcon />
           </Icon>

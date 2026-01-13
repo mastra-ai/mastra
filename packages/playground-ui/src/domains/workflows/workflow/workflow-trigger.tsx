@@ -6,10 +6,8 @@ import { z } from 'zod';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { Button } from '@/ds/components/Button';
-import { CodeBlockDemo } from '@/components/ui/code-block';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text } from '@/components/ui/text';
 
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
@@ -268,15 +266,15 @@ export function WorkflowTrigger({
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4" key={step.stepId}>
-                <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                <Txt variant="ui-xs" className="text-mastra-el-3">
                   {step.stepId}
-                </Text>
+                </Txt>
                 {step.suspendPayload && (
                   <div data-testid="suspended-payload">
-                    <CodeBlockDemo
+                    <CodeEditor
+                      data={step.suspendPayload}
                       className="w-full overflow-x-auto p-2"
-                      code={JSON.stringify(step.suspendPayload, null, 2)}
-                      language="json"
+                      showCopyButton={false}
                     />
                   </div>
                 )}
@@ -328,9 +326,9 @@ export function WorkflowTrigger({
           <>
             <hr className="border-border1 border-sm my-5" />
             <div className="flex flex-col gap-2">
-              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+              <Txt variant="ui-xs" className="px-4 text-mastra-el-3">
                 Status
-              </Text>
+              </Txt>
               <div className="px-4 flex flex-col gap-4">
                 {Object.entries(workflowActivePaths)
                   .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
