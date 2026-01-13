@@ -333,7 +333,10 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { resourceId, threadId, requestContext } = processedParams as StreamParams;
+    const { memory, requestContext } = processedParams as StreamParams;
+    const { resource, thread } = memory ?? {};
+    const resourceId = resource;
+    const threadId = typeof thread === 'string' ? thread : thread?.id;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
