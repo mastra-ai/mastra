@@ -98,36 +98,7 @@ describe('Lance vector store tests', () => {
       });
     });
 
-    describe('list indexes', () => {
-      const listIndexTestTable = 'list-index-test-table' + Date.now();
-      const indexColumnName = 'vector';
-
-      afterAll(async () => {
-        try {
-          await vectorDB.deleteIndex({ indexName: indexColumnName + '_idx' });
-        } catch (error) {
-          console.warn('Failed to delete index during cleanup:', error);
-        }
-      });
-    });
-
-    describe('describe index', () => {
-      const describeIndexTestTable = 'describe-index-test-table' + Date.now();
-      const indexColumnName = 'vector';
-
-      afterAll(async () => {
-        try {
-          await vectorDB.deleteIndex({ indexName: indexColumnName + '_idx' });
-        } catch (error) {
-          console.warn('Failed to delete index during cleanup:', error);
-        }
-      });
-    });
-
     describe('delete index', () => {
-      const deleteIndexTestTable = 'delete-index-test-table' + Date.now();
-      const indexColumnName = 'vector';
-
       // Clean up tables from previous test runs to ensure isolation
       beforeAll(async () => {
         await vectorDB.deleteAllTables();
@@ -1225,7 +1196,7 @@ describe('Lance Shared Test Suite', () => {
       const tableName = indexName;
       try {
         await vectorDB.deleteTable(tableName);
-      } catch (error) {
+      } catch {
         // Ignore errors if table doesn't exist
       }
     },
