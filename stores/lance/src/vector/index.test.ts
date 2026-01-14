@@ -1170,8 +1170,10 @@ describe('Lance Shared Test Suite', () => {
     }));
   };
 
-  createVectorTestSuite({
-    vector: vectorDB,
+  // Use Object.defineProperty with a getter to ensure vectorDB is resolved dynamically
+  // This allows createVectorTestSuite to be called at module scope while vectorDB
+  // is initialized asynchronously in beforeAll
+  const config: any = {
     createIndex: async (indexName: string) => {
       // Lance requires table to exist before creating index
       // Create table with 300 rows (Lance requires 256+ for index creation)
@@ -1225,5 +1227,16 @@ describe('Lance Shared Test Suite', () => {
       // (deleteVectors/updateVector work differently with tableName parameter)
       advancedOps: false,
     },
+  };
+
+  // Define vector as a getter that resolves to vectorDB when accessed
+  Object.defineProperty(config, 'vector', {
+    get() {
+      return vectorDB;
+    },
+    enumerable: true,
+    configurable: true,
   });
+
+  createVectorTestSuite(config);
 });
