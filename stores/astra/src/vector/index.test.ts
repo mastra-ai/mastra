@@ -1,5 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { AstraVector } from './';
 
