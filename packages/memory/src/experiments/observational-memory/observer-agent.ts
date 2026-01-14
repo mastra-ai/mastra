@@ -166,13 +166,73 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 /**
  * Build the complete observer system prompt.
  * @param recognizePatterns - Whether to include pattern recognition instructions (default: true)
+ * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  */
-export function buildObserverSystemPrompt(recognizePatterns: boolean = true): string {
+export function buildObserverSystemPrompt(recognizePatterns: boolean = true, multiThread: boolean = false): string {
   
   // Conditionally include patterns section based on config
   const outputFormat = recognizePatterns 
     ? OBSERVER_OUTPUT_FORMAT 
     : OBSERVER_OUTPUT_FORMAT_BASE;
+
+  if (multiThread) {
+    return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
+
+Extract observations that will help the assistant remember:
+
+${OBSERVER_EXTRACTION_INSTRUCTIONS}
+
+=== MULTI-THREAD INPUT ===
+
+You will receive messages from MULTIPLE conversation threads, each wrapped in <thread id="..."> tags.
+Process each thread separately and output observations for each thread.
+
+=== OUTPUT FORMAT ===
+
+Your output MUST use XML tags to structure the response. Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.
+
+<observations>
+<thread id="thread_id_1">
+Date: Dec 4, 2025
+* 🔴 (14:30) User prefers direct answers
+* 🟡 (14:31) Working on feature X
+
+<current-task>
+What the agent is currently working on in this thread
+</current-task>
+
+<suggested-response>
+Hint for the agent's next message in this thread
+</suggested-response>
+</thread>
+
+<thread id="thread_id_2">
+Date: Dec 5, 2025
+* 🟡 (09:15) User asked about deployment
+
+<current-task>
+Current task for this thread
+</current-task>
+
+<suggested-response>
+Suggested response for this thread
+</suggested-response>
+</thread>
+</observations>
+
+Use priority levels:
+- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+- 🟡 Medium: project details, learned information, tool results
+- 🟢 Low: minor details, uncertain observations
+
+=== GUIDELINES ===
+
+${OBSERVER_GUIDELINES}
+
+Remember: These observations are the assistant's ONLY memory. Make them count.
+
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.`;
+  }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
@@ -277,6 +337,169 @@ export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
       return `**${role}${timestampStr}:**\n${content}`;
     })
     .join('\n\n---\n\n');
+}
+
+/**
+ * Format messages from multiple threads for batched observation.
+ * Each thread's messages are wrapped in a <thread id="..."> block.
+ */
+export function formatMultiThreadMessagesForObserver(
+  messagesByThread: Map<string, MastraDBMessage[]>,
+  threadOrder: string[],
+): string {
+  const sections: string[] = [];
+
+  for (const threadId of threadOrder) {
+    const messages = messagesByThread.get(threadId);
+    if (!messages || messages.length === 0) continue;
+
+    const formattedMessages = formatMessagesForObserver(messages);
+    sections.push(`<thread id="${threadId}">\n${formattedMessages}\n</thread>`);
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Build the prompt for multi-thread batched observation.
+ */
+export function buildMultiThreadObserverPrompt(
+  existingObservations: string | undefined,
+  messagesByThread: Map<string, MastraDBMessage[]>,
+  threadOrder: string[],
+): string {
+  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
+
+  let prompt = '';
+
+  if (existingObservations) {
+    prompt += `## Previous Observations\n\n${existingObservations}\n\n---\n\n`;
+    prompt +=
+      'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
+  }
+
+  prompt += `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n`;
+
+  prompt += `## Your Task\n\n`;
+  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, and suggested-response.\n\n`;
+  prompt += `Example output format:\n`;
+  prompt += `<observations>\n`;
+  prompt += `<thread id="thread1">\n`;
+  prompt += `Date: Dec 4, 2025\n`;
+  prompt += `* 🔴 (14:30) User prefers direct answers\n`;
+  prompt += `<current-task>Working on feature X</current-task>\n`;
+  prompt += `<suggested-response>Continue with the implementation</suggested-response>\n`;
+  prompt += `</thread>\n`;
+  prompt += `<thread id="thread2">\n`;
+  prompt += `Date: Dec 5, 2025\n`;
+  prompt += `* 🟡 (09:15) User asked about deployment\n`;
+  prompt += `<current-task>Discussing deployment options</current-task>\n`;
+  prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
+  prompt += `</thread>\n`;
+  prompt += `</observations>`;
+
+  return prompt;
+}
+
+/**
+ * Result from parsing multi-thread Observer output
+ */
+export interface MultiThreadObserverResult {
+  /** Results per thread */
+  threads: Map<string, ObserverResult>;
+  /** Raw output from the model (for debugging) */
+  rawOutput: string;
+}
+
+/**
+ * Parse multi-thread Observer output to extract per-thread results.
+ */
+export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
+  const threads = new Map<string, ObserverResult>();
+
+  // Extract the <observations> block first
+  const observationsMatch = output.match(/^[ \t]*<observations>([\s\S]*?)^[ \t]*<\/observations>/im);
+  const observationsContent = observationsMatch?.[1] ?? output;
+
+  // Find all <thread id="...">...</thread> blocks within observations
+  const threadRegex = /<thread\s+id="([^"]+)">([\s\S]*?)<\/thread>/gi;
+  let match;
+
+  while ((match = threadRegex.exec(observationsContent)) !== null) {
+    const threadId = match[1];
+    const threadContent = match[2];
+    if (!threadId || !threadContent) continue;
+
+    // Parse this thread's content for observations, current-task, suggested-response
+    // Extract observations (everything except current-task and suggested-response)
+    let observations = threadContent;
+
+    // Extract and remove current-task
+    let currentTask: string | undefined;
+    const currentTaskMatch = threadContent.match(/<current-task>([\s\S]*?)<\/current-task>/i);
+    if (currentTaskMatch?.[1]) {
+      currentTask = currentTaskMatch[1].trim();
+      observations = observations.replace(/<current-task>[\s\S]*?<\/current-task>/i, '');
+    }
+
+    // Extract and remove suggested-response
+    let suggestedContinuation: string | undefined;
+    const suggestedMatch = threadContent.match(/<suggested-response>([\s\S]*?)<\/suggested-response>/i);
+    if (suggestedMatch?.[1]) {
+      suggestedContinuation = suggestedMatch[1].trim();
+      observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
+    }
+
+    // Extract patterns if present
+    let patterns: ObserverPatterns | undefined;
+    const patternsMatch = threadContent.match(/<patterns>([\s\S]*?)<\/patterns>/i);
+    if (patternsMatch?.[1]) {
+      patterns = {};
+      const patternsContent = patternsMatch[1];
+      const patternTagRegex = /<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/gi;
+      let patternMatch;
+      while ((patternMatch = patternTagRegex.exec(patternsContent)) !== null) {
+        const patternName = patternMatch[1];
+        const patternItemsRaw = patternMatch[2];
+        if (!patternName || !patternItemsRaw) continue;
+        const items = patternItemsRaw
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line.startsWith('-') || line.startsWith('*'))
+          .map(line => line.replace(/^[-*]\s*/, '').trim())
+          .filter(Boolean);
+        if (items.length > 0) {
+          patterns[patternName] = items;
+        }
+      }
+      observations = observations.replace(/<patterns>[\s\S]*?<\/patterns>/i, '');
+      if (Object.keys(patterns).length === 0) {
+        patterns = undefined;
+      }
+    }
+
+    // Clean up observations
+    observations = observations.trim();
+
+    threads.set(threadId, {
+      observations,
+      currentTask,
+      suggestedContinuation,
+      patterns,
+      rawOutput: threadContent,
+    });
+  }
+
+  // If no thread blocks found, log a warning
+  // The caller will need to handle this case (e.g., by falling back to single-thread parsing)
+  if (threads.size === 0) {
+    omWarn('[OM Observer] No thread blocks found in multi-thread output');
+  }
+
+  return {
+    threads,
+    rawOutput: output,
+  };
 }
 
 /**

@@ -53,6 +53,8 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
+  lastObservedAt?: string;
   // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
 };
 

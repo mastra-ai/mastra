@@ -110,6 +110,16 @@ export interface ObserverConfig {
    * @default false
    */
   recognizePatterns?: boolean;
+
+  /**
+   * Maximum tokens per batch when observing multiple threads.
+   * Threads are chunked into batches of this size and processed in parallel.
+   * Lower values = more parallelism but more API calls.
+   * Higher values = fewer API calls but less parallelism.
+   *
+   * @default 10000
+   */
+  maxTokensPerBatch?: number;
 }
 
 /**

@@ -10,13 +10,59 @@ import type {
 } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import * as fs from 'fs';
 import xxhash from 'xxhash-wasm';
 import { z } from 'zod';
+
+// ════════════════════════════════════════════════════════════
+// DEBUG INSTRUMENTATION - writes to /tmp/om-debug.json
+// Set OM_DEBUG_FILE=1 to enable file-based debug output
+// ════════════════════════════════════════════════════════════
+const OM_DEBUG_FILE = process.env.OM_DEBUG_FILE === '1' || process.env.OM_DEBUG_FILE === 'true';
+const OM_DEBUG_PATH = process.env.OM_DEBUG_PATH || '/tmp/om-debug.json';
+
+interface DebugEntry {
+  timestamp: string;
+  stage: string;
+  data: Record<string, unknown>;
+}
+
+const debugEntries: DebugEntry[] = [];
+
+function writeDebugEntry(stage: string, data: Record<string, unknown>): void {
+  if (!OM_DEBUG_FILE) return;
+
+  const entry: DebugEntry = {
+    timestamp: new Date().toISOString(),
+    stage,
+    data,
+  };
+  debugEntries.push(entry);
+
+  // Write to file after each entry (so we don't lose data on crash)
+  try {
+    fs.writeFileSync(OM_DEBUG_PATH, JSON.stringify(debugEntries, null, 2));
+  } catch (e) {
+    console.error(`[OM Debug] Failed to write debug file: ${e}`);
+  }
+}
+
+function clearDebugEntries(): void {
+  if (!OM_DEBUG_FILE) return;
+  debugEntries.length = 0;
+  try {
+    fs.writeFileSync(OM_DEBUG_PATH, '[]');
+  } catch (e) {
+    // ignore
+  }
+}
 
 import {
   buildObserverSystemPrompt,
   buildObserverPrompt,
+  buildMultiThreadObserverPrompt,
   parseObserverOutput,
+  parseMultiThreadObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
 } from './observer-agent';
@@ -45,6 +91,106 @@ function omWarn(...args: unknown[]): void {
   if (OM_DEBUG) {
     console.warn(...args);
   }
+}
+
+/**
+ * Format a relative time string like "5 days ago", "2 weeks ago", "today", etc.
+ */
+function formatRelativeTime(date: Date, currentDate: Date): string {
+  const diffMs = currentDate.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 60) return '1 month ago';
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} year${Math.floor(diffDays / 365) > 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Add relative time annotations to date headers in observations.
+ * Transforms "Date: May 15, 2023" to "Date: May 15, 2023 (5 days ago)"
+ */
+function formatGapBetweenDates(prevDate: Date, currDate: Date): string | null {
+  const diffMs = currDate.getTime() - prevDate.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 1) {
+    return null; // No gap marker for consecutive days
+  } else if (diffDays < 7) {
+    return `[${diffDays} days later]`;
+  } else if (diffDays < 14) {
+    return `[1 week later]`;
+  } else if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `[${weeks} weeks later]`;
+  } else if (diffDays < 60) {
+    return `[1 month later]`;
+  } else {
+    const months = Math.floor(diffDays / 30);
+    return `[${months} months later]`;
+  }
+}
+
+function addRelativeTimeToObservations(observations: string, currentDate: Date): string {
+  // Match date headers like "Date: May 15, 2023" or "Date: January 1, 2024"
+  const dateHeaderRegex = /^(Date:\s*)([A-Z][a-z]+ \d{1,2}, \d{4})$/gm;
+
+  // First pass: collect all dates in order
+  const dates: { index: number; date: Date; match: string; prefix: string; dateStr: string }[] = [];
+  let regexMatch: RegExpExecArray | null;
+  while ((regexMatch = dateHeaderRegex.exec(observations)) !== null) {
+    const dateStr = regexMatch[2]!;
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      dates.push({
+        index: regexMatch.index,
+        date: parsed,
+        match: regexMatch[0],
+        prefix: regexMatch[1]!,
+        dateStr,
+      });
+    }
+  }
+
+  // If no dates found, return original
+  if (dates.length === 0) {
+    return observations;
+  }
+
+  // Second pass: build result with relative times and gap markers
+  let result = '';
+  let lastIndex = 0;
+
+  for (let i = 0; i < dates.length; i++) {
+    const curr = dates[i]!;
+    const prev = i > 0 ? dates[i - 1]! : null;
+
+    // Add text before this date header
+    result += observations.slice(lastIndex, curr.index);
+
+    // Add gap marker if there's a significant gap from previous date
+    if (prev) {
+      const gap = formatGapBetweenDates(prev.date, curr.date);
+      if (gap) {
+        result += `\n${gap}\n\n`;
+      }
+    }
+
+    // Add the date header with relative time
+    const relative = formatRelativeTime(curr.date, currentDate);
+    result += `${curr.prefix}${curr.dateStr} (${relative})`;
+
+    lastIndex = curr.index + curr.match.length;
+  }
+
+  // Add remaining text after last date header
+  result += observations.slice(lastIndex);
+
+  return result;
 }
 
 /**
@@ -145,6 +291,7 @@ interface ResolvedObserverConfig {
   bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
+  maxTokensPerBatch: number;
 }
 
 interface ResolvedReflectorConfig {
@@ -319,6 +466,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.maxOutputTokens,
       },
       providerOptions: config.observer?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.providerOptions,
+      maxTokensPerBatch: config.observer?.maxTokensPerBatch ?? 10000,
     };
 
     // Resolve reflector config with defaults
@@ -708,12 +856,53 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Retry wrapper for LLM calls with exponential backoff.
    * Handles 429 rate limit errors by waiting and retrying.
    */
-  private async withRetry<T>(fn: () => Promise<T>, maxRetries = 3, context = 'LLM call'): Promise<T> {
+  private async withRetry<T>(
+    fn: () => Promise<T>,
+    maxRetries = 3,
+    context = 'LLM call',
+    contextData?: { prompt?: string; messages?: MastraDBMessage[] },
+  ): Promise<T> {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         return await fn();
       } catch (error: any) {
         const is429 = error?.statusCode === 429 || error?.message?.includes('Too Many Requests');
+        const errorMessage = error?.message || '';
+        const errorString = String(error);
+        const causeString = error?.cause ? String(error.cause) : '';
+        const isProhibited =
+          errorMessage.includes('PROHIBITED_CONTENT') ||
+          errorMessage.includes('blockReason') ||
+          errorString.includes('PROHIBITED_CONTENT') ||
+          causeString.includes('PROHIBITED_CONTENT');
+        
+        console.error(`\n🔍 [OM] Error caught in withRetry. isProhibited=${isProhibited}`);
+
+        // If PROHIBITED_CONTENT, dump context for debugging
+        if (isProhibited && contextData) {
+          const dumpPath = `/tmp/om-prohibited-${Date.now()}.json`;
+          console.error(`\n🔍 [OM] Attempting to dump context to: ${dumpPath}`);
+          const contextDump = {
+            context,
+            prompt: contextData.prompt?.slice(0, 50000), // Truncate to avoid huge files
+            messageCount: contextData.messages?.length,
+            messages: contextData.messages?.map(m => ({
+              id: m.id,
+              role: m.role,
+              content: JSON.stringify(m.content).slice(0, 2000),
+              createdAt: m.createdAt,
+            })),
+            error: error?.message?.slice(0, 1000),
+            timestamp: new Date().toISOString(),
+          };
+          try {
+            const fs = await import('fs/promises');
+            await fs.writeFile(dumpPath, JSON.stringify(contextDump, null, 2));
+            console.error(`\n⚠️ [OM] PROHIBITED_CONTENT detected! Context dumped to: ${dumpPath}`);
+          } catch {
+            // Ignore write errors
+          }
+        }
 
         if (is429 && attempt < maxRetries) {
           // Extract retry-after header or use exponential backoff
@@ -777,6 +966,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         }),
       3,
       'Observer',
+      { prompt, messages: messagesToObserve },
     );
 
     const parsed = parseObserverOutput(result.text);
@@ -791,6 +981,111 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Call the Observer agent for multiple threads in a single batched request.
+   * This is more efficient than calling the Observer for each thread individually.
+   * Returns per-thread results with observations, currentTask, and suggestedContinuation.
+   */
+  private async callMultiThreadObserver(
+    existingObservations: string | undefined,
+    messagesByThread: Map<string, MastraDBMessage[]>,
+    threadOrder: string[],
+    existingPatterns?: Record<string, string[]>,
+  ): Promise<
+    Map<
+      string,
+      {
+        observations: string;
+        currentTask?: string;
+        suggestedContinuation?: string;
+        patterns?: Record<string, string[]>;
+      }
+    >
+  > {
+    // Create a multi-thread observer agent with the special system prompt
+    const agent = new Agent({
+      id: 'multi-thread-observer',
+      name: 'multi-thread-observer',
+      model: this.observerConfig.model,
+      instructions: buildObserverSystemPrompt(this.observerRecognizePatterns, true),
+    });
+
+    // Format existing patterns into the observations if present
+    let observationsWithPatterns = existingObservations;
+    if (existingPatterns && Object.keys(existingPatterns).length > 0) {
+      let patternsContent = '\n\n<patterns>';
+      for (const [patternName, items] of Object.entries(existingPatterns)) {
+        patternsContent += `\n<${patternName}>`;
+        for (const item of items) {
+          patternsContent += `\n* ${item}`;
+        }
+        patternsContent += `\n</${patternName}>`;
+      }
+      patternsContent += '\n</patterns>';
+      observationsWithPatterns = (observationsWithPatterns || '') + patternsContent;
+    }
+
+    const prompt = buildMultiThreadObserverPrompt(observationsWithPatterns, messagesByThread, threadOrder);
+
+    omDebug(`[OM] Calling multi-thread Observer for ${threadOrder.length} threads`);
+    console.log('[OM DEBUG] Observer providerOptions:', JSON.stringify(this.observerConfig.providerOptions, null, 2));
+
+    // Flatten all messages for context dump
+    const allMessages: MastraDBMessage[] = [];
+    for (const msgs of messagesByThread.values()) {
+      allMessages.push(...msgs);
+    }
+
+    const result = await this.withRetry(
+      () =>
+        agent.generate(prompt, {
+          modelSettings: {
+            temperature: this.observerConfig.modelSettings.temperature,
+            maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
+          },
+          providerOptions: this.observerConfig.providerOptions as any,
+        }),
+      3,
+      'MultiThreadObserver',
+      { prompt, messages: allMessages },
+    );
+
+    const parsed = parseMultiThreadObserverOutput(result.text);
+
+    omDebug(`[OM] Multi-thread Observer returned results for ${parsed.threads.size} threads`);
+
+    // Convert to the expected return format
+    const results = new Map<
+      string,
+      {
+        observations: string;
+        currentTask?: string;
+        suggestedContinuation?: string;
+        patterns?: Record<string, string[]>;
+      }
+    >();
+
+    for (const [threadId, threadResult] of parsed.threads) {
+      results.set(threadId, {
+        observations: threadResult.observations,
+        currentTask: threadResult.currentTask,
+        suggestedContinuation: threadResult.suggestedContinuation,
+        patterns: this.observerRecognizePatterns ? threadResult.patterns : undefined,
+      });
+    }
+
+    // If some threads didn't get results, log a warning
+    for (const threadId of threadOrder) {
+      if (!results.has(threadId)) {
+        omDebug(`[OM] Warning: No observations returned for thread ${threadId}`);
+        // Add empty result so we still update the cursor
+        results.set(threadId, { observations: '' });
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Call the Reflector agent to condense observations.
    * Includes compression validation and retry logic.
    */
@@ -799,6 +1094,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     manualPrompt?: string,
     patterns?: Record<string, string[]>,
   ): Promise<{ observations: string; suggestedContinuation?: string; patterns?: Record<string, string[]> }> {
+    writeDebugEntry('callReflector:start', {
+      inputObservationsLength: observations.length,
+      inputObservationsPreview: observations.slice(0, 500),
+      hasManualPrompt: !!manualPrompt,
+      hasPatterns: !!patterns && Object.keys(patterns).length > 0,
+    });
+
     const agent = this.getReflectorAgent();
 
     // Format patterns into the observations if present
@@ -873,6 +1175,15 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       omDebug(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens})`);
     }
 
+    writeDebugEntry('callReflector:result', {
+      originalTokens,
+      reflectedTokens,
+      outputObservationsLength: parsed.observations.length,
+      outputObservationsPreview: parsed.observations.slice(0, 500),
+      hasSuggestedContinuation: !!parsed.suggestedContinuation,
+      hasPatterns: !!parsed.patterns && Object.keys(parsed.patterns).length > 0,
+    });
+
     return {
       observations: parsed.observations,
       suggestedContinuation: parsed.suggestedContinuation,
@@ -899,16 +1210,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     patterns?: Record<string, string[]>,
+    currentDate?: Date,
   ): string {
     // Optimize observations to save tokens
-    const optimized = optimizeObservationsForContext(observations);
+    let optimized = optimizeObservationsForContext(observations);
+
+    // Add relative time annotations to date headers if currentDate is provided
+    if (currentDate) {
+      optimized = addRelativeTimeToObservations(optimized, currentDate);
+    }
 
     let content = `
-The following observations block contains your memory of past conversations with this user. Use these observations to provide personalized, contextually relevant responses.
+The following observations block contains your memory of past conversations with this user.
 
 <observations>
 ${optimized}
-</observations>`;
+</observations>
+
+IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.`;
 
     // Dynamically inject patterns from thread metadata
     if (patterns && Object.keys(patterns).length > 0) {
@@ -1069,6 +1388,10 @@ ${suggestedResponse}
     // Patterns are stored on the OM record (resource-level), not thread metadata
     const patterns = record.patterns;
 
+    // Get currentDate from request context (for relative time annotations)
+    // Defaults to actual current date if not provided
+    const currentDate = (requestContext?.get('currentDate') as Date | undefined) ?? new Date();
+
     // Inject observations as a system message (every step)
     // This happens after historical message loading so we have unobservedContextBlocks
     if (record.activeObservations) {
@@ -1078,6 +1401,7 @@ ${suggestedResponse}
         suggestedResponse,
         unobservedContextBlocks,
         patterns,
+        currentDate,
       );
       omDebug(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.scope === 'resource') {
@@ -1348,9 +1672,7 @@ ${formattedMessages}
     // ═══════════════════════════════════════════════════════════════════
 
     const shouldObserveNow = this.shouldObserve(totalPendingTokens, currentObservationTokens);
-    omDebug(
-      `[OM] Observe check: totalPending=${totalPendingTokens} > threshold=${threshold} ? ${shouldObserveNow}`,
-    );
+    omDebug(`[OM] Observe check: totalPending=${totalPendingTokens} > threshold=${threshold} ? ${shouldObserveNow}`);
 
     if (shouldObserveNow) {
       // ════════════════════════════════════════════════════════════
@@ -1551,42 +1873,177 @@ ${formattedMessages}
   ): Promise<void> {
     omDebug(`[OM] Starting resource-scoped observation for resource ${resourceId}`);
 
-    // Load unobserved messages from OTHER threads in the resource from DB
-    const dbMessages = await this.loadUnobservedMessages(currentThreadId, resourceId, record.lastObservedAt);
+    // Clear debug entries at start of observation cycle
+    clearDebugEntries();
+    writeDebugEntry('doResourceScopedObservation:start', {
+      resourceId,
+      currentThreadId,
+      recordId: record.id,
+      lastObservedAt: record.lastObservedAt,
+      existingObservationsLength: record.activeObservations?.length ?? 0,
+      currentThreadMessagesCount: currentThreadMessages.length,
+    });
 
-    // Merge DB messages with current thread's messages from messageList
-    // Current thread messages may not be in DB yet, so we need to include them
-    // Use a Map to dedupe by message ID
-    const messageMap = new Map<string, MastraDBMessage>();
+    // ════════════════════════════════════════════════════════════
+    // PER-THREAD CURSORS: Load unobserved messages for each thread using its own lastObservedAt
+    // This prevents message loss when threads have different observation progress
+    // ════════════════════════════════════════════════════════════
 
-    // Add DB messages first
-    for (const msg of dbMessages) {
-      if (msg.id) messageMap.set(msg.id, msg);
+    // First, get all threads for this resource to access their per-thread lastObservedAt
+    const { threads: allThreads } = await this.storage.listThreadsByResourceId({ resourceId });
+    const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
+
+    for (const thread of allThreads) {
+      const omMetadata = getThreadOMMetadata(thread.metadata);
+      threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
     }
 
-    // Add/override with current thread messages (they're more up-to-date)
-    for (const msg of currentThreadMessages) {
-      if (msg.id) messageMap.set(msg.id, msg);
+    // Load messages per-thread using each thread's own cursor
+    const messagesByThread = new Map<string, MastraDBMessage[]>();
+    let totalDbMessages = 0;
+
+    for (const thread of allThreads) {
+      const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
+
+      // Query messages for this specific thread after its lastObservedAt
+      const result = await this.storage.listMessages({
+        threadId: thread.id,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: threadLastObservedAt ? { dateRange: { start: new Date(threadLastObservedAt) } } : undefined,
+      });
+
+      if (result.messages.length > 0) {
+        messagesByThread.set(thread.id, result.messages);
+        totalDbMessages += result.messages.length;
+        omDebug(
+          `[OM] Thread ${thread.id}: loaded ${result.messages.length} messages after ${threadLastObservedAt ?? 'beginning'}`,
+        );
+      }
     }
 
-    const allUnobservedMessages = Array.from(messageMap.values());
+    // Handle current thread messages (may not be in DB yet)
+    // Merge with any DB messages for the current thread
+    if (currentThreadMessages.length > 0) {
+      const existingCurrentThreadMsgs = messagesByThread.get(currentThreadId) ?? [];
+      const messageMap = new Map<string, MastraDBMessage>();
+
+      // Add DB messages first
+      for (const msg of existingCurrentThreadMsgs) {
+        if (msg.id) messageMap.set(msg.id, msg);
+      }
+
+      // Add/override with current thread messages (they're more up-to-date)
+      for (const msg of currentThreadMessages) {
+        if (msg.id) messageMap.set(msg.id, msg);
+      }
+
+      messagesByThread.set(currentThreadId, Array.from(messageMap.values()));
+    }
+
+    // Count total messages
+    let totalMessages = 0;
+    for (const msgs of messagesByThread.values()) {
+      totalMessages += msgs.length;
+    }
 
     omDebug(
-      `[OM] Merged messages: ${dbMessages.length} from DB + ${currentThreadMessages.length} from current session = ${allUnobservedMessages.length} total (after dedup)`,
+      `[OM] Per-thread loading: ${totalDbMessages} from DB + ${currentThreadMessages.length} from current session = ${totalMessages} total across ${messagesByThread.size} threads`,
     );
 
-    if (allUnobservedMessages.length === 0) {
+    if (totalMessages === 0) {
       omDebug(`[OM] No unobserved messages found for resource ${resourceId}`);
       return;
     }
 
-    // Group by thread
-    const messagesByThread = this.groupMessagesByThread(allUnobservedMessages);
-    omDebug(`[OM] Found ${messagesByThread.size} threads with unobserved messages`);
+    omDebug(`[OM] Found ${messagesByThread.size} threads with messages to observe`);
 
-    // Sort threads by oldest message (oldest first)
-    const threadOrder = this.sortThreadsByOldestMessage(messagesByThread);
+    // ════════════════════════════════════════════════════════════
+    // THREAD SELECTION: Pick which threads to observe based on token threshold
+    // - Sort by largest threads first (most messages = most value per Observer call)
+    // - Accumulate until we hit the threshold
+    // - This prevents making many small Observer calls for 1-message threads
+    // ════════════════════════════════════════════════════════════
+    const threshold = this.getMaxThreshold(this.observerConfig.observationThreshold);
+
+    // Calculate tokens per thread and sort by size (largest first)
+    const threadTokenCounts = new Map<string, number>();
+    for (const [threadId, msgs] of messagesByThread) {
+      let tokens = 0;
+      for (const msg of msgs) {
+        tokens += this.tokenCounter.countMessage(msg);
+      }
+      threadTokenCounts.set(threadId, tokens);
+    }
+
+    const threadsBySize = Array.from(messagesByThread.keys()).sort((a, b) => {
+      return (threadTokenCounts.get(b) ?? 0) - (threadTokenCounts.get(a) ?? 0);
+    });
+
+    // Select threads to observe until we hit the threshold
+    let accumulatedTokens = 0;
+    const threadsToObserve: string[] = [];
+
+    for (const threadId of threadsBySize) {
+      const threadTokens = threadTokenCounts.get(threadId) ?? 0;
+
+      // If we've already accumulated enough, stop adding threads
+      if (accumulatedTokens >= threshold) {
+        omDebug(
+          `[OM] Token threshold reached (${accumulatedTokens} >= ${threshold}), selected ${threadsToObserve.length} threads`,
+        );
+        break;
+      }
+
+      threadsToObserve.push(threadId);
+      accumulatedTokens += threadTokens;
+    }
+
+    omDebug(
+      `[OM] Selected ${threadsToObserve.length} of ${messagesByThread.size} threads to observe (${accumulatedTokens} tokens, threshold: ${threshold})`,
+    );
+
+    if (threadsToObserve.length === 0) {
+      omDebug(`[OM] No threads selected for observation`);
+      return;
+    }
+
+    // Now sort the selected threads by oldest message for consistent observation order
+    const threadOrder = this.sortThreadsByOldestMessage(
+      new Map(threadsToObserve.map(tid => [tid, messagesByThread.get(tid) ?? []])),
+    );
     omDebug(`[OM] Thread observation order: ${threadOrder.join(', ')}`);
+
+    // Debug: Log message counts per thread and date ranges
+    writeDebugEntry('doResourceScopedObservation:messages_loaded', {
+      totalDbMessagesCount: totalDbMessages,
+      currentThreadMessagesCount: currentThreadMessages.length,
+      totalMessagesCount: totalMessages,
+      threadCount: messagesByThread.size,
+      threadOrder,
+      messagesByThread: Object.fromEntries(
+        Array.from(messagesByThread.entries()).map(([tid, msgs]) => [
+          tid,
+          {
+            count: msgs.length,
+            lastObservedAt: threadMetadataMap.get(tid)?.lastObservedAt ?? null,
+            dateRange:
+              msgs.length > 0
+                ? {
+                    earliest: msgs.reduce(
+                      (min, m) => (m.createdAt && m.createdAt < min ? m.createdAt : min),
+                      msgs[0]?.createdAt ?? '',
+                    ),
+                    latest: msgs.reduce(
+                      (max, m) => (m.createdAt && m.createdAt > max ? m.createdAt : max),
+                      msgs[0]?.createdAt ?? '',
+                    ),
+                  }
+                : null,
+          },
+        ]),
+      ),
+    });
 
     // ════════════════════════════════════════════════════════════
     // LOCKING: Acquire lock and re-check
@@ -1608,50 +2065,112 @@ ${formattedMessages}
       const existingPatterns = freshRecord?.patterns ?? record.patterns;
 
       // ════════════════════════════════════════════════════════════
-      // PARALLEL OBSERVATION: Call Observer for all threads concurrently
-      // This significantly speeds up multi-thread observation
+      // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
+      // This is much more efficient than calling the Observer for each thread individually
       // ════════════════════════════════════════════════════════════
 
-      // Prepare observation tasks for each thread
-      const observationTasks = threadOrder.map(threadId => async () => {
-        const threadMessages = messagesByThread.get(threadId) ?? [];
-        if (threadMessages.length === 0) return null;
+      // Filter to only threads with messages
+      const threadsWithMessages = new Map<string, MastraDBMessage[]>();
+      for (const threadId of threadOrder) {
+        const msgs = messagesByThread.get(threadId);
+        if (msgs && msgs.length > 0) {
+          threadsWithMessages.set(threadId, msgs);
+        }
+      }
 
-        omDebug(`[OM] Observing thread ${threadId} with ${threadMessages.length} messages`);
-
-        // Emit debug event for observation triggered
-        this.emitDebugEvent({
-          type: 'observation_triggered',
-          timestamp: new Date(),
-          threadId,
-          resourceId,
-          previousObservations: existingObservations,
-          messages: threadMessages.map(m => ({
+      // Emit debug event for observation triggered (combined for all threads)
+      this.emitDebugEvent({
+        type: 'observation_triggered',
+        timestamp: new Date(),
+        threadId: threadOrder.join(','),
+        resourceId,
+        previousObservations: existingObservations,
+        messages: Array.from(threadsWithMessages.values())
+          .flat()
+          .map(m => ({
             role: m.role,
             content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
           })),
-        });
-
-        // Call observer for this thread's messages
-        // Note: Each thread gets the same existingObservations and existingPatterns context (before any new observations)
-        // This is intentional - we don't want cross-contamination between parallel calls
-        const result = await this.callObserver(existingObservations, threadMessages, existingPatterns);
-
-        omDebug(
-          `[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars):`,
-        );
-        omDebug(`[OM]   Observations: ${result.observations.substring(0, 500)}...`);
-
-        return {
-          threadId,
-          threadMessages,
-          result,
-        };
       });
 
-      const runParallel = true;
-      // Execute all observations in parallel
-      omDebug(`[OM] Starting parallel observation of ${observationTasks.length} threads`);
+      omDebug(`[OM] Starting batched observation of ${threadsWithMessages.size} threads`);
+
+      // ════════════════════════════════════════════════════════════
+      // PARALLEL BATCHING: Chunk threads into batches and process in parallel
+      // This combines batching efficiency with parallel execution
+      // ════════════════════════════════════════════════════════════
+      const maxTokensPerBatch = this.observerConfig.maxTokensPerBatch ?? 5000;
+      const orderedThreadIds = threadOrder.filter(tid => threadsWithMessages.has(tid));
+
+      // Chunk threads into batches based on token count
+      const batches: Array<{ threadIds: string[]; threadMap: Map<string, MastraDBMessage[]> }> = [];
+      let currentBatch: { threadIds: string[]; threadMap: Map<string, MastraDBMessage[]> } = {
+        threadIds: [],
+        threadMap: new Map(),
+      };
+      let currentBatchTokens = 0;
+
+      for (const threadId of orderedThreadIds) {
+        const msgs = threadsWithMessages.get(threadId)!;
+        const threadTokens = threadTokenCounts.get(threadId) ?? 0;
+
+        // If adding this thread would exceed the batch limit, start a new batch
+        // (unless the current batch is empty - always include at least one thread)
+        if (currentBatchTokens + threadTokens > maxTokensPerBatch && currentBatch.threadIds.length > 0) {
+          batches.push(currentBatch);
+          currentBatch = { threadIds: [], threadMap: new Map() };
+          currentBatchTokens = 0;
+        }
+
+        currentBatch.threadIds.push(threadId);
+        currentBatch.threadMap.set(threadId, msgs);
+        currentBatchTokens += threadTokens;
+      }
+
+      // Don't forget the last batch
+      if (currentBatch.threadIds.length > 0) {
+        batches.push(currentBatch);
+      }
+
+      omDebug(
+        `[OM] Split ${orderedThreadIds.length} threads into ${batches.length} batches ` +
+          `(maxTokensPerBatch: ${maxTokensPerBatch})`,
+      );
+
+      // Process all batches in parallel
+      const batchPromises = batches.map(async (batch, batchIndex) => {
+        omDebug(`[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads`);
+        const results = await this.callMultiThreadObserver(
+          existingObservations,
+          batch.threadMap,
+          batch.threadIds,
+          existingPatterns,
+        );
+        omDebug(`[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${results.size} threads`);
+        return results;
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+
+      // Merge all batch results into a single map
+      const multiThreadResults = new Map<
+        string,
+        {
+          observations: string;
+          currentTask?: string;
+          suggestedContinuation?: string;
+          patterns?: Record<string, string[]>;
+        }
+      >();
+      for (const batchResult of batchResults) {
+        for (const [threadId, result] of batchResult) {
+          multiThreadResults.set(threadId, result);
+        }
+      }
+
+      omDebug(`[OM] All batches complete, got results for ${multiThreadResults.size} threads total`);
+
+      // Convert to the expected format for downstream processing
       const observationResults: Array<{
         threadId: string;
         threadMessages: MastraDBMessage[];
@@ -1661,14 +2180,47 @@ ${formattedMessages}
           suggestedContinuation?: string;
           patterns?: Record<string, string[]>;
         };
-      } | null> = runParallel ? await Promise.all(observationTasks.map(fn => fn())) : [];
-      if (!runParallel) {
-        for (const runTask of observationTasks) {
-          const result = await runTask();
-          if (result) observationResults.push(result);
+      } | null> = [];
+
+      for (const threadId of threadOrder) {
+        const threadMessages = messagesByThread.get(threadId) ?? [];
+        if (threadMessages.length === 0) continue;
+
+        const result = multiThreadResults.get(threadId);
+        if (!result) {
+          omDebug(`[OM] Warning: No result for thread ${threadId}`);
+          continue;
         }
+
+        omDebug(`[OM] Thread ${threadId}: ${result.observations.length} chars of observations`);
+
+        // Debug: Log Observer output for this thread
+        writeDebugEntry('doResourceScopedObservation:observer_result', {
+          threadId,
+          messagesCount: threadMessages.length,
+          messagesDateRange: {
+            earliest: threadMessages.reduce(
+              (min, m) => (m.createdAt && m.createdAt < min ? m.createdAt : min),
+              threadMessages[0]?.createdAt ?? '',
+            ),
+            latest: threadMessages.reduce(
+              (max, m) => (m.createdAt && m.createdAt > max ? m.createdAt : max),
+              threadMessages[0]?.createdAt ?? '',
+            ),
+          },
+          observationsLength: result.observations.length,
+          observationsPreview: result.observations.substring(0, 1000),
+          hasCurrentTask: !!result.currentTask,
+          hasSuggestedContinuation: !!result.suggestedContinuation,
+          hasPatterns: !!result.patterns && Object.keys(result.patterns).length > 0,
+        });
+
+        observationResults.push({
+          threadId,
+          threadMessages,
+          result,
+        });
       }
-      omDebug(`[OM] All parallel observations complete`);
 
       // Combine results: wrap each thread's observations and append to existing
       // Also collect all patterns from all threads to store on the OM record
@@ -1690,21 +2242,28 @@ ${formattedMessages}
           allPatterns = this.mergePatterns(allPatterns, result.patterns);
         }
 
-        // Update thread-specific metadata (currentTask, suggestedResponse only - patterns go on OM record)
-        if (result.suggestedContinuation || result.currentTask) {
-          const thread = await this.storage.getThreadById({ threadId });
-          if (thread) {
-            const newMetadata = setThreadOMMetadata(thread.metadata, {
-              suggestedResponse: result.suggestedContinuation,
-              currentTask: result.currentTask,
-            });
-            await this.storage.updateThread({
-              id: threadId,
-              title: thread.title ?? '',
-              metadata: newMetadata,
-            });
-            omDebug(`[OM] Updated thread ${threadId} metadata with suggestedResponse and currentTask`);
-          }
+        // Update thread-specific metadata:
+        // - lastObservedAt: ALWAYS update to track per-thread observation progress
+        // - currentTask, suggestedResponse: only if present in result
+        // - patterns go on OM record, not thread metadata
+        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+        const thread = await this.storage.getThreadById({ threadId });
+        if (thread) {
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            lastObservedAt: threadLastObservedAt.toISOString(),
+            ...(result.suggestedContinuation && { suggestedResponse: result.suggestedContinuation }),
+            ...(result.currentTask && { currentTask: result.currentTask }),
+          });
+          await this.storage.updateThread({
+            id: threadId,
+            title: thread.title ?? '',
+            metadata: newMetadata,
+          });
+          omDebug(
+            `[OM] Updated thread ${threadId} metadata: lastObservedAt=${threadLastObservedAt.toISOString()}` +
+              (result.suggestedContinuation ? ', suggestedResponse' : '') +
+              (result.currentTask ? ', currentTask' : ''),
+          );
         }
 
         // Emit debug event for observation complete
@@ -1731,9 +2290,16 @@ ${formattedMessages}
         totalTokenCount += this.tokenCounter.countObservations(patternsString);
       }
 
-      // Use the max message timestamp as cursor instead of current time
-      // This ensures historical data (like LongMemEval fixtures) works correctly
-      const lastObservedAt = this.getMaxMessageTimestamp(allUnobservedMessages);
+      // Compute global lastObservedAt as a "high water mark" across all threads
+      // Note: Per-thread cursors (stored in ThreadOMMetadata.lastObservedAt) are the authoritative source
+      // for determining which messages each thread has observed. This global value is used for:
+      // - Quick concurrency checks (has any observation happened since we started?)
+      // - Thread-scoped observation (non-resource scope)
+      // - finalize() and getRecallTool() methods
+      const observedMessages = observationResults
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+        .flatMap(r => r.threadMessages);
+      const lastObservedAt = this.getMaxMessageTimestamp(observedMessages);
 
       omDebug(`[OM] All threads observed. Storing ${totalTokenCount} tokens (including patterns)`);
 
@@ -1746,6 +2312,16 @@ ${formattedMessages}
       });
 
       omDebug(`[OM] Resource-scoped observation complete`);
+
+      writeDebugEntry('doResourceScopedObservation:before_maybeReflect', {
+        recordId: record.id,
+        totalTokenCount,
+        currentObservationsLength: currentObservations.length,
+        currentObservationsPreview: currentObservations.slice(0, 1000),
+        currentObservationsTail: currentObservations.slice(-500),
+        lastObservedAt: lastObservedAt.toISOString(),
+        patternsCount: Object.keys(allPatterns).length,
+      });
 
       // Check for reflection AFTER all threads are observed (pass currentThreadId so patterns can be cleared)
       await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount, currentThreadId);
@@ -1763,22 +2339,35 @@ ${formattedMessages}
     observationTokens: number,
     _threadId?: string,
   ): Promise<void> {
+    writeDebugEntry('maybeReflect:start', {
+      recordId: record.id,
+      observationTokens,
+      activeObservationsLength: record.activeObservations?.length ?? 0,
+      activeObservationsPreview: record.activeObservations?.slice(0, 500) ?? '',
+    });
+
     if (!this.shouldReflect(observationTokens)) {
+      writeDebugEntry('maybeReflect:skip', {
+        reason: 'below_threshold',
+        observationTokens,
+        threshold: this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+      });
       return;
     }
 
-    // ═══════════════════════════════════════════��══════════════����═
+    // ═══════════════════════════════════════════════════════════
     // LOCKING: Check if reflection is already in progress
     // ════════════════════════════════════════════════════════════
     if (record.isReflecting) {
+      writeDebugEntry('maybeReflect:skip', {
+        reason: 'already_reflecting',
+      });
       omDebug(`[OM] Reflection already in progress for ${record.id}, skipping`);
       return;
     }
 
     const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-    omDebug(
-      `[OM] Reflection threshold exceeded (${observationTokens} > ${reflectThreshold}), triggering Reflector`,
-    );
+    omDebug(`[OM] Reflection threshold exceeded (${observationTokens} > ${reflectThreshold}), triggering Reflector`);
 
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
@@ -1791,11 +2380,24 @@ ${formattedMessages}
       const reflectResult = await this.callReflector(record.activeObservations, undefined, patternsToReflect);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
+      writeDebugEntry('maybeReflect:before_createReflectionGeneration', {
+        recordId: record.id,
+        inputObservationsLength: record.activeObservations?.length ?? 0,
+        outputObservationsLength: reflectResult.observations.length,
+        reflectionTokenCount,
+        outputObservationsPreview: reflectResult.observations.slice(0, 500),
+      });
+
       await this.storage.createReflectionGeneration({
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
         patterns: reflectResult.patterns,
+      });
+
+      writeDebugEntry('maybeReflect:complete', {
+        recordId: record.id,
+        reflectionTokenCount,
       });
 
       // Note: Patterns from the Reflector are preserved in the new OM record.
@@ -2132,9 +2734,7 @@ ${formattedMessages}
 
             reflectionCount++;
             reflected = true;
-            omDebug(
-              `[OM Finalize] Mid-loop reflection complete: ${totalTokenCount} -> ${reflectionTokenCount} tokens`,
-            );
+            omDebug(`[OM Finalize] Mid-loop reflection complete: ${totalTokenCount} -> ${reflectionTokenCount} tokens`);
 
             // Reload record to continue with compressed observations
             const newRecord = await this.storage.getObservationalMemory(null, resourceId);
@@ -2312,12 +2912,14 @@ ${formattedMessages}
           const patterns = record.patterns;
 
           // Format the OM context (observations, patterns, current task, etc.)
+          // Note: recall tool uses current date for relative time (no request context available)
           const formattedContext = this.formatObservationsForContext(
             record.activeObservations || '',
             currentTask,
             suggestedResponse,
             unobservedContextBlocks,
             patterns,
+            new Date(),
           );
 
           // Convert current agent loop messages to MastraDBMessage format
