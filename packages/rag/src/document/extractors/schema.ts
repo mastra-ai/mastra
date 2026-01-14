@@ -23,16 +23,15 @@ export class SchemaExtractor<T extends z.ZodType> extends BaseExtractor {
   }
 
   async extract(nodes: BaseNode[]): Promise<Record<string, any>[]> {
+    const agent = new Agent({
+      name: 'schema-extractor',
+      id: 'schema-extractor',
+      instructions: this.instructions ?? 'Extract structured data from the provided text.',
+      model: this.llm ?? baseLLM,
+    });
     const results = await Promise.all(
       nodes.map(async node => {
         try {
-          const agent = new Agent({
-            name: 'schema-extractor',
-            id: 'schema-extractor',
-            instructions: this.instructions ?? 'Extract structured data from the provided text.',
-            model: this.llm ?? baseLLM,
-          });
-
           const result = await agent.generate([{ role: 'user', content: node.getContent() }], {
             structuredOutput: { schema: this.schema as any },
           });
