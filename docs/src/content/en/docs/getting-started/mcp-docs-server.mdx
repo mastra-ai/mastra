@@ -83,20 +83,21 @@ Google Antigravity is an agent-first development platform that supports MCP serv
    - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
    - You can access it through the MCP Store interface in Antigravity
 
-   <img
-     src="/img/antigravity_mcp_server.png"
-     alt="Antigravity interface showing configured Mastra MCP server"
-     width={800}
-     className="rounded-lg"
-   />
+<img
+  src="/img/antigravity_mcp_server.png"
+  alt="Antigravity interface showing configured Mastra MCP server"
+  width={800}
+  className="rounded-lg"
+/>
 
-2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
-   <img
-     src="/img/antigravity_managed_mcp.png"
-     alt="Antigravity interface showing configured Mastra MCP server"
-     width={800}
-     className="rounded-lg"
-   />
+2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.
+
+<img
+  src="/img/antigravity_managed_mcp.png"
+  alt="Antigravity interface showing configured Mastra MCP server"
+  width={800}
+  className="rounded-lg"
+/>
 
 3. Add the Mastra MCP server configuration:
 
@@ -111,16 +112,17 @@ Google Antigravity is an agent-first development platform that supports MCP serv
               ]
           }
       }
-  }
+    }
    ```
 
 4. Save the configuration and restart Antigravity
-    <img
-      src="/img/antigravity_final_interface_mcp.png"
-      alt="Antigravity interface showing configured Mastra MCP server"
-      width={800}
-      className="rounded-lg"
-   />
+
+<img
+  src="/img/antigravity_final_interface_mcp.png"
+  alt="Antigravity interface showing configured Mastra MCP server"
+  width={800}
+  className="rounded-lg"
+/>
 
 Once configured, the Mastra MCP server exposes the following to Antigravity agents:
 - Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
@@ -155,12 +157,12 @@ Once you installed the MCP server, you can use it like so:
 2. Navigate to MCP settings.
 3. Click "enable" on the Chat > MCP option.
 
-   <img
-     src="/img/vscode-mcp-setting.png"
-     alt="Settings page of VSCode to enable MCP"
-     width={800}
-     className="rounded-lg"
-   />
+<img
+  src="/img/vscode-mcp-setting.png"
+  alt="Settings page of VSCode to enable MCP"
+  width={800}
+  className="rounded-lg"
+/>
 
 MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and click the "start" button. Note that the "start" button will only appear if the `.vscode` folder containing `mcp.json` is in your workspace root, or the highest level of the in-editor file explorer.
 
