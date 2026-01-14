@@ -201,6 +201,105 @@ describe('Span', () => {
     });
   });
 
+  describe('entity inheritance', () => {
+    it('should inherit entityId and entityName from parent span when not explicitly provided', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        entityId: 'agent-123',
+        entityName: 'MyAgent',
+        attributes: {},
+      });
+
+      const llmSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      // MODEL_GENERATION should inherit entityId and entityName from AGENT_RUN
+      expect(llmSpan.entityId).toBe('agent-123');
+      expect(llmSpan.entityName).toBe('MyAgent');
+
+      agentSpan.end();
+    });
+
+    it('should allow child span to override inherited entityId and entityName', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        entityId: 'agent-123',
+        entityName: 'MyAgent',
+        attributes: {},
+      });
+
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool-call',
+        entityId: 'tool-456',
+        entityName: 'MyTool',
+        attributes: {},
+      });
+
+      // TOOL_CALL should use its own entityId and entityName
+      expect(toolSpan.entityId).toBe('tool-456');
+      expect(toolSpan.entityName).toBe('MyTool');
+
+      agentSpan.end();
+    });
+
+    it('should inherit through multiple levels of hierarchy', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        entityId: 'agent-123',
+        entityName: 'MyAgent',
+        attributes: {},
+      });
+
+      const workflowSpan = agentSpan.createChildSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        attributes: {},
+      });
+
+      const llmSpan = workflowSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      // Both child spans should inherit from AGENT_RUN
+      expect(workflowSpan.entityId).toBe('agent-123');
+      expect(workflowSpan.entityName).toBe('MyAgent');
+      expect(llmSpan.entityId).toBe('agent-123');
+      expect(llmSpan.entityName).toBe('MyAgent');
+
+      agentSpan.end();
+    });
+  });
+
   describe('getExternalParentId', () => {
     it('should return undefined when no parent', () => {
       const options = {
