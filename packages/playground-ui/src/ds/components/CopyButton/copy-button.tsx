@@ -29,7 +29,10 @@ export function CopyButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <button onClick={handleCopy} type="button" className={className}>
-          <Icon className="transition-colors hover:bg-surface4 rounded-lg text-icon3 hover:text-icon6" size={iconSize}>
+          <Icon
+            className="transition-colors hover:bg-surface4 rounded-lg text-neutral3 hover:text-neutral6"
+            size={iconSize}
+          >
             <CopyIcon />
           </Icon>
         </button>

@@ -18,7 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/compon
 import { cn } from '@/lib/utils';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-const buttonClass = 'text-icon3 hover:text-icon6';
+const buttonClass = 'text-neutral3 hover:text-neutral6';
 
 export type WorkflowTimeTravelFormProps = {
   stepKey: string;
@@ -84,7 +84,7 @@ const JsonField = ({
       {isExampleOpen && (
         <div className="border border-border1 rounded-lg bg-surface3 p-3 space-y-2">
           <div className="flex items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="text-icon3">
+            <Txt as="p" variant="ui-sm" className="text-neutral3">
               Example {label}
             </Txt>
             <Tooltip>
@@ -114,11 +114,11 @@ const JsonField = ({
       <Collapsible className="border border-border1 rounded-lg bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
         <div className="flex items-center justify-between w-full px-3">
           <div>
-            <Txt as="label" variant="ui-md" className="text-icon3">
+            <Txt as="label" variant="ui-md" className="text-neutral3">
               {label}
             </Txt>
             {helperText && (
-              <Txt variant="ui-xs" className="text-icon3">
+              <Txt variant="ui-xs" className="text-neutral3">
                 {helperText}
               </Txt>
             )}
@@ -288,10 +288,10 @@ export const WorkflowTimeTravelForm = ({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Txt as="p" variant="ui-lg" className="text-icon3">
+          <Txt as="p" variant="ui-lg" className="text-neutral3">
             Input data
           </Txt>
-          <Txt variant="ui-xs" className="text-icon3">
+          <Txt variant="ui-xs" className="text-neutral3">
             Step: {stepKey}
           </Txt>
         </div>

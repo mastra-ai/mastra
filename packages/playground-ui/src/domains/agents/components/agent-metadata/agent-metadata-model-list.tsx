@@ -106,7 +106,7 @@ const AgentMetadataModelListItem = ({
     <div className="rounded-lg bg-surface1 hover:bg-surface4/50 transition-colors">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
-          <div {...dragHandleProps} className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
+          <div {...dragHandleProps} className="text-neutral3 cursor-grab active:cursor-grabbing flex-shrink-0">
             <Icon>
               <GripVertical />
             </Icon>

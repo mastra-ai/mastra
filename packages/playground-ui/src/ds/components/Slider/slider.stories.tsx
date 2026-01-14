@@ -69,8 +69,8 @@ export const WithLabel: Story = {
   render: () => (
     <div className="flex flex-col gap-2 w-[250px]">
       <div className="flex justify-between">
-        <span className="text-sm text-icon5">Volume</span>
-        <span className="text-sm text-icon3">50%</span>
+        <span className="text-sm text-neutral5">Volume</span>
+        <span className="text-sm text-neutral3">50%</span>
       </div>
       <Slider defaultValue={[50]} max={100} step={1} />
     </div>

@@ -83,7 +83,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
             {isCollapsible && (
               <Icon>
                 <ChevronDown
-                  className={cn('transition-transform text-icon3', {
+                  className={cn('transition-transform text-neutral3', {
                     'transform rotate-180': open,
                   })}
                 />
@@ -130,7 +130,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                         >
                           {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>
-                              <span className="inline-block mr-2 text-icon3">{i + 1}</span>
+                              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
                               {line.map((token, key) => (
                                 <span key={key} {...getTokenProps({ token })} />
                               ))}
@@ -160,7 +160,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                               >
                                 {tokens.map((line, i) => (
                                   <div key={i} {...getLineProps({ line })}>
-                                    <span className="inline-block mr-2 text-icon3">{i + 1}</span>
+                                    <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
                                     {line.map((token, key) => (
                                       <span key={key} {...getTokenProps({ token })} />
                                     ))}
@@ -179,7 +179,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Txt variant="ui-xs" className=" text-icon3 flex-1">
+                        <Txt variant="ui-xs" className=" text-neutral3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
                         </Txt>

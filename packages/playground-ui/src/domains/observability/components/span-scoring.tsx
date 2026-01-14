@@ -102,7 +102,7 @@ export const SpanScoring = ({
             disabled={isWaiting}
           />
           {selectedScorerDescription && (
-            <TextAndIcon className="text-icon3">
+            <TextAndIcon className="text-neutral3">
               <InfoIcon /> {selectedScorerDescription}
             </TextAndIcon>
           )}

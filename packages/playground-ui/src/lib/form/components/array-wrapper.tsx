@@ -10,7 +10,7 @@ export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onA
   return (
     <div>
       <div className="flex gap-2 justify-between">
-        <Txt as="h3" variant="ui-sm" className="text-icon3 pb-2 flex items-center gap-1">
+        <Txt as="h3" variant="ui-sm" className="text-neutral3 pb-2 flex items-center gap-1">
           <Icon size="sm">
             <Brackets />
           </Icon>
@@ -24,7 +24,7 @@ export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onA
               <button
                 onClick={onAddItem}
                 type="button"
-                className="text-icon3 bg-surface3 rounded-md p-1 hover:bg-surface4 hover:text-icon6 h-icon-sm w-icon-sm"
+                className="text-neutral3 bg-surface3 rounded-md p-1 hover:bg-surface4 hover:text-neutral6 h-icon-sm w-icon-sm"
               >
                 <Icon size="sm">
                   <PlusIcon />

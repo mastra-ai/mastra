@@ -18,7 +18,7 @@ export function EntryListMessage({ children, message, className, type }: EntryLi
       {message ? (
         <p
           className={cn(
-            'text-icon3 text-[0.875rem] text-center grid p-[2rem] justify-center justify-items-center gap-[.5rem]',
+            'text-neutral3 text-[0.875rem] text-center grid p-[2rem] justify-center justify-items-center gap-[.5rem]',
             '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em] [&>svg]:opacity-75',
             {
               '[&>svg]:text-red-500': type === 'error',
