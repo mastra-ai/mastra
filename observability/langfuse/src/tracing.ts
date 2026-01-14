@@ -334,6 +334,48 @@ export class LangfuseExporter extends TrackingExporter<
   }
 
   /**
+   * * Deprecated: scores are now added and exported with spans.
+   * Add a score to a trace in Langfuse.
+   */
+  async addScoreToTrace({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      await this.client.score({
+        id: `${traceId}-${scorerName}`,
+        traceId,
+        observationId: spanId,
+        name: scorerName,
+        value: score,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        metadata: { ...(reason ? { reason } : {}) },
+        dataType: 'NUMERIC',
+      });
+    } catch (error) {
+      this.logger.error('Langfuse exporter: Error adding score to trace', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
+    }
+  }
+
+  /**
    * Submit scores from span.scores to Langfuse.
    * Called during SPAN_UPDATED events when scores are attached to spans.
    */
