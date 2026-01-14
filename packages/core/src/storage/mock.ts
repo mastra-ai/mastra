@@ -2,6 +2,7 @@ import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryIntegrationsStorage } from './domains/integrations/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
@@ -50,6 +51,7 @@ export class InMemoryStore extends MastraStorage {
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
+      integrations: new InMemoryIntegrationsStorage({ db: this.#db }),
     };
   }
 
