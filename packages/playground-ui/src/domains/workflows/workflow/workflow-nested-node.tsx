@@ -125,16 +125,19 @@ export function WorkflowNestedNode({
             {displayStatus === 'suspended' && <PauseIcon className="text-accent3" />}
             {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" />}
             {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-            {!step && <CircleDashed className="text-icon2" />}
+            {!step && <CircleDashed className="text-neutral2" />}
           </Icon>
 
-          <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
+          <Txt
+            variant="ui-lg"
+            className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full"
+          >
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
         </div>
 
         {description && (
-          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+          <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
             {description}
           </Txt>
         )}

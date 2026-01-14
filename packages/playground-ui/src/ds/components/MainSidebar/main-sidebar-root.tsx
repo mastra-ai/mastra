@@ -47,9 +47,9 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
             <button
               onClick={toggleSidebar}
               className={cn(
-                'inline-flex w-auto items-center text-icon3 h-[2rem] px-[0.75rem] rounded-md ml-auto',
+                'inline-flex w-auto items-center text-neutral3 h-[2rem] px-[0.75rem] rounded-md ml-auto',
                 'hover:bg-surface4',
-                '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-icon3',
+                '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3',
                 {
                   'ml-auto': !isCollapsed,
                 },

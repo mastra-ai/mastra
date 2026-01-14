@@ -34,7 +34,7 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
         <Badge icon={<BADGE_ICONS.after className="text-current" style={{ color: BADGE_COLORS.after }} />}>AFTER</Badge>
         <Icon>
           <ChevronDown
-            className={cn('transition-transform text-icon3', {
+            className={cn('transition-transform text-neutral3', {
               'transform rotate-180': open,
             })}
           />
@@ -44,7 +44,7 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
         {steps.map(step => (
           <div className="text-sm bg-surface5 flex items-center gap-[6px] rounded-sm  p-2" key={step}>
             <Footprints className="text-current w-4 h-4" />
-            <Txt variant="ui-xs" className="text-icon6 capitalize">
+            <Txt variant="ui-xs" className="text-neutral6 capitalize">
               {step}
             </Txt>
           </div>

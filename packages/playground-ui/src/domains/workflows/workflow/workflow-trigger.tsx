@@ -216,7 +216,7 @@ export function WorkflowTrigger({
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
-              <Loader2 className="animate-spin text-icon6" />
+              <Loader2 className="animate-spin text-neutral6" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -266,7 +266,7 @@ export function WorkflowTrigger({
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4" key={step.stepId}>
-                <Txt variant="ui-xs" className="text-icon3">
+                <Txt variant="ui-xs" className="text-neutral3">
                   {step.stepId}
                 </Txt>
                 {step.suspendPayload && (
@@ -326,7 +326,7 @@ export function WorkflowTrigger({
           <>
             <hr className="border-border1 border-sm my-5" />
             <div className="flex flex-col gap-2">
-              <Txt variant="ui-xs" className="px-4 text-icon3">
+              <Txt variant="ui-xs" className="px-4 text-neutral3">
                 Status
               </Txt>
               <div className="px-4 flex flex-col gap-4">
@@ -396,7 +396,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
     <>
       <Button variant="light" onClick={() => setOpen(true)} className="w-full" size="lg">
         <Icon>
-          <Braces className="text-icon3" />
+          <Braces className="text-neutral3" />
         </Icon>
         Open Workflow Execution (JSON)
       </Button>

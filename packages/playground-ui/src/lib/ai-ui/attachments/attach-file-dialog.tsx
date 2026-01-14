@@ -53,7 +53,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
 
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-4">
           <div className="w-full space-y-1">
-            <Label htmlFor="url-attachment" className="text-icon3 text-ui-md">
+            <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
               Public URL
             </Label>
             <Input
@@ -75,12 +75,12 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
         <hr className="my-2 border-sm border-border1" />
 
         <div className="space-y-2">
-          <Txt variant="ui-md" className="text-icon3">
+          <Txt variant="ui-md" className="text-neutral3">
             Or from your computer
           </Txt>
           <button
             onClick={addFilInputAttachment}
-            className="w-full h-40 border-sm border-border1 rounded-lg text-icon3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
+            className="w-full h-40 border-sm border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
           >
             <CloudUpload className="size-12" />
             <Txt variant="header-md">Add a local file</Txt>

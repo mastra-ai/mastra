@@ -50,7 +50,7 @@ export const WithGroup: Story = {
     <Header>
       <HeaderGroup>
         <HeaderTitle>Workflows</HeaderTitle>
-        <span className="text-sm text-icon3">12 total</span>
+        <span className="text-sm text-neutral3">12 total</span>
       </HeaderGroup>
       <HeaderAction>
         <Button variant="outline" size="md">
