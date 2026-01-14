@@ -74,48 +74,6 @@ export default {
         mono: ['var(--geist-mono)', ...defaultFont.fontFamily.mono],
         sans: ['var(--font-inter)', ...defaultFont.fontFamily.sans],
       },
-      animation: {
-        ripple: 'ripple var(--duration,2s) ease calc(var(--i, 0)*.2s) infinite',
-        'icon-right': 'animate-icon-right ease-out 250ms',
-        'typing-dot-bounce': 'typing-dot-bounce 1.4s infinite ease-in-out',
-        'fade-in': 'fade-in 1s ease-out',
-      },
-      keyframes: {
-        ripple: {
-          '0%, 100%': {
-            transform: 'translate(-50%, -50%) scale(1)',
-          },
-          '50%': {
-            transform: 'translate(-50%, -50%) scale(0.9)',
-          },
-        },
-        'animate-icon-right': {
-          '0%': {
-            transform: 'translateX(-6px)',
-          },
-          '100%': {
-            transform: 'translateX(0px)',
-          },
-        },
-        'typing-dot-bounce': {
-          '0%, 100%': {
-            transform: 'translateY(0)',
-          },
-          '50%': {
-            transform: 'translateY(-4px)',
-          },
-        },
-        'fade-in': {
-          '0%': {
-            opacity: '0.8',
-            backgroundColor: '#1A1A1A',
-          },
-          '100%': {
-            opacity: '1',
-            backgroundColor: 'transparent',
-          },
-        },
-      },
     },
   },
   plugins: [animate, assistantUi, containerQueries],
