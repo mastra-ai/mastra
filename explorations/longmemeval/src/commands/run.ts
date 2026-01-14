@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { Memory } from '@mastra/memory';
 import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
@@ -1059,6 +1060,7 @@ ${JSON.stringify(responses, null, 2)}`);
         agent.generate(meta.question, {
           threadId: evalThreadId,
           resourceId: meta.resourceId,
+          requestContext,
           modelSettings: {
             temperature: 0,
           },
@@ -1117,6 +1119,7 @@ ${JSON.stringify(responses, null, 2)}`);
           agent.generate(meta.question, {
             threadId: retryThreadId,
             resourceId: meta.resourceId,
+            requestContext,
             modelSettings: {
               temperature: 0,
             },
@@ -1162,6 +1165,7 @@ ${JSON.stringify(responses, null, 2)}`);
             agent.generate(improvedQuestion, {
               threadId: improvedThreadId,
               resourceId: meta.resourceId,
+              requestContext,
               modelSettings: {
                 temperature: 0,
               },
@@ -1196,6 +1200,7 @@ ${JSON.stringify(responses, null, 2)}`);
             agent.generate(improvedQuestion, {
               threadId: retryThreadId,
               resourceId: meta.resourceId,
+              requestContext,
               modelSettings: {
                 temperature: 0,
               },
