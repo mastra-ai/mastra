@@ -1,5 +1,5 @@
 ---
-'@mastra/rag': major
+'@mastra/rag': minor
 ---
 
 **BREAKING CHANGES for RAG v1.0**
