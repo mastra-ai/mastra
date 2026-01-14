@@ -7,7 +7,9 @@ const DEFAULT_CHUNK_PARAMS = {
   strategy: 'recursive' as const,
   maxSize: 512,
   overlap: 50,
-  separators: ['\n'],
+  recursiveOptions: {
+    separators: ['\n'],
+  },
 } satisfies ChunkParams;
 
 export const createDocumentChunkerTool = ({
@@ -17,12 +19,13 @@ export const createDocumentChunkerTool = ({
   doc: MDocument;
   params?: ChunkParams;
 }) => {
+  const maxSize = (params as any).maxSize || (params as any).sentenceOptions?.maxSize;
+  const overlap = (params as any).overlap || 0;
+
   return createTool({
-    id: `Document Chunker ${params.strategy} ${params.maxSize}`,
+    id: `Document Chunker ${params.strategy} ${maxSize}`,
     inputSchema: z.object({}),
-    description: `Chunks document using ${params.strategy} strategy with maxSize ${params.maxSize} and ${
-      params.overlap || 0
-    } overlap`,
+    description: `Chunks document using ${params.strategy} strategy with maxSize ${maxSize} and ${overlap} overlap`,
     execute: async () => {
       const chunks = await doc.chunk(params);
 

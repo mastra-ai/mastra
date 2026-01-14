@@ -331,10 +331,85 @@ export class MDocument {
   }
 
   async chunk(params?: ChunkParams): Promise<Chunk[]> {
-    const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
+    if (!params) {
+      params = {};
+    }
+
+    const { strategy: passedStrategy, extract } = params;
+
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
 
+    // Extract general and strategy-specific options based on the strategy
+    let chunkOptions: any;
+    const { maxSize, overlap, lengthFunction, separatorPosition, addStartIndex, stripWhitespace } = params as any;
+
+    const generalOptions = {
+      ...(maxSize !== undefined && { maxSize }),
+      ...(overlap !== undefined && { overlap }),
+      ...(lengthFunction !== undefined && { lengthFunction }),
+      ...(separatorPosition !== undefined && { separatorPosition }),
+      ...(addStartIndex !== undefined && { addStartIndex }),
+      ...(stripWhitespace !== undefined && { stripWhitespace }),
+    };
+
+    // Extract strategy-specific options and merge with general options
+    switch (strategy) {
+      case 'character':
+        chunkOptions = { ...generalOptions, ...((params as any).characterOptions || {}) };
+        break;
+      case 'recursive':
+        chunkOptions = { ...generalOptions, ...((params as any).recursiveOptions || {}) };
+        break;
+      case 'token':
+        chunkOptions = { ...generalOptions, ...((params as any).tokenOptions || {}) };
+        break;
+      case 'markdown':
+        chunkOptions = { ...generalOptions, ...((params as any).markdownOptions || {}) };
+        break;
+      case 'html':
+        chunkOptions = { ...generalOptions, ...((params as any).htmlOptions || {}) };
+        break;
+      case 'json':
+        chunkOptions = { ...generalOptions, ...((params as any).jsonOptions || {}) };
+        break;
+      case 'latex':
+        chunkOptions = { ...generalOptions, ...((params as any).latexOptions || {}) };
+        break;
+      case 'sentence':
+        chunkOptions = { ...generalOptions, ...((params as any).sentenceOptions || {}) };
+        break;
+      case 'semantic-markdown':
+        chunkOptions = { ...generalOptions, ...((params as any).semanticMarkdownOptions || {}) };
+        break;
+      default:
+        chunkOptions = generalOptions;
+    }
+
+    // For backwards compatibility, also merge in any strategy-specific options passed at the top level
+    const topLevelOptions: any = { ...params };
+    delete topLevelOptions.strategy;
+    delete topLevelOptions.extract;
+    delete topLevelOptions.characterOptions;
+    delete topLevelOptions.recursiveOptions;
+    delete topLevelOptions.tokenOptions;
+    delete topLevelOptions.markdownOptions;
+    delete topLevelOptions.htmlOptions;
+    delete topLevelOptions.jsonOptions;
+    delete topLevelOptions.latexOptions;
+    delete topLevelOptions.sentenceOptions;
+    delete topLevelOptions.semanticMarkdownOptions;
+    delete topLevelOptions.maxSize;
+    delete topLevelOptions.overlap;
+    delete topLevelOptions.lengthFunction;
+    delete topLevelOptions.separatorPosition;
+    delete topLevelOptions.addStartIndex;
+    delete topLevelOptions.stripWhitespace;
+
+    // Merge remaining top-level options for backwards compatibility
+    chunkOptions = { ...chunkOptions, ...topLevelOptions };
+
+    // Validate merged options
     validateChunkParams(strategy, chunkOptions);
 
     // Apply the appropriate chunking strategy
