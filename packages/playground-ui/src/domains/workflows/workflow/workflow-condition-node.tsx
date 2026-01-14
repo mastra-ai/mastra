@@ -179,7 +179,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Txt variant="ui-xs" className=" text-mastra-el-3 flex-1">
+                        <Txt variant="ui-xs" className=" text-icon3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
                         </Txt>

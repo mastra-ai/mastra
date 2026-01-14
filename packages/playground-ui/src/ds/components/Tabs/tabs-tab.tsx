@@ -15,7 +15,7 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
     <RadixTabs.Trigger
       value={value}
       className={cn(
-        'text-xs p-3 text-mastra-el-3 data-[state=active]:text-mastra-el-5 data-[state=active]:border-b-2 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
+        'text-xs p-3 text-icon3 data-[state=active]:text-icon5 data-[state=active]:border-b-2 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
         className,
       )}
       onClick={onClick}
