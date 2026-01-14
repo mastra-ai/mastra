@@ -135,8 +135,7 @@ export async function setupStreamingMemoryTest({
       const isV5Plus = isV5PlusModel(model);
       if (isV5Plus) {
         await agent.generate('Hello, world!', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         await agent.generateLegacy('Hello, world!', {

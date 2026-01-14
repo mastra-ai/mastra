@@ -385,8 +385,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const userMessage = 'Tell me something interesting about space';
 
       const res = await agent.generate([{ role: 'user', content: userMessage }], {
-        threadId: thread.id,
-        resourceId,
+        memory: { thread: thread.id, resource: resourceId },
       });
 
       // Small delay to ensure message persistence completes
@@ -407,8 +406,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const userMessage2 = 'Tell me something else interesting about space';
 
       const res2 = await agent.generate([{ role: 'user', content: userMessage2 }], {
-        threadId: thread.id,
-        resourceId,
+        memory: { thread: thread.id, resource: resourceId },
       });
 
       // Small delay to ensure message persistence completes

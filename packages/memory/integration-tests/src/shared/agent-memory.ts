@@ -201,15 +201,15 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await agent.generate('Tell me about cats', {
-          threadId: thread1Id,
-          resourceId,
-        });
-      } else {
-        await agent.generateLegacy('Tell me about cats', {
           memory: {
             thread: thread1Id,
             resource: resourceId,
           },
+        });
+      } else {
+        await agent.generateLegacy('Tell me about cats', {
+          threadId: thread1Id,
+          resourceId,
         });
       }
 
@@ -227,15 +227,15 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         secondResponse = await agent.generate('What did we discuss about cats?', {
-          threadId: thread2Id,
-          resourceId,
-        });
-      } else {
-        secondResponse = await agent.generateLegacy('What did we discuss about cats?', {
           memory: {
             thread: thread2Id,
             resource: resourceId,
           },
+        });
+      } else {
+        secondResponse = await agent.generateLegacy('What did we discuss about cats?', {
+          threadId: thread2Id,
+          resourceId,
         });
       }
 

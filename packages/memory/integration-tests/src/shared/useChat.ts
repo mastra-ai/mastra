@@ -390,8 +390,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
       const localThreadId = randomUUID();
 
       await weatherAgentV5.generate(`hi`, {
-        threadId: localThreadId,
-        resourceId,
+        memory: { thread: localThreadId, resource: resourceId },
       });
 
       const agentMemory = (await weatherAgentV5.getMemory())!;

@@ -4319,8 +4319,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('repeat tool calls', {
-            threadId: 'thread-1-generate',
-            resourceId: 'resource-1-generate',
+            memory: {
+              thread: 'thread-1-generate',
+              resource: 'resource-1-generate',
+            },
           });
         }
 

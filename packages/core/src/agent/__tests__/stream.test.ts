@@ -921,8 +921,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         ]);
       } else {
         firstResponse = await agent.generate('What is the weather in London?', {
-          threadId,
-          resourceId,
+          memory: {
+            thread: threadId,
+            resource: resourceId,
+          },
           onStepFinish: args => {
             args;
           },
