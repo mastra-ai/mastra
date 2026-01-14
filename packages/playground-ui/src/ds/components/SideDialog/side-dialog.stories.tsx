@@ -39,11 +39,7 @@ const SideDialogDemo = ({
           <SideDialog.Header>
             <SideDialog.Heading>Side Dialog</SideDialog.Heading>
           </SideDialog.Header>
-          <SideDialog.Nav>
-            <button className="px-3 py-1 text-sm text-icon5 border-b-2 border-icon5">Overview</button>
-            <button className="px-3 py-1 text-sm text-icon3">Details</button>
-            <button className="px-3 py-1 text-sm text-icon3">Settings</button>
-          </SideDialog.Nav>
+          <SideDialog.Nav onNext={() => console.log('Next')} onPrevious={() => console.log('Previous')} />
         </SideDialog.Top>
         <SideDialog.Content>
           <div className="p-6">
@@ -100,15 +96,14 @@ const SideDialogWithCodeDemo = () => {
                 </div>
               </div>
             </div>
-            <SideDialog.CodeSection>
-              <pre className="text-sm font-mono text-icon5">
-                {`{
+            <SideDialog.CodeSection
+              title="Agent Configuration"
+              codeStr={`{
   "name": "customer-support",
   "model": "gpt-4",
   "temperature": 0.7
 }`}
-              </pre>
-            </SideDialog.CodeSection>
+            />
           </div>
         </SideDialog.Content>
       </SideDialog>

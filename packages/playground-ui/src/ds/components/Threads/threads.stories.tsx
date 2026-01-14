@@ -123,7 +123,7 @@ export const EmptyThreadList: Story = {
   render: () => (
     <div className="w-[280px] h-[400px]">
       <Threads>
-        <ThreadList>{/* Empty list */}</ThreadList>
+        <ThreadList>{null}</ThreadList>
       </Threads>
     </div>
   ),

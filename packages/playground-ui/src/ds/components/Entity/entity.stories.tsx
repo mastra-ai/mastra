@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './entity';
+import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
 import { Bot, Workflow, Database, Settings } from 'lucide-react';
 
 const meta: Meta<typeof Entity> = {
