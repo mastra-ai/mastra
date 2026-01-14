@@ -2,6 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
+import type { HttpLoggingConfig } from '@mastra/core/server';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
@@ -98,6 +99,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected taskStore?: InMemoryTaskStore;
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
+  protected httpLoggingConfig?: HttpLoggingConfig;
 
   constructor({
     app,
@@ -130,8 +132,54 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
 
+    // Parse HTTP logging configuration
+    const serverConfig = mastra.getServer();
+    this.httpLoggingConfig = this.parseLoggingConfig(serverConfig?.build?.apiReqLogs);
+
     // Automatically register this adapter with Mastra so getServerApp() works
     mastra.setMastraServer(this);
+  }
+
+  /**
+   * Parses the apiReqLogs configuration into a normalized HttpLoggingConfig.
+   * @param config - The raw config value from server.build.apiReqLogs
+   * @returns Normalized HttpLoggingConfig or undefined if disabled
+   */
+  private parseLoggingConfig(config?: boolean | HttpLoggingConfig): HttpLoggingConfig | undefined {
+    if (config === true) {
+      // Default configuration when enabled with just `true`
+      return {
+        enabled: true,
+        level: 'info',
+        redactHeaders: ['authorization', 'cookie'],
+      };
+    }
+    if (typeof config === 'object' && config.enabled) {
+      // Merge user config with defaults
+      return {
+        enabled: true,
+        level: config.level || 'info',
+        excludePaths: config.excludePaths,
+        includeHeaders: config.includeHeaders,
+        includeQueryParams: config.includeQueryParams,
+        redactHeaders: config.redactHeaders || ['authorization', 'cookie'],
+      };
+    }
+    return undefined;
+  }
+
+  /**
+   * Determines if a request to the given path should be logged.
+   * @param path - The request path to check
+   * @returns true if the request should be logged, false otherwise
+   */
+  protected shouldLogRequest(path: string): boolean {
+    if (!this.httpLoggingConfig?.enabled) {
+      return false;
+    }
+
+    const excludePaths = this.httpLoggingConfig.excludePaths || [];
+    return !excludePaths.some((excluded: string) => path.startsWith(excluded));
   }
 
   protected mergeRequestContext({
@@ -161,10 +209,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
   abstract registerContextMiddleware(): void;
   abstract registerAuthMiddleware(): void;
+  abstract registerHttpLoggingMiddleware(): void;
 
   async init() {
     this.registerContextMiddleware();
     this.registerAuthMiddleware();
+    this.registerHttpLoggingMiddleware();
     await this.registerRoutes();
   }
 

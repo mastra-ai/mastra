@@ -410,4 +410,52 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     this.app.use(authenticationMiddleware);
     this.app.use(authorizationMiddleware);
   }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
+      return;
+    }
+
+    this.app.use((req, res, next) => {
+      if (!this.shouldLogRequest(req.path)) {
+        return next();
+      }
+
+      const start = Date.now();
+      const method = req.method;
+      const path = req.path;
+
+      res.on('finish', () => {
+        const duration = Date.now() - start;
+        const status = res.statusCode;
+        const level = this.httpLoggingConfig?.level || 'info';
+
+        const logData: Record<string, any> = {
+          method,
+          path,
+          status,
+          duration: `${duration}ms`,
+        };
+
+        if (this.httpLoggingConfig?.includeQueryParams) {
+          logData.query = req.query;
+        }
+
+        if (this.httpLoggingConfig?.includeHeaders) {
+          const headers = { ...req.headers };
+          const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+          redactHeaders.forEach(h => {
+            if (headers[h]) {
+              headers[h] = '[REDACTED]';
+            }
+          });
+          logData.headers = headers;
+        }
+
+        this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+      });
+
+      next();
+    });
+  }
 }

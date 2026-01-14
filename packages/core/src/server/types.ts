@@ -79,6 +79,38 @@ export type MastraAuthConfig<TUser = unknown> = {
   }[];
 };
 
+export type HttpLoggingConfig = {
+  /**
+   * Enable HTTP request logging
+   */
+  enabled: boolean;
+  /**
+   * Log level for HTTP requests
+   * @default 'info'
+   */
+  level?: 'debug' | 'info' | 'warn';
+  /**
+   * Paths to exclude from logging (e.g., health checks)
+   * @example ['/health', '/ready', '/metrics']
+   */
+  excludePaths?: string[];
+  /**
+   * Include request headers in logs
+   * @default false
+   */
+  includeHeaders?: boolean;
+  /**
+   * Include query parameters in logs
+   * @default false
+   */
+  includeQueryParams?: boolean;
+  /**
+   * Headers to redact from logs (if includeHeaders is true)
+   * @default ['authorization', 'cookie']
+   */
+  redactHeaders?: string[];
+};
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -124,9 +156,22 @@ export type ServerConfig = {
     swaggerUI?: boolean;
     /**
      * Enable API request logging
+     * - Set to `true` for default logging (info level, redacts auth headers)
+     * - Set to an object for custom configuration
      * @default false
+     * @example
+     * // Simple enable
+     * apiReqLogs: true
+     *
+     * // Advanced configuration
+     * apiReqLogs: {
+     *   enabled: true,
+     *   level: 'debug',
+     *   excludePaths: ['/health', '/ready'],
+     *   includeQueryParams: true,
+     * }
      */
-    apiReqLogs?: boolean;
+    apiReqLogs?: boolean | HttpLoggingConfig;
     /**
      * Enable OpenAPI documentation
      * @default false
