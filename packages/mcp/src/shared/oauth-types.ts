@@ -152,10 +152,10 @@ export interface OAuthResponseOptions {
 }
 
 /**
- * Escapes double quotes in a string for use in HTTP header quoted-string values.
+ * Escapes backslashes and double quotes in a string for use in HTTP header quoted-string values.
  */
 function escapeHeaderValue(value: string): string {
-  return value.replace(/"/g, '\\"');
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 /**

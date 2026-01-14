@@ -16,10 +16,10 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 import type { OAuthMiddlewareResult } from '../server/oauth-middleware.js';
-import { createOAuthMiddleware, createStaticTokenValidator } from '../server/oauth-middleware.js';
+import { createOAuthMiddleware, createStaticTokenValidator, createIntrospectionValidator } from '../server/oauth-middleware.js';
 import { MCPServer } from '../server/server.js';
 import type { MCPServerOAuthConfig } from '../shared/oauth-types.js';
 import {
@@ -91,6 +91,31 @@ describe('OAuth Types and Helpers', () => {
       });
       expect(header).toContain('error="invalid_token"');
       expect(header).toContain('error_description="Token expired"');
+    });
+
+    it('should properly escape backslashes and quotes in header values', () => {
+      const header = generateWWWAuthenticateHeader({
+        additionalParams: {
+          error_description: 'Value with "quotes"',
+        },
+      });
+      expect(header).toContain('error_description="Value with \\"quotes\\""');
+
+      const headerWithBackslash = generateWWWAuthenticateHeader({
+        additionalParams: {
+          error_description: 'Path: C:\\Users\\test',
+        },
+      });
+      expect(headerWithBackslash).toContain('error_description="Path: C:\\\\Users\\\\test"');
+
+      // Test combined: backslash before quote should be escaped correctly
+      const headerCombined = generateWWWAuthenticateHeader({
+        additionalParams: {
+          error_description: 'test\\"value',
+        },
+      });
+      // Input: test\"value -> After escaping \ then ": test\\"value
+      expect(headerCombined).toContain('error_description="test\\\\\\"value"');
     });
   });
 
@@ -296,6 +321,91 @@ describe('createStaticTokenValidator', () => {
     const result = await validator!('invalid-token', 'https://example.com');
     expect(result.valid).toBe(false);
     expect(result.error).toBe('invalid_token');
+  });
+});
+
+describe('createIntrospectionValidator', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return empty scopes array for empty scope string', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        active: true,
+        scope: '',
+        sub: 'user-123',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    } as Response);
+
+    const validator = createIntrospectionValidator('https://auth.example.com/introspect');
+    const result = await validator('test-token', 'https://example.com');
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.scopes).toEqual([]);
+    }
+  });
+
+  it('should return empty scopes array for whitespace-only scope string', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        active: true,
+        scope: '   ',
+        sub: 'user-123',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    } as Response);
+
+    const validator = createIntrospectionValidator('https://auth.example.com/introspect');
+    const result = await validator('test-token', 'https://example.com');
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.scopes).toEqual([]);
+    }
+  });
+
+  it('should parse space-separated scopes correctly', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        active: true,
+        scope: 'read write admin',
+        sub: 'user-123',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    } as Response);
+
+    const validator = createIntrospectionValidator('https://auth.example.com/introspect');
+    const result = await validator('test-token', 'https://example.com');
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.scopes).toEqual(['read', 'write', 'admin']);
+    }
+  });
+
+  it('should handle undefined scope', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        active: true,
+        sub: 'user-123',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    } as Response);
+
+    const validator = createIntrospectionValidator('https://auth.example.com/introspect');
+    const result = await validator('test-token', 'https://example.com');
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.scopes).toEqual([]);
+    }
   });
 });
 

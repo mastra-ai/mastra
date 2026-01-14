@@ -352,7 +352,11 @@ export function createIntrospectionValidator(
 
       return {
         valid: true,
-        scopes: data.scope?.split(' ') || [],
+        scopes:
+          data.scope
+            ?.trim()
+            .split(' ')
+            .filter(s => s !== '') || [],
         subject: data.sub,
         expiresAt: data.exp,
         claims: data as Record<string, unknown>,
