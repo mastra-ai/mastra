@@ -11,6 +11,9 @@ import {
   Spacings,
   Sizes,
 } from './src/ds/tokens';
+import animate from 'tailwindcss-animate';
+import assistantUi from '@assistant-ui/react-ui/tailwindcss';
+import containerQueries from '@tailwindcss/container-queries';
 
 export default {
   darkMode: ['class'],
@@ -202,9 +205,5 @@ export default {
       },
     },
   },
-  plugins: [
-    require('tailwindcss-animate'),
-    require('@assistant-ui/react-ui/tailwindcss'),
-    require('@tailwindcss/container-queries'),
-  ],
+  plugins: [animate, assistantUi, containerQueries],
 } satisfies Config;
