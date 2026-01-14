@@ -381,37 +381,203 @@ Prompt notifications are delivered via SSE or compatible transports. Register ha
 
 ## Authentication
 
-### OAuth Token Refresh with AuthProvider
+### OAuth 2.0 Authentication (MCP Auth Spec)
 
-For HTTP-based MCP servers that require OAuth authentication with automatic token refresh, you can use the `authProvider` option:
+Mastra provides full support for the [MCP OAuth specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), including:
+
+- **Server-side**: Protected Resource Metadata (RFC 9728), token validation middleware
+- **Client-side**: OAuth client provider implementation with PKCE, token storage, and automatic refresh
+
+#### Client-Side: Connecting to OAuth-Protected MCP Servers
+
+Use `MastraOAuthClientProvider` to connect to MCP servers that require OAuth authentication:
 
 ```typescript
-const httpClient = new MCPClient({
+import { MCPClient, MastraOAuthClientProvider } from '@mastra/mcp';
+
+// Create an OAuth provider for your client
+const oauthProvider = new MastraOAuthClientProvider({
+  redirectUrl: 'http://localhost:3000/oauth/callback',
+  clientMetadata: {
+    redirect_uris: ['http://localhost:3000/oauth/callback'],
+    client_name: 'My MCP Client',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+  },
+  // Handle authorization redirects (for CLI apps, open browser; for web apps, redirect response)
+  onRedirectToAuthorization: url => {
+    console.log(`Please visit: ${url}`);
+    // Or: window.location.href = url.toString();
+  },
+});
+
+// Create client with OAuth provider
+const client = new MCPClient({
   servers: {
-    myOAuthClient: {
-      url: new URL('https://your-mcp-server.com/mcp'),
-      authProvider: {
-        tokens: async () => {
-          // Your token refresh logic here
-          const refreshedToken = await refreshAccessToken();
-          return {
-            token: refreshedToken,
-            type: 'Bearer',
-          };
-        },
-        // Additional OAuth provider methods as needed
-        redirectUrl: 'https://your-app.com/oauth/callback',
-        clientMetadata: {
-          /* ... */
-        },
-        // ... other OAuth provider properties
-      },
+    protectedServer: {
+      url: new URL('https://mcp.example.com/mcp'),
+      authProvider: oauthProvider,
+    },
+  },
+});
+
+await client.connect();
+```
+
+For testing or when you already have a valid token, use `createSimpleTokenProvider`:
+
+```typescript
+import { MCPClient, createSimpleTokenProvider } from '@mastra/mcp';
+
+const provider = createSimpleTokenProvider('your-access-token', {
+  redirectUrl: 'http://localhost:3000/callback',
+  clientMetadata: {
+    redirect_uris: ['http://localhost:3000/callback'],
+    client_name: 'Test Client',
+  },
+});
+
+const client = new MCPClient({
+  servers: {
+    testServer: {
+      url: new URL('https://mcp.example.com/mcp'),
+      authProvider: provider,
     },
   },
 });
 ```
 
-The `authProvider` is automatically passed to both Streamable HTTP and SSE transports.
+#### Server-Side: Protecting Your MCP Server with OAuth
+
+Use `createOAuthMiddleware` to protect your MCP server endpoints:
+
+```typescript
+import http from 'node:http';
+import { MCPServer, createOAuthMiddleware, createStaticTokenValidator } from '@mastra/mcp';
+
+// Create your MCP server
+const mcpServer = new MCPServer({
+  name: 'Protected MCP Server',
+  version: '1.0.0',
+  tools: {
+    /* your tools */
+  },
+});
+
+// Create OAuth middleware
+const oauthMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: 'https://mcp.example.com/mcp',
+    authorizationServers: ['https://auth.example.com'],
+    scopesSupported: ['mcp:read', 'mcp:write'],
+    resourceName: 'My Protected MCP Server',
+    // For production, use proper token validation (JWT, introspection, etc.)
+    validateToken: createStaticTokenValidator(['allowed-token-1', 'allowed-token-2']),
+  },
+  mcpPath: '/mcp',
+});
+
+// Create HTTP server with OAuth protection
+const httpServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url || '', 'https://mcp.example.com');
+
+  // Apply OAuth middleware first
+  const result = await oauthMiddleware(req, res, url);
+  if (!result.proceed) return; // Middleware handled the response (401, metadata, etc.)
+
+  // Token is valid, proceed to MCP handler
+  await mcpServer.startHTTP({ url, httpPath: '/mcp', req, res });
+});
+
+httpServer.listen(3000);
+```
+
+The middleware automatically:
+
+- Serves Protected Resource Metadata at `/.well-known/oauth-protected-resource`
+- Returns `401 Unauthorized` with proper `WWW-Authenticate` headers when authentication is required
+- Validates bearer tokens using your provided validator
+
+#### Token Validation Options
+
+For production use, implement proper token validation:
+
+```typescript
+import { createOAuthMiddleware, createIntrospectionValidator } from '@mastra/mcp';
+
+// Option 1: Token introspection (RFC 7662)
+const middleware = createOAuthMiddleware({
+  oauth: {
+    resource: 'https://mcp.example.com/mcp',
+    authorizationServers: ['https://auth.example.com'],
+    validateToken: createIntrospectionValidator('https://auth.example.com/oauth/introspect', {
+      clientId: 'mcp-server',
+      clientSecret: 'secret',
+    }),
+  },
+});
+
+// Option 2: Custom validation (JWT, database lookup, etc.)
+const middlewareCustom = createOAuthMiddleware({
+  oauth: {
+    resource: 'https://mcp.example.com/mcp',
+    authorizationServers: ['https://auth.example.com'],
+    validateToken: async (token, resource) => {
+      // Your custom validation logic
+      const decoded = await verifyJWT(token);
+      if (!decoded) {
+        return { valid: false, error: 'invalid_token', errorDescription: 'Token verification failed' };
+      }
+      return {
+        valid: true,
+        scopes: decoded.scope?.split(' ') || [],
+        subject: decoded.sub,
+        expiresAt: decoded.exp,
+      };
+    },
+  },
+});
+```
+
+#### Custom OAuth Storage
+
+For persistent token storage across sessions, implement the `OAuthStorage` interface:
+
+```typescript
+import { MastraOAuthClientProvider, OAuthStorage } from '@mastra/mcp';
+
+// Example: Redis-based storage
+class RedisOAuthStorage implements OAuthStorage {
+  constructor(
+    private redis: RedisClient,
+    private prefix: string,
+  ) {}
+
+  async set(key: string, value: string): Promise<void> {
+    await this.redis.set(`${this.prefix}:${key}`, value);
+  }
+
+  async get(key: string): Promise<string | undefined> {
+    return (await this.redis.get(`${this.prefix}:${key}`)) ?? undefined;
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.redis.del(`${this.prefix}:${key}`);
+  }
+}
+
+const provider = new MastraOAuthClientProvider({
+  redirectUrl: 'http://localhost:3000/callback',
+  clientMetadata: {
+    /* ... */
+  },
+  storage: new RedisOAuthStorage(redisClient, 'oauth:user123'),
+});
+```
+
+### OAuth Token Refresh with AuthProvider
+
+For simpler OAuth scenarios where you just need token refresh, you can pass an `authProvider` directly:
 
 ### Custom Fetch for Dynamic Authentication
 
@@ -613,6 +779,8 @@ The client includes comprehensive error handling:
 ## Related Links
 
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification)
+- [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
+- [RFC 9728 - OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728.html)
 - [@modelcontextprotocol/sdk Documentation](https://github.com/modelcontextprotocol/typescript-sdk)
 - [Mastra Docs: Using MCP With Mastra](/docs/agents/mcp-guide)
 - [Mastra Docs: MastraMCPClient Reference](/reference/tools/client)

@@ -1191,6 +1191,136 @@ type ElicitResult = {
 };
 ```
 
+## OAuth Protection
+
+To protect your MCP server with OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `createOAuthMiddleware` function:
+
+```typescript
+import http from "node:http";
+import { MCPServer, createOAuthMiddleware, createStaticTokenValidator } from "@mastra/mcp";
+
+const mcpServer = new MCPServer({
+  id: "protected-server",
+  name: "Protected MCP Server",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+// Create OAuth middleware
+const oauthMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    scopesSupported: ["mcp:read", "mcp:write"],
+    resourceName: "My Protected MCP Server",
+    validateToken: createStaticTokenValidator(["allowed-token-1"]),
+  },
+  mcpPath: "/mcp",
+});
+
+// Create HTTP server with OAuth protection
+const httpServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url || "", "https://mcp.example.com");
+
+  // Apply OAuth middleware first
+  const result = await oauthMiddleware(req, res, url);
+  if (!result.proceed) return; // Middleware handled response (401, metadata, etc.)
+
+  // Token is valid, proceed to MCP handler
+  await mcpServer.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+
+httpServer.listen(3000);
+```
+
+The middleware automatically:
+
+- Serves **Protected Resource Metadata** at `/.well-known/oauth-protected-resource` (RFC 9728)
+- Returns `401 Unauthorized` with proper `WWW-Authenticate` headers when authentication is required
+- Validates bearer tokens using your provided validator
+
+### Token Validation
+
+For production, use proper token validation:
+
+```typescript
+import { createOAuthMiddleware, createIntrospectionValidator } from "@mastra/mcp";
+
+// Option 1: Token introspection (RFC 7662)
+const middleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    validateToken: createIntrospectionValidator(
+      "https://auth.example.com/oauth/introspect",
+      { clientId: "mcp-server", clientSecret: "secret" }
+    ),
+  },
+});
+
+// Option 2: Custom validation (JWT, database lookup, etc.)
+const customMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    validateToken: async (token, resource) => {
+      const decoded = await verifyJWT(token);
+      if (!decoded) {
+        return { valid: false, error: "invalid_token" };
+      }
+      return {
+        valid: true,
+        scopes: decoded.scope?.split(" ") || [],
+        subject: decoded.sub,
+      };
+    },
+  },
+});
+```
+
+### OAuth Middleware Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "oauth.resource",
+      type: "string",
+      description: "The canonical URL of your MCP server. This is returned in Protected Resource Metadata.",
+    },
+    {
+      name: "oauth.authorizationServers",
+      type: "string[]",
+      description: "URLs of authorization servers that can issue tokens for this resource.",
+    },
+    {
+      name: "oauth.scopesSupported",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "['mcp:read', 'mcp:write']",
+      description: "Scopes supported by this MCP server.",
+    },
+    {
+      name: "oauth.resourceName",
+      type: "string",
+      isOptional: true,
+      description: "Human-readable name for this resource server.",
+    },
+    {
+      name: "oauth.validateToken",
+      type: "(token: string, resource: string) => Promise<TokenValidationResult>",
+      isOptional: true,
+      description: "Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).",
+    },
+    {
+      name: "mcpPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "'/mcp'",
+      description: "Path where the MCP endpoint is served. Only requests to this path require authentication.",
+    },
+  ]}
+/>
+
 ## Authentication Context
 
 Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
