@@ -418,6 +418,8 @@ export interface StorageCachedTool {
   outputSchema?: Record<string, unknown>;
   /** Raw tool definition from provider API */
   rawDefinition: Record<string, unknown>;
+  /** When this tool definition was first created */
+  createdAt: Date;
   /** When this tool definition was cached */
   cachedAt: Date;
   /** Last time this tool definition was updated */
@@ -435,7 +437,7 @@ export type StorageUpdateIntegrationInput = {
   ownerId?: string;
 };
 
-export type StorageCachedToolInput = Omit<StorageCachedTool, 'cachedAt' | 'updatedAt'>;
+export type StorageCachedToolInput = Omit<StorageCachedTool, 'createdAt' | 'cachedAt' | 'updatedAt'>;
 
 export type StorageListIntegrationsInput = {
   /**

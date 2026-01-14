@@ -98,6 +98,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
       inputSchema: this.parseJson(row.inputSchema, 'inputSchema'),
       outputSchema: this.parseJson(row.outputSchema, 'outputSchema'),
       rawDefinition: this.parseJson(row.rawDefinition, 'rawDefinition'),
+      createdAt: new Date(row.createdAt as string),
       cachedAt: new Date(row.cachedAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -250,7 +251,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
   }
 
   async listIntegrations(args?: StorageListIntegrationsInput): Promise<StorageListIntegrationsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, provider, ownerId } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, provider, ownerId, enabled } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -281,6 +282,11 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
       if (ownerId !== undefined) {
         whereClauses.push(`"ownerId" = ?`);
         whereValues.push(ownerId);
+      }
+
+      if (enabled !== undefined) {
+        whereClauses.push(`"enabled" = ?`);
+        whereValues.push(enabled ? 1 : 0);
       }
 
       const whereClause =
@@ -354,6 +360,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
           inputSchema: tool.inputSchema,
           outputSchema: tool.outputSchema ?? null,
           rawDefinition: tool.rawDefinition,
+          createdAt: now,
           cachedAt: now,
           updatedAt: now,
         },
@@ -361,6 +368,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
 
       return {
         ...tool,
+        createdAt: now,
         cachedAt: now,
         updatedAt: now,
       };
@@ -392,6 +400,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
         inputSchema: tool.inputSchema,
         outputSchema: tool.outputSchema ?? null,
         rawDefinition: tool.rawDefinition,
+        createdAt: now,
         cachedAt: now,
         updatedAt: now,
       }));
@@ -403,6 +412,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
 
       return tools.map(tool => ({
         ...tool,
+        createdAt: now,
         cachedAt: now,
         updatedAt: now,
       }));

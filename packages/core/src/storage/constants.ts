@@ -147,6 +147,7 @@ export const CACHED_TOOLS_SCHEMA: Record<string, StorageColumn> = {
   inputSchema: { type: 'jsonb', nullable: false }, // JSON schema for input
   outputSchema: { type: 'jsonb', nullable: true }, // JSON schema for output
   rawDefinition: { type: 'jsonb', nullable: false }, // Full tool definition from provider
+  createdAt: { type: 'timestamp', nullable: false }, // When tool was first cached (same as cachedAt for compatibility)
   cachedAt: { type: 'timestamp', nullable: false }, // When tool was cached
   updatedAt: { type: 'timestamp', nullable: false }, // When tool cache was last updated
 };

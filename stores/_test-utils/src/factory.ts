@@ -5,11 +5,13 @@ import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
+import { createIntegrationsTests } from './domains/integrations';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
 export * from './domains/observability/data';
 export * from './domains/agents/data';
+export * from './domains/integrations/data';
 
 /**
  * Test-specific feature flags for conditionally enabling test scenarios.
@@ -39,6 +41,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
       const scoresStorage = await storage.getStore('scores');
       const observabilityStorage = await storage.getStore('observability');
       const agentsStorage = await storage.getStore('agents');
+      const integrationsStorage = await storage.getStore('integrations');
 
       if (workflowStorage) {
         clearList.push(workflowStorage.dangerouslyClearAll());
@@ -55,6 +58,9 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
       if (agentsStorage) {
         clearList.push(agentsStorage.dangerouslyClearAll());
       }
+      if (integrationsStorage) {
+        clearList.push(integrationsStorage.dangerouslyClearAll());
+      }
       // Clear all domain data after tests
       await Promise.all(clearList);
     });
@@ -66,5 +72,6 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage });
     createAgentsTests({ storage });
+    createIntegrationsTests({ storage });
   });
 }

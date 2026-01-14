@@ -1247,3 +1247,67 @@ Date: 2025-01-14
 - Future enhancement: Add ability to click on integration name in source column to navigate to integrations management page
 - The implementation is production-ready for the MVP scope
 
+
+## Task 025: Add integration tests for integration storage [COMPLETED]
+
+**Date:** 2026-01-14
+
+**Summary:**
+Successfully created comprehensive integration tests for the integrations storage domain in the test-utils package.
+
+**Implementation Details:**
+
+1. Created test data helpers in `stores/_test-utils/src/domains/integrations/data.ts`:
+   - `createSampleIntegration()` - Creates test integration configurations
+   - `createFullSampleIntegration()` - Creates integrations with all optional fields
+   - `createSampleIntegrations()` - Creates multiple test integrations
+   - `createSampleCachedTool()` - Creates test cached tool definitions
+   - `createSampleCachedTools()` - Creates multiple test tools
+
+2. Created comprehensive tests in `stores/_test-utils/src/domains/integrations/index.ts`:
+   - Integration CRUD operations (create, read, update, delete)
+   - Listing integrations with pagination and filtering
+   - Cached tool operations (cache, retrieve, list, delete)
+   - Edge cases (non-existent items, empty lists, etc.)
+   - All tests follow the existing domain test patterns
+
+3. Integrated tests into the storage test suite:
+   - Added `createIntegrationsTests` to the factory
+   - Updated cleanup logic to clear integrations storage
+   - Exported test helpers for use in storage adapters
+
+4. Schema fixes:
+   - Added `createdAt` column to `CACHED_TOOLS_SCHEMA` for consistency with LibSQLDB's select method
+   - Updated `StorageCachedTool` type to include `createdAt`
+   - Updated `StorageCachedToolInput` to exclude timestamps
+   - Updated LibSQL implementation to set `createdAt` when caching tools
+
+5. Bug fixes during testing:
+   - Fixed pagination parameter names (`perPage` instead of `pageSize`)
+   - Fixed page numbering (0-indexed instead of 1-indexed)
+   - Fixed response field names (`integrations` and `tools` instead of `data`)
+   - Added missing `enabled` filter to `listIntegrations` WHERE clause
+
+**Test Results:**
+- All 450 tests passing in LibSQL storage adapter
+- 13 skipped, 2 todo
+- Integration storage tests cover all CRUD operations and edge cases
+
+**Files Modified:**
+- `stores/_test-utils/src/domains/integrations/data.ts` (created)
+- `stores/_test-utils/src/domains/integrations/index.ts` (created)
+- `stores/_test-utils/src/factory.ts` (updated)
+- `packages/core/src/storage/constants.ts` (added `createdAt` to CACHED_TOOLS_SCHEMA)
+- `packages/core/src/storage/types.ts` (added `createdAt` to StorageCachedTool)
+- `stores/libsql/src/storage/domains/integrations/index.ts` (added `createdAt` handling)
+
+**Next Steps:**
+Task 025 is complete. The remaining P1 tasks are:
+- Task 026: Add integration tests for provider APIs
+- Task 027: Add E2E tests for integration flow
+
+**Notes for Next Engineer:**
+- The integration storage tests are comprehensive and follow existing patterns
+- All timestamp fields (createdAt, cachedAt, updatedAt) are now consistent across the schema
+- The tests use 0-indexed page numbering and correct field names
+- LibSQL adapter passes all tests, but other adapters (PG, etc.) will need similar updates for the `createdAt` column
