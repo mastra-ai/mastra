@@ -174,7 +174,7 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
-        <ToolIconComponent className="group-hover/entity:text-[#ECB047]" />
+        <ToolIconComponent className="group-hover/entity:text-accent6" />
       </EntityIcon>
 
       <EntityContent>

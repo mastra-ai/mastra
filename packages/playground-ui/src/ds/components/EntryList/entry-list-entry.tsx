@@ -19,7 +19,7 @@ export function EntryListEntry({ entry, isSelected, onClick, children, columns }
   return (
     <li
       className={cn(
-        'border-t text-[#ccc] border-border1 last:border-b-0 text-[0.875rem]',
+        'border-t text-neutral5 border-border1 last:border-b-0 text-[0.875rem]',
         '[&:last-child>button]:rounded-b-lg',
         {
           'bg-surface5': isSelected,

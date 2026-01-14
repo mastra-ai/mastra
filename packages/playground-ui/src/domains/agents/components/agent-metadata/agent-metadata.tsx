@@ -208,7 +208,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       {tools.map(tool => (
         <AgentMetadataListItem key={tool.id}>
           <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge">
-            <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{tool.id}</Badge>
+            <Badge icon={<ToolsIcon className="text-accent6" />}>{tool.id}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}
