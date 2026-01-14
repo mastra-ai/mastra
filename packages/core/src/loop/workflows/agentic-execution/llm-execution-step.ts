@@ -524,18 +524,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
-  return createStep<
-    'llm-execution',
-    unknown,
-    InferSchemaOutput<typeof llmIterationOutputSchema>,
-    InferSchemaOutput<typeof llmIterationOutputSchema>,
-    unknown,
-    unknown
-  >({
-    id: 'llm-execution',
+  return createStep({
+    id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    // @ts-ignore
     execute: async ({ inputData, bail, tracingContext }) => {
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
