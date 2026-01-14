@@ -66,9 +66,9 @@ export class InMemoryOAuthStorage implements OAuthStorage {
 }
 
 /**
- * Options for creating a MastraOAuthClientProvider.
+ * Options for creating a MCPOAuthClientProvider.
  */
-export interface MastraOAuthClientProviderOptions {
+export interface MCPOAuthClientProviderOptions {
   /**
    * The redirect URL for the OAuth callback.
    * This should be a URL your application controls that can handle
@@ -125,10 +125,10 @@ export interface MastraOAuthClientProviderOptions {
  *
  * @example
  * ```typescript
- * import { MCPClient, MastraOAuthClientProvider, InMemoryOAuthStorage } from '@mastra/mcp';
+ * import { MCPClient, MCPOAuthClientProvider, InMemoryOAuthStorage } from '@mastra/mcp';
  *
  * // Create the OAuth provider
- * const oauthProvider = new MastraOAuthClientProvider({
+ * const oauthProvider = new MCPOAuthClientProvider({
  *   redirectUrl: 'http://localhost:3000/oauth/callback',
  *   clientMetadata: {
  *     redirect_uris: ['http://localhost:3000/oauth/callback'],
@@ -155,7 +155,7 @@ export interface MastraOAuthClientProviderOptions {
  * await client.connect();
  * ```
  */
-export class MastraOAuthClientProvider implements OAuthClientProvider {
+export class MCPOAuthClientProvider implements OAuthClientProvider {
   private readonly _redirectUrl: string | URL;
   private readonly _clientMetadata: OAuthClientMetadata;
   private readonly storage: OAuthStorage;
@@ -164,7 +164,7 @@ export class MastraOAuthClientProvider implements OAuthClientProvider {
 
   private _clientInfo?: OAuthClientInformation;
 
-  constructor(options: MastraOAuthClientProviderOptions) {
+  constructor(options: MCPOAuthClientProviderOptions) {
     this._redirectUrl = options.redirectUrl;
     this._clientMetadata = options.clientMetadata;
     this._clientInfo = options.clientInformation;
@@ -344,7 +344,7 @@ export class MastraOAuthClientProvider implements OAuthClientProvider {
  * Creates a simple OAuth provider with pre-configured tokens.
  *
  * This is useful for testing scenarios where you already have a valid token.
- * For production, use the full MastraOAuthClientProvider with proper OAuth flow.
+ * For production, use the full MCPOAuthClientProvider with proper OAuth flow.
  *
  * @param accessToken - A valid access token
  * @param options - Additional configuration options
@@ -394,7 +394,7 @@ export function createSimpleTokenProvider(
     storage.set('client_info', JSON.stringify(options.clientInformation));
   }
 
-  return new MastraOAuthClientProvider({
+  return new MCPOAuthClientProvider({
     redirectUrl: options.redirectUrl,
     clientMetadata: options.clientMetadata,
     clientInformation: options.clientInformation,

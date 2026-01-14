@@ -390,13 +390,13 @@ Mastra provides full support for the [MCP OAuth specification](https://modelcont
 
 #### Client-Side: Connecting to OAuth-Protected MCP Servers
 
-Use `MastraOAuthClientProvider` to connect to MCP servers that require OAuth authentication:
+Use `MCPOAuthClientProvider` to connect to MCP servers that require OAuth authentication:
 
 ```typescript
-import { MCPClient, MastraOAuthClientProvider } from '@mastra/mcp';
+import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
 
 // Create an OAuth provider for your client
-const oauthProvider = new MastraOAuthClientProvider({
+const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/oauth/callback',
   clientMetadata: {
     redirect_uris: ['http://localhost:3000/oauth/callback'],
@@ -545,7 +545,7 @@ const middlewareCustom = createOAuthMiddleware({
 For persistent token storage across sessions, implement the `OAuthStorage` interface:
 
 ```typescript
-import { MastraOAuthClientProvider, OAuthStorage } from '@mastra/mcp';
+import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp';
 
 // Example: Redis-based storage
 class RedisOAuthStorage implements OAuthStorage {
@@ -567,7 +567,7 @@ class RedisOAuthStorage implements OAuthStorage {
   }
 }
 
-const provider = new MastraOAuthClientProvider({
+const provider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/callback',
   clientMetadata: {
     /* ... */

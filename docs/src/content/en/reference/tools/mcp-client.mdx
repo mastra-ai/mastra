@@ -131,7 +131,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "authProvider",
       type: "OAuthClientProvider",
       isOptional: true,
-      description: "For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MastraOAuthClientProvider for a ready-to-use implementation.",
+      description: "For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.",
     },
     {
       name: "enableServerLogs",
@@ -698,13 +698,13 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 
 ## OAuth Authentication
 
-For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MastraOAuthClientProvider`:
+For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
 
 ```typescript
-import { MCPClient, MastraOAuthClientProvider } from "@mastra/mcp";
+import { MCPClient, MCPOAuthClientProvider } from "@mastra/mcp";
 
 // Create an OAuth provider
-const oauthProvider = new MastraOAuthClientProvider({
+const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: "http://localhost:3000/oauth/callback",
   clientMetadata: {
     redirect_uris: ["http://localhost:3000/oauth/callback"],
@@ -759,7 +759,7 @@ const client = new MCPClient({
 For persistent token storage across sessions, implement the `OAuthStorage` interface:
 
 ```typescript
-import { MastraOAuthClientProvider, OAuthStorage } from "@mastra/mcp";
+import { MCPOAuthClientProvider, OAuthStorage } from "@mastra/mcp";
 
 class DatabaseOAuthStorage implements OAuthStorage {
   constructor(private db: Database, private userId: string) {}
@@ -787,7 +787,7 @@ class DatabaseOAuthStorage implements OAuthStorage {
   }
 }
 
-const provider = new MastraOAuthClientProvider({
+const provider = new MCPOAuthClientProvider({
   redirectUrl: "http://localhost:3000/callback",
   clientMetadata: { /* ... */ },
   storage: new DatabaseOAuthStorage(db, "user-123"),

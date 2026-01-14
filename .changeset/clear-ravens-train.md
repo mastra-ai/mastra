@@ -5,7 +5,7 @@
 Add OAuth 2.1 support for MCP client and server
 
 Client-side OAuth:
-- MastraOAuthClientProvider: Ready-to-use OAuth provider implementation for connecting to - OAuth-protected MCP servers
+- MCPOAuthClientProvider: Ready-to-use OAuth provider implementation for connecting to - OAuth-protected MCP servers
 - Supports dynamic client registration (RFC 7591), PKCE, and token refresh
 - OAuthStorage interface with InMemoryOAuthStorage for token persistence
 - createSimpleTokenProvider helper for testing with pre-configured tokens

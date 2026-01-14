@@ -27,7 +27,7 @@ import {
   generateWWWAuthenticateHeader,
   extractBearerToken,
 } from '../shared/oauth-types.js';
-import { MastraOAuthClientProvider, createSimpleTokenProvider } from './oauth-provider.js';
+import { MCPOAuthClientProvider, createSimpleTokenProvider } from './oauth-provider.js';
 
 // =============================================================================
 // Unit Tests for OAuth Types and Helpers
@@ -141,9 +141,9 @@ describe('OAuth Types and Helpers', () => {
 // Unit Tests for OAuth Client Provider
 // =============================================================================
 
-describe('MastraOAuthClientProvider', () => {
+describe('MCPOAuthClientProvider', () => {
   it('should return the configured redirect URL', () => {
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
@@ -161,7 +161,7 @@ describe('MastraOAuthClientProvider', () => {
       grant_types: ['authorization_code'],
     };
 
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: metadata,
     });
@@ -170,7 +170,7 @@ describe('MastraOAuthClientProvider', () => {
   });
 
   it('should store and retrieve tokens', async () => {
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
@@ -195,7 +195,7 @@ describe('MastraOAuthClientProvider', () => {
   });
 
   it('should store and retrieve code verifier', async () => {
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
@@ -208,7 +208,7 @@ describe('MastraOAuthClientProvider', () => {
   });
 
   it('should invalidate credentials by scope', async () => {
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
@@ -236,7 +236,7 @@ describe('MastraOAuthClientProvider', () => {
   });
 
   it('should generate state for OAuth requests', async () => {
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
@@ -252,7 +252,7 @@ describe('MastraOAuthClientProvider', () => {
 
   it('should use custom state generator', async () => {
     const customState = 'custom-state-value';
-    const provider = new MastraOAuthClientProvider({
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
@@ -581,8 +581,8 @@ describe('MCPClient authProvider passthrough', () => {
    * - Client registration
    * - Authorization redirects
    */
-  it('should accept MastraOAuthClientProvider as authProvider', async () => {
-    const provider = new MastraOAuthClientProvider({
+  it('should accept MCPOAuthClientProvider as authProvider', async () => {
+    const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: {
         redirect_uris: ['http://localhost:3000/callback'],
