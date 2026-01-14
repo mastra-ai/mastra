@@ -152,6 +152,13 @@ export interface OAuthResponseOptions {
 }
 
 /**
+ * Escapes double quotes in a string for use in HTTP header quoted-string values.
+ */
+function escapeHeaderValue(value: string): string {
+  return value.replace(/"/g, '\\"');
+}
+
+/**
  * Generates a WWW-Authenticate header value for OAuth 401 responses.
  *
  * @param options - Options for generating the header
@@ -166,19 +173,23 @@ export interface OAuthResponseOptions {
  * ```
  */
 export function generateWWWAuthenticateHeader(options: OAuthResponseOptions = {}): string {
-  const parts: string[] = ['Bearer'];
+  const params: string[] = [];
 
   if (options.resourceMetadataUrl) {
-    parts.push(`resource_metadata="${options.resourceMetadataUrl}"`);
+    params.push(`resource_metadata="${escapeHeaderValue(options.resourceMetadataUrl)}"`);
   }
 
   if (options.additionalParams) {
     for (const [key, value] of Object.entries(options.additionalParams)) {
-      parts.push(`${key}="${value}"`);
+      params.push(`${key}="${escapeHeaderValue(value)}"`);
     }
   }
 
-  return parts.join(' ');
+  if (params.length === 0) {
+    return 'Bearer';
+  }
+
+  return `Bearer ${params.join(', ')}`;
 }
 
 /**

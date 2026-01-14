@@ -297,6 +297,14 @@ export function createIntrospectionValidator(
       };
 
       if (clientCredentials) {
+        // RFC 7617: user-id cannot contain a colon character
+        if (clientCredentials.clientId.includes(':')) {
+          return {
+            valid: false,
+            error: 'invalid_request',
+            errorDescription: 'clientId cannot contain a colon character per RFC 7617',
+          };
+        }
         const credentials = Buffer.from(`${clientCredentials.clientId}:${clientCredentials.clientSecret}`).toString(
           'base64',
         );

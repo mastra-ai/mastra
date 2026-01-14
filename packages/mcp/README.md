@@ -457,6 +457,7 @@ import { MCPServer, createOAuthMiddleware, createStaticTokenValidator } from '@m
 
 // Create your MCP server
 const mcpServer = new MCPServer({
+  id: 'protected-mcp-server',
   name: 'Protected MCP Server',
   version: '1.0.0',
   tools: {
