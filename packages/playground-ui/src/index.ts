@@ -69,8 +69,8 @@ export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
 
-// DS Components - Migrated AutoForm
-export * from './ds/components/AutoForm';
+// Form utilities (AutoForm)
+export * from './lib/form';
 
 // DS Icons
 export * from './ds/icons/index';
