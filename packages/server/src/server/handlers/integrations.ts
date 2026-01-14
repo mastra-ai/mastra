@@ -382,6 +382,13 @@ export const LIST_PROVIDER_TOOLKITS_ROUTE = createRoute({
   tags: ['Integrations'],
   handler: async ({ provider, search, category, limit, cursor }) => {
     try {
+      // Validate provider type
+      if (provider !== 'composio' && provider !== 'arcade') {
+        throw new HTTPException(400, {
+          message: `Invalid provider: ${provider}. Must be 'composio' or 'arcade'.`,
+        });
+      }
+
       const toolProvider = getProvider(provider);
 
       // Check provider connection status
@@ -421,6 +428,13 @@ export const LIST_PROVIDER_TOOLS_ROUTE = createRoute({
   tags: ['Integrations'],
   handler: async ({ provider, toolkitSlug, toolkitSlugs, search, limit, cursor }) => {
     try {
+      // Validate provider type
+      if (provider !== 'composio' && provider !== 'arcade') {
+        throw new HTTPException(400, {
+          message: `Invalid provider: ${provider}. Must be 'composio' or 'arcade'.`,
+        });
+      }
+
       const toolProvider = getProvider(provider);
 
       // Check provider connection status

@@ -16,7 +16,7 @@ export const integrationIdPathParams = z.object({
  * Path parameter for provider name
  */
 export const providerPathParams = z.object({
-  provider: z.enum(['composio', 'arcade']).describe('Integration provider type'),
+  provider: z.string().describe('Integration provider type'),
 });
 
 // ============================================================================

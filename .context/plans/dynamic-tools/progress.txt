@@ -510,3 +510,56 @@ Date: 2025-01-14
   This is the next P0 task that depends on task 011. It will create the routes file and register all handlers with the server adapter.
   This is a small task that should be quick to complete.
 
+
+## Task 012: Register integration routes - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/server/src/server/server-adapter/routes/integrations.ts
+- Exported INTEGRATIONS_ROUTES array with all 9 integration route handlers:
+  - LIST_INTEGRATIONS_ROUTE
+  - GET_INTEGRATION_ROUTE
+  - CREATE_INTEGRATION_ROUTE
+  - UPDATE_INTEGRATION_ROUTE
+  - DELETE_INTEGRATION_ROUTE
+  - GET_PROVIDERS_ROUTE
+  - LIST_PROVIDER_TOOLKITS_ROUTE
+  - LIST_PROVIDER_TOOLS_ROUTE
+  - REFRESH_INTEGRATION_TOOLS_ROUTE
+- Added INTEGRATIONS_ROUTES import to packages/server/src/server/server-adapter/routes/index.ts
+- Registered INTEGRATIONS_ROUTES in SERVER_ROUTES array (line 106)
+- Fixed schema validation issue: Changed providerPathParams from z.enum() to z.string()
+- Added runtime validation in handlers to check provider is 'composio' or 'arcade'
+
+### Key implementation details:
+- Followed the same pattern as stored-agents.ts for consistency
+- Routes are organized into 3 sections: Integration CRUD, Provider Discovery & Proxy, Tool Refresh
+- Provider path parameter uses z.string() in schema for test compatibility
+- Runtime validation ensures provider is valid IntegrationProviderType before calling getProvider()
+- All routes include proper JSDoc comments and grouping
+
+### Build/Test status:
+- Full monorepo typecheck passes (pnpm typecheck)
+- Server package tests pass - 410 passed, 2 skipped (410/412 passing)
+- Schema consistency tests pass - all 21 tests passing
+- Full monorepo build passes (pnpm -w run build) - 121 successful tasks
+- All acceptance criteria met:
+  ✓ All integration endpoints accessible via API (routes registered in SERVER_ROUTES)
+  ✓ Routes follow existing naming conventions (matches stored-agents pattern)
+  ✓ OpenAPI spec includes new endpoints (all routes have openapi metadata via createRoute)
+
+### Files created:
+- packages/server/src/server/server-adapter/routes/integrations.ts (new - 40 lines)
+
+### Files modified:
+- packages/server/src/server/server-adapter/routes/index.ts (added import and registration)
+- packages/server/src/server/schemas/integrations.ts (fixed providerPathParams schema)
+- packages/server/src/server/handlers/integrations.ts (added runtime validation for provider parameter)
+- .context/plans/dynamic-tools/tasks.json (marked task 012 as passing)
+
+### Next recommended task:
+- Task 013: Add integration methods to MastraClient SDK
+  This is the next P0 task that depends on task 012. It will extend the JavaScript client SDK with methods for integration management.
+  This will enable the frontend (playground) to interact with the integration API endpoints.
+
