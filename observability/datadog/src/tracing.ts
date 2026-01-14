@@ -677,11 +677,9 @@ export class DatadogExporter extends BaseExporter {
           metricType: 'score',
           mlApp: this.config.mlApp,
           value: score.score,
-          // Include reason and metadata as tags for searchability
           tags: {
             scorerId: score.scorerId,
-            ...(score.metadata ? score.metadata : {}),
-            ...(score.reason ? { reason: score.reason } : {}),
+            ...(span.metadata?.sessionId ? { sessionId: span.metadata.sessionId } : {}),
           },
         });
 

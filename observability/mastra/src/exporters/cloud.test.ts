@@ -1,4 +1,4 @@
-import type { TracingEvent, AnyExportedSpan, CreateSpanOptions } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, CreateSpanOptions, SpanScore } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 
 import { fetchWithRetry } from '@mastra/core/utils';
@@ -23,7 +23,7 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
 }
 
 function getMockSpan<TType extends SpanType>(
-  options: CreateSpanOptions<TType> & { id: string; traceId: string },
+  options: CreateSpanOptions<TType> & { id: string; traceId: string; scores?: SpanScore[] },
 ): AnyExportedSpan {
   return {
     ...options,
@@ -32,6 +32,7 @@ function getMockSpan<TType extends SpanType>(
     isEvent: options.isEvent ?? false,
     isRootSpan: true,
     parentSpanId: undefined,
+    scores: options.scores,
   };
 }
 
@@ -89,7 +90,24 @@ describe('CloudExporter', () => {
       expect(addToBufferSpy).not.toHaveBeenCalled();
     });
 
-    it('should ignore SPAN_UPDATED events', async () => {
+    it('should handle SPAN_UPDATED events with scores via handleSpanUpdate', async () => {
+      const spanWithScores = {
+        ...mockSpan,
+        scores: [{ scorerId: 's1', scorerName: 'Test', score: 0.9, timestamp: Date.now() }],
+      };
+      const spanUpdatedEvent: TracingEvent = {
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithScores,
+      };
+
+      const handleSpanUpdateSpy = vi.spyOn(exporter as any, 'handleSpanUpdate');
+
+      await exporter.exportTracingEvent(spanUpdatedEvent);
+
+      expect(handleSpanUpdateSpy).toHaveBeenCalledWith(spanWithScores);
+    });
+
+    it('should ignore SPAN_UPDATED events without scores', async () => {
       const spanUpdatedEvent: TracingEvent = {
         type: TracingEventType.SPAN_UPDATED,
         exportedSpan: mockSpan,
@@ -116,7 +134,7 @@ describe('CloudExporter', () => {
       // Access private buffer to check size
       const buffer = (exporter as any).buffer;
       expect(buffer.totalSize).toBe(1); // Only SPAN_ENDED should be counted
-      expect(buffer.spans).toHaveLength(1);
+      expect(buffer.spans.size).toBe(1);
     });
   });
 
@@ -134,7 +152,7 @@ describe('CloudExporter', () => {
     it('should initialize buffer with empty state', () => {
       const buffer = (exporter as any).buffer;
 
-      expect(buffer.spans).toEqual([]);
+      expect(buffer.spans.size).toBe(0);
       expect(buffer.totalSize).toBe(0);
       expect(buffer.firstEventTime).toBeUndefined();
     });
@@ -206,7 +224,7 @@ describe('CloudExporter', () => {
       });
 
       const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
+      const spanRecord = buffer.spans.get(mockSpan.id);
 
       expect(spanRecord).toMatchObject({
         traceId: mockSpan.traceId,
@@ -231,13 +249,13 @@ describe('CloudExporter', () => {
       const resetBuffer = (exporter as any).resetBuffer.bind(exporter);
 
       // Simulate buffer with data
-      buffer.spans = [{ id: 'test' }];
+      buffer.spans.set('test', { spanId: 'test' });
       buffer.totalSize = 1;
       buffer.firstEventTime = new Date();
 
       resetBuffer();
 
-      expect(buffer.spans).toEqual([]);
+      expect(buffer.spans.size).toBe(0);
       expect(buffer.totalSize).toBe(0);
       expect(buffer.firstEventTime).toBeUndefined();
     });
@@ -260,7 +278,7 @@ describe('CloudExporter', () => {
       });
 
       const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
+      const spanRecord = buffer.spans.get('child-span');
 
       expect(spanRecord.parentSpanId).toBe('parent-span');
     });
@@ -907,6 +925,176 @@ describe('CloudExporter', () => {
       // Should not call clearTimeout when timer is already null
       expect(clearTimeoutSpy).not.toHaveBeenCalled();
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
+    });
+  });
+
+  describe('Score Handling', () => {
+    const mockSpan = getMockSpan({
+      id: 'span-123',
+      name: 'test-agent-run',
+      type: SpanType.AGENT_RUN,
+      isEvent: false,
+      traceId: 'trace-456',
+      input: { prompt: 'test' },
+      output: { response: 'result' },
+    });
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+    });
+
+    it('should include scores when span has scores on span_ended', async () => {
+      const spanWithScores = getMockSpan({
+        id: 'span-with-scores',
+        name: 'test-agent-run',
+        type: SpanType.AGENT_RUN,
+        isEvent: false,
+        traceId: 'trace-456',
+        scores: [{ scorerId: 's1', scorerName: 'Quality', score: 0.9, timestamp: Date.now() }],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithScores,
+      });
+
+      await (exporter as any).flush();
+
+      const callArgs = mockFetchWithRetry.mock.calls[0];
+      const requestOptions = callArgs[1] as RequestInit;
+      const requestBody = JSON.parse(requestOptions.body as string);
+
+      expect(requestBody.spans[0].scores).toHaveLength(1);
+      expect(requestBody.spans[0].scores[0]).toMatchObject({
+        scorerId: 's1',
+        scorerName: 'Quality',
+        score: 0.9,
+      });
+    });
+
+    it('should update buffered span when SPAN_UPDATED arrives before flush', async () => {
+      // Span ends without scores
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+
+      // Score arrives before flush
+      const updatedSpan = {
+        ...mockSpan,
+        scores: [{ scorerId: 's1', scorerName: 'Late', score: 0.8, timestamp: Date.now() }],
+      };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: updatedSpan,
+      });
+
+      await (exporter as any).flush();
+
+      const callArgs = mockFetchWithRetry.mock.calls[0];
+      const requestOptions = callArgs[1] as RequestInit;
+      const requestBody = JSON.parse(requestOptions.body as string);
+
+      expect(requestBody.spans).toHaveLength(1);
+      expect(requestBody.spans[0].scores[0].scorerName).toBe('Late');
+    });
+
+    it('should queue score update when SPAN_UPDATED arrives after flush', async () => {
+      // Span ends and gets flushed
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+      await (exporter as any).flush();
+
+      mockFetchWithRetry.mockClear();
+
+      // Score arrives after flush
+      const updatedSpan = {
+        ...mockSpan,
+        scores: [{ scorerId: 's1', scorerName: 'Late', score: 0.8, timestamp: Date.now() }],
+      };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: updatedSpan,
+      });
+
+      await (exporter as any).flush();
+
+      const callArgs = mockFetchWithRetry.mock.calls[0];
+      const requestOptions = callArgs[1] as RequestInit;
+      const requestBody = JSON.parse(requestOptions.body as string);
+
+      expect(requestBody.spans).toHaveLength(1);
+      expect(requestBody.spans[0].updatedAt).not.toBeNull();
+      expect(requestBody.spans[0].scores[0].scorerName).toBe('Late');
+    });
+
+    it('should not process SPAN_UPDATED without scores', async () => {
+      const handleSpanUpdateSpy = vi.spyOn(exporter as any, 'handleSpanUpdate');
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: mockSpan,
+      });
+
+      expect(handleSpanUpdateSpy).toHaveBeenCalled();
+      // Buffer should still be empty since there are no scores
+      const buffer = (exporter as any).buffer;
+      expect(buffer.spans.size).toBe(0);
+    });
+
+    it('should schedule flush when score update is first item in buffer', async () => {
+      // First flush the initial span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+      await (exporter as any).flush();
+
+      const scheduleFlushSpy = vi.spyOn(exporter as any, 'scheduleFlush');
+
+      // Score arrives after flush - should be first item in new buffer
+      const updatedSpan = {
+        ...mockSpan,
+        scores: [{ scorerId: 's1', scorerName: 'Late', score: 0.8, timestamp: Date.now() }],
+      };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: updatedSpan,
+      });
+
+      expect(scheduleFlushSpy).toHaveBeenCalled();
+    });
+
+    it('should include multiple scores in span record', async () => {
+      const spanWithMultipleScores = getMockSpan({
+        id: 'span-multi-scores',
+        name: 'test-agent-run',
+        type: SpanType.AGENT_RUN,
+        isEvent: false,
+        traceId: 'trace-456',
+        scores: [
+          { scorerId: 's1', scorerName: 'Quality', score: 0.9, timestamp: Date.now() },
+          { scorerId: 's2', scorerName: 'Relevance', score: 0.85, timestamp: Date.now() + 1 },
+        ],
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithMultipleScores,
+      });
+
+      await (exporter as any).flush();
+
+      const callArgs = mockFetchWithRetry.mock.calls[0];
+      const requestOptions = callArgs[1] as RequestInit;
+      const requestBody = JSON.parse(requestOptions.body as string);
+
+      expect(requestBody.spans[0].scores).toHaveLength(2);
+      expect(requestBody.spans[0].scores[0].scorerName).toBe('Quality');
+      expect(requestBody.spans[0].scores[1].scorerName).toBe('Relevance');
     });
   });
 });

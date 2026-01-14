@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
 import { TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent, AnyExportedSpan } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, SpanScore } from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
@@ -17,7 +17,7 @@ export interface CloudExporterConfig extends BaseExporterConfig {
 }
 
 interface MastraCloudBuffer {
-  spans: MastraCloudSpanRecord[];
+  spans: Map<string, MastraCloudSpanRecord>;
   firstEventTime?: Date;
   totalSize: number;
 }
@@ -38,6 +38,7 @@ interface MastraCloudSpanRecord {
   isEvent: boolean;
   createdAt: Date;
   updatedAt: Date | null;
+  scores?: SpanScore[];
 }
 
 export class CloudExporter extends BaseExporter {
@@ -69,13 +70,19 @@ export class CloudExporter extends BaseExporter {
     };
 
     this.buffer = {
-      spans: [],
+      spans: new Map(),
       totalSize: 0,
     };
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    // Cloud Observability only process SPAN_ENDED events
+    // Handle SPAN_UPDATED for late-arriving scores
+    if (event.type === TracingEventType.SPAN_UPDATED) {
+      this.handleSpanUpdate(event.exportedSpan);
+      return;
+    }
+
+    // Cloud Observability only processes SPAN_ENDED events
     if (event.type !== TracingEventType.SPAN_ENDED) {
       return;
     }
@@ -100,7 +107,7 @@ export class CloudExporter extends BaseExporter {
     }
 
     const spanRecord = this.formatSpan(event.exportedSpan);
-    this.buffer.spans.push(spanRecord);
+    this.buffer.spans.set(spanRecord.spanId, spanRecord);
     this.buffer.totalSize++;
   }
 
@@ -121,9 +128,35 @@ export class CloudExporter extends BaseExporter {
       isEvent: span.isEvent,
       createdAt: new Date(),
       updatedAt: null,
+      scores: span.scores,
     };
 
     return spanRecord;
+  }
+
+  private handleSpanUpdate(span: AnyExportedSpan): void {
+    if (!span.scores?.length) return;
+
+    // Check if span is still in buffer (O(1) lookup with Map)
+    const bufferedSpan = this.buffer.spans.get(span.id);
+    if (bufferedSpan) {
+      // Update buffered span's scores
+      bufferedSpan.scores = span.scores;
+      return;
+    }
+
+    // Span not in buffer = already flushed (SPAN_ENDED always comes before SPAN_UPDATED with scores)
+    // Queue score update for next batch - reuse formatSpan to avoid hardcoding
+    const updateRecord = this.formatSpan(span);
+    updateRecord.updatedAt = new Date(); // Mark as update so cloud API can merge
+
+    this.buffer.spans.set(span.id, updateRecord);
+    this.buffer.totalSize++;
+
+    // Schedule flush if this is the first item
+    if (this.buffer.totalSize === 1) {
+      this.scheduleFlush();
+    }
   }
 
   private shouldFlush(): boolean {
@@ -175,7 +208,7 @@ export class CloudExporter extends BaseExporter {
     }
 
     const startTime = Date.now();
-    const spansCopy = [...this.buffer.spans];
+    const spansCopy = Array.from(this.buffer.spans.values());
     const flushReason = this.buffer.totalSize >= this.config.maxBatchSize ? 'size' : 'time';
 
     // Reset buffer immediately to prevent blocking new events
@@ -223,12 +256,11 @@ export class CloudExporter extends BaseExporter {
       headers,
       body: JSON.stringify({ spans }),
     };
-
     await fetchWithRetry(this.config.endpoint, options, this.config.maxRetries);
   }
 
   private resetBuffer(): void {
-    this.buffer.spans = [];
+    this.buffer.spans.clear();
     this.buffer.firstEventTime = undefined;
     this.buffer.totalSize = 0;
   }
