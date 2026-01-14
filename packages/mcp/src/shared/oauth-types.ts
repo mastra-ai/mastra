@@ -211,6 +211,11 @@ export function generateProtectedResourceMetadata(config: MCPServerOAuthConfig):
 export function extractBearerToken(authHeader: string | null | undefined): string | undefined {
   if (!authHeader) return undefined;
 
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match?.[1];
+  // Case-insensitive check for "Bearer " prefix (safer than regex to avoid ReDoS)
+  const prefix = 'bearer ';
+  if (authHeader.length <= prefix.length) return undefined;
+  if (authHeader.slice(0, prefix.length).toLowerCase() !== prefix) return undefined;
+
+  const token = authHeader.slice(prefix.length).trim();
+  return token || undefined;
 }
