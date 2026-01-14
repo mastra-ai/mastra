@@ -1,12 +1,12 @@
-import { DynamicForm } from '@/components/dynamic-form';
-import { CopyButton } from '@/components/ui/copy-button';
+import { DynamicForm } from '@/lib/form';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { ZodType } from 'zod';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { MCPToolType } from '@mastra/core/mcp';
-import { MainContentContent } from '@/components/ui/containers/MainContent';
+import { MainContentContent } from '@/ds/components/MainContent';
 
 interface ToolExecutorProps {
   isExecutingTool: boolean;
