@@ -1,8 +1,4 @@
-# PR
-
-The user will issue this command. You will need to do two things.
-
-## Create a changeset file
+# Changeset
 
 Create a changeset in `.changeset`, ensuring the naming convention for the changeset file is inline with other changesets in the `.changeset` folder.
 
@@ -31,13 +27,3 @@ The body of the changeset should follow these guidelines:
 - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
 - For larger, more substantial changes, also answer the "Why" behind the changes
 - Check that the description inside the changeset file only applies to the packages listed in the frontmatter. Do not allow descriptions that mention changes to packages not listed in the frontmatter. In these cases, you must create a separate changeset file for those packages.
-
-## Open a PR using the GitHub CLI
-
-Use gh cli to open a PR for the current branch in the user's browser. Do not open it directly, use the web option that opens it in the browser so the user can edit the title/description if needed.
-
-Add a descriptive/concise title, use conventional commits in the title (e.g. "fix: title here" or "feat(pkg-name): title here").
-
-Add a concise, humble PR description without flowery or overly verbose language.
-Keep it casual/friendly but get to the point. Show simple code examples before/after for fixes, or just after examples for new features.
-Do not add lists or headings. Keep it simple and to the point.
