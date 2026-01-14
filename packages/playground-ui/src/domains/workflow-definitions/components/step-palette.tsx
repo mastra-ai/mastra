@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Bot, Wrench, Workflow, ArrowRightLeft, Pause, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 
 // Types for the palette
 export interface StepPaletteItem {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronRight, ChevronDown, Database, Copy, Check, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/ds/components/Input';
 import { useSelectedNodeDataContext, type DataSource, type DataField } from '../../hooks/use-data-context';
 
 // ============================================================================

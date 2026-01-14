@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import type { VariableRef } from '../../types';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
 import { cn } from '@/lib/utils';
 import { useSelectedNodeDataContext } from '../../hooks/use-data-context';
 

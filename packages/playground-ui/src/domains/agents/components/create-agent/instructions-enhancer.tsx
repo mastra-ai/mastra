@@ -5,10 +5,10 @@ import { RefreshCcwIcon, Sparkles, ChevronDown } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
-import { Input } from '@/components/ui/input';
-import Spinner from '@/components/ui/spinner';
+import { Input } from '@/ds/components/Input';
+import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 
 import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
 import { useAgent } from '../../hooks/use-agent';

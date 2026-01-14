@@ -9,9 +9,9 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from '@/ds/components/Dialog';
 import { Button } from '@/ds/components/Button';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/ds/components/Label';
 import { toast } from '@/lib/toast';
 
 interface SaveVersionDialogProps {

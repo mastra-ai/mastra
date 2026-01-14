@@ -2,8 +2,8 @@ import { useCallback } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { BuilderNode, ParallelNodeData, ParallelBranch } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/ds/components/Label';
+import { Textarea } from '@/ds/components/Textarea';
 import { cn } from '@/lib/utils';
 
 export interface ParallelConfigProps {

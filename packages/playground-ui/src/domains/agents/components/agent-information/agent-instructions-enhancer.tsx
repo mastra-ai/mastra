@@ -16,7 +16,7 @@ import { useAgent } from '../../hooks/use-agent';
 import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
 import { cleanProviderId } from '../agent-metadata/utils';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useAllModels, ModelInfo } from '../model-picker/use-model-picker';
 
 export const PromptEnhancer = ({ agentId }: { agentId: string }) => {

@@ -6,7 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from '@/ds/components/Dialog';
 import { Button } from '@/ds/components/Button';
 import { useWorkflowDefinitionMutations } from '../hooks';
 

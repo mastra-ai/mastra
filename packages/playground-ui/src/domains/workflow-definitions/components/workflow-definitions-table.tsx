@@ -8,11 +8,11 @@ import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable, Row as TanStackRow } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/components/scrollable-container';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface WorkflowDefinition {
   id: string;

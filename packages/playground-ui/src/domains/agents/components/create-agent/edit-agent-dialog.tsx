@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/ds/components/Dialog';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { AgentForm } from './agent-form';
 import { DeleteAgentConfirm } from './delete-agent-confirm';
 import { useStoredAgent, useStoredAgentMutations } from '../../hooks/use-stored-agents';

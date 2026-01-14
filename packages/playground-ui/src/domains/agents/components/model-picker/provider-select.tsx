@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/ds/components/Input';
 import { Info } from 'lucide-react';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cleanProviderId } from '../agent-metadata/utils';
 import { Provider } from '@mastra/client-js';
 import { useFilteredProviders } from './use-model-picker';

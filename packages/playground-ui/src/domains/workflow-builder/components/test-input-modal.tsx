@@ -2,9 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { Play, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ds/components/Button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { Textarea } from '@/ds/components/Textarea';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { useTestRunnerStore } from '../store/test-runner-store';
 

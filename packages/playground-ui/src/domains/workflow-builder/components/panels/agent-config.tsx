@@ -3,9 +3,9 @@ import type { BuilderNode, AgentNodeData } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
 import { usePredecessorIds } from '../../hooks/use-graph-utils';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/ds/components/Input';
+import { Textarea } from '@/ds/components/Textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import {
   ConfigField,
   ConfigInfoBox,

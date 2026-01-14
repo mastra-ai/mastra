@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/ds/components/Label';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

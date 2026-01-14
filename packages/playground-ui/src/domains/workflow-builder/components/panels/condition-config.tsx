@@ -3,8 +3,8 @@ import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import type { BuilderNode, ConditionNodeData, ConditionBranch } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
 import { usePredecessorSet } from '../../hooks/use-graph-utils';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/ds/components/Label';
+import { Textarea } from '@/ds/components/Textarea';
 import { cn } from '@/lib/utils';
 
 // ============================================================================

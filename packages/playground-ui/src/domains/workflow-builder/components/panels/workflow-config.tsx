@@ -2,9 +2,9 @@ import { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { BuilderNode, WorkflowNodeData } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/ds/components/Label';
+import { Textarea } from '@/ds/components/Textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export interface WorkflowConfigProps {

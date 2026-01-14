@@ -3,10 +3,10 @@ import type { BuilderNode, ToolNodeData } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
 import { usePredecessorIds } from '../../hooks/use-graph-utils';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { Textarea } from '@/ds/components/Textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { ConfigField, OutputReference, SectionHeader, type DataReference } from './shared';
 import { Loader2, ChevronDown, ChevronRight, AlertCircle, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 

@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import type { BuilderNode, TriggerNodeData } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { Textarea } from '@/ds/components/Textarea';
 import { VisualSchemaEditor } from './visual-schema-editor';
 
 export interface TriggerConfigProps {

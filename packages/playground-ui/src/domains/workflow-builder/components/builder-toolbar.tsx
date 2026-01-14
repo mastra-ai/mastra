@@ -3,8 +3,8 @@ import { ArrowLeft, Undo2, Redo2, Save, Loader2, AlertTriangle, Keyboard } from 
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { useWorkflowDefinitionMutations } from '@/domains/workflow-definitions/hooks';
 import { Button } from '@/ds/components/Button';
-import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from '@/ds/components/Input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 import { useLinkComponent } from '@/lib/framework';
 import { serializeGraph } from '../utils/serialize';

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { MessageSquare, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from '@/ds/components/Textarea';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
 
 // ============================================================================
