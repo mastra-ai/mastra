@@ -4,7 +4,7 @@ import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { Button } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';

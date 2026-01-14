@@ -1,11 +1,11 @@
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
-import { AutoForm } from '@/ds/components/AutoForm';
+import { AutoForm } from './auto-form';
 import type { ExtendableAutoFormProps } from '@autoform/react';
 import z, { ZodObject, ZodIntersection } from 'zod';
 import { Label } from '@/ds/components/Label';
 import { Icon } from '@/ds/icons';
-import { CustomZodProvider } from '@/ds/components/AutoForm/zod-provider';
+import { CustomZodProvider } from './zod-provider';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;

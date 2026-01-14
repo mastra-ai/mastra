@@ -1,4 +1,4 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import { DynamicForm } from '@/lib/form';
 import { Button } from '@/ds/components/Button/Button';
 import { CodeEditor, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';

@@ -1,6 +1,7 @@
 import { buildZodFieldConfig } from '@autoform/react';
 import { FieldTypes } from './auto-form';
 import { FieldConfig } from '@autoform/core';
+import { z } from 'zod';
 
 // @ts-ignore
 export const fieldConfig: FieldConfig = buildZodFieldConfig<
@@ -44,4 +45,15 @@ export function removeEmptyValues<T extends Record<string, any>>(values: T): Par
   }
 
   return result;
+}
+
+/**
+ * Resolve serialized zod output - This function takes the string output of the `jsonSchemaToZod` function
+ * and instantiates the zod object correctly.
+ *
+ * @param obj - serialized zod object
+ * @returns resolved zod object
+ */
+export function resolveSerializedZodOutput(obj: any) {
+  return Function('z', `"use strict";return (${obj});`)(z);
 }

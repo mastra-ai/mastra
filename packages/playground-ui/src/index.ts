@@ -6,8 +6,7 @@ export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
-export * from './components/dynamic-form/index';
-export * from './components/threads';
+export * from './ds/components/Threads';
 export * from './types';
 
 // DS Components - Existing
@@ -69,8 +68,8 @@ export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
 
-// DS Components - Migrated AutoForm
-export * from './ds/components/AutoForm';
+// Form utilities (AutoForm)
+export * from './lib/form';
 
 // DS Icons
 export * from './ds/icons/index';
@@ -82,10 +81,10 @@ export * from './lib/tanstack-query';
 export * from './domains/memory/hooks';
 export * from './store/playground-store';
 export * from './lib/framework';
-export { MemorySearch } from './components/assistant-ui/memory-search';
+export { MemorySearch } from './lib/ai-ui/memory-search';
 export * from './domains/conversation/index';
 export * from './lib/errors';
-export * from './components/assistant-ui/tools/tool-fallback';
+export * from './lib/ai-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
