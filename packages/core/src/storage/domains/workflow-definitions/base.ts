@@ -30,7 +30,7 @@ export interface WorkflowDefinitionVersion {
   createdAt: Date;
 }
 
-export interface CreateVersionInput {
+export interface CreateWorkflowDefinitionVersionInput {
   id: string;
   workflowDefinitionId: string;
   versionNumber: number;
@@ -40,7 +40,7 @@ export interface CreateVersionInput {
   changeMessage?: string;
 }
 
-export interface ListVersionsInput {
+export interface ListWorkflowDefinitionVersionsInput {
   workflowDefinitionId: string;
   page?: number;
   perPage?: number | false;
@@ -50,7 +50,7 @@ export interface ListVersionsInput {
   };
 }
 
-export interface ListVersionsOutput {
+export interface ListWorkflowDefinitionVersionsOutput {
   versions: WorkflowDefinitionVersion[];
   total: number;
   page: number;
@@ -92,7 +92,7 @@ export abstract class WorkflowDefinitionsStorage extends StorageDomain {
 
   // ==================== Version Methods ====================
 
-  abstract createVersion(input: CreateVersionInput): Promise<WorkflowDefinitionVersion>;
+  abstract createVersion(input: CreateWorkflowDefinitionVersionInput): Promise<WorkflowDefinitionVersion>;
 
   abstract getVersion(id: string): Promise<WorkflowDefinitionVersion | null>;
 
@@ -103,7 +103,7 @@ export abstract class WorkflowDefinitionsStorage extends StorageDomain {
 
   abstract getLatestVersion(workflowDefinitionId: string): Promise<WorkflowDefinitionVersion | null>;
 
-  abstract listVersions(input: ListVersionsInput): Promise<ListVersionsOutput>;
+  abstract listVersions(input: ListWorkflowDefinitionVersionsInput): Promise<ListWorkflowDefinitionVersionsOutput>;
 
   abstract deleteVersion(id: string): Promise<void>;
 

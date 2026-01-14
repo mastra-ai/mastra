@@ -11,9 +11,9 @@ import type { InMemoryDB } from '../inmemory-db';
 import {
   WorkflowDefinitionsStorage,
   type WorkflowDefinitionVersion,
-  type CreateVersionInput,
-  type ListVersionsInput,
-  type ListVersionsOutput,
+  type CreateWorkflowDefinitionVersionInput,
+  type ListWorkflowDefinitionVersionsInput,
+  type ListWorkflowDefinitionVersionsOutput,
 } from './base';
 
 /**
@@ -170,7 +170,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
 
   // ==================== Version Methods ====================
 
-  async createVersion(input: CreateVersionInput): Promise<WorkflowDefinitionVersion> {
+  async createVersion(input: CreateWorkflowDefinitionVersionInput): Promise<WorkflowDefinitionVersion> {
     this.logger.debug(
       `InMemoryWorkflowDefinitionsStorage: createVersion called for ${input.workflowDefinitionId} v${input.versionNumber}`,
     );
@@ -224,7 +224,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
     return latest ? structuredClone(latest) : null;
   }
 
-  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+  async listVersions(input: ListWorkflowDefinitionVersionsInput): Promise<ListWorkflowDefinitionVersionsOutput> {
     const { workflowDefinitionId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
 

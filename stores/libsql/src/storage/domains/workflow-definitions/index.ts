@@ -19,9 +19,9 @@ import type {
 } from '@mastra/core/storage';
 import type {
   WorkflowDefinitionVersion,
-  CreateVersionInput,
-  ListVersionsInput,
-  ListVersionsOutput,
+  CreateWorkflowDefinitionVersionInput,
+  ListWorkflowDefinitionVersionsInput,
+  ListWorkflowDefinitionVersionsOutput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -387,7 +387,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
 
   // ==================== Version Methods ====================
 
-  async createVersion(input: CreateVersionInput): Promise<WorkflowDefinitionVersion> {
+  async createVersion(input: CreateWorkflowDefinitionVersionInput): Promise<WorkflowDefinitionVersion> {
     try {
       const now = new Date();
 
@@ -497,7 +497,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     }
   }
 
-  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+  async listVersions(input: ListWorkflowDefinitionVersionsInput): Promise<ListWorkflowDefinitionVersionsOutput> {
     const { workflowDefinitionId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
 
