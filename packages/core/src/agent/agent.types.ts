@@ -141,6 +141,21 @@ export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
  */
 export type MultiPrimitiveExecutionOptions<OUTPUT extends OutputSchema = undefined> = NetworkOptions<OUTPUT>;
 
+/**
+ * Configuration for stopping execution after a tool returns a result.
+ * Used to skip additional LLM reasoning steps when tools return complete structured data.
+ *
+ * - `true` - Stop after any tool returns a result
+ * - `string` - Stop after a specific tool by name
+ * - `string[]` - Stop after any of the specified tools return a result
+ * - `(result: unknown, toolName: string) => boolean` - Custom predicate to check tool result
+ */
+export type StopAfterToolResultConfig =
+  | boolean
+  | string
+  | string[]
+  | ((result: unknown, toolName: string) => boolean | Promise<boolean>);
+
 export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
@@ -173,6 +188,45 @@ export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
 
   /** Conditions for stopping execution (e.g., step count, token limit) */
   stopWhen?: LoopOptions['stopWhen'];
+
+  /**
+   * Stop execution immediately after a tool returns a result.
+   * Skips additional LLM reasoning steps after tool completion.
+   * Useful when tools return complete structured data that doesn't need summarization.
+   *
+   * - `true` - Stop after any tool returns a result
+   * - `string` - Stop after a specific tool by name
+   * - `string[]` - Stop after any of the specified tools return a result
+   * - `(result: unknown, toolName: string) => boolean` - Custom predicate to check tool result
+   *
+   * @example
+   * ```typescript
+   * // Stop after any tool result
+   * const result = await agent.generate('Get project info', {
+   *   stopAfterToolResult: true,
+   * });
+   *
+   * // Stop after specific tool
+   * const result = await agent.generate('Get data', {
+   *   stopAfterToolResult: 'fetchData',
+   * });
+   *
+   * // Stop after any of these tools
+   * const result = await agent.generate('Query', {
+   *   stopAfterToolResult: ['getData', 'fetchRecords'],
+   * });
+   *
+   * // Custom predicate
+   * const result = await agent.generate('Get info', {
+   *   stopAfterToolResult: (result, toolName) => {
+   *     return toolName === 'fetchData' && result?.success === true;
+   *   },
+   * });
+   * ```
+   *
+   * @default undefined (do not stop after tool results)
+   */
+  stopAfterToolResult?: StopAfterToolResultConfig;
 
   /** Provider-specific options passed to the language model */
   providerOptions?: ProviderOptions;

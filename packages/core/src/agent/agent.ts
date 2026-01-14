@@ -56,7 +56,9 @@ import type {
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
+  StopAfterToolResultConfig,
 } from './agent.types';
+import { mergeStopConditions } from './stop-after-tool-result';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -138,6 +140,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
+  #stopAfterToolResult?: StopAfterToolResultConfig;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -265,6 +268,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     if (config.maxProcessorRetries !== undefined) {
       this.#maxProcessorRetries = config.maxProcessorRetries;
+    }
+
+    if (config.stopAfterToolResult !== undefined) {
+      this.#stopAfterToolResult = config.stopAfterToolResult;
     }
 
     // @ts-ignore Flag for agent network messages
@@ -3251,9 +3258,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: options?.requestContext,
     });
+
+    // Determine effective stopAfterToolResult (options override agent config)
+    const effectiveStopAfterToolResult = options?.stopAfterToolResult ?? this.#stopAfterToolResult;
+
+    // Merge stopAfterToolResult with existing stopWhen conditions
+    const mergedStopWhen = mergeStopConditions(
+      effectiveStopAfterToolResult,
+      options?.stopWhen ?? defaultOptions?.stopWhen,
+    );
+
     const mergedOptions = {
       ...defaultOptions,
       ...(options ?? {}),
+      stopWhen: mergedStopWhen,
     };
 
     const llm = await this.getLLM({
@@ -3330,9 +3348,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });
+
+    // Determine effective stopAfterToolResult (options override agent config)
+    const effectiveStopAfterToolResult = streamOptions?.stopAfterToolResult ?? this.#stopAfterToolResult;
+
+    // Merge stopAfterToolResult with existing stopWhen conditions
+    const mergedStopWhen = mergeStopConditions(
+      effectiveStopAfterToolResult,
+      streamOptions?.stopWhen ?? defaultOptions?.stopWhen,
+    );
+
     const mergedOptions = {
       ...defaultOptions,
       ...(streamOptions ?? {}),
+      stopWhen: mergedStopWhen,
     };
 
     const llm = await this.getLLM({
@@ -3413,9 +3442,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext: streamOptions?.requestContext,
     });
 
+    // Determine effective stopAfterToolResult (options override agent config)
+    const effectiveStopAfterToolResult = streamOptions?.stopAfterToolResult ?? this.#stopAfterToolResult;
+
+    // Merge stopAfterToolResult with existing stopWhen conditions
+    const mergedStopWhen = mergeStopConditions(
+      effectiveStopAfterToolResult,
+      streamOptions?.stopWhen ?? defaultOptions?.stopWhen,
+    );
+
     let mergedStreamOptions = {
       ...defaultOptions,
       ...streamOptions,
+      stopWhen: mergedStopWhen,
     };
 
     const llm = await this.getLLM({
@@ -3491,9 +3530,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext: options?.requestContext,
     });
 
+    // Determine effective stopAfterToolResult (options override agent config)
+    const effectiveStopAfterToolResult = options?.stopAfterToolResult ?? this.#stopAfterToolResult;
+
+    // Merge stopAfterToolResult with existing stopWhen conditions
+    const mergedStopWhen = mergeStopConditions(
+      effectiveStopAfterToolResult,
+      options?.stopWhen ?? defaultOptions?.stopWhen,
+    );
+
     const mergedOptions = {
       ...defaultOptions,
       ...(options ?? {}),
+      stopWhen: mergedStopWhen,
     };
 
     const llm = await this.getLLM({

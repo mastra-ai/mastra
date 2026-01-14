@@ -501,6 +501,13 @@ const stream = await agent.stream("message for agent");
         "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
+      name: "stopAfterToolResult",
+      type: "boolean | string | string[] | ((result: unknown, toolName: string) => boolean | Promise<boolean>)",
+      isOptional: true,
+      description:
+        "Stop execution immediately after a tool returns a result, skipping additional LLM reasoning steps. Useful when tools return complete structured data that doesn't need summarization. Can be `true` (stop after any tool), a tool name string, an array of tool names, or a custom predicate function.",
+    },
+    {
       name: "providerOptions",
       type: "Record<string, Record<string, JSONValue>>",
       isOptional: true,
@@ -781,6 +788,50 @@ await agent.stream("message for agent", {
     new ModerationProcessor({ model: "openrouter/openai/gpt-oss-safeguard-20b" }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
   ],
+});
+```
+
+### Stop After Tool Result
+
+Use `stopAfterToolResult` to skip additional LLM reasoning steps after a tool returns a complete structured result. This reduces token usage and latency when tools return data that doesn't need summarization.
+
+```ts title="index.ts"
+// Stop after any tool result
+const stream = await agent.stream("Get project info", {
+  stopAfterToolResult: true,
+});
+
+// Stop after a specific tool
+const stream = await agent.stream("Fetch user data", {
+  stopAfterToolResult: "fetchData",
+});
+
+// Stop after any of these tools
+const stream = await agent.stream("Query database", {
+  stopAfterToolResult: ["getData", "fetchRecords"],
+});
+
+// Custom predicate function
+const stream = await agent.stream("Get info", {
+  stopAfterToolResult: (result, toolName) => {
+    // Only stop if the result has a success flag
+    return toolName === "fetchData" && result?.success === true;
+  },
+});
+```
+
+You can also set this as a default in the agent configuration:
+
+```ts title="src/mastra/agents/data-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const dataAgent = new Agent({
+  id: "data-agent",
+  name: "Data Agent",
+  instructions: "You fetch data from APIs",
+  model: "openai/gpt-5.1",
+  tools: { fetchData, queryDb },
+  stopAfterToolResult: true, // Applied to all generate/stream calls
 });
 ```
 

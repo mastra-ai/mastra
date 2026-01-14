@@ -36,7 +36,7 @@ import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions, StopAfterToolResultConfig } from './agent.types';
 import type { MessageList } from './message-list/index';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
@@ -236,6 +236,32 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
+  /**
+   * Stop execution immediately after a tool returns a result.
+   * Skips additional LLM reasoning steps after tool completion.
+   * Useful when tools return complete structured data that doesn't need summarization.
+   *
+   * This setting is applied as the default for all generate/stream calls.
+   * Can be overridden per-call via execution options.
+   *
+   * - `true` - Stop after any tool returns a result
+   * - `string` - Stop after a specific tool by name
+   * - `string[]` - Stop after any of the specified tools return a result
+   * - `(result: unknown, toolName: string) => boolean` - Custom predicate to check tool result
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   id: 'data-fetcher',
+   *   model: openai('gpt-4o-mini'),
+   *   tools: { fetchData },
+   *   stopAfterToolResult: true, // Stop after any tool result
+   * });
+   * ```
+   *
+   * @default undefined (do not stop after tool results)
+   */
+  stopAfterToolResult?: StopAfterToolResultConfig;
   /**
    * Options to pass to the agent upon creation.
    */

@@ -227,6 +227,13 @@ export const agent = new Agent({
       description:
         "Maximum number of times a processor can request retrying the LLM step.",
     },
+    {
+      name: "stopAfterToolResult",
+      type: "boolean | string | string[] | ((result: unknown, toolName: string) => boolean | Promise<boolean>)",
+      isOptional: true,
+      description:
+        "Stop execution immediately after a tool returns a result, skipping additional LLM reasoning steps. Useful when tools return complete structured data that doesn't need summarization. Can be `true` (stop after any tool), a tool name string, an array of tool names, or a custom predicate function.",
+    },
   ]}
 />
 
