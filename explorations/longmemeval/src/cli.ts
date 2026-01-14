@@ -20,6 +20,7 @@ import { DeterministicIdsCommand } from './commands/deterministic-ids';
 import { ListPartialCommand } from './commands/list-partial';
 import { TokensCommand } from './commands/tokens';
 import { PrecomputeEmbeddingsCommand } from './commands/precompute-embeddings';
+import { FindProhibitedCommand } from './commands/find-prohibited';
 import {
   getRunVariant,
   resolveConfigAlias,
@@ -1120,6 +1121,24 @@ program
         subset: options.subset,
         batchSize: options.batchSize,
         cooldown: options.cooldown,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('find-prohibited')
+  .description('Find messages that trigger Gemini PROHIBITED_CONTENT filter using binary search')
+  .requiredOption('-d, --dataset <dataset>', 'Dataset to use (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .requiredOption('-q, --question-id <id>', 'Question ID to analyze')
+  .action(async options => {
+    try {
+      const command = new FindProhibitedCommand();
+      await command.run({
+        dataset: options.dataset,
+        questionId: options.questionId,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
