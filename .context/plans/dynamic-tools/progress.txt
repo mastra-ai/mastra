@@ -832,3 +832,72 @@ Date: 2025-01-14
 - Integration CRUD operations invalidate both 'integrations' and 'tools' query keys
 - The hooks are ready to be used in UI components (tasks 017-024)
 
+
+## Task 017: Create provider list component - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/playground-ui/src/domains/integrations/components/provider-list.tsx
+- Built ProviderList component that displays integration providers with connection status
+- Built ProviderCard sub-component for individual provider display
+- Integrated Badge component for connection status (Connected/Not Connected with CheckIcon)
+- Integrated Txt component for typography (ui-lg for provider name, ui-sm for description)
+- Added loading state with Loader2 icon from lucide-react
+- Added empty state for when no providers are available
+- Implemented click handling for connected providers only
+- Added keyboard accessibility (Enter and Space keys trigger selection)
+- Integrated Tooltip component for disconnected providers with helpful ENV var message
+- Created components/index.ts to export provider-list
+- Updated domain index.ts to export components
+
+### Key implementation details:
+- Followed playground-ui/CLAUDE.md guidelines strictly:
+  - Used named exports only (no default exports)
+  - Used design tokens from @/ds (text-icon3, text-icon6, bg-surface3, bg-surface4, border-border1, border-border2)
+  - Used proper Txt variants (ui-lg, ui-sm, ui-md) - not arbitrary text sizes
+  - Used existing Badge component with proper variants (success, default)
+  - Used existing CheckIcon from @/ds/icons
+  - Used lucide-react for Loader2 icon
+  - Used Radix UI tooltip via @/components/ui/tooltip
+- Connected providers are clickable and show hover states
+- Disconnected providers are disabled (opacity-60, cursor-not-allowed) with tooltip
+- Tooltip message explains missing API key: "Set {PROVIDER}_API_KEY environment variable"
+- Selection state highlighted with border-accent1 and bg-surface4
+- Proper TypeScript types exported for ProviderListProps
+- Comprehensive JSDoc documentation on public component
+
+### Build/Test status:
+- Playground-ui package typecheck passes (pnpm typecheck)
+- Playground-ui package tests pass (18 tests passing)
+- Full monorepo build passes (pnpm build)
+- All acceptance criteria met:
+  ✓ Shows all providers (renders ProviderStatus array from useProviders hook)
+  ✓ Clearly indicates which are connected (Badge with "Connected" or "Not Connected")
+  ✓ Unconnected providers show helpful message about ENV var (Tooltip with clear instructions)
+
+### Files created:
+- packages/playground-ui/src/domains/integrations/components/provider-list.tsx (new - 138 lines)
+- packages/playground-ui/src/domains/integrations/components/index.ts (new)
+
+### Files modified:
+- packages/playground-ui/src/domains/integrations/index.ts (added export for components)
+- .context/plans/dynamic-tools/tasks.json (marked task 017 as passing)
+
+### Next recommended task:
+- Task 018: Create toolkit browser component
+  This is the next P1 UI task that depends on task 016 (hooks are ready). It will build the component
+  for browsing and selecting toolkits from a provider. This is a medium complexity task.
+  OR
+- Task 019: Create tool selector component
+  This can be started in parallel if working on multiple components at once, but toolkit browser
+  should be done first as tool selector depends on it.
+
+### Notes for next engineer:
+- The ProviderList component is ready to be integrated into the Add Tools dialog (task 020)
+- Component is fully accessible with keyboard navigation and screen reader support
+- Component follows all playground-ui standards and design system conventions
+- The component is stateless - parent manages selected provider state
+- Icon support was intentionally omitted as provider icons weren't prioritized in initial implementation
+- Future enhancement: Add provider-specific icons (ComposioIcon, ArcadeIcon) if needed
+
