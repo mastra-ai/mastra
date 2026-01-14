@@ -12,7 +12,7 @@
  */
 
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DuckDBVector } from '../vector/index.js';
 
 describe('DuckDBVector', () => {
