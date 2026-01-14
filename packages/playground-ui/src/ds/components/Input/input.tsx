@@ -2,15 +2,15 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import clsx from 'clsx';
+import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   'flex w-full text-neutral6 rounded-lg border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'border-sm border-border1 placeholder:text-neutral3',
-        filled: 'border-sm bg-inputFill border-border1 placeholder:text-neutral3',
+        default: 'border border-border1 placeholder:text-neutral3',
+        filled: 'border bg-inputFill border-border1 placeholder:text-neutral3',
         unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
       },
       customSize: {
@@ -36,7 +36,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={type}
-        className={clsx(className, inputVariants({ variant, customSize, className }))}
+        className={cn(className, inputVariants({ variant, customSize, className }))}
         data-testid={testId}
         ref={ref}
         {...props}

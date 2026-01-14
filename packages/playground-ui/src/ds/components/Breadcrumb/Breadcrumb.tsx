@@ -1,8 +1,8 @@
-import clsx from 'clsx';
 import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
+import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;
@@ -35,7 +35,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
       <li className="flex h-full shrink-0 items-center gap-1">
         <Root
           aria-current={isCurrent ? 'page' : undefined}
-          className={clsx(
+          className={cn(
             'text-ui-lg leading-ui-lg font-medium flex items-center gap-2',
             isCurrent ? 'text-white' : 'text-neutral3',
             className,
