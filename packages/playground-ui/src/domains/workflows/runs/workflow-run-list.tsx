@@ -74,7 +74,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                     <WorkflowRunStatusBadge status={run.snapshot.status} />
                   </div>
                 )}
-                <span className="truncate max-w-32 text-muted-foreground">{run.runId}</span>
+                <span className="truncate max-w-32 text-icon3">{run.runId}</span>
                 <span>
                   {typeof run?.snapshot === 'string'
                     ? ''

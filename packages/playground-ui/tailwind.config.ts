@@ -68,30 +68,6 @@ export default {
         ...Colors,
         ...IconColors,
         ...BorderColors,
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
-        },
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
-        },
-        accent: {
-          DEFAULT: 'hsla(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-        },
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
       },
       fontFamily: {
         serif: ['var(--tasa-explorer)', ...defaultFont.fontFamily.serif],
@@ -132,7 +108,7 @@ export default {
         'fade-in': {
           '0%': {
             opacity: '0.8',
-            backgroundColor: 'hsl(var(--muted))',
+            backgroundColor: '#1A1A1A',
           },
           '100%': {
             opacity: '1',

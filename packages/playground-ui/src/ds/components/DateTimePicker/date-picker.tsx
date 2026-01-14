@@ -22,7 +22,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         dropdown_month: 'w-full border-collapse space-y-1',
         weeknumber: 'flex',
         day: cn(
-          'relative p-0 text-center focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-md',
+          'relative p-0 text-center focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-surface5 [&:has([aria-selected].day-outside)]:bg-surface5/50 [&:has([aria-selected].day-range-end)]:rounded-r-md',
           props.mode === 'range'
             ? '[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md'
             : '[&:has([aria-selected])]:rounded-md',
@@ -31,14 +31,14 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start',
         day_range_end: 'day-range-end',
         day_selected:
-          '!bg-primary/50 !text-primary-foreground hover:bg-primary rounded-md hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground',
-        day_today: 'bg-primary/10 text-accent-foreground',
+          '!bg-icon6/50 !text-surface2 hover:bg-icon6 rounded-md hover:text-surface2 focus:bg-icon6 focus:text-surface2',
+        day_today: 'bg-icon6/10 text-icon5',
         day_outside:
-          'day-outside text-muted-foreground opacity-50  aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30',
-        day_disabled: 'text-muted-foreground opacity-50',
-        day_range_middle: 'aria-selected:bg-accent aria-selected:text-accent-foreground',
+          'day-outside text-icon3 opacity-50  aria-selected:bg-surface5/50 aria-selected:text-icon3 aria-selected:opacity-30',
+        day_disabled: 'text-icon3 opacity-50',
+        day_range_middle: 'aria-selected:bg-surface5 aria-selected:text-icon5',
         day_hidden: 'invisible',
-        head_cell: 'text-[0.625rem] text-muted-foreground',
+        head_cell: 'text-[0.625rem] text-icon3',
         ...classNames,
       }}
       {...props}

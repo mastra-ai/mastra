@@ -132,10 +132,10 @@ function ThreadTitle({ title, id }: { title?: string; id?: string }) {
   }
 
   if (isDefaultThreadName(title)) {
-    return <span className="text-muted-foreground">Thread {id ? id.substring(id.length - 5) : null}</span>;
+    return <span className="text-icon3">Thread {id ? id.substring(id.length - 5) : null}</span>;
   }
 
-  return <span className="truncate max-w-[14rem] text-muted-foreground">{title}</span>;
+  return <span className="truncate max-w-[14rem] text-icon3">{title}</span>;
 }
 
 const formatDay = (date: Date) => {
