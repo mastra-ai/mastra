@@ -559,6 +559,21 @@
       "source": "/examples/v1",
       "destination": "/docs/v1/getting-started/start",
       "permanent": true
+    },
+    {
+      "source": "/reference/v1/core/setTelemetry",
+      "destination": "/reference/v1/logging/pino-logger",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/workflows/workflow-methods/sendEvent",
+      "destination": "/docs/v1/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/workflows/workflow-methods/waitForEvent",
+      "destination": "/docs/v1/workflows/suspend-and-resume",
+      "permanent": true
     }
   ]
 }

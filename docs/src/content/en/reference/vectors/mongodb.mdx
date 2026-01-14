@@ -25,8 +25,8 @@ import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   id: 'mongodb-vector',
-  url: process.env.MONGODB_URL,
-  database: process.env.MONGODB_DATABASE,
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
 });
 ```
 
@@ -40,12 +40,12 @@ const store = new MongoDBVector({
       description: "Unique identifier for this vector store instance",
     },
     {
-      name: "url",
+      name: "uri",
       type: "string",
-      description: "MongoDB connection string (URI)",
+      description: "MongoDB connection string",
     },
     {
-      name: "database",
+      name: "dbName",
       type: "string",
       description: "Name of the MongoDB database to use",
     },
@@ -379,10 +379,12 @@ export const mongodbAgent = new Agent({
   model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     vector: new MongoDBVector({
+      id: 'mongodb-vector',
       uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
@@ -393,9 +395,7 @@ export const mongodbAgent = new Agent({
         topK: 3,
         messageRange: 2,
       },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
+      generateTitle: true, // generates descriptive thread titles automatically
     },
   }),
 });

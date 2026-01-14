@@ -1,4 +1,4 @@
-import type { ClickHouseClient } from '@clickhouse/client';
+import type { ClickHouseClient, ClickHouseClientConfigOptions } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
@@ -39,11 +39,49 @@ type ClickhouseTtlConfig = {
 };
 
 /**
+ * ClickHouse credentials configuration.
+ * Requires url, username, and password, plus supports all other ClickHouseClientConfigOptions.
+ */
+type ClickhouseCredentialsConfig = Omit<ClickHouseClientConfigOptions, 'url' | 'username' | 'password'> & {
+  /** ClickHouse server URL (required) */
+  url: string;
+  /** ClickHouse username (required) */
+  username: string;
+  /** ClickHouse password (required) */
+  password: string;
+};
+
+/**
  * ClickHouse configuration type.
  *
  * Accepts either:
  * - A pre-configured ClickHouse client: `{ id, client, ttl? }`
- * - URL/credentials config: `{ id, url, username, password, ttl? }`
+ * - ClickHouse credentials with optional advanced options: `{ id, url, username, password, ... }`
+ *
+ * All ClickHouseClientConfigOptions are supported (database, request_timeout,
+ * compression, keep_alive, max_open_connections, etc.).
+ *
+ * @example
+ * ```typescript
+ * // Simple credentials config
+ * const store = new ClickhouseStore({
+ *   id: 'my-store',
+ *   url: 'http://localhost:8123',
+ *   username: 'default',
+ *   password: '',
+ * });
+ *
+ * // With advanced options
+ * const store = new ClickhouseStore({
+ *   id: 'my-store',
+ *   url: 'http://localhost:8123',
+ *   username: 'default',
+ *   password: '',
+ *   request_timeout: 60000,
+ *   compression: { request: true, response: true },
+ *   keep_alive: { enabled: true },
+ * });
+ * ```
  */
 export type ClickhouseConfig = {
   id: string;
@@ -92,11 +130,7 @@ export type ClickhouseConfig = {
        */
       client: ClickHouseClient;
     }
-  | {
-      url: string;
-      username: string;
-      password: string;
-    }
+  | ClickhouseCredentialsConfig
 );
 
 /**
@@ -153,12 +187,15 @@ export class ClickhouseStore extends MastraStorage {
       if (typeof config.password !== 'string') {
         throw new Error('ClickhouseStore: password must be a string.');
       }
-      // Create client from credentials
+
+      // Extract Mastra-specific config, pass rest to ClickHouse client
+      const { id, ttl, disableInit, clickhouse_settings, ...clientOptions } = config;
+
+      // Create client with all provided options
       this.db = createClient({
-        url: config.url,
-        username: config.username,
-        password: config.password,
+        ...clientOptions,
         clickhouse_settings: {
+          ...clickhouse_settings,
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso', // This is crucial
           use_client_time_zone: 1,

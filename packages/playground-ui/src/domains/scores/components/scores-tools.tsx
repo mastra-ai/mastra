@@ -1,4 +1,4 @@
-import { SelectField } from '@/components/ui/elements';
+import { SelectField } from '@/ds/components/FormFields';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';

@@ -150,7 +150,7 @@ importers:
         specifier: 1.38.0
         version: 1.38.0
       dotenv:
-        specifier: ^17.2.0
+        specifier: ^17.2.3
         version: 17.2.3
       hono:
         specifier: ^4.11.3

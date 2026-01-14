@@ -12,7 +12,6 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
-import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -77,7 +76,6 @@ type DelayedPromises<OUTPUT extends OutputSchema = undefined> = {
 
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
-  #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
@@ -684,6 +682,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
+
+                  chunk.payload.response = response;
                 } else if (!self.#options.isLLMExecutionStep) {
                   // No processor runner, not in LLM execution step - resolve with buffered text
                   this.resolvePromises({
@@ -867,16 +867,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         },
       }),
     );
-
-    this.#aisdkv5 = new AISDKV5OutputStream({
-      modelOutput: this,
-      messageList,
-      options: {
-        toolCallStreaming: options?.toolCallStreaming,
-        structuredOutput: options?.structuredOutput,
-        tracingContext: options?.tracingContext,
-      },
-    });
 
     if (initialState) {
       this.deserializeState(initialState);
@@ -1140,6 +1130,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       traceId: this.traceId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
+      // All messages from this execution (input + memory history + response)
+      messages: this.messageList.get.all.db(),
+      // Only messages loaded from memory (conversation history)
+      rememberedMessages: this.messageList.get.remembered.db(),
     };
 
     return fullOutput;
@@ -1162,18 +1156,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get content(): Promise<LLMStepResult['content']> {
     return this.#getDelayedPromise(this.#delayedPromises.content);
-  }
-
-  /**
-   * Other output stream formats.
-   */
-  get aisdk() {
-    return {
-      /**
-       * The AI SDK v5 output stream format.
-       */
-      v5: this.#aisdkv5,
-    };
   }
 
   /**

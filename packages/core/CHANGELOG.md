@@ -1,5 +1,85 @@
 # @mastra/core
 
+## 1.0.0-beta.21
+
+### Minor Changes
+
+- Add structured output support to agent.network() method. Users can now pass a `structuredOutput` option with a Zod schema to get typed results from network execution. ([#11701](https://github.com/mastra-ai/mastra/pull/11701))
+
+  The stream exposes `.object` (Promise) and `.objectStream` (ReadableStream) getters, and emits `network-object` and `network-object-result` chunk types. The structured output is generated after task completion using the provided schema.
+
+  ```typescript
+  const stream = await agent.network('Research AI trends', {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+        recommendations: z.array(z.string()),
+      }),
+    },
+  });
+
+  const result = await stream.object;
+  // result is typed: { summary: string; recommendations: string[] }
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#10191](https://github.com/mastra-ai/mastra/pull/10191))
+  - Updated dependency [`dotenv@^17.2.3` ↗︎](https://www.npmjs.com/package/dotenv/v/17.2.3) (from `^16.6.1`, in `dependencies`)
+
+- Add additional context to workflow `onFinish` and `onError` callbacks ([#11705](https://github.com/mastra-ai/mastra/pull/11705))
+
+  The `onFinish` and `onError` lifecycle callbacks now receive additional properties:
+  - `runId` - The unique identifier for the workflow run
+  - `workflowId` - The workflow's identifier
+  - `resourceId` - Optional resource identifier (if provided when creating the run)
+  - `getInitData()` - Function that returns the initial input data passed to the workflow
+  - `mastra` - The Mastra instance (if workflow is registered with Mastra)
+  - `requestContext` - Request-scoped context data
+  - `logger` - The workflow's logger instance
+  - `state` - The workflow's current state object
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'order-processing',
+    inputSchema: z.object({ orderId: z.string() }),
+    outputSchema: z.object({ status: z.string() }),
+    options: {
+      onFinish: async ({ runId, workflowId, getInitData, logger, state, mastra }) => {
+        const inputData = getInitData();
+        logger.info(`Workflow ${workflowId} run ${runId} completed`, {
+          orderId: inputData.orderId,
+          finalState: state,
+        });
+
+        // Access other Mastra components if needed
+        const agent = mastra?.getAgent('notification-agent');
+      },
+      onError: async ({ runId, workflowId, error, logger, requestContext }) => {
+        logger.error(`Workflow ${workflowId} run ${runId} failed: ${error?.message}`);
+        // Access request context for additional debugging
+        const userId = requestContext.get('userId');
+      },
+    },
+  });
+  ```
+
+- Make initialState optional in studio ([#11744](https://github.com/mastra-ai/mastra/pull/11744))
+
+- Refactor: consolidate duplicate applyMessages helpers in workflow.ts ([#11688](https://github.com/mastra-ai/mastra/pull/11688))
+  - Added optional `defaultSource` parameter to `ProcessorRunner.applyMessagesToMessageList` to support both 'input' and 'response' default sources
+  - Removed 3 duplicate inline `applyMessages` helper functions from workflow.ts (in input, outputResult, and outputStep phases)
+  - All phases now use the shared `ProcessorRunner.applyMessagesToMessageList` static method
+
+  This is an internal refactoring with no changes to external behavior.
+
+- Cache processor instances in MastraMemory to preserve embedding cache across calls ([#11720](https://github.com/mastra-ai/mastra/pull/11720))
+  Fixed issue where getInputProcessors() and getOutputProcessors() created new processor instances on each call, causing the SemanticRecall embedding cache to be discarded. Processor instances (SemanticRecall, WorkingMemory, MessageHistory) are now cached and reused, reducing unnecessary embedding API calls and improving latency.
+  Also added cache invalidation when setStorage(), setVector(), or setEmbedder() are called to ensure processors use updated dependencies.
+  Fixes #11455
+- Updated dependencies [[`3bf08bf`](https://github.com/mastra-ai/mastra/commit/3bf08bf9c7c73818ac937b5a69d90e205653115f)]:
+  - @mastra/schema-compat@1.0.0-beta.6
+
 ## 1.0.0-beta.20
 
 ### Minor Changes

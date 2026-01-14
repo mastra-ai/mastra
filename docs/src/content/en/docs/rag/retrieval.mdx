@@ -192,7 +192,7 @@ The Vector Query Tool supports database-specific configurations that enable you 
 These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
 
 
-Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
+Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ url: '...' })`).
 :::
 
 ```ts
@@ -280,11 +280,10 @@ requestContext.set("databaseConfig", {
   },
 });
 
-await pineconeQueryTool.execute({
-  context: { queryText: "search query" },
-  mastra,
-  requestContext,
-});
+await pineconeQueryTool.execute(
+  { queryText: "search query" },
+  { mastra, requestContext }
+);
 ```
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/v1/tools/vector-query-tool).

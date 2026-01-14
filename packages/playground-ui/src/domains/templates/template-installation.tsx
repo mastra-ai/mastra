@@ -1,7 +1,7 @@
 import { Container } from './shared';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
-import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/components/ui/elements/steps';
+import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/ds/components/Steps';
 import { OctagonXIcon } from 'lucide-react';
 
 type TemplateInstallationProps = {
@@ -68,12 +68,12 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="space-y-6 text-icon3 mb-[2rem] content-center">
+    <Container className="space-y-6 text-neutral3 mb-[2rem] content-center">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-icon5">{getPhaseMessage()}</h3>
+        <h3 className="text-lg font-semibold text-neutral5">{getPhaseMessage()}</h3>
         {streamResult?.runId && (
-          <div className="mt-[0.5rem] text-[0.75rem] text-icon3">Run ID: {streamResult.runId}</div>
+          <div className="mt-[0.5rem] text-[0.75rem] text-neutral3">Run ID: {streamResult.runId}</div>
         )}
       </div>
 
@@ -88,7 +88,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-icon5 p-[1.5rem] flex items-center gap-[.75rem] text-[0.875rem] bg-red-500/10',
+            'rounded-lg text-neutral5 p-[1.5rem] flex items-center gap-[.75rem] text-[0.875rem] bg-red-500/10',
             '[&>svg]:w-[1.5rem] [&>svg]:h-[1.5rem] [&>svg]:opacity-70 [&>svg]:text-red-500',
           )}
         >
@@ -102,7 +102,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-center text-sm text-icon3 grid gap-[1rem] justify-items-center">
+        <div className="text-center text-sm text-neutral3 grid gap-[1rem] justify-items-center">
           <Spinner />
           <p>This may take some time...</p>
         </div>

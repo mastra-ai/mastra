@@ -8,7 +8,7 @@ import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import type { ConditionFunction, LoopConditionFunction, Step } from '../step';
+import type { ConditionFunction, InnerOutput, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
@@ -222,7 +222,7 @@ export interface ExecuteConditionalParams {
   entry: {
     type: 'conditional';
     steps: { type: 'step'; step: Step }[];
-    conditions: ConditionFunction<any, any, any, any, DefaultEngineType>[];
+    conditions: ConditionFunction<any, any, any, any, any, DefaultEngineType>[];
   };
   prevOutput: any;
   stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -308,7 +308,7 @@ export async function executeConditional(
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(null, stepResults),
-            bail: () => {},
+            bail: (() => {}) as () => InnerOutput,
             abort: () => {
               abortController?.abort();
             },
@@ -497,7 +497,7 @@ export interface ExecuteLoopParams {
   entry: {
     type: 'loop';
     step: Step;
-    condition: LoopConditionFunction<any, any, any, any, DefaultEngineType>;
+    condition: LoopConditionFunction<any, any, any, any, any, DefaultEngineType>;
     loopType: 'dowhile' | 'dountil';
   };
   prevStep: StepFlowEntry;
@@ -642,7 +642,7 @@ export async function executeLoop(
           iterationCount: iteration + 1,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(null, stepResults),
-          bail: () => {},
+          bail: (() => {}) as () => InnerOutput,
           abort: () => {
             abortController?.abort();
           },

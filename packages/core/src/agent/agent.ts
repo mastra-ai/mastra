@@ -49,6 +49,7 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
+import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -125,7 +126,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
@@ -307,6 +308,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         throw mastraError;
       }
 
+      Object.entries(agents || {}).forEach(([_agentName, agent]) => {
+        if (this.#mastra) {
+          agent.__registerMastra(this.#mastra);
+        }
+      });
+
       return agents;
     });
   }
@@ -402,15 +409,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
-      let step;
+      let step: Step<string, unknown, any, any, any, any>;
       if (isProcessorWorkflow(processorOrWorkflow)) {
         step = processorOrWorkflow;
       } else {
         // Set processorIndex on the processor for span attributes
-        const processor = processorOrWorkflow as Exclude<T, ProcessorWorkflow>;
+        const processor = processorOrWorkflow;
+        // @ts-ignore - TODO: fix types
         processor.processorIndex = index;
         step = createStep(processor);
       }
+
       workflow = workflow.then(step);
     }
 
@@ -625,7 +634,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -1919,9 +1928,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
               let result: any;
               const slugify = await import(`@sindresorhus/slugify`);
-              const subAgentThreadId = inputData.threadId || context?.mastra?.generateId() || randomUUID();
+              const subAgentThreadId =
+                inputData.threadId ||
+                context?.mastra?.generateId({
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                }) ||
+                randomUUID();
               const subAgentResourceId =
-                inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
+                inputData.resourceId ||
+                context?.mastra?.generateId({
+                  idType: 'generic',
+                  source: 'agent',
+                  entityId: agentName,
+                }) ||
+                `${slugify.default(this.id)}-${agentName}`;
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
@@ -2119,6 +2142,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
+          // @ts-ignore
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
@@ -2207,18 +2231,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 while (firstSuspendedStepPath.length > 0) {
                   const key = firstSuspendedStepPath.shift();
                   if (key) {
-                    if (!workflow.steps[key]) {
+                    if (!wflowStep.steps[key]) {
                       this.logger.warn(`Suspended step '${key}' not found in workflow '${workflowName}'`);
                       break;
                     }
-                    wflowStep = workflow.steps[key] as any;
+                    wflowStep = wflowStep.steps[key] as any;
                   }
                 }
                 const resumeSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds, resumeSchema });
+                return suspend?.(suspendPayload, {
+                  resumeLabel: suspendedStepIds,
+                  resumeSchema: resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined,
+                });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -2753,7 +2780,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    const runId = options.runId || this.#mastra?.generateId() || randomUUID();
+    const runId =
+      options.runId ||
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+        threadId: threadFromArgs?.id,
+        resourceId,
+      }) ||
+      randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
     // Set Tracing context
@@ -3082,7 +3118,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
-      generateId: () => this.#mastra?.generateId() || randomUUID(),
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
       threadId,
@@ -3090,10 +3126,122 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       validation: mergedOptions?.completion,
       routing: mergedOptions?.routing,
       onIterationComplete: mergedOptions?.onIterationComplete,
+      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
+      mastra: this.#mastra,
       structuredOutput: (options?.structuredOutput ?? defaultNetworkOptions?.structuredOutput) as
         | StructuredOutputOptions<OUTPUT>
         | undefined,
     });
+  }
+
+  /**
+   * Resumes a suspended network loop where multiple agents can collaborate to handle messages.
+   * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
+   *
+   * @experimental
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.resumeNetwork({ approved: true }, {
+   *   runId: 'previous-run-id',
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   },
+   *   maxSteps: 10
+   * });
+   *
+   * for await (const chunk of result.stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
+  async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
+    const runId = options.runId;
+    const requestContextToUse = options?.requestContext || new RequestContext();
+
+    // Merge default network options with call-specific options
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
+    const mergedOptions = {
+      ...defaultNetworkOptions,
+      ...options,
+      // Deep merge nested objects
+      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+    };
+
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadId =
+      threadIdFromContext ||
+      (typeof mergedOptions?.memory?.thread === 'string'
+        ? mergedOptions?.memory?.thread
+        : mergedOptions?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+
+    return await networkLoop({
+      networkName: this.name,
+      requestContext: requestContextToUse,
+      runId,
+      routingAgent: this,
+      routingAgentOptions: {
+        modelSettings: mergedOptions?.modelSettings,
+        memory: mergedOptions?.memory,
+      },
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      maxIterations: mergedOptions?.maxSteps || 1,
+      messages: [],
+      threadId,
+      resourceId,
+      resumeData,
+      validation: mergedOptions?.completion,
+      routing: mergedOptions?.routing,
+      onIterationComplete: mergedOptions?.onIterationComplete,
+      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
+      mastra: this.#mastra,
+    });
+  }
+
+  /**
+   * Approves a pending network tool call and resumes execution.
+   * Used when `tool.requireApproval` is enabled to allow the agent to proceed with a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.approveNetworkToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
+  async approveNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
+    return this.resumeNetwork({ approved: true }, options);
+  }
+
+  /**
+   * Declines a pending network tool call and resumes execution.
+   * Used when `tool.requireApproval` is enabled to allow the agent to proceed with a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.declineNetworkToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
+  async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
+    return this.resumeNetwork({ approved: false }, options);
   }
 
   async generate<OUTPUT extends OutputSchema = undefined>(

@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { Run } from '../workflows';
+import type { DefaultEngineType, Run, Step } from '../workflows';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 import type { ChunkType } from './types';
 
@@ -24,13 +24,14 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
   #objectStreamController: ReadableStreamDefaultController<PartialSchemaOutput<OUTPUT>> | null = null;
   #objectStream: ReadableStream<PartialSchemaOutput<OUTPUT>> | null = null;
   #run: Run;
+  runId: string;
 
   constructor({
     createStream,
     run,
   }: {
     createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
-    run: Run;
+    run: Run<DefaultEngineType, Step<string, any, any, any, any, any, DefaultEngineType>[], any, any, any>;
   }) {
     const deferredPromise = {
       promise: null,
@@ -185,6 +186,8 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
 
     this.#run = run;
     this.#streamPromise = deferredPromise;
+
+    this.runId = run.runId;
     this.#objectPromise = objectDeferredPromise;
 
     // Create object stream

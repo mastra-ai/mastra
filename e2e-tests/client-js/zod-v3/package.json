@@ -1,0 +1,18 @@
+{
+  "name": "client-js-e2e-tests-zod-v3",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@internal/client-js-test-utils": "workspace:*",
+    "vitest": "catalog:",
+    "typescript": "catalog:"
+  }
+}
