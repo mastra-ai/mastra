@@ -1,4 +1,3 @@
-import { Mastra } from '@mastra/core/mastra';
 import { createHttpLoggingTestSuite } from '@internal/server-adapter-test-utils';
 import { Hono } from 'hono';
 import { describe } from 'vitest';

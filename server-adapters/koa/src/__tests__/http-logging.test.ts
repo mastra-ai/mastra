@@ -1,4 +1,3 @@
-import { Mastra } from '@mastra/core/mastra';
 import { createHttpLoggingTestSuite } from '@internal/server-adapter-test-utils';
 import Koa from 'koa';
 import { describe } from 'vitest';

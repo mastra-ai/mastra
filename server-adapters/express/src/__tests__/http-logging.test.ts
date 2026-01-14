@@ -1,6 +1,5 @@
-import { Mastra } from '@mastra/core/mastra';
 import { createHttpLoggingTestSuite } from '@internal/server-adapter-test-utils';
-import express, { type Express } from 'express';
+import express from 'express';
 import { describe } from 'vitest';
 import { MastraServer } from '../index';
 
