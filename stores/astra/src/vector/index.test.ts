@@ -78,6 +78,7 @@ describe.skip('AstraVector Integration Tests', () => {
       token,
       endpoint,
       keyspace,
+      id: 'astra-vector-integration-test',
     });
     try {
       const collections = await vectorDB.listIndexes();
@@ -554,6 +555,7 @@ describe('AstraVector Shared Test Suite', () => {
     token,
     endpoint,
     keyspace,
+    id: 'astra-vector-test',
   });
 
   createVectorTestSuite({
