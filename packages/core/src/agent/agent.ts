@@ -2418,7 +2418,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
-    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
+    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-.]/g;
     const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
 
     for (const key of Object.keys(tools)) {
