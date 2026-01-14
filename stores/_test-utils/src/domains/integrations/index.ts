@@ -275,7 +275,7 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
         });
 
         expect(composioResults.integrations).toHaveLength(1);
-        expect(composioResults.integrations[0].provider).toBe('composio');
+        expect(composioResults.integrations[0]?.provider).toBe('composio');
       });
 
       it('should filter by enabled status', async () => {
@@ -292,7 +292,7 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
         });
 
         expect(enabledResults.integrations).toHaveLength(1);
-        expect(enabledResults.integrations[0].enabled).toBe(true);
+        expect(enabledResults.integrations[0]?.enabled).toBe(true);
       });
 
       it('should filter by ownerId', async () => {
@@ -309,7 +309,7 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
         });
 
         expect(owner1Results.integrations).toHaveLength(1);
-        expect(owner1Results.integrations[0].ownerId).toBe(ownerId1);
+        expect(owner1Results.integrations[0]?.ownerId).toBe(ownerId1);
       });
 
       it('should order by createdAt descending', async () => {
@@ -323,11 +323,11 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
         const result = await integrationsStorage.listIntegrations({
           page: 0,
           perPage: 10,
-          orderBy: { field: 'createdAt', direction: 'desc' },
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
 
-        expect(result.integrations[0].name).toBe('Second');
-        expect(result.integrations[1].name).toBe('First');
+        expect(result.integrations[0]?.name).toBe('Second');
+        expect(result.integrations[1]?.name).toBe('First');
       });
 
       it('should return empty array when no integrations exist', async () => {
@@ -368,7 +368,7 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
         expect(cachedTools).toHaveLength(3);
         cachedTools.forEach((cachedTool, index) => {
           expect(cachedTool.integrationId).toBe(integration.id);
-          expect(cachedTool.toolSlug).toBe(tools[index].toolSlug);
+          expect(cachedTool.toolSlug).toBe(tools[index]?.toolSlug);
         });
       });
     });
@@ -588,7 +588,10 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
 
         const tools = createSampleCachedTools(integration.id, 2);
         const cachedTools = await integrationsStorage.cacheTools({ tools });
-        const originalTimestamp = cachedTools[0].updatedAt;
+        const originalTimestamp = cachedTools[0]?.updatedAt;
+
+        expect(originalTimestamp).toBeDefined();
+        if (!originalTimestamp) return;
 
         // Wait to ensure different timestamp
         await new Promise(resolve => setTimeout(resolve, 10));

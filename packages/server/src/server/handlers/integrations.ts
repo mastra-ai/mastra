@@ -172,7 +172,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
           : toolsResponse.tools;
 
         // Convert to cached tool format
-        const cachedTools: StorageCachedToolInput[] = toolsToCache.map(tool => ({
+        const cachedTools = toolsToCache.map(tool => ({
           id: crypto.randomUUID(),
           integrationId: integration.id,
           provider,
@@ -183,6 +183,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
           inputSchema: tool.inputSchema || {},
           outputSchema: tool.outputSchema,
           rawDefinition: tool.metadata || {},
+          createdAt: new Date(),
         }));
 
         // Batch insert cached tools
@@ -273,7 +274,7 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
             ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
             : toolsResponse.tools;
 
-          const cachedTools: StorageCachedToolInput[] = toolsToCache.map(tool => ({
+          const cachedTools = toolsToCache.map(tool => ({
             id: crypto.randomUUID(),
             integrationId: updatedIntegration.id,
             provider: updatedIntegration.provider,
@@ -284,6 +285,7 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
             inputSchema: tool.inputSchema || {},
             outputSchema: tool.outputSchema,
             rawDefinition: tool.metadata || {},
+            createdAt: new Date(),
           }));
 
           if (cachedTools.length > 0) {
@@ -525,7 +527,7 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
           ? toolsResponse.tools.filter(tool => existingToolSlugs.has(tool.slug))
           : toolsResponse.tools;
 
-      const cachedTools: StorageCachedToolInput[] = toolsToCache.map(tool => ({
+      const cachedTools = toolsToCache.map(tool => ({
         id: crypto.randomUUID(),
         integrationId: integration.id,
         provider: integration.provider,
@@ -536,6 +538,7 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
         inputSchema: tool.inputSchema || {},
         outputSchema: tool.outputSchema,
         rawDefinition: tool.metadata || {},
+        createdAt: new Date(),
       }));
 
       if (cachedTools.length > 0) {

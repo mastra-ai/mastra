@@ -60,7 +60,7 @@ export function createSampleIntegrations(count: number = 3): StorageCreateIntegr
 /**
  * Creates a sample cached tool for testing
  */
-export function createSampleCachedTool(integrationId: string, overrides?: Partial<StorageCachedTool>): Omit<StorageCachedTool, 'createdAt' | 'cachedAt' | 'updatedAt'> {
+export function createSampleCachedTool(integrationId: string, overrides?: Partial<StorageCachedTool>): Omit<StorageCachedTool, 'cachedAt' | 'updatedAt'> {
   const toolSlug = overrides?.toolSlug || `tool-${randomUUID()}`;
   const provider = overrides?.provider || 'composio';
   const toolkitSlug = overrides?.toolkitSlug || 'github';
@@ -92,6 +92,7 @@ export function createSampleCachedTool(integrationId: string, overrides?: Partia
       method: 'POST',
       auth_required: true,
     },
+    createdAt: new Date(),
     ...overrides,
   };
 }
@@ -103,7 +104,7 @@ export function createSampleCachedTools(
   integrationId: string,
   count: number = 3,
   toolkitSlug: string = 'github'
-): Array<Omit<StorageCachedTool, 'createdAt' | 'cachedAt' | 'updatedAt'>> {
+): Array<Omit<StorageCachedTool, 'cachedAt' | 'updatedAt'>> {
   return Array.from({ length: count }, (_, i) =>
     createSampleCachedTool(integrationId, {
       toolSlug: `tool-${i}-${randomUUID()}`,
