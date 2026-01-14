@@ -2,13 +2,13 @@ import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { useAgentSettings } from '@/domains/agents/context/agent-context';
 import { useEffect, useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/ds/components/Input';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown, Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { cn } from '@/lib/utils';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import CodeMirror from '@uiw/react-codemirror';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';

@@ -1,7 +1,9 @@
 import { Button } from '@/ds/components/Button/Button';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
-import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
+import { Notification } from '@/ds/components/Notification';
+import { SelectField } from '@/ds/components/FormFields';
+import { TextAndIcon } from '@/ds/components/Text';
 import { useEffect, useState } from 'react';
 import { type GetScorerResponse } from '@mastra/client-js';
 

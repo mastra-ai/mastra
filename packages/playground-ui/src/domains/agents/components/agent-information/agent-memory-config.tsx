@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';

@@ -1,5 +1,5 @@
-import { MainContentContent } from '@/components/ui/containers/MainContent';
-import { CopyButton } from '@/components/ui/copy-button';
+import { MainContentContent } from '@/ds/components/MainContent';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';

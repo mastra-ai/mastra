@@ -3,7 +3,7 @@ import { Maximize, Minus, Plus } from 'lucide-react';
 
 import { Panel, useViewport, useReactFlow, PanelProps } from '@xyflow/react';
 
-import { Slider } from '@/components/ui/slider';
+import { Slider } from '@/ds/components/Slider';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +12,7 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
   const { zoomTo, zoomIn, zoomOut, fitView } = useReactFlow();
 
   return (
-    <Panel className={cn('flex gap-1 rounded-md bg-primary-foreground p-1 text-foreground', className)} {...props}>
+    <Panel className={cn('flex gap-1 rounded-md bg-surface2 p-1 text-icon6', className)} {...props}>
       <Button onClick={() => zoomOut({ duration: 300 })}>
         <Minus className="h-4 w-4" />
       </Button>
