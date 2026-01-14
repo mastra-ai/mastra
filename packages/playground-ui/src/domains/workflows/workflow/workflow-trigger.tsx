@@ -266,7 +266,7 @@ export function WorkflowTrigger({
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4" key={step.stepId}>
-                <Txt variant="ui-xs" className="text-mastra-el-3">
+                <Txt variant="ui-xs" className="text-icon3">
                   {step.stepId}
                 </Txt>
                 {step.suspendPayload && (
@@ -326,7 +326,7 @@ export function WorkflowTrigger({
           <>
             <hr className="border-border1 border-sm my-5" />
             <div className="flex flex-col gap-2">
-              <Txt variant="ui-xs" className="px-4 text-mastra-el-3">
+              <Txt variant="ui-xs" className="px-4 text-icon3">
                 Status
               </Txt>
               <div className="px-4 flex flex-col gap-4">
