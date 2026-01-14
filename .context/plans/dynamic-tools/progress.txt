@@ -1311,3 +1311,90 @@ Task 025 is complete. The remaining P1 tasks are:
 - All timestamp fields (createdAt, cachedAt, updatedAt) are now consistent across the schema
 - The tests use 0-indexed page numbering and correct field names
 - LibSQL adapter passes all tests, but other adapters (PG, etc.) will need similar updates for the `createdAt` column
+
+## Task 026: Add integration tests for provider APIs [COMPLETED]
+
+**Date:** 2026-01-14
+
+**Summary:**
+Successfully created comprehensive integration tests for the ComposioProvider and ArcadeProvider implementations, with full coverage of all provider methods and error scenarios.
+
+**Implementation Details:**
+
+1. Created test file `packages/core/src/integrations/providers/providers.test.ts` with 40 comprehensive tests
+   - Tests for ComposioProvider (20 tests)
+   - Tests for ArcadeProvider (16 tests)
+   - Tests for Provider Registry (4 tests)
+
+2. ComposioProvider test coverage:
+   - getStatus() method (connected and disconnected states)
+   - listToolkits() method with mocked API responses
+   - Search and category filtering
+   - Pagination support (cursor-based)
+   - Error handling (missing API key, API failures)
+   - Edge cases (toolkits without categories/tool counts)
+   - listTools() method with various filters
+   - toolkitSlug and toolkitSlugs parameter handling
+   - Tools without schemas
+   - getTool() method for individual tool retrieval
+
+3. ArcadeProvider test coverage:
+   - getStatus() method (connected and disconnected states)
+   - listToolkits() method (derived from tools)
+   - Toolkit derivation from tool.toolkit field
+   - Tools without toolkit field (defaults to 'general')
+   - Search filtering on derived toolkits
+   - Pagination for derived toolkits
+   - listTools() method with offset-based pagination
+   - Toolkit filtering (single and multiple)
+   - Client-side filtering for multiple toolkits
+   - Cursor-to-offset pagination conversion
+   - hasMore calculation based on total count
+   - getTool() method
+
+4. Provider Registry test coverage:
+   - getProvider() factory function
+   - listProviders() status listing
+   - hasProvider() existence check
+   - getProviderNames() name listing
+   - registerProvider() custom provider registration
+
+**Key Testing Patterns:**
+
+- Used Vitest for test framework (vi.fn() for mocking)
+- Mocked global fetch API for HTTP requests
+- Tested both success and error paths
+- Covered edge cases (missing data, empty responses)
+- Validated proper error messages and status codes
+- Tested pagination behavior (cursor and offset-based)
+- Verified proper API header construction
+- Tested client-side filtering logic
+
+**Test Results:**
+- All 40 tests passing
+- Test execution time: 12ms
+- Full typecheck passes across monorepo
+- No type errors
+
+**Files Created:**
+- packages/core/src/integrations/providers/providers.test.ts (new - 40 tests, comprehensive coverage)
+
+**Files Modified:**
+- .context/plans/dynamic-tools/tasks.json (marked task 026 as passing)
+
+**Next Steps:**
+Task 026 is complete. The remaining P1 testing task is:
+- Task 027: Add E2E tests for integration flow
+
+**Notes for Next Engineer:**
+- The provider tests use mocked fetch responses for all external API calls
+- Tests validate both the happy path and error scenarios
+- Pagination tests cover both cursor-based (Composio) and offset-based (Arcade) patterns
+- The registry tests validate the singleton pattern and provider registration
+- All acceptance criteria met:
+  ✓ Provider methods have test coverage
+  ✓ API response mapping is tested
+  ✓ Error scenarios are covered
+- Future enhancement: Add integration tests that call real APIs (requires API keys in CI)
+- Future enhancement: Add performance tests for large result sets
+
