@@ -8,7 +8,7 @@ import type {
   BlacklistedRootOperators,
 } from '@mastra/core/vector/filter';
 
-type QdrantOperatorValueMap = Omit<OperatorValueMap, '$options' | '$elemMatch' | '$all'> & {
+type QdrantOperatorValueMap = Omit<OperatorValueMap, '$options' | '$elemMatch'> & {
   /**
    * $count: Filter by array length or value count.
    * Example: { tags: { $count: { gt: 2 } } }
@@ -127,10 +127,17 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       logical: ['$and', '$or', '$not'],
-      array: ['$in', '$nin'],
+      array: ['$in', '$nin', '$all'],
       regex: ['$regex'],
+      element: ['$exists'],
       custom: ['$count', '$geo', '$nested', '$datetime', '$null', '$empty', '$hasId', '$hasVector'],
     };
+  }
+
+  protected override isOperator(key: string): key is any {
+    // $not can be both a logical operator and a field-level operator
+    // When used at field level like { field: { $not: { $gt: 5 } } }, treat it as an operator
+    return super.isOperator(key) || key === '$not';
   }
 
   translate(filter?: QdrantVectorFilter): QdrantVectorFilter {
@@ -238,7 +245,44 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
         conditions.push(customOp);
       } else if (this.isOperator(key)) {
         const opResult = this.translateOperatorValue(key, value);
-        if (opResult.range) {
+
+        // Handle special markers for operators that need custom handling
+        if (opResult._specialNull) {
+          // $eq: null -> use is_null
+          conditions.push({ is_null: { key: fieldKey } });
+        } else if (opResult._specialNotNull) {
+          // $ne: null -> use must_not with is_null
+          conditions.push({ must_not: [{ is_null: { key: fieldKey } }] });
+        } else if (opResult._specialNe) {
+          // $ne: value -> use must_not with match
+          conditions.push({
+            must_not: [{ key: fieldKey, match: { value: opResult._specialNe } }],
+          });
+        } else if (opResult._specialNin) {
+          // $nin: [values] -> use must_not with match any
+          conditions.push({
+            must_not: [{ key: fieldKey, match: { any: opResult._specialNin } }],
+          });
+        } else if (opResult._specialAll) {
+          // $all: [values] -> create multiple match conditions joined with must
+          for (const val of opResult._specialAll) {
+            conditions.push({ key: fieldKey, match: { value: val } });
+          }
+        } else if (opResult._specialExists) {
+          // $exists: true -> field must not be null or empty
+          conditions.push({
+            must_not: [{ is_null: { key: fieldKey } }, { is_empty: { key: fieldKey } }],
+          });
+        } else if (opResult._specialNotExists) {
+          // $exists: false -> field must be null or empty
+          conditions.push({
+            should: [{ is_null: { key: fieldKey } }, { is_empty: { key: fieldKey } }],
+          });
+        } else if (opResult._specialNot) {
+          // $not: { operator: value } -> translate inner condition and wrap in must_not
+          const innerResult = this.translateNode(opResult._specialNot, true, fieldKey);
+          conditions.push({ must_not: [innerResult] });
+        } else if (opResult.range) {
           Object.assign(range, opResult.range);
         } else {
           matchCondition = opResult;
@@ -315,9 +359,18 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
 
     switch (operator) {
       case '$eq':
+        // Handle null comparison: use is_null instead of match
+        if (value === null) {
+          return { _specialNull: true };
+        }
         return { value: normalizedValue };
       case '$ne':
-        return { except: [normalizedValue] };
+        // Handle null comparison: for "not null", we need is_null wrapped in must_not
+        if (value === null) {
+          return { _specialNotNull: true };
+        }
+        // For $ne with non-null values, we need to use must_not with match
+        return { _specialNe: normalizedValue };
       case '$gt':
         return { range: { gt: normalizedValue } };
       case '$gte':
@@ -329,17 +382,21 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
       case '$in':
         return { any: this.normalizeArrayValues(value) };
       case '$nin':
-        return { except: this.normalizeArrayValues(value) };
+        // Similar to $ne, $nin should use must_not
+        return { _specialNin: this.normalizeArrayValues(value) };
       case '$regex':
         return { text: value };
-      case 'exists':
-        return value
-          ? {
-              must_not: [{ is_null: { key: value } }, { is_empty: { key: value } }],
-            }
-          : {
-              is_empty: { key: value },
-            };
+      case '$all':
+        // For $all operator, all values must be present in the array
+        // Qdrant doesn't have native $all, but we can use must with multiple match conditions
+        return { _specialAll: this.normalizeArrayValues(value) };
+      case '$exists':
+        // $exists: true means field must not be null/empty
+        // $exists: false means field must be null or empty
+        return value ? { _specialExists: true } : { _specialNotExists: true };
+      case '$not':
+        // $not wraps another operator
+        return { _specialNot: value };
       default:
         throw new Error(`Unsupported operator: ${operator}`);
     }

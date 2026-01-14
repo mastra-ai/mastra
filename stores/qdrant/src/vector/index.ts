@@ -77,6 +77,42 @@ export class QdrantVector extends MastraVector {
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+    // Input validation
+    if (!vectors || vectors.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'UPSERT', 'INVALID_ARGS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, vectorsLength: vectors?.length || 0 },
+      });
+    }
+
+    if (metadata && metadata.length !== vectors.length) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'UPSERT', 'INVALID_ARGS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          indexName,
+          vectorsLength: vectors.length,
+          metadataLength: metadata.length,
+        },
+      });
+    }
+
+    if (ids && ids.length !== vectors.length) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'UPSERT', 'INVALID_ARGS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          indexName,
+          vectorsLength: vectors.length,
+          idsLength: ids.length,
+        },
+      });
+    }
+
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
