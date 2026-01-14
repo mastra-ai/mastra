@@ -27,12 +27,13 @@ export const LIST_TOOLS_ROUTE = createRoute({
   responseType: 'json',
   responseSchema: listToolsResponseSchema,
   summary: 'List all tools',
-  description: 'Returns a list of all available tools in the system',
+  description: 'Returns a list of all available tools in the system, including tools from integrations',
   tags: ['Tools'],
   handler: async ({ mastra, tools }) => {
     try {
       const allTools = tools || mastra.listTools() || {};
 
+      // Serialize code-defined tools
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
           const tool = _tool;
@@ -40,11 +41,57 @@ export const LIST_TOOLS_ROUTE = createRoute({
             ...tool,
             inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
             outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+            source: 'code',
           };
           return acc;
         },
         {} as Record<string, any>,
       );
+
+      // Fetch cached tools from integrations
+      const storage = mastra.getStorage() as any;
+      if (storage?.integrations) {
+        try {
+          const cachedToolsResult = await storage.integrations.listCachedTools({});
+          const cachedTools = cachedToolsResult.data || [];
+
+          // Fetch integrations to get their names
+          const integrationIds = [...new Set(cachedTools.map((t: any) => t.integrationId))];
+          const integrationsMap = new Map<string, string>();
+
+          for (const integrationId of integrationIds) {
+            try {
+              const integration = await storage.integrations.getIntegrationById({ id: integrationId });
+              if (integration) {
+                integrationsMap.set(integration.id, integration.name);
+              }
+            } catch {
+              // Integration not found, skip
+            }
+          }
+
+          // Add cached tools to serialized tools
+          for (const cachedTool of cachedTools) {
+            const toolId = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
+            const integrationName = integrationsMap.get(cachedTool.integrationId) || cachedTool.provider;
+
+            serializedTools[toolId] = {
+              id: toolId,
+              name: cachedTool.name,
+              description: cachedTool.description,
+              inputSchema: cachedTool.inputSchema ? stringify(cachedTool.inputSchema) : undefined,
+              outputSchema: cachedTool.outputSchema ? stringify(cachedTool.outputSchema) : undefined,
+              source: integrationName,
+              provider: cachedTool.provider,
+              toolkit: cachedTool.toolkitSlug,
+              integrationId: cachedTool.integrationId,
+            };
+          }
+        } catch (error) {
+          // Log error but don't fail the request
+          console.error('Error fetching cached tools:', error);
+        }
+      }
 
       return serializedTools;
     } catch (error) {

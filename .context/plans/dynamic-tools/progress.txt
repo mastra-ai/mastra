@@ -1177,3 +1177,73 @@ Date: 2025-01-14
 - The integration tools are already available to agents via task 014 (tool resolution integration)
 - The UI is ready for end-to-end testing once task 022 is complete
 
+## Task 022: Display integration tools in Tools table - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Updated packages/server/src/server/handlers/tools.ts to include cached integration tools in LIST_TOOLS_ROUTE
+- Modified the handler to fetch cached tools from storage.integrations.listCachedTools()
+- Added logic to fetch integration names and map them to tools as the 'source' field
+- Updated tool serialization to include 'source' field (code-defined tools = 'code', integration tools = integration name)
+- Added integration-specific fields to tool response: provider, toolkit, integrationId
+- Updated packages/playground-ui/src/domains/tools/components/tool-table/columns.tsx to display source column
+- Added new 'Source' column between 'Name' and 'Attached entities' columns
+- Source column shows badge with icon: code tools show CodeIcon, integration tools show ToolCoinIcon
+- Badge variants: 'default' for code tools, 'success' for integration tools
+- All changes follow existing patterns and design system conventions
+
+### Key implementation details:
+- Backend change: LIST_TOOLS_ROUTE now merges both code-defined tools and cached integration tools
+- Integration tools use ID format: `${provider}_${toolkitSlug}_${toolSlug}` (e.g., 'composio_github_create_issue')
+- Source field shows integration name for integration tools, 'code' for code-defined tools
+- Used `as any` type assertion for storage to handle optional integrations property
+- Error handling: catches errors when fetching cached tools but doesn't fail the entire request
+- Frontend change: Added Source column to tool table with proper styling and icons
+- Icons: CodeIcon from lucide-react for code tools, ToolCoinIcon from @/ds/icons for integration tools
+- Badge colors distinguish tool types visually for users
+
+### Build/Test status:
+- Playground-ui typecheck passes (pnpm exec tsc --noEmit)
+- Server package typecheck passes (pnpm --filter @mastra/server exec tsc --noEmit)
+- Full monorepo typecheck passes (pnpm typecheck)
+- Playground-ui tests pass (18 tests passing)
+- Full monorepo build passes (pnpm build)
+- All acceptance criteria met:
+  ✓ Integration tools appear in Tools table (fetched from cached_tools via API)
+  ✓ Can distinguish integration tools from code tools (Source column with badges)
+  ✓ Tool count includes integration tools (merged in LIST_TOOLS_ROUTE handler)
+
+### Files created:
+- None (only modified existing files)
+
+### Files modified:
+- packages/server/src/server/handlers/tools.ts (updated LIST_TOOLS_ROUTE to fetch and merge cached tools)
+- packages/playground-ui/src/domains/tools/components/tool-table/columns.tsx (added Source column)
+- .context/plans/dynamic-tools/tasks.json (marked task 022 as passing)
+
+### Next recommended task:
+- Task 023: Add integrations management page (P2)
+  This will create a dedicated page to view and manage configured integrations.
+  OR
+- Task 024: Add integration selector to agent form (P2)
+  This will allow users to assign integrations to agents when creating/editing.
+  OR
+- Task 025: Add integration tests for integration storage (P1)
+  This is important for testing the storage layer comprehensively.
+
+### Notes for next engineer:
+- Integration tools are now fully visible in the Tools table with proper source indication
+- The full end-to-end flow is functional:
+  1. User clicks "Add Tools" button
+  2. Selects provider (Composio/Arcade)
+  3. Selects toolkits
+  4. Reviews and deselects unwanted tools
+  5. Saves integration - tools are cached to database
+  6. Tools immediately appear in Tools table with integration name as source
+- Integration tools can be assigned to agents (via task 014 implementation)
+- Tool detail page should work for integration tools as the ID format is consistent
+- Future enhancement: Add tool detail page handling to show integration-specific metadata (provider, toolkit, etc.)
+- Future enhancement: Add ability to click on integration name in source column to navigate to integrations management page
+- The implementation is production-ready for the MVP scope
+
