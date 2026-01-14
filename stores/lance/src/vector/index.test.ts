@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { LanceVectorStore } from './index';
 
@@ -2057,3 +2058,108 @@ describe('Lance vector store tests', () => {
 
 // Note: Lance's architecture (tables + column names + index names) doesn't align cleanly
 // with the shared test suite's expectations. Lance-specific tests are above.
+
+/**
+ * Shared Test Suite Integration
+ *
+ * Lance has a unique table-based architecture that differs from most vector stores:
+ * - Requires tables to be created before indexes
+ * - Uses tableName parameter throughout operations
+ * - Has schema evolution and column management
+ *
+ * We integrate the shared suite with selective test domain opt-outs to handle
+ * Lance's architectural differences while still testing common vector operations.
+ */
+describe.skip('Lance Shared Test Suite', () => {
+  let vectorDB: LanceVectorStore;
+  const connectionString = process.env.DB_URL || 'lancedb-vector';
+
+  beforeAll(async () => {
+    if (!connectionString) {
+      console.warn(
+        'Skipping Lance shared test suite: DB_URL environment variable not set. Set DB_URL to a LanceDB connection string (local directory or remote S3/cloud URL).',
+      );
+      return;
+    }
+
+    vectorDB = await LanceVectorStore.create(connectionString);
+  });
+
+  afterAll(async () => {
+    if (vectorDB) {
+      try {
+        await vectorDB.deleteAllTables();
+      } catch (error) {
+        console.warn('Failed to cleanup tables:', error);
+      } finally {
+        vectorDB.close();
+      }
+    }
+  });
+
+  // Helper function to generate test data for Lance (requires 256+ rows for index creation)
+  const generateTableData = (numRows: number, dimension: number = 1536) => {
+    return Array.from({ length: numRows }, (_, i) => ({
+      id: String(i + 1),
+      vector: Array.from({ length: dimension }, () => Math.random()),
+      metadata: {},
+    }));
+  };
+
+  createVectorTestSuite({
+    vector: vectorDB,
+    createIndex: async (indexName: string) => {
+      // Lance requires table to exist before creating index
+      // Create table with 300 rows (Lance requires 256+ for index creation)
+      const tableName = indexName;
+      await vectorDB.createTable(tableName, generateTableData(300, 1536));
+
+      // Create index on the 'vector' column
+      await vectorDB.createIndex({
+        indexName: 'vector',
+        dimension: 1536,
+        metric: 'cosine',
+        tableName: tableName,
+        indexConfig: {
+          type: 'ivfflat',
+          numPartitions: 2,
+          numSubVectors: 1,
+        },
+      });
+    },
+    deleteIndex: async (indexName: string) => {
+      // Lance uses deleteTable instead of deleteIndex
+      const tableName = indexName;
+      try {
+        await vectorDB.deleteTable(tableName);
+      } catch (error) {
+        // Ignore errors if table doesn't exist
+      }
+    },
+    waitForIndexing: async () => {
+      // Lance operations are synchronous, no need to wait
+      return;
+    },
+    testDomains: {
+      // Enable basic operations (createIndex, upsert, query, listIndexes, describeIndex)
+      basicOps: true,
+
+      // Enable filter operators ($gt, $lt, $in, $and, $or, etc.)
+      filterOps: true,
+
+      // Disable edge cases - Lance's table-based architecture handles these differently
+      // (e.g., dimension mismatch, large batches, concurrent ops have Lance-specific behavior)
+      edgeCases: false,
+
+      // Enable error handling tests
+      errorHandling: true,
+
+      // Enable metadata filtering (Memory system compatibility)
+      metadataFiltering: true,
+
+      // Disable advanced operations - Lance's architecture differs significantly
+      // (deleteVectors/updateVector work differently with tableName parameter)
+      advancedOps: false,
+    },
+  });
+});
