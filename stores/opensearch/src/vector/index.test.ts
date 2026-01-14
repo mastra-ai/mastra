@@ -8,7 +8,7 @@ import { OpenSearchVector } from './index';
  * Helper function to check if two vectors are similar (cosine similarity close to 1)
  * This is needed because OpenSearch may normalize vectors when using cosine similarity
  */
-function areVectorsSimilar(v1: number[] | undefined, v2: number[] | undefined, threshold = 0.99): boolean {
+function _areVectorsSimilar(v1: number[] | undefined, v2: number[] | undefined, threshold = 0.99): boolean {
   if (!v1 || !v2 || v1.length !== v2.length) return false;
 
   // Calculate cosine similarity

@@ -1,5 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { S3Vectors } from './';
 
 // ====== Vitest timeouts: keep generous but tests should run faster without manual waits ======

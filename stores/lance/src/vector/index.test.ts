@@ -1162,7 +1162,7 @@ describe('Lance Shared Test Suite', () => {
   });
 
   // Helper function to generate test data for Lance (requires 256+ rows for index creation)
-  const generateTableData = (numRows: number, dimension: number = 1536) => {
+  const _generateTableData = (numRows: number, dimension: number = 1536) => {
     return Array.from({ length: numRows }, (_, i) => ({
       id: String(i + 1),
       vector: Array.from({ length: dimension }, () => Math.random()),
