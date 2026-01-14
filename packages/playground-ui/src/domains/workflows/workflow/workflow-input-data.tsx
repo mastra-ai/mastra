@@ -1,10 +1,10 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import { DynamicForm } from '@/lib/form';
 import { Button } from '@/ds/components/Button/Button';
 import { CodeEditor, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Label } from '@/ds/components/Label';
 import { Loader2 } from 'lucide-react';
 
 import { ZodSchema } from 'zod';
@@ -43,13 +43,13 @@ export const WorkflowInputData = ({
         <div className="flex flex-row gap-4">
           <div className="flex items-center gap-3">
             <RadioGroupItem value="form" id="form" />
-            <Label htmlFor="form" className="!text-icon3 text-ui-sm">
+            <Label htmlFor="form" className="!text-neutral3 text-ui-sm">
               Form
             </Label>
           </div>
           <div className="flex items-center gap-3">
             <RadioGroupItem value="json" id="json" />
-            <Label htmlFor="json" className="!text-icon3 text-ui-sm">
+            <Label htmlFor="json" className="!text-neutral3 text-ui-sm">
               JSON
             </Label>
           </div>

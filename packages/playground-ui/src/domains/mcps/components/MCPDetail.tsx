@@ -1,5 +1,5 @@
-import { MainContentContent } from '@/components/ui/containers/MainContent';
-import { CopyButton } from '@/components/ui/copy-button';
+import { MainContentContent } from '@/ds/components/MainContent';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';
@@ -52,7 +52,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   if (!server)
     return (
       <MainContentContent>
-        <Txt as="h1" variant="header-md" className="text-icon3 font-medium py-20 text-center">
+        <Txt as="h1" variant="header-md" className="text-neutral3 font-medium py-20 text-center">
           Server not found
         </Txt>
       </MainContentContent>
@@ -63,18 +63,18 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   return (
     <MainContentContent isDivided={true}>
       <div className="px-8 py-12 mx-auto max-w-2xl w-full">
-        <Txt as="h1" variant="header-md" className="text-icon6 font-medium pb-4">
+        <Txt as="h1" variant="header-md" className="text-neutral6 font-medium pb-4">
           {server.name}
         </Txt>
 
         <div className="flex items-center gap-1 pb-6">
-          <Badge icon={<FolderIcon className="text-icon6" />} className="rounded-r-sm !text-icon4">
+          <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm !text-neutral4">
             Version
           </Badge>
-          <Badge className="rounded-l-sm !text-icon4">{server.version_detail.version}</Badge>
+          <Badge className="rounded-l-sm !text-neutral4">{server.version_detail.version}</Badge>
         </div>
 
-        <Txt className="text-icon3 pb-4">
+        <Txt className="text-neutral3 pb-4">
           This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use
           case.
         </Txt>
@@ -86,7 +86,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
               Regular HTTP Endpoint
             </Badge>
 
-            <Txt className="text-icon3 pt-1 pb-2">Use for stateless HTTP transport with streamable responses.</Txt>
+            <Txt className="text-neutral3 pt-1 pb-2">Use for stateless HTTP transport with streamable responses.</Txt>
 
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{httpStreamUrl}</Txt>
@@ -102,7 +102,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
               Server-Sent Events
             </Badge>
 
-            <Txt className="text-icon3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
+            <Txt className="text-neutral3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
 
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{sseUrl}</Txt>
@@ -116,7 +116,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
             <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">CLI</span>}>Command Line</Badge>
 
-            <Txt className="text-icon3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
+            <Txt className="text-neutral3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
 
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{commandLineConfig}</Txt>
@@ -144,7 +144,7 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
 
   return (
     <div className="p-5 overflow-y-scroll">
-      <div className="text-icon6 flex gap-2 items-center">
+      <div className="text-neutral6 flex gap-2 items-center">
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           <McpServerIcon />
         </Icon>

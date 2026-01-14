@@ -37,7 +37,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="space-y-4 text-icon3 mb-[2rem] content-center">
+    <Container className="space-y-4 text-neutral3 mb-[2rem] content-center">
       {/* Main Error Display */}
       <div
         className={cn(
@@ -47,15 +47,15 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       >
         {icon}
         <div className="text-center space-y-2">
-          <p className="text-[0.875rem] font-medium text-icon5">{title}</p>
-          <p className="text-[0.875rem] text-icon3">{getUserFriendlyMessage()}</p>
+          <p className="text-[0.875rem] font-medium text-neutral5">{title}</p>
+          <p className="text-[0.875rem] text-neutral3">{getUserFriendlyMessage()}</p>
         </div>
       </div>
 
       {/* Validation Errors */}
       {validationErrors && validationErrors.length > 0 && (
         <details className="text-xs">
-          <summary className="cursor-pointer text-icon3 hover:text-icon4 select-none text-center">
+          <summary className="cursor-pointer text-neutral3 hover:text-neutral4 select-none text-center">
             Show Validation Issues ({validationErrors.length})
           </summary>
           <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-auto max-h-60 text-left space-y-2">
@@ -76,7 +76,9 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       {/* General Error Details */}
       {errorMsg && !isValidationError && (
         <details className="text-xs">
-          <summary className="cursor-pointer text-icon3 hover:text-icon4 select-none text-center">Show Details</summary>
+          <summary className="cursor-pointer text-neutral3 hover:text-neutral4 select-none text-center">
+            Show Details
+          </summary>
           <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono overflow-auto max-h-60 text-left">
             <div className="whitespace-pre-wrap break-words">{errorMsg}</div>
           </div>

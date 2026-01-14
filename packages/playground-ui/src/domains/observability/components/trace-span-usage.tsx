@@ -243,7 +243,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
                   return (
                     <dl
                       key={detailKey}
-                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem] justify-between text-icon3"
+                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem] justify-between text-neutral3"
                     >
                       <dt>{detailKeyLabels[detailKey] || detailKey}</dt>
                       <dd>{detailValue}</dd>
@@ -260,7 +260,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
                   return (
                     <dl
                       key={provider}
-                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem]  justify-between text-icon3"
+                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem]  justify-between text-neutral3"
                     >
                       <dt>{provider}</dt>
                       <dd>{tokenValue}</dd>
