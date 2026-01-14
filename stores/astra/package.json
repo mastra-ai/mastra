@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.13.17",
