@@ -14,11 +14,11 @@ packages:
 For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
 
 
-```typescript 
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: "file:./mastra.db",
@@ -27,7 +27,7 @@ const mastra = new Mastra({
 ```
 On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
-## Supported Providers
+## Supported providers
 
 Each provider page includes installation instructions, configuration parameters, and usage examples:
 
@@ -46,40 +46,71 @@ Each provider page includes installation instructions, configuration parameters,
 libSQL is the easiest way to get started because it doesn’t require running a separate database server
 :::
 
-## Configuration Scope
+## Configuration scope
 
 You can configure storage at two different scopes:
 
 ### Instance-level storage
 
-Add storage to your Mastra instance so all agents share the same memory provider:
+Add storage to your Mastra instance so all agents, workflows, observability traces and scores share the same memory provider:
 
-```typescript 
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
   }),
 });
-
-// All agents automatically use this storage
-const agent1 = new Agent({ memory: new Memory() });
-const agent2 = new Agent({ memory: new Memory() });
 ```
+
+This is useful when all primitives share the same storage backend and have similar performance, scaling, and operational requirements.
+
+#### Composite storage
+
+Add storage to your Mastra instance using `MastraStorage` and configure individual storage domains to use different storage providers.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { WorkflowsPG } from "@mastra/pg";
+import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+
+export const mastra = new Mastra({
+  storage: new MastraStorage({
+    id: "composite",
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      observability: new ObservabilityStorageClickhouse({
+        url: process.env.CLICKHOUSE_URL,
+        username: process.env.CLICKHOUSE_USERNAME,
+        password: process.env.CLICKHOUSE_PASSWORD,
+      }),
+    },
+  }),
+});
+```
+
+This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
+
+:::info
+See [Storage Domains](/reference/v1/storage/composite#storage-domains) for more information.
+:::
 
 ### Agent-level storage
 
-Add storage to a specific agent when you need data boundaries or compliance requirements:
+Agent-level storage overrides storage configured at the instance-level. Add storage to a specific agent when you need data boundaries or compliance requirements:
 
-```typescript 
+```typescript title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
 
-const agent = new Agent({
+export const agent = new Agent({
   memory: new Memory({
     storage: new PostgresStore({
       id: 'agent-storage',
@@ -91,7 +122,7 @@ const agent = new Agent({
 
 This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
 
-## Threads and Resources
+## Threads and resources
 
 Mastra organizes memory into threads using two identifiers:
 
@@ -100,7 +131,7 @@ Mastra organizes memory into threads using two identifiers:
 
 Both identifiers are required for agents to store and recall information:
 
-```typescript 
+```typescript
 const stream = await agent.stream("message for agent", {
   memory: {
     thread: "convo_123",
@@ -119,7 +150,7 @@ Mastra can automatically generate descriptive thread titles based on the user's 
 
 Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
 
-```typescript 
+```typescript
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
@@ -154,7 +185,7 @@ Semantic recall uses vector embeddings to retrieve relevant past messages based 
 
 The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
 
-```typescript 
+```typescript
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
@@ -162,7 +193,7 @@ import { PostgresStore } from "@mastra/pg";
 import { PineconeVector } from "@mastra/pinecone";
 
 // Instance-level vector configuration
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
@@ -170,7 +201,7 @@ const mastra = new Mastra({
 });
 
 // Agent-level vector configuration
-const agent = new Agent({
+export const agent = new Agent({
   memory: new Memory({
     vector: new PineconeVector({
       id: 'agent-vector',
