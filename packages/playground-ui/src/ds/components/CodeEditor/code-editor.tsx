@@ -9,6 +9,7 @@ import { HTMLAttributes, useMemo } from 'react';
 import type { Extension } from '@codemirror/state';
 
 import { CopyButton } from '@/ds/components/CopyButton';
+import { TooltipProvider } from '../Tooltip';
 
 export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => {
@@ -51,16 +52,18 @@ export const CodeEditor = ({ data, value, onChange, showCopyButton = true, class
   const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
   return (
-    <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
-      {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
-      <CodeMirror
-        value={formattedCode}
-        theme={theme}
-        extensions={[jsonLanguage]}
-        onChange={onChange}
-        aria-label="Code editor"
-      />
-    </div>
+    <TooltipProvider>
+      <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
+        {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
+        <CodeMirror
+          value={formattedCode}
+          theme={theme}
+          extensions={[jsonLanguage]}
+          onChange={onChange}
+          aria-label="Code editor"
+        />
+      </div>
+    </TooltipProvider>
   );
 };
 

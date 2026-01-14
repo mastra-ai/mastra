@@ -1,10 +1,4 @@
-import {
-  ComposerPrimitive,
-  MessagePrimitive,
-  ThreadPrimitive,
-  ToolCallMessagePartComponent,
-  useComposerRuntime,
-} from '@assistant-ui/react';
+import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
 import { TooltipIconButton } from './tooltip-icon-button';
@@ -142,7 +136,7 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-[#898989] hover:text-[#fff]" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
     </TooltipIconButton>
   );
 };
@@ -158,7 +152,7 @@ const ComposerAction = () => {
         className="rounded-full"
         onClick={() => setIsAddAttachmentDialogOpen(true)}
       >
-        <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+        <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
       </TooltipIconButton>
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
@@ -168,9 +162,9 @@ const ComposerAction = () => {
           <TooltipIconButton
             tooltip="Send"
             variant="default"
-            className="rounded-full border-sm border-[#363636] bg-[#292929]"
+            className="rounded-full border-sm border-border1 bg-surface4"
           >
-            <ArrowUp className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+            <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
           </TooltipIconButton>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>

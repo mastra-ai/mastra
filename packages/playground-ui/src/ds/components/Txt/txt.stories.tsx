@@ -31,6 +31,7 @@ export const Default: Story = {
   args: {
     children: 'Default text',
     variant: 'ui-md',
+    className: 'text-neutral6',
   },
 };
 
@@ -39,6 +40,7 @@ export const HeaderMd: Story = {
     children: 'Header Medium',
     variant: 'header-md',
     as: 'h2',
+    className: 'text-neutral6',
   },
 };
 
@@ -46,6 +48,7 @@ export const UiLg: Story = {
   args: {
     children: 'UI Large text',
     variant: 'ui-lg',
+    className: 'text-neutral6',
   },
 };
 
@@ -53,6 +56,7 @@ export const UiMd: Story = {
   args: {
     children: 'UI Medium text',
     variant: 'ui-md',
+    className: 'text-neutral6',
   },
 };
 
@@ -60,6 +64,7 @@ export const UiSm: Story = {
   args: {
     children: 'UI Small text',
     variant: 'ui-sm',
+    className: 'text-neutral6',
   },
 };
 
@@ -67,6 +72,7 @@ export const UiXs: Story = {
   args: {
     children: 'UI Extra Small text',
     variant: 'ui-xs',
+    className: 'text-neutral6',
   },
 };
 
@@ -75,6 +81,7 @@ export const Monospace: Story = {
     children: 'const code = "monospace"',
     variant: 'ui-md',
     font: 'mono',
+    className: 'text-neutral6',
   },
 };
 
@@ -83,6 +90,7 @@ export const AsHeading: Story = {
     children: 'This is a heading',
     as: 'h1',
     variant: 'header-md',
+    className: 'text-neutral6',
   },
 };
 
@@ -92,19 +100,28 @@ export const AsLabel: Story = {
     as: 'label',
     variant: 'ui-sm',
     htmlFor: 'input-field',
+    className: 'text-neutral6',
   },
 };
 
 export const AllVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      <Txt variant="header-md" as="h2">
+      <Txt variant="header-md" as="h2" className="text-neutral6">
         Header Medium
       </Txt>
-      <Txt variant="ui-lg">UI Large</Txt>
-      <Txt variant="ui-md">UI Medium</Txt>
-      <Txt variant="ui-sm">UI Small</Txt>
-      <Txt variant="ui-xs">UI Extra Small</Txt>
+      <Txt variant="ui-lg" className="text-neutral6">
+        UI Large
+      </Txt>
+      <Txt variant="ui-md" className="text-neutral6">
+        UI Medium
+      </Txt>
+      <Txt variant="ui-sm" className="text-neutral6">
+        UI Small
+      </Txt>
+      <Txt variant="ui-xs" className="text-neutral6">
+        UI Extra Small
+      </Txt>
     </div>
   ),
 };
@@ -112,13 +129,13 @@ export const AllVariants: Story = {
 export const MonospaceVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-2">
-      <Txt variant="ui-md" font="mono">
+      <Txt variant="ui-md" font="mono" className="text-neutral6">
         Regular monospace
       </Txt>
-      <Txt variant="ui-sm" font="mono">
+      <Txt variant="ui-sm" font="mono" className="text-neutral6">
         Small monospace
       </Txt>
-      <Txt variant="ui-xs" font="mono">
+      <Txt variant="ui-xs" font="mono" className="text-neutral6">
         Extra small monospace
       </Txt>
     </div>

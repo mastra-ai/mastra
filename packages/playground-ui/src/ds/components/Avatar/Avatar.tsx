@@ -22,7 +22,7 @@ export const Avatar = ({ src, name, size = 'sm' }: AvatarProps) => {
       {src ? (
         <img src={src} alt={name} className="h-full w-full object-cover" />
       ) : (
-        <Txt variant="ui-md" className="text-center">
+        <Txt variant="ui-md" className="text-center text-neutral6">
           {name[0].toUpperCase()}
         </Txt>
       )}
