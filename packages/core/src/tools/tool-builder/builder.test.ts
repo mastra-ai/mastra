@@ -606,7 +606,6 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-
   it('should not inject tracingContext when agentSpan is not available', async () => {
     let receivedTracingContext: any = undefined;
 
