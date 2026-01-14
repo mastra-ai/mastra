@@ -93,7 +93,10 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       } catch (error: any) {
         if (
           error.code === 'SQLITE_BUSY' ||
-          (error.message && error.message.toLowerCase().includes('database is locked'))
+          error.code === 'SQLITE_LOCKED' ||
+          error.code === 'SQLITE_LOCKED_SHAREDCACHE' ||
+          (error.message && error.message.toLowerCase().includes('database is locked')) ||
+          (error.message && error.message.toLowerCase().includes('database table is locked'))
         ) {
           attempts++;
           if (attempts >= this.maxRetries) {
@@ -212,6 +215,40 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+    // Input validation
+    if (!vectors || vectors.length === 0) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('LIBSQL', 'UPSERT', 'INVALID_ARGS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        new Error('vectors array cannot be empty'),
+      );
+    }
+
+    if (metadata && metadata.length !== vectors.length) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('LIBSQL', 'UPSERT', 'INVALID_ARGS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        new Error(`metadata length (${metadata.length}) must match vectors length (${vectors.length})`),
+      );
+    }
+
+    if (ids && ids.length !== vectors.length) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('LIBSQL', 'UPSERT', 'INVALID_ARGS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        new Error(`ids length (${ids.length}) must match vectors length (${vectors.length})`),
+      );
+    }
+
     const tx = await this.turso.transaction('write');
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
