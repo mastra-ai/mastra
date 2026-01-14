@@ -280,7 +280,7 @@ export function createBasicOperationsTest(config: VectorTestConfig) {
 
         // Scores should be in descending order (higher score = more similar)
         for (let i = 0; i < results.length - 1; i++) {
-          expect(results[i].score).toBeGreaterThanOrEqual(results[i + 1].score);
+          expect(results[i]?.score).toBeGreaterThanOrEqual(results[i + 1]?.score ?? 0);
         }
       });
 
