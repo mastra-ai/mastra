@@ -423,6 +423,7 @@ describe('OAuth Middleware Integration', () => {
   beforeAll(async () => {
     // Create an MCP server with a simple tool
     const mcpServer = new MCPServer({
+      id: 'oauth-test-server',
       name: 'OAuth Test Server',
       version: '1.0.0',
       tools: {},
