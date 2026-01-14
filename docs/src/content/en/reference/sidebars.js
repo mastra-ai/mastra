@@ -222,7 +222,6 @@ const sidebars = {
         { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
         { type: "doc", id: "core/setLogger", label: ".setLogger()" },
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
-        { type: "doc", id: "core/setTelemetry", label: ".setTelemetry()" },
       ],
     },
     {
@@ -547,7 +546,7 @@ const sidebars = {
         {
           type: "doc",
           id: "storage/composite",
-          label: "Storage Composition",
+          label: "Composite Storage",
         },
         {
           type: "doc",
@@ -812,11 +811,6 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "workflows/workflow-methods/sendEvent",
-              label: ".sendEvent()",
-            },
-            {
-              type: "doc",
               id: "workflows/workflow-methods/sleep",
               label: ".sleep()",
             },
@@ -829,11 +823,6 @@ const sidebars = {
               type: "doc",
               id: "workflows/workflow-methods/then",
               label: ".then()",
-            },
-            {
-              type: "doc",
-              id: "workflows/workflow-methods/waitForEvent",
-              label: ".waitForEvent()",
             },
           ],
         },

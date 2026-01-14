@@ -157,10 +157,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
-    // Entity identification
-    this.entityType = options.entityType;
-    this.entityId = options.entityId;
-    this.entityName = options.entityName;
+    // Entity identification - inherit from parent if not explicitly provided
+    this.entityType = options.entityType ?? options.parent?.entityType;
+    this.entityId = options.entityId ?? options.parent?.entityId;
+    this.entityName = options.entityName ?? options.parent?.entityName;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.

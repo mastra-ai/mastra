@@ -6511,7 +6511,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //             "stopSequences": undefined,
   //             "temperature": undefined,
   //             "toolChoice": undefined,
-  //             "tools": undefined,
   //             "topK": undefined,
   //             "topP": undefined,
   //           }
@@ -7509,7 +7508,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   ],
                   "text": "Hello, This is aworld! test.",
                   "toolCalls": [],
-                  "tools": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -7630,7 +7628,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   ],
                   "text": "Hello, This is aworld! test.",
                   "toolCalls": [],
-                  "tools": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
