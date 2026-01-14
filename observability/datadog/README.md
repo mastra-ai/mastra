@@ -10,6 +10,7 @@ pnpm add @mastra/datadog
 
 ## Requirements
 
+- **Node.js >=22.13.0** (Node.js 22.x recommended for best native module compatibility)
 - Datadog account with LLM Observability enabled
 - Datadog API key (available in your Datadog account settings)
 
@@ -97,6 +98,58 @@ All unmapped span types (including `MODEL_CHUNK`, `GENERIC`, etc., and future sp
 - **Metadata as tags**: Span metadata is flattened into searchable Datadog tags
 - **Error tracking**: Error spans include error tags with message, ID, and category
 - **Parent/child hierarchy**: Spans are emitted parent-first to preserve trace trees in Datadog
+
+## Troubleshooting
+
+### Missing `@openfeature/core` dependency
+
+If you see warnings about missing `@openfeature/core` or `@openfeature/server-sdk`, these are optional peer dependencies from `dd-trace`. You can ignore the warnings or install them:
+
+```bash
+pnpm add @openfeature/core @openfeature/server-sdk
+```
+
+### Native module ABI errors
+
+If you see errors like `No native build was found for runtime=node abi=137`:
+
+1. **Use Node.js 22.x** - Native modules have best compatibility with Node.js 22.x
+2. **Ignore the warnings** - Native modules are optional; core tracing still works without them
+
+### Version resolution issues
+
+If you encounter version conflicts with `@mastra/observability`, add this to your `package.json`:
+
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "@mastra/observability": "1.0.0-beta.10"
+    }
+  }
+}
+```
+
+### Bundler configuration
+
+When using bundlers, mark `dd-trace` and native modules as external:
+
+```typescript
+// mastra.config.ts
+export default {
+  bundler: {
+    externals: [
+      "dd-trace",
+      "@openfeature/core",
+      "@openfeature/server-sdk",
+      "@datadog/native-metrics",
+      "@datadog/native-appsec",
+      "@datadog/native-iast-taint-tracking",
+      "@datadog/pprof",
+    ],
+  },
+};
+```
 
 ## License
 

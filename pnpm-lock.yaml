@@ -1091,6 +1091,12 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../mastra
+      '@openfeature/core':
+        specifier: ^1.7.0
+        version: 1.9.1
+      '@openfeature/server-sdk':
+        specifier: ^1.18.0
+        version: 1.18.0(@openfeature/core@1.9.1)
       dd-trace:
         specifier: ^5.0.0
         version: 5.81.0(@openfeature/core@1.9.1)(@openfeature/server-sdk@1.18.0(@openfeature/core@1.9.1))
@@ -23023,13 +23029,11 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@openfeature/core@1.9.1':
-    optional: true
+  '@openfeature/core@1.9.1': {}
 
   '@openfeature/server-sdk@1.18.0(@openfeature/core@1.9.1)':
     dependencies:
       '@openfeature/core': 1.9.1
-    optional: true
 
   '@openrouter/ai-sdk-provider@0.4.6(zod@3.25.76)':
     dependencies:

@@ -133,6 +133,83 @@ Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
+## Troubleshooting
+
+### Missing `@openfeature/core` dependency
+
+If you see warnings about missing `@openfeature/core` or `@openfeature/server-sdk` dependencies, these are optional peer dependencies from `dd-trace`. You can safely ignore these warnings, or install them explicitly:
+
+```bash npm2yarn
+npm install @openfeature/core @openfeature/server-sdk
+```
+
+### Native module ABI mismatch
+
+If you see errors like:
+
+```
+Error: No native build was found for runtime=node abi=137 platform=linuxglibc arch=x64
+```
+
+This indicates a Node.js version compatibility issue with `dd-trace`'s native modules. These native modules are **optional** and provide performance monitoring features.
+
+**Solutions:**
+
+1. **Use Node.js 22.x**: The `@mastra/datadog` package requires Node.js >=22.13.0. Native modules have the best compatibility with Node.js 22.x.
+
+2. **Ignore native module warnings**: The native modules (`@datadog/native-metrics`, `@datadog/native-appsec`, etc.) are optional. If they fail to load, core tracing functionality still works.
+
+3. **Set environment variable**: You can suppress native module warnings:
+   ```bash
+   DD_TRACE_DISABLED_INSTRUMENTATIONS=native-metrics
+   ```
+
+### Version resolution issues
+
+If you encounter version mismatch errors with `@mastra/observability`, add this override to your `package.json`:
+
+```json title="package.json"
+{
+  "overrides": {
+    "@mastra/datadog": {
+      "@mastra/observability": "1.0.0-beta.10"
+    }
+  }
+}
+```
+
+For pnpm users:
+
+```json title="package.json"
+{
+  "pnpm": {
+    "overrides": {
+      "@mastra/observability": "1.0.0-beta.10"
+    }
+  }
+}
+```
+
+### Bundler externals configuration
+
+When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
+
+```typescript title="mastra.config.ts"
+export default {
+  bundler: {
+    externals: [
+      "dd-trace",
+      "@openfeature/core",
+      "@openfeature/server-sdk",
+      "@datadog/native-metrics",
+      "@datadog/native-appsec",
+      "@datadog/native-iast-taint-tracking",
+      "@datadog/pprof",
+    ],
+  },
+};
+```
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
