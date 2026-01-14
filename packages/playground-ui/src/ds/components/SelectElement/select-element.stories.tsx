@@ -24,7 +24,7 @@ export const Default: Story = {
 export const WithValue: Story = {
   args: {
     name: 'select-value',
-    value: '1',
+    value: 'Banana',
     options: ['Apple', 'Banana', 'Cherry'],
   },
 };

@@ -29,17 +29,6 @@ export const WithInput: Story = {
   ),
 };
 
-export const Required: Story = {
-  render: () => (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="name">
-        Name <span className="text-red-500">*</span>
-      </Label>
-      <Input id="name" placeholder="Enter your name" />
-    </div>
-  ),
-};
-
 export const WithDescription: Story = {
   render: () => (
     <div className="flex flex-col gap-1">
