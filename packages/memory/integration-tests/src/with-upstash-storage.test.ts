@@ -39,7 +39,7 @@ describe('Memory with UpstashStore Integration', () => {
     }),
     vector: new LibSQLVector({
       // TODO: use upstash vector in tests
-      connectionUrl: 'file:upstash-test-vector.db',
+      url: 'file:upstash-test-vector.db',
       id: randomUUID(),
     }),
     embedder: fastembed,

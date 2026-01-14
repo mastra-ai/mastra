@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
@@ -178,6 +179,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     error?: any;
     steps: Record<string, any>;
     tripwire?: any;
+    runId: string;
+    workflowId: string;
+    resourceId?: string;
+    input?: any;
+    requestContext: RequestContext;
+    state: Record<string, any>;
   }): Promise<void> {
     // No-op: Inngest handles callbacks in workflow.ts finalize step
   }
@@ -191,6 +198,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     error?: any;
     steps: Record<string, any>;
     tripwire?: any;
+    runId: string;
+    workflowId: string;
+    resourceId?: string;
+    input?: any;
+    requestContext: RequestContext;
+    state: Record<string, any>;
   }): Promise<void> {
     return super.invokeLifecycleCallbacks(result);
   }

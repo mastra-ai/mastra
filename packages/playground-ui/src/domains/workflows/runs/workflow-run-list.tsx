@@ -3,14 +3,14 @@ import { Icon } from '@/ds/icons';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
+import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from 'date-fns';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Badge } from '@/ds/components/Badge';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { useInView } from '@/hooks';
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
 
 export interface WorkflowRunListProps {
@@ -74,7 +74,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                     <WorkflowRunStatusBadge status={run.snapshot.status} />
                   </div>
                 )}
-                <span className="truncate max-w-32 text-muted-foreground">{run.runId}</span>
+                <span className="truncate max-w-32 text-icon3">{run.runId}</span>
                 <span>
                   {typeof run?.snapshot === 'string'
                     ? ''

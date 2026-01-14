@@ -1,13 +1,12 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import { DynamicForm } from '@/lib/form';
 import { Button } from '@/ds/components/Button/Button';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { CodeEditor, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Label } from '@/ds/components/Label';
 import { Loader2 } from 'lucide-react';
-import { jsonLanguage } from '@codemirror/lang-json';
-import { CopyButton } from '@/components/ui/copy-button';
+
 import { ZodSchema } from 'zod';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
@@ -116,6 +115,13 @@ const JSONInput = ({
     }
   };
 
+  let data = {};
+  try {
+    data = JSON.parse(inputData);
+  } catch {
+    data = {};
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {errors.length > 0 && (
@@ -134,7 +140,7 @@ const JSONInput = ({
         </div>
       )}
 
-      <JsonEditor data={inputData} onChange={setInputData} />
+      <CodeEditor data={data} onChange={setInputData} />
 
       {children}
 
@@ -143,17 +149,6 @@ const JSONInput = ({
           {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
         </Button>
       )}
-    </div>
-  );
-};
-
-const JsonEditor = ({ data, onChange }: { data: string; onChange?: (data: string) => void }) => {
-  const theme = useCodemirrorTheme();
-
-  return (
-    <div className="rounded-md bg-surface4 p-1 font-mono relative">
-      <CopyButton content={data} className="absolute top-2 right-2 z-10" />
-      <CodeMirror value={data} theme={theme} extensions={[jsonLanguage]} onChange={onChange} />
     </div>
   );
 };

@@ -11,6 +11,7 @@ import {
   isPlainJSONSchema,
   jsonSchema,
 } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -344,7 +345,9 @@ export class CoreToolBuilder extends MastraBase {
               suspendData = args;
               const newSuspendOptions = {
                 ...(suspendOptions ?? {}),
-                resumeSchema: suspendOptions?.resumeSchema ?? resumeSchema,
+                resumeSchema:
+                  suspendOptions?.resumeSchema ??
+                  (resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined),
               };
               return execOptions.suspend?.(args, newSuspendOptions);
             },

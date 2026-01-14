@@ -45,9 +45,12 @@ export interface NetworkRoutingConfig {
 /**
  * Full configuration options for agent.network() execution.
  */
-export type NetworkOptions = {
+export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
+
+  /** Whether to automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
 
   /** Unique identifier for this execution run */
   runId?: string;
@@ -105,12 +108,38 @@ export type NetworkOptions = {
     result: string;
     isComplete: boolean;
   }) => void | Promise<void>;
+
+  /**
+   * Structured output configuration for the network's final result.
+   * When provided, the network will generate a structured response matching the schema.
+   *
+   * @example
+   * ```typescript
+   * import { z } from 'zod';
+   *
+   * const resultSchema = z.object({
+   *   summary: z.string(),
+   *   recommendations: z.array(z.string()),
+   *   confidence: z.number(),
+   * });
+   *
+   * const stream = await agent.network(task, {
+   *   structuredOutput: {
+   *     schema: resultSchema,
+   *   },
+   * });
+   *
+   * // Get typed result
+   * const result = await stream.object;
+   * ```
+   */
+  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
 };
 
 /**
  * @deprecated Use NetworkOptions instead
  */
-export type MultiPrimitiveExecutionOptions = NetworkOptions;
+export type MultiPrimitiveExecutionOptions<OUTPUT extends OutputSchema = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Custom instructions that override the agent's default instructions for this execution */

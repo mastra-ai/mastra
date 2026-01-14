@@ -34,13 +34,13 @@ function areVectorsSimilar(v1: number[] | undefined, v2: number[] | undefined, t
 
 describe('OpenSearchVector', () => {
   let vectorDB: OpenSearchVector;
-  const url = 'http://localhost:9200';
+  const node = 'http://localhost:9200';
   const testIndexName = 'test-index-' + Date.now();
   const testIndexName2 = 'test-index2-' + Date.now();
 
   beforeAll(async () => {
     // Initialize OpenSearchVector
-    vectorDB = new OpenSearchVector({ url, id: 'opensearch-test' });
+    vectorDB = new OpenSearchVector({ node, id: 'opensearch-test' });
   });
 
   afterAll(async () => {
@@ -1560,7 +1560,7 @@ describe('OpenSearchVector', () => {
 
 // Metadata filtering and advanced operations tests
 describe('OpenSearch Metadata Filtering', () => {
-  const opensearchVector = new OpenSearchVector({ url: 'http://localhost:9200', id: 'opensearch-metadata-test' });
+  const opensearchVector = new OpenSearchVector({ node: 'http://localhost:9200', id: 'opensearch-metadata-test' });
 
   createVectorTestSuite({
     vector: opensearchVector,

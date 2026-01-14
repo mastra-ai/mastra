@@ -1,5 +1,5 @@
-import { MainContentContent } from '@/components/ui/containers/MainContent';
-import { CopyButton } from '@/components/ui/copy-button';
+import { MainContentContent } from '@/ds/components/MainContent';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';
@@ -10,7 +10,6 @@ import { useEffect, useRef, useState } from 'react';
 import { ToolIconMap } from '@/domains/tools';
 import { McpToolInfo } from '@mastra/client-js';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
-import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 
 export interface MCPDetailProps {
   isLoading: boolean;

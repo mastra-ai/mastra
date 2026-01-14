@@ -1,5 +1,20 @@
 # @mastra/dane
 
+## 1.0.0-beta.21
+
+### Patch Changes
+
+- dependencies updates: ([#10189](https://github.com/mastra-ai/mastra/pull/10189))
+  - Updated dependency [`commander@^14.0.2` ↗︎](https://www.npmjs.com/package/commander/v/14.0.2) (from `^12.1.0`, in `dependencies`)
+
+- dependencies updates: ([#10191](https://github.com/mastra-ai/mastra/pull/10191))
+  - Updated dependency [`dotenv@^17.2.3` ↗︎](https://www.npmjs.com/package/dotenv/v/17.2.3) (from `^16.4.7`, in `dependencies`)
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ce22710`](https://github.com/mastra-ai/mastra/commit/ce22710754f7e4b81431358c7c05ccf288706de0), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`8bbc554`](https://github.com/mastra-ai/mastra/commit/8bbc554beed3bbda31c063a4506451af6c4a50e4), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+  - @mastra/mcp@1.0.0-beta.9
+  - @mastra/rag@2.0.0-beta.6
+  - @mastra/memory@1.0.0-beta.12
+
 ## 1.0.0-beta.20
 
 ### Patch Changes

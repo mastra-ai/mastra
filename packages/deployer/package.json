@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.20",
+  "version": "1.0.0-beta.21",
   "description": "",
   "type": "module",
   "files": [
@@ -108,7 +108,7 @@
     "empathic": "^2.0.0",
     "esbuild": "^0.25.10",
     "find-workspaces": "^0.3.1",
-    "fs-extra": "^11.3.2",
+    "fs-extra": "^11.3.3",
     "hono": "^4.11.3",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",

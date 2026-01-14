@@ -65,13 +65,7 @@ export const agent = new Agent({
       description: "Memory configuration options.",
       isOptional: true,
     },
-    {
-      name: "processors",
-      type: "MemoryProcessor[]",
-      description:
-        "Array of memory processors that can filter or transform messages before they're sent to the LLM.",
-      isOptional: true,
-    },
+    
   ]}
 />
 
@@ -113,12 +107,12 @@ export const agent = new Agent({
         "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
-      name: "threads",
-      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+      name: "generateTitle",
+      type: "boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }",
       description:
-        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
+        "Controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
       isOptional: true,
-      defaultValue: "{ generateTitle: false }",
+      defaultValue: "false",
     },
   ]}
 />
@@ -153,7 +147,7 @@ export const agent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'test-agent-vector',
-      connectionUrl: "file:./vector-memory.db",
+      url: "file:./vector-memory.db",
     }),
     options: {
       lastMessages: 10,
@@ -165,9 +159,7 @@ export const agent = new Agent({
       workingMemory: {
         enabled: true,
       },
-      threads: {
-        generateTitle: true,
-      },
+      generateTitle: true,
     },
   }),
 });

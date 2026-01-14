@@ -1,6 +1,10 @@
 import { cn } from '@/lib/utils';
-import { SideDialog, KeyValueList, TextAndIcon, getShortId, Section } from '@/components/ui/elements';
-import { ButtonsGroup, Sections } from '@/components/ui/containers';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Section } from '@/ds/components/Section';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Sections } from '@/ds/components/Sections';
 import {
   PanelLeftIcon,
   HashIcon,

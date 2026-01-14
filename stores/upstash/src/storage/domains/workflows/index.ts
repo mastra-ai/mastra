@@ -18,26 +18,6 @@ import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
 import { getKey } from '../utils';
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
-}
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -47,6 +27,26 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const client = resolveUpstashConfig(config);
     this.client = client;
     this.#db = new UpstashDB({ client });
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -272,7 +272,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       );
       const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
       if (!data) return null;
-      return parseWorkflowRun(data);
+      return this.parseWorkflowRun(data);
     } catch (error) {
       throw new MastraError(
         {
@@ -373,7 +373,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         )
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
-        .map(w => parseWorkflowRun(w!))
+        .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
@@ -383,7 +383,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
               try {
                 snapshot = JSON.parse(snapshot) as WorkflowRunState;
               } catch (e) {
-                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                this.logger.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
                 return false;
               }
             }

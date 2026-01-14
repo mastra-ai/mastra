@@ -5,7 +5,7 @@ import { createNodeServer, getToolExports } from '#server';
 import { tools } from '#tools';
 // @ts-ignore
 await createNodeServer(mastra, {
-  playground: true,
+  studio: true,
   isDev: true,
   tools: getToolExports(tools),
 });

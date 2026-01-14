@@ -1,4 +1,4 @@
-import { Tabs, TabList, Tab, TabContent } from '@/components/ui/elements/tabs';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import {
   KeyValueList,
   KeyValueListItemData,

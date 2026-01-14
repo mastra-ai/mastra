@@ -2,11 +2,10 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { useState } from 'react';
 
-import { Text } from '@/components/ui/text';
-
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown, Footprints } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
@@ -27,7 +26,7 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn('bg-mastra-bg-3 rounded-md w-[274px] flex flex-col p-2 gap-2')}
+      className={cn('bg-surface4 rounded-md w-[274px] flex flex-col p-2 gap-2')}
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 
@@ -43,11 +42,11 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2">
         {steps.map(step => (
-          <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2" key={step}>
+          <div className="text-sm bg-surface5 flex items-center gap-[6px] rounded-sm  p-2" key={step}>
             <Footprints className="text-current w-4 h-4" />
-            <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
+            <Txt variant="ui-xs" className="text-icon6 capitalize">
               {step}
-            </Text>
+            </Txt>
           </div>
         ))}
       </CollapsibleContent>

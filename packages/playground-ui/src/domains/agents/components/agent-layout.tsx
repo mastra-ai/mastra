@@ -1,5 +1,5 @@
 import { Panel, useDefaultLayout, Group, PanelImperativeHandle } from 'react-resizable-panels';
-import { getMainContentContentClassName } from '@/components/ui/containers/MainContent';
+import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 
@@ -51,7 +51,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLay
             id="right-slot"
             minSize={300}
             maxSize={'50%'}
-            defaultSize={300}
+            defaultSize="30%"
             collapsedSize={60}
             collapsible={true}
           >

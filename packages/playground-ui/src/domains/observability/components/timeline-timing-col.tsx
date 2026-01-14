@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { KeyValueList } from '@/components/ui/elements';
+import { KeyValueList } from '@/ds/components/KeyValueList';
 import { type UISpan } from '../types';
 import { format } from 'date-fns/format';
 import { useLinkComponent } from '@/lib/framework';

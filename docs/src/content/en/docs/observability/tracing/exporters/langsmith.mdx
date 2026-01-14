@@ -26,12 +26,38 @@ npm install @mastra/langsmith@beta
 3. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
+# Required
 LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
-LANGCHAIN_PROJECT=my-project  # Optional: default project for traces
-LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
+
+# Optional
+LANGCHAIN_PROJECT=my-project  # Default project for traces
+LANGSMITH_BASE_URL=https://api.smith.langchain.com  # For self-hosted
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangSmithExporter } from "@mastra/langsmith";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langsmith: {
+        serviceName: "my-service",
+        exporters: [new LangSmithExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";

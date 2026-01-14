@@ -2,8 +2,7 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { CircleCheck, CircleX } from 'lucide-react';
 
-import { Text } from '@/components/ui/text';
-
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type LoopResultNode = Node<
@@ -19,16 +18,16 @@ export function WorkflowLoopResultNode({ data }: NodeProps<LoopResultNode>) {
     <div
       data-testid="workflow-loop-result-node"
       data-workflow-step-status={result ? 'success' : 'failed'}
-      className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}
+      className={cn('bg-surface4 rounded-md w-[274px]')}
       data-workflow-node
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
       <div className="p-2">
-        <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2">
+        <div className="text-sm bg-surface5 flex items-center gap-[6px] rounded-sm  p-2">
           {result ? <CircleCheck className="text-current w-4 h-4" /> : <CircleX className="text-current w-4 h-4" />}
-          <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
+          <Txt variant="ui-xs" className="text-icon6 capitalize">
             {String(result)}
-          </Text>
+          </Txt>
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />

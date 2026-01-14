@@ -568,9 +568,21 @@ describe('runEvals', () => {
         saveScore: saveScoreSpy,
       };
 
+      // Mock workflows store with methods needed for scorer workflow runs
+      const mockWorkflowsStore = {
+        getWorkflowRunById: vi.fn().mockResolvedValue(null),
+        deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
+        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+        listWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
+      };
+
       const mockStorage = {
         init: vi.fn().mockResolvedValue(undefined),
-        getStore: vi.fn().mockResolvedValue(mockScoresStore),
+        getStore: vi.fn().mockImplementation(async (domain: string) => {
+          if (domain === 'workflows') return mockWorkflowsStore;
+          if (domain === 'scores') return mockScoresStore;
+          return null;
+        }),
         __setLogger: vi.fn(),
       };
 
@@ -579,15 +591,17 @@ describe('runEvals', () => {
           testAgent: agent,
         },
         logger: false,
+        storage: mockStorage as any,
       });
-
-      mastra.setStorage(mockStorage as any);
 
       const scorer = createScorer({
         id: 'testScorer',
         description: 'Test scorer',
         name: 'testScorer',
       }).generateScore(() => 0.85);
+
+      // Register the scorer with Mastra so it can be found during score saving
+      mastra.addScorer(scorer, 'testScorer');
 
       // Run evals
       await runEvals({
@@ -640,10 +654,12 @@ describe('runEvals', () => {
         saveScore: saveScoreSpy,
       };
 
-      // Mock workflows store with getWorkflowRunById for createRun
+      // Mock workflows store with methods needed for scorer workflow runs
       const mockWorkflowsStore = {
         getWorkflowRunById: vi.fn().mockResolvedValue(null),
+        deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
         persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+        listWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
       };
 
       const mockStorage = {
@@ -661,15 +677,17 @@ describe('runEvals', () => {
           testWorkflow: workflow,
         },
         logger: false,
+        storage: mockStorage as any,
       });
-
-      mastra.setStorage(mockStorage as any);
 
       const scorer = createScorer({
         id: 'workflowScorer',
         description: 'Workflow scorer',
         name: 'workflowScorer',
       }).generateScore(() => 0.75);
+
+      // Register the scorer with Mastra so it can be found during score saving
+      mastra.addScorer(scorer, 'workflowScorer');
 
       // Run evals with workflow
       await runEvals({
