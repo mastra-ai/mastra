@@ -24,6 +24,12 @@ const result = await memory.listThreads({
 
 Use `perPage: false` to retrieve all matching threads at once.
 
+:::warning
+
+Generally speaking it's recommended to use pagination, especially for large datasets. Use this option cautiously.
+
+:::
+
 ```typescript
 const result = await memory.listThreads({
   filter: { resourceId: "user-123" },
