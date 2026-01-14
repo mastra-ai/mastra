@@ -545,19 +545,12 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, threadId, resourceId, resourceid, ...rest } = params;
-      // Use resourceId if provided, fall back to resourceid (deprecated)
-      const finalResourceId = resourceId ?? resourceid;
+      const { messages, ...rest } = params;
 
       validateBody({ messages });
 
-      // Transform deprecated threadId/resourceId to memory format for v5+ agents
-      const memoryOption =
-        threadId && finalResourceId && !rest.memory ? { memory: { thread: threadId, resource: finalResourceId } } : {};
-
       const result = await agent.generate(messages, {
         ...rest,
-        ...memoryOption,
         abortSignal,
       });
 
@@ -734,18 +727,11 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, threadId, resourceId, resourceid, ...rest } = params;
-      // Use resourceId if provided, fall back to resourceid (deprecated)
-      const finalResourceId = resourceId ?? resourceid;
+      const { messages, ...rest } = params;
       validateBody({ messages });
-
-      // Transform deprecated threadId/resourceId to memory format for v5+ agents
-      const memoryOption =
-        threadId && finalResourceId && !rest.memory ? { memory: { thread: threadId, resource: finalResourceId } } : {};
 
       const streamResult = await agent.stream(messages, {
         ...rest,
-        ...memoryOption,
         abortSignal,
       });
 

@@ -288,7 +288,7 @@ describe('A2A Handler', () => {
       `);
     });
 
-    it('should pass contextId as thread and agentId as resource to agent.generate for memory', async () => {
+    it('should pass contextId as threadId and agentId as resourceId to agent.generate for memory', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
       const agentId = 'test-agent';
@@ -320,11 +320,12 @@ describe('A2A Handler', () => {
         requestContext,
       });
 
-      // Verify that agent.generate was called with memory option (using new format)
+      // Verify that agent.generate was called with threadId and resourceId (defaults to agentId)
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          memory: { thread: contextId, resource: agentId },
+          threadId: contextId,
+          resourceId: agentId,
         }),
       );
     });
@@ -365,11 +366,12 @@ describe('A2A Handler', () => {
         requestContext,
       });
 
-      // Verify that agent.generate was called with user-provided resourceId (using new memory format)
+      // Verify that agent.generate was called with user-provided resourceId
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          memory: { thread: contextId, resource: customResourceId },
+          threadId: contextId,
+          resourceId: customResourceId,
         }),
       );
     });
@@ -414,7 +416,8 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          memory: { thread: contextId, resource: customResourceId },
+          threadId: contextId,
+          resourceId: customResourceId,
         }),
       );
     });
@@ -463,7 +466,8 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          memory: { thread: contextId, resource: paramsResourceId },
+          threadId: contextId,
+          resourceId: paramsResourceId,
         }),
       );
     });
@@ -508,7 +512,8 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          memory: { thread: contextId, resource: customResourceId },
+          threadId: contextId,
+          resourceId: customResourceId,
         }),
       );
     });
@@ -553,12 +558,13 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          memory: { thread: contextId, resource: customResourceId },
+          threadId: contextId,
+          resourceId: customResourceId,
         }),
       );
     });
 
-    it('should not pass memory when contextId is not provided', async () => {
+    it('should not pass threadId/resourceId when contextId is not provided', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
       const agentId = 'test-agent';
@@ -589,11 +595,11 @@ describe('A2A Handler', () => {
         requestContext,
       });
 
-      // Verify that agent.generate was NOT called with memory option
+      // Verify that agent.generate was NOT called with threadId/resourceId
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.not.objectContaining({
-          memory: expect.any(Object),
+          threadId: expect.any(String),
         }),
       );
     });
