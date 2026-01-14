@@ -610,7 +610,7 @@ export const AgentMetadataModelSwitcher = ({
                   <Loader2 className="h-4 w-4 animate-spin mx-auto" />
                 </div>
               ) : filteredModels.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">No models found</div>
+                <div className="p-4 text-center text-sm text-icon3">No models found</div>
               ) : (
                 filteredModels.map((model, index) => {
                   const isHighlighted = index === highlightedModelIndex;

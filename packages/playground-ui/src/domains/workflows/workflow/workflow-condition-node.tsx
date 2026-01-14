@@ -130,7 +130,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                         >
                           {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>
-                              <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                              <span className="inline-block mr-2 text-icon3">{i + 1}</span>
                               {line.map((token, key) => (
                                 <span key={key} {...getTokenProps({ token })} />
                               ))}
@@ -160,7 +160,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                               >
                                 {tokens.map((line, i) => (
                                   <div key={i} {...getLineProps({ line })}>
-                                    <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                                    <span className="inline-block mr-2 text-icon3">{i + 1}</span>
                                     {line.map((token, key) => (
                                       <span key={key} {...getTokenProps({ token })} />
                                     ))}

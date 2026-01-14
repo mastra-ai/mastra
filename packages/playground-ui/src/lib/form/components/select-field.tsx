@@ -19,7 +19,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
         props.onChange(syntheticEvent);
       }}
     >
-      <SelectTrigger id={id} className={error ? 'border-destructive' : ''}>
+      <SelectTrigger id={id} className={error ? 'border-accent2' : ''}>
         <SelectValue placeholder="Select an option" />
       </SelectTrigger>
       <SelectContent>

@@ -116,7 +116,7 @@ const ImageWithFallback = ({ alt, src, ...rest }: ImgHTMLAttributes<HTMLImageEle
           d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
         />
       </svg>
-      <p className="text-xs italic text-muted-foreground -mt-[0.625rem] mb-[0.625rem]">Image link is broken</p>
+      <p className="text-xs italic text-icon3 -mt-[0.625rem] mb-[0.625rem]">Image link is broken</p>
     </div>
   ) : (
     <img
@@ -192,7 +192,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ),
   p: ({ className, ...props }) => <p className={cn('leading-7 first:mt-0 last:mb-0', className)} {...props} />,
   a: ({ className, ...props }) => (
-    <a className={cn('text-primary font-medium underline underline-offset-4', className)} {...props} />
+    <a className={cn('text-icon6 font-medium underline underline-offset-4', className)} {...props} />
   ),
   blockquote: ({ className, ...props }) => (
     <blockquote className={cn('border-l-2 pl-6 italic', className)} {...props} />
@@ -206,7 +206,7 @@ const defaultComponents = memoizeMarkdownComponents({
   th: ({ className, ...props }) => (
     <th
       className={cn(
-        'bg-muted px-4 py-2 text-left font-bold first:rounded-tl-lg last:rounded-tr-lg [&[align=center]]:text-center [&[align=right]]:text-right',
+        'bg-surface4 px-4 py-2 text-left font-bold first:rounded-tl-lg last:rounded-tr-lg [&[align=center]]:text-center [&[align=right]]:text-right',
         className,
       )}
       {...props}
@@ -255,7 +255,7 @@ const defaultComponents = memoizeMarkdownComponents({
         }}
       >
         <code
-          className={cn(!isCodeBlock && 'bg-muted rounded border font-semibold', className)}
+          className={cn(!isCodeBlock && 'bg-surface4 rounded border font-semibold', className)}
           {...props}
           style={{
             fontWeight: '400',
