@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { TraceTimelineSpan } from './trace-timeline-span';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { UISpan } from '../types';
 
 type TraceTimelineProps = {

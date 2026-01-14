@@ -4,13 +4,13 @@ import { CircleXIcon, PaperclipIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import { Icon } from '@/ds/icons';
 import { useHasAttachments } from '../hooks/use-has-attachments';
 import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
 import { fileToBase64 } from '@/lib/file/toBase64';
 

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Search, X, ExternalLink } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/ds/components/Input';
 import { Button } from '@/ds/components/Button/Button';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';

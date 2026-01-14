@@ -1,4 +1,4 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 
 interface CodeDisplayProps {
   content: string;

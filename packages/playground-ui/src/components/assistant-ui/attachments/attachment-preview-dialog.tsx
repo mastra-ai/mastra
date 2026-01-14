@@ -1,4 +1,4 @@
-import { Dialog, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogTitle, DialogContent } from '@/ds/components/Dialog';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
 

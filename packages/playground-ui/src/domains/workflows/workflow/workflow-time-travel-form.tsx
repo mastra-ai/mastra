@@ -6,7 +6,7 @@ import { WorkflowInputData } from './workflow-input-data';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
@@ -14,7 +14,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { z } from 'zod';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { cn } from '@/lib/utils';
 import { usePlaygroundStore } from '@/store/playground-store';
 

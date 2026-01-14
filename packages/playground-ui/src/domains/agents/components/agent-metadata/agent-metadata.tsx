@@ -22,7 +22,7 @@ import {
   useUpdateModelInModelList,
 } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
 
 export interface AgentMetadataProps {
