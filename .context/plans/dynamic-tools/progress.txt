@@ -195,3 +195,51 @@ Task 005 was already completed by previous work. All required integrations were 
   OR
 - Task 007 or 008 can be done in parallel with 006 once the interface is defined.
 
+
+## Task 006: Define ToolProvider interface - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/core/src/integrations/providers/ directory structure
+- Created types.ts with comprehensive type definitions for tool provider abstraction layer:
+  - IntegrationProviderType: Type union for 'composio' | 'arcade'
+  - ProviderStatus: Interface for provider connection status with name, description, icon
+  - ProviderToolkit: Interface for toolkit groupings with slug, name, description, icon, category, toolCount, metadata
+  - ProviderTool: Interface for tool definitions with slug, name, description, inputSchema, outputSchema, toolkit, metadata
+  - ListToolkitsOptions: Options for listing toolkits with search, category, limit, cursor
+  - ListToolsOptions: Options for listing tools with toolkitSlug, toolkitSlugs, search, limit, cursor
+  - ListToolkitsResponse: Paginated response with toolkits array, nextCursor, hasMore
+  - ListToolsResponse: Paginated response with tools array, nextCursor, hasMore
+  - ToolProvider: Abstract interface with methods: getStatus(), listToolkits(), listTools(), getTool()
+- Created packages/core/src/integrations/providers/index.ts to export types
+- Created packages/core/src/integrations/index.ts to export providers module
+- Added comprehensive JSDoc documentation for all types and interfaces
+
+### Key implementation details:
+- ToolProvider interface is designed to support both Composio and Arcade.dev API patterns
+- All methods support pagination via cursor-based pagination (cursor/limit pattern)
+- ListToolsOptions includes both toolkitSlug (single) and toolkitSlugs (multiple) for flexibility
+- Input and output schemas stored as Record<string, unknown> for JSON Schema / Zod compatibility
+- Metadata fields allow provider-specific extensions without breaking the interface
+- getStatus() can return Promise or direct value for flexibility in implementations
+- The interface is generic enough to support future providers beyond Composio and Arcade
+
+### Build/Test status:
+- Core package typecheck passes (pnpm typecheck in packages/core)
+- Full monorepo build passes (pnpm -w run build) - 121 successful tasks
+- No type errors or compilation failures
+- Task marked as passing in tasks.json
+
+### Files created:
+- packages/core/src/integrations/providers/types.ts (new)
+- packages/core/src/integrations/providers/index.ts (new)
+- packages/core/src/integrations/index.ts (new)
+
+### Next recommended task:
+- Task 007: Implement ComposioProvider
+  This is the next P0 task that depends on task 006. It will create the Composio provider implementation.
+  OR
+- Task 008: Implement ArcadeProvider
+  This can be done in parallel with task 007 as both depend on task 006 but are independent of each other.
+
