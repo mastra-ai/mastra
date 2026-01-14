@@ -633,6 +633,10 @@ ol {
   list-style: decimal;
 }
 
+.grecaptcha-badge {
+  visibility: hidden;
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
@@ -1047,10 +1051,6 @@ ol {
   input[type="search"]::-webkit-search-cancel-button {
     -webkit-appearance: none;
     appearance: none;
-  }
-
-  .grecaptcha-badge {
-    visibility: hidden;
   }
 
   .copilotKitMarkdown p {
