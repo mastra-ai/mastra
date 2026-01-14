@@ -15,6 +15,12 @@ export interface LongMemEvalOutput {
 
 /**
  * Get the evaluation prompt based on question type
+ *
+ * These prompts are copied EXACTLY from the official LongMemEval benchmark:
+ * https://github.com/xiaowu0162/LongMemEval/blob/main/src/evaluation/evaluate_qa.py
+ *
+ * IMPORTANT: Do not modify these prompts - they must match the official benchmark
+ * for comparable results with other systems (SuperMemory, EMem, etc.)
  */
 function getEvalPrompt(
   taskType: QuestionType,
@@ -23,6 +29,7 @@ function getEvalPrompt(
   response: string,
   isAbstention: boolean,
 ): string {
+  // Official LongMemEval abstention prompt
   if (isAbstention) {
     return `I will give you an unanswerable question, an explanation, and a response from a model. Please answer yes if the model correctly identifies the question as unanswerable. The model could say that the information is incomplete, or some other information is given but the asked information is not.
 
@@ -32,15 +39,15 @@ Explanation: ${answer}
 
 Model Response: ${response}
 
-Does the model correctly identify the question as unanswerable? Answer yes or no only. If you answer "no" please also include a reason why (ex "no: because x reason")`;
+Does the model correctly identify the question as unanswerable? Answer yes or no only.`;
   }
 
   switch (taskType) {
+    // Official LongMemEval default prompt (single-session-user, single-session-assistant, multi-session)
     case 'single-session-user':
     case 'single-session-assistant':
     case 'multi-session':
       return `I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response is equivalent to the correct answer or contains all the intermediate steps to get the correct answer, you should also answer yes. If the response only contains a subset of the information required by the answer, answer no.
-If you answer "no" please also include a reason why (ex "no: because x reason")
 
 Question: ${question}
 
@@ -48,8 +55,10 @@ Correct Answer: ${answer}
 
 Model Response: ${response}
 
-Is the model response correct? Answer yes or no only. If you answer "no" please also include a reason why (ex "no: because x reason")`;
+Is the model response correct? Answer yes or no only.`;
 
+    // Official LongMemEval temporal-reasoning prompt
+    // NOTE: Includes off-by-one leniency for day/week/month counts
     case 'temporal-reasoning':
       return `I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response is equivalent to the correct answer or contains all the intermediate steps to get the correct answer, you should also answer yes. If the response only contains a subset of the information required by the answer, answer no. In addition, do not penalize off-by-one errors for the number of days. If the question asks for the number of days/weeks/months, etc., and the model makes off-by-one errors (e.g., predicting 19 days when the answer is 18), the model's response is still correct.
 
@@ -59,8 +68,10 @@ Correct Answer: ${answer}
 
 Model Response: ${response}
 
-Is the model response correct? Answer yes or no only. If you answer "no" please also include a reason why (ex "no: because x reason")`;
+Is the model response correct? Answer yes or no only.`;
 
+    // Official LongMemEval knowledge-update prompt
+    // NOTE: Accepts previous info if updated answer is also present
     case 'knowledge-update':
       return `I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response contains some previous information along with an updated answer, the response should be considered as correct as long as the updated answer is the required answer.
 
@@ -72,8 +83,10 @@ Model Response: ${response}
 
 Is the model response correct? Answer yes or no only.`;
 
+    // Official LongMemEval single-session-preference prompt
+    // NOTE: More lenient - doesn't require all rubric points
     case 'single-session-preference':
-      return `I will give you a question, a rubric for desired personalized response, and a response from a model. Please answer yes if the response satisfies the desired response. Otherwise, answer no and provide a reason why. The model does not need to reflect all the points in the rubric. The response is correct as long as it recalls and utilizes the user's personal information correctly.
+      return `I will give you a question, a rubric for desired personalized response, and a response from a model. Please answer yes if the response satisfies the desired response. Otherwise, answer no. The model does not need to reflect all the points in the rubric. The response is correct as long as it recalls and utilizes the user's personal information correctly.
 
 Question: ${question}
 
@@ -81,7 +94,7 @@ Rubric: ${answer}
 
 Model Response: ${response}
 
-Is the model response correct? Answer yes or no only. If you answer "no" please also include a reason why (ex "no: because x reason")`;
+Is the model response correct? Answer yes or no only.`;
 
     default:
       throw new Error(`Unknown question type: ${taskType}`);
