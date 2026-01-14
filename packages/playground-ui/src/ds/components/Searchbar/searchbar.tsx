@@ -47,7 +47,7 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: Se
 
   return (
     <div className="focus-within:outline focus-within:outline-accent1 -outline-offset-2 border-sm border-icon-3 flex h-8 w-full items-center gap-2 overflow-hidden rounded-lg pl-2 pr-1">
-      <SearchIcon className="text-icon3 h-4 w-4" />
+      <SearchIcon className="text-neutral3 h-4 w-4" />
 
       <div className="flex-1">
         <label htmlFor={id} className="sr-only">

@@ -129,12 +129,12 @@ export function Combobox({
         </DSButton>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-fit" align="start">
-        <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-surface3 text-icon5">
+        <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-surface3 text-neutral5">
           <div className="flex items-center border-b px-3 py-2">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
               ref={inputRef}
-              className="flex h-8 w-full rounded-md bg-transparent py-1 text-sm placeholder:text-icon3 disabled:cursor-not-allowed disabled:opacity-50 outline-none"
+              className="flex h-8 w-full rounded-md bg-transparent py-1 text-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50 outline-none"
               placeholder={searchPlaceholder}
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -164,8 +164,8 @@ export function Combobox({
                     aria-selected={isSelected}
                     className={cn(
                       'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm transition-colors',
-                      'hover:bg-surface5 hover:text-icon5',
-                      isHighlighted && 'bg-surface5 text-icon5',
+                      'hover:bg-surface5 hover:text-neutral5',
+                      isHighlighted && 'bg-surface5 text-neutral5',
                       isSelected && !isHighlighted && 'bg-surface5/50',
                     )}
                     onClick={() => handleSelect(option.value)}

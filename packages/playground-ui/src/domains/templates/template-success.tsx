@@ -21,8 +21,8 @@ export function TemplateSuccess({ name, installedEntities, linkComponent }: Temp
     >
       <PackageOpenIcon />
       <h2 className="text-[1.25rem ]">Done!</h2>
-      <p className="text-[0.875rem] text-center text-icon3 ">
-        The <b className="text-icon4">{name}</b> template has been successfully installed.
+      <p className="text-[0.875rem] text-center text-neutral3 ">
+        The <b className="text-neutral4">{name}</b> template has been successfully installed.
         {installedEntities && installedEntities.length > 0 && (
           <>
             <br /> Installed entities are listed below.

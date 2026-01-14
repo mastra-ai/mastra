@@ -40,7 +40,7 @@ export const WithIcon: Story = {
     <Tooltip>
       <TooltipTrigger asChild>
         <button className="p-1 rounded hover:bg-surface2">
-          <Info className="h-4 w-4 text-icon3" />
+          <Info className="h-4 w-4 text-neutral3" />
         </button>
       </TooltipTrigger>
       <TooltipContent>

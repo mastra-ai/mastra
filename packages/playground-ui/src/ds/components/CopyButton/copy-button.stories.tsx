@@ -58,7 +58,7 @@ export const LargeIcon: Story = {
 export const InContext: Story = {
   render: () => (
     <div className="flex items-center gap-2 p-3 bg-surface4 rounded-md">
-      <code className="text-sm font-mono text-icon5">npm install @mastra/core</code>
+      <code className="text-sm font-mono text-neutral5">npm install @mastra/core</code>
       <CopyButton content="npm install @mastra/core" />
     </div>
   ),
@@ -68,7 +68,7 @@ export const CodeBlock: Story = {
   render: () => (
     <div className="relative p-4 bg-surface4 rounded-md w-[300px]">
       <CopyButton content="const agent = new Agent()" className="absolute top-2 right-2" />
-      <pre className="text-sm font-mono text-icon5">const agent = new Agent()</pre>
+      <pre className="text-sm font-mono text-neutral5">const agent = new Agent()</pre>
     </div>
   ),
 };

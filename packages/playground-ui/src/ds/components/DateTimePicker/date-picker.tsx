@@ -31,14 +31,14 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start',
         day_range_end: 'day-range-end',
         day_selected:
-          '!bg-icon6/50 !text-surface2 hover:bg-icon6 rounded-md hover:text-surface2 focus:bg-icon6 focus:text-surface2',
-        day_today: 'bg-icon6/10 text-icon5',
+          '!bg-neutral6/50 !text-surface2 hover:bg-neutral6 rounded-md hover:text-surface2 focus:bg-neutral6 focus:text-surface2',
+        day_today: 'bg-neutral6/10 text-neutral5',
         day_outside:
-          'day-outside text-icon3 opacity-50  aria-selected:bg-surface5/50 aria-selected:text-icon3 aria-selected:opacity-30',
-        day_disabled: 'text-icon3 opacity-50',
-        day_range_middle: 'aria-selected:bg-surface5 aria-selected:text-icon5',
+          'day-outside text-neutral3 opacity-50  aria-selected:bg-surface5/50 aria-selected:text-neutral3 aria-selected:opacity-30',
+        day_disabled: 'text-neutral3 opacity-50',
+        day_range_middle: 'aria-selected:bg-surface5 aria-selected:text-neutral5',
         day_hidden: 'invisible',
-        head_cell: 'text-[0.625rem] text-icon3',
+        head_cell: 'text-[0.625rem] text-neutral3',
         ...classNames,
       }}
       {...props}

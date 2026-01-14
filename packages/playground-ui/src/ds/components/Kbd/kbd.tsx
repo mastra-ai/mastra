@@ -7,7 +7,7 @@ export type KbdProps = {
 
 const themeClasses: Record<NonNullable<KbdProps['theme']>, string> = {
   light: 'bg-gray-100 border-gray-300 text-gray-700',
-  dark: 'bg-surface4 border-border1 text-icon6',
+  dark: 'bg-surface4 border-border1 text-neutral6',
 };
 
 export const Kbd = ({ children, theme = 'dark' }: KbdProps) => {

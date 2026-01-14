@@ -19,7 +19,7 @@ export const Reasoning = ({ text }: ReasoningMessagePart) => {
 
       {!isCollapsed ? (
         <div className="rounded-lg bg-surface4 p-2 border-sm border-border-1">
-          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-icon6">{text}</pre>
+          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-neutral6">{text}</pre>
         </div>
       ) : null}
     </div>

@@ -28,7 +28,7 @@ export const Default: Story = {
         <div className="flex gap-4 p-4 w-[1000px]">
           {Array.from({ length: 20 }).map((_, i) => (
             <div key={i} className="h-16 w-24 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
-              <span className="text-sm text-icon5">Item {i + 1}</span>
+              <span className="text-sm text-neutral5">Item {i + 1}</span>
             </div>
           ))}
         </div>
@@ -47,8 +47,8 @@ export const CardGallery: Story = {
               key={i}
               className="h-32 w-48 shrink-0 rounded-lg bg-surface3 border border-border1 p-4 flex flex-col justify-between"
             >
-              <span className="text-sm font-medium text-icon6">Card {i + 1}</span>
-              <span className="text-xs text-icon3">Description text</span>
+              <span className="text-sm font-medium text-neutral6">Card {i + 1}</span>
+              <span className="text-xs text-neutral3">Description text</span>
             </div>
           ))}
         </div>
@@ -64,7 +64,7 @@ export const FastScroll: Story = {
         <div className="flex gap-2 p-2 w-[1200px]">
           {Array.from({ length: 30 }).map((_, i) => (
             <div key={i} className="h-12 w-12 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
-              <span className="text-xs text-icon5">{i + 1}</span>
+              <span className="text-xs text-neutral5">{i + 1}</span>
             </div>
           ))}
         </div>
@@ -80,7 +80,7 @@ export const SlowScroll: Story = {
         <div className="flex gap-2 p-2 w-[1000px]">
           {Array.from({ length: 25 }).map((_, i) => (
             <div key={i} className="h-12 w-12 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
-              <span className="text-xs text-icon5">{i + 1}</span>
+              <span className="text-xs text-neutral5">{i + 1}</span>
             </div>
           ))}
         </div>
@@ -108,7 +108,7 @@ export const Badges: Story = {
             'Next.js',
             'Tailwind',
           ].map(tech => (
-            <span key={tech} className="shrink-0 px-3 py-1 text-xs rounded-full bg-surface4 text-icon5">
+            <span key={tech} className="shrink-0 px-3 py-1 text-xs rounded-full bg-surface4 text-neutral5">
               {tech}
             </span>
           ))}
