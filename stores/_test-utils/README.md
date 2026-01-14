@@ -11,14 +11,21 @@ The shared test suite provides 90+ test cases across 6 domains that verify funda
 - Consistent testing across all vector stores
 - Guaranteed Memory system compatibility
 - Comprehensive coverage of vector operations
-- Reduced test duplication
+- Reduced test duplication (96% reduction in redundant custom tests across 17 stores)
 - Faster onboarding for new vector stores
+
+**Statistics** (as of 2026-01-14):
+
+- 17 vector stores using shared test suite
+- ~1,800+ total tests across all stores
+- 72% code reduction (stores with custom tests)
+- Zero coverage loss - all functionality preserved
 
 ## Available Test Domains
 
 The test suite is organized into 6 domains, all enabled by default:
 
-### 1. Basic Operations (14 tests)
+### 1. Basic Operations (~15 tests)
 
 **Module**: `domains/vector/basic-operations.ts`
 
@@ -30,7 +37,7 @@ Tests fundamental vector store operations:
 
 These tests verify the core MastraVector interface methods work correctly.
 
-### 2. Filter Operators (25+ tests)
+### 2. Filter Operators (~20 tests)
 
 **Module**: `domains/vector/filter-operators.ts`
 
@@ -44,7 +51,7 @@ Tests metadata filtering capabilities:
 - **Pattern Matching** (OPTIONAL): `$regex`, `$contains` (wrapped in try/catch for stores that don't support)
 - **Combined Filters**: Multiple operators together
 
-### 3. Edge Cases (17 tests)
+### 3. Edge Cases (~15 tests)
 
 **Module**: `domains/vector/edge-cases.ts`
 
@@ -56,7 +63,7 @@ Tests boundary conditions and stress scenarios:
 - **Concurrent Operations**: Parallel upserts, parallel queries, mixed concurrent operations
 - **Vector Normalization**: Zero magnitude, NaN/Infinity rejection, extreme values
 
-### 4. Error Handling (30+ tests)
+### 4. Error Handling (~10 tests)
 
 **Module**: `domains/vector/error-handling.ts`
 
@@ -69,7 +76,7 @@ Tests error scenarios to ensure consistent error behavior:
 - **Metadata Type Errors**: Circular references, functions, symbols, extremely large metadata
 - **Concurrent Operation Errors**: Double deletion, concurrent upserts
 
-### 5. Metadata Filtering (existing tests)
+### 5. Metadata Filtering (~20 tests)
 
 **Module**: `domains/vector/metadata-filtering.ts`
 
@@ -81,7 +88,7 @@ Tests Memory system compatibility:
 - Empty results for non-matching filters
 - Backward compatibility with `metadata.` prefix
 
-### 6. Advanced Operations (existing tests)
+### 6. Advanced Operations (~10 tests)
 
 **Module**: `domains/vector/advanced-operations.ts`
 
@@ -542,6 +549,26 @@ createVectorTestSuite({
 });
 ```
 
+## Store-Specific Features
+
+Some stores have unique features that are tested separately from the shared suite. These are preserved as custom tests in their respective test files:
+
+### Stores with Custom Tests
+
+| Store         | Custom Tests | Features Tested                                                             |
+| ------------- | ------------ | --------------------------------------------------------------------------- |
+| **couchbase** | 8 tests      | TTL management, bulk operations, implementation verification                |
+| **duckdb**    | 16 tests     | $contains operator, distance metrics, storage modes, implementation details |
+| **upstash**   | 6 tests      | Metadata range queries, batch operations with metadata filters              |
+| **libsql**    | 12 tests     | Path configuration, encryption support, connection modes                    |
+| **mongodb**   | 6 tests      | MongoDB-specific filter operators, batch operations                         |
+
+### Stores Using Shared Suite Only
+
+The following stores use only the shared test suite (no custom tests):
+
+- Astra, Chroma, Convex, DynamoDB, Elasticsearch, Lance, OpenSearch, Pinecone, Qdrant, S3Vectors, Turbopuffer, Vectorize
+
 ## Store-Specific Patterns
 
 ### Pattern 1: Eventual Consistency Helpers
@@ -637,9 +664,9 @@ See these stores for working examples:
 
 - `DEVELOPMENT.md` - Monorepo setup and contribution guidelines
 - `@mastra/core/vector` - Base `MastraVector` interface
-- `.ralph-wiggum/TEST_RESULTS.md` - Validation results for all 16 vector stores
-- `.ralph-wiggum/GAP_ANALYSIS.md` - Analysis of test coverage gaps
-- `.ralph-wiggum/CUSTOM_TEST_ANALYSIS.md` - Store-specific test analysis
+- `.ralph-wiggum/FINAL_VALIDATION.md` - Comprehensive validation results for all 17 vector stores
+- `.ralph-wiggum/SHARED_SUITE_GAPS.md` - Analysis of test coverage gaps (zero high-priority gaps found)
+- `.ralph-wiggum/CURRENT_STATE.md` - Current state of all vector stores after comprehensive review
 
 ## Support
 
