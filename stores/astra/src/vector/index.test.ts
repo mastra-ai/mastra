@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 
 import { AstraVector } from './';
@@ -1274,5 +1275,40 @@ describe.skip('AstraVector Integration Tests', () => {
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
+  });
+});
+
+// Shared Test Suite Integration
+// Following the pattern from stores/pg - integrates all 6 test domains from shared suite
+describe.skip('AstraVector Shared Test Suite', () => {
+  const token = process.env.ASTRA_DB_TOKEN;
+  const endpoint = process.env.ASTRA_DB_ENDPOINT;
+  const keyspace = process.env.ASTRA_DB_KEYSPACE;
+
+  if (!token || !endpoint) {
+    console.warn('Skipping shared test suite: ASTRA_DB_TOKEN and ASTRA_DB_ENDPOINT environment variables not set');
+    return;
+  }
+
+  const sharedVectorDB = new AstraVector({
+    token,
+    endpoint,
+    keyspace,
+  });
+
+  createVectorTestSuite({
+    vector: sharedVectorDB,
+    createIndex: async (indexName: string) => {
+      // Using dimension 1536 as required by the shared test suite
+      await createIndexAndWait(sharedVectorDB, indexName, 1536, 'cosine');
+    },
+    deleteIndex: async (indexName: string) => {
+      await deleteIndexAndWait(sharedVectorDB, indexName);
+    },
+    waitForIndexing: async () => {
+      // Astra needs time for eventual consistency
+      // Using a fixed delay since we already wait in createIndexAndWait
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    },
   });
 });
