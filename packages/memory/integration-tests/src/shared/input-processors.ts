@@ -139,14 +139,13 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const resourceId = `limit-test-resource-${version}-${randomUUID()}`;
 
       // Create 3 exchanges (6 messages total)
-      await agent.generate('Message 1', { threadId, resourceId, maxSteps: 1 });
-      await agent.generate('Message 2', { threadId, resourceId, maxSteps: 1 });
-      await agent.generate('Message 3', { threadId, resourceId, maxSteps: 1 });
+      await agent.generate('Message 1', { memory: { thread: threadId, resource: resourceId }, maxSteps: 1 });
+      await agent.generate('Message 2', { memory: { thread: threadId, resource: resourceId }, maxSteps: 1 });
+      await agent.generate('Message 3', { memory: { thread: threadId, resource: resourceId }, maxSteps: 1 });
 
       // Fourth message - should only include last 2 messages (Message 3 + its response)
       const fourthResponse = await agent.generate('Message 4', {
-        threadId,
-        resourceId,
+        memory: { thread: threadId, resource: resourceId },
         maxSteps: 1,
       });
 
@@ -444,14 +443,13 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const thread2Id = `topk-thread-2-${version}-${randomUUID()}`;
 
       // Create multiple messages in thread 1
-      await agent.generate('I like cats', { threadId: thread1Id, resourceId });
-      await agent.generate('I like dogs', { threadId: thread1Id, resourceId });
-      await agent.generate('I like birds', { threadId: thread1Id, resourceId });
+      await agent.generate('I like cats', { memory: { thread: thread1Id, resource: resourceId } });
+      await agent.generate('I like dogs', { memory: { thread: thread1Id, resource: resourceId } });
+      await agent.generate('I like birds', { memory: { thread: thread1Id, resource: resourceId } });
 
       // Query from thread 2 - should only recall 1 message (topK=1)
       const response = await agent.generate('Tell me about cats', {
-        threadId: thread2Id,
-        resourceId,
+        memory: { thread: thread2Id, resource: resourceId },
       });
 
       const requestMessages: CoreMessage[] = (response.request.body as any).input;
@@ -501,13 +499,23 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const threadId = `perpage-thread-${version}-${randomUUID()}`;
 
       // Create 4 messages with distinct topics
-      await agent.generate('I really love apples, they are my favorite fruit', { threadId, resourceId });
-      await agent.generate('Cats are wonderful pets and companions', { threadId, resourceId });
-      await agent.generate('Programming in JavaScript is fun', { threadId, resourceId });
-      await agent.generate('Mountains are great for hiking and skiing', { threadId, resourceId });
+      await agent.generate('I really love apples, they are my favorite fruit', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      await agent.generate('Cats are wonderful pets and companions', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      await agent.generate('Programming in JavaScript is fun', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      await agent.generate('Mountains are great for hiking and skiing', {
+        memory: { thread: threadId, resource: resourceId },
+      });
 
       // Query about apples - semantic recall should find only the apple message
-      const response = await agent.generate('What do you know about apples?', { threadId, resourceId });
+      const response = await agent.generate('What do you know about apples?', {
+        memory: { thread: threadId, resource: resourceId },
+      });
       const requestMessages: CoreMessage[] = (response.request.body as any).input;
 
       // Extract all user message content
@@ -586,15 +594,14 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       });
 
       // Thread 1: Create some history
-      await agent.generate('I work with React', { threadId: thread1Id, resourceId });
+      await agent.generate('I work with React', { memory: { thread: thread1Id, resource: resourceId } });
 
       // Thread 2: Create some history
-      await agent.generate('Hello', { threadId: thread2Id, resourceId });
+      await agent.generate('Hello', { memory: { thread: thread2Id, resource: resourceId } });
 
       // Thread 2: Query - should include all processors
       const response = await agent.generate('What do I work with?', {
-        threadId: thread2Id,
-        resourceId,
+        memory: { thread: thread2Id, resource: resourceId },
       });
 
       const requestMessages: CoreMessage[] = (response.request.body as any).input;

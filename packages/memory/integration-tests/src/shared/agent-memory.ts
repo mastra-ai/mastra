@@ -676,8 +676,12 @@ export function getAgentMemoryTests({
         typeof model === 'string' ||
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
-        await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-        await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+        await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
+          memory: { thread: threadId, resource: resourceId },
+        });
+        await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
+          memory: { thread: threadId, resource: resourceId },
+        });
       } else {
         await agentWithTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
         await agentWithTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
@@ -753,8 +757,12 @@ export function getAgentMemoryTests({
         typeof model === 'string' ||
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
-        await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-        await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+        await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
+          memory: { thread: threadId, resource: resourceId },
+        });
+        await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
+          memory: { thread: threadId, resource: resourceId },
+        });
       } else {
         await agentNoTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
         await agentNoTitle.generateLegacy([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });

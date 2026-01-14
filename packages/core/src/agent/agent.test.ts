@@ -3194,64 +3194,55 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(thread?.resourceId).toBe('user-1');
     });
 
-    it('generate - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'test',
-        model: dummyModel,
-        memory: mockMemory,
-      });
+    it.skipIf(version !== 'v1')(
+      'generate - should still work with deprecated threadId and resourceId (legacy only)',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
 
-      if (version === 'v1') {
         await agent.generateLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
-      } else {
-        await agent.generate('hello', {
+
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+        expect(thread).toBeDefined();
+        expect(thread?.id).toBe('thread-1');
+        expect(thread?.resourceId).toBe('user-1');
+      },
+    );
+
+    it.skipIf(version !== 'v1')(
+      'stream - should still work with deprecated threadId and resourceId (legacy only)',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
+
+        const stream = await agent.streamLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
-      }
 
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.id).toBe('thread-1');
-      expect(thread?.resourceId).toBe('user-1');
-    });
+        await stream.consumeStream();
 
-    it('stream - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'test',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('hello', {
-          resourceId: 'user-1',
-          threadId: 'thread-1',
-        });
-      } else {
-        stream = await agent.stream('hello', {
-          resourceId: 'user-1',
-          threadId: 'thread-1',
-        });
-      }
-
-      await stream.consumeStream();
-
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.id).toBe('thread-1');
-      expect(thread?.resourceId).toBe('user-1');
-    });
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+        expect(thread).toBeDefined();
+        expect(thread?.id).toBe('thread-1');
+        expect(thread?.resourceId).toBe('user-1');
+      },
+    );
   });
 
   describe(`${version} - Dynamic instructions with mastra instance`, () => {

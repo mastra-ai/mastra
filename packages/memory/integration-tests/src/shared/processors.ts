@@ -530,13 +530,17 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
 
       // First message - use weather tool
-      await weatherAgent.generate('What is the weather in Seattle?', { threadId, resourceId });
+      await weatherAgent.generate('What is the weather in Seattle?', {
+        memory: { thread: threadId, resource: resourceId },
+      });
       await new Promise(resolve => setTimeout(resolve, 50));
       // Second message - use calculator tool
-      await calculatorAgent.generate('Calculate 123 * 456', { threadId, resourceId });
+      await calculatorAgent.generate('Calculate 123 * 456', { memory: { thread: threadId, resource: resourceId } });
       await new Promise(resolve => setTimeout(resolve, 50));
       // Third message - simple text response
-      await textAgent.generate('Tell me something interesting about space', { threadId, resourceId });
+      await textAgent.generate('Tell me something interesting about space', {
+        memory: { thread: threadId, resource: resourceId },
+      });
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Query with no processors to verify baseline message count

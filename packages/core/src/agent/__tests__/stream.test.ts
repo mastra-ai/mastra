@@ -334,8 +334,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('repeat tool calls', {
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
+          memory: {
+            thread: 'thread-1',
+            resource: 'resource-1',
+          },
         });
       }
 
@@ -446,8 +448,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('no progress', {
-          threadId: 'thread-2',
-          resourceId: 'resource-2',
+          memory: {
+            thread: 'thread-2',
+            resource: 'resource-2',
+          },
         });
       }
 
@@ -490,8 +494,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('interrupt before step', {
-          threadId: 'thread-3',
-          resourceId: 'resource-3',
+          memory: {
+            thread: 'thread-3',
+            resource: 'resource-3',
+          },
         });
       }
 
