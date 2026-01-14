@@ -20,7 +20,7 @@ export interface HeaderListFormProps {
 export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      <Txt as="h2" variant="header-md" className="text-icon6">
+      <Txt as="h2" variant="header-md" className="text-neutral6">
         Headers
       </Txt>
 

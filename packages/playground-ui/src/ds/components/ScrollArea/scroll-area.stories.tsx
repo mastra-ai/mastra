@@ -18,7 +18,7 @@ export const Default: Story = {
     <ScrollArea className="h-[200px] w-[300px] rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i} className="text-sm text-icon5">
+          <p key={i} className="text-sm text-neutral5">
             Item {i + 1} - Lorem ipsum dolor sit amet
           </p>
         ))}
@@ -32,7 +32,7 @@ export const WithMaxHeight: Story = {
     <ScrollArea maxHeight="150px" className="w-[300px] rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 15 }).map((_, i) => (
-          <p key={i} className="text-sm text-icon5">
+          <p key={i} className="text-sm text-neutral5">
             Line {i + 1}
           </p>
         ))}
@@ -47,7 +47,7 @@ export const HorizontalScroll: Story = {
       <div className="flex gap-4 w-[800px]">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
-            <span className="text-sm text-icon5">{i + 1}</span>
+            <span className="text-sm text-neutral5">{i + 1}</span>
           </div>
         ))}
       </div>
@@ -58,7 +58,7 @@ export const HorizontalScroll: Story = {
 export const CodeBlock: Story = {
   render: () => (
     <ScrollArea className="h-[200px] w-[400px] rounded-md border border-border1 bg-surface2">
-      <pre className="p-4 text-sm font-mono text-icon5">
+      <pre className="p-4 text-sm font-mono text-neutral5">
         {`function example() {
   const data = fetchData();
 
@@ -98,7 +98,7 @@ export const ChatMessages: Story = {
       <div className="space-y-4">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className={`p-3 rounded-lg ${i % 2 === 0 ? 'bg-surface3 ml-8' : 'bg-surface4 mr-8'}`}>
-            <p className="text-sm text-icon5">
+            <p className="text-sm text-neutral5">
               {i % 2 === 0
                 ? 'This is a user message with some content'
                 : 'This is an assistant response with helpful information'}

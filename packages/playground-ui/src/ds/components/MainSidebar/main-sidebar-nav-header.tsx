@@ -14,7 +14,7 @@ export function MainSidebarNavHeader({ children, className, state = 'default' }:
   return (
     <div className={cn('grid grid-cols-[auto_1fr] items-center min-h-[2.8rem] ', className)}>
       <header
-        className={cn('text-[0.6875rem] uppercase text-icon3/75 tracking-widest', {
+        className={cn('text-[0.6875rem] uppercase text-neutral3/75 tracking-widest', {
           'pl-[0.75rem]': isDefaultState,
         })}
       >

@@ -85,7 +85,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
     <AgentMetadataWrapper>
       {agent?.description && (
         <AgentMetadataSection title="Description">
-          <p className="text-sm text-icon3">{agent.description}</p>
+          <p className="text-sm text-neutral3">{agent.description}</p>
         </AgentMetadataSection>
       )}
       {agent.modelList ? (
@@ -273,7 +273,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
       {scorerList.map(scorer => (
         <AgentMetadataListItem key={scorer.id}>
           <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
-            <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
+            <Badge icon={<GaugeIcon className="text-neutral3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}

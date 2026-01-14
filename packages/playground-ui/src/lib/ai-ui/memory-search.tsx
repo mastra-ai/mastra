@@ -226,7 +226,7 @@ export const MemorySearch = ({
   return (
     <div className={cn('flex flex-col h-full', className)} ref={dropdownRef}>
       <div className="relative shrink-0">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-icon3" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral3" />
         <Input
           type="text"
           value={query}
@@ -253,13 +253,13 @@ export const MemorySearch = ({
             </div>
           ) : isSearching && results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-icon3">
+              <Txt variant="ui-sm" className="text-neutral3">
                 Searching...
               </Txt>
             </div>
           ) : results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-icon3">
+              <Txt variant="ui-sm" className="text-neutral3">
                 No results found for "{query}"
               </Txt>
             </div>
@@ -281,7 +281,7 @@ export const MemorySearch = ({
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
-                            <span className="text-icon3">{truncateContent(msg.content, 50)}</span>
+                            <span className="text-neutral3">{truncateContent(msg.content, 50)}</span>
                           </div>
                         ))}
                       </div>
@@ -301,7 +301,7 @@ export const MemorySearch = ({
                           >
                             {result.role}
                           </span>
-                          <Txt variant="ui-xs" className="text-icon3">
+                          <Txt variant="ui-xs" className="text-neutral3">
                             {formatRelativeTime(new Date(result.createdAt))}
                           </Txt>
                           {result.threadTitle && (
@@ -310,7 +310,7 @@ export const MemorySearch = ({
                                 variant="ui-xs"
                                 className={cn(
                                   'truncate max-w-[150px]',
-                                  result.threadId !== currentThreadId ? 'text-blue-400 font-medium' : 'text-icon3',
+                                  result.threadId !== currentThreadId ? 'text-blue-400 font-medium' : 'text-neutral3',
                                 )}
                                 title={result.threadTitle}
                               >
@@ -322,7 +322,7 @@ export const MemorySearch = ({
                             </div>
                           )}
                         </div>
-                        <Txt variant="ui-sm" className="text-icon5 break-words">
+                        <Txt variant="ui-sm" className="text-neutral5 break-words">
                           {truncateContent(result.content)}
                         </Txt>
                       </div>
@@ -334,7 +334,7 @@ export const MemorySearch = ({
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
-                            <span className="text-icon3">{truncateContent(msg.content, 50)}</span>
+                            <span className="text-neutral3">{truncateContent(msg.content, 50)}</span>
                           </div>
                         ))}
                       </div>

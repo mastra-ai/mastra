@@ -77,7 +77,7 @@ export const WithAction: Story = {
         isCurrent
         action={
           <button className="p-1 hover:bg-surface2 rounded">
-            <ChevronDown className="h-4 w-4 text-icon3" />
+            <ChevronDown className="h-4 w-4 text-neutral3" />
           </button>
         }
       >

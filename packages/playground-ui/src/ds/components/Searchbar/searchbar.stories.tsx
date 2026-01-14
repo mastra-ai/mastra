@@ -90,7 +90,7 @@ const InteractiveSearchDemo = () => {
       {results.length > 0 && (
         <ul className="bg-surface3 rounded-md p-2 space-y-1">
           {results.map(result => (
-            <li key={result} className="text-sm text-icon5 p-1">
+            <li key={result} className="text-sm text-neutral5 p-1">
               {result}
             </li>
           ))}

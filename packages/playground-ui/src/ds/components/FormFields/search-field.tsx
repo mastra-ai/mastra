@@ -24,9 +24,9 @@ export function SearchField({ onReset, ...props }: SearchFieldProps) {
         <button
           type="button"
           onClick={onReset}
-          className={cn('absolute top-1/2 right-2 -translate-y-1/2 p-1', '[&:hover>svg]:text-icon5')}
+          className={cn('absolute top-1/2 right-2 -translate-y-1/2 p-1', '[&:hover>svg]:text-neutral5')}
         >
-          <XIcon className="text-icon3 w-[1rem] h-[1rem]" />
+          <XIcon className="text-neutral3 w-[1rem] h-[1rem]" />
         </button>
       )}
     </div>

@@ -116,7 +116,7 @@ export const ScrollableContainer = ({
         onMouseUp={onStopScrolling}
         onTouchEnd={onStopScrolling}
         onTouchCancel={onStopScrolling}
-        className="bg-surface4 text-icon3 border-surface5 hover:border-icon3 fixed z-10 flex items-center justify-center rounded-lg border text-2xl hover:text-white"
+        className="bg-surface4 text-neutral3 border-surface5 hover:border-neutral3 fixed z-10 flex items-center justify-center rounded-lg border text-2xl hover:text-white"
         style={{
           ...styles,
           left:

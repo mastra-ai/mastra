@@ -43,13 +43,13 @@ export const WorkflowInputData = ({
         <div className="flex flex-row gap-4">
           <div className="flex items-center gap-3">
             <RadioGroupItem value="form" id="form" />
-            <Label htmlFor="form" className="!text-icon3 text-ui-sm">
+            <Label htmlFor="form" className="!text-neutral3 text-ui-sm">
               Form
             </Label>
           </div>
           <div className="flex items-center gap-3">
             <RadioGroupItem value="json" id="json" />
-            <Label htmlFor="json" className="!text-icon3 text-ui-sm">
+            <Label htmlFor="json" className="!text-neutral3 text-ui-sm">
               JSON
             </Label>
           </div>

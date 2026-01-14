@@ -20,10 +20,10 @@ const sizeClasses = {
 };
 
 const variantClasses = {
-  default: 'bg-surface2 hover:bg-surface4 text-icon3 hover:text-icon6 disabled:opacity-50',
-  light: 'bg-surface3 hover:bg-surface5 text-icon6 disabled:opacity-50',
-  outline: 'bg-transparent hover:bg-surface2 text-icon3 hover:text-icon6 disabled:opacity-50',
-  ghost: 'bg-transparent border-transparent hover:bg-surface2 text-icon3 hover:text-icon6 disabled:opacity-50',
+  default: 'bg-surface2 hover:bg-surface4 text-neutral3 hover:text-neutral6 disabled:opacity-50',
+  light: 'bg-surface3 hover:bg-surface5 text-neutral6 disabled:opacity-50',
+  outline: 'bg-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 disabled:opacity-50',
+  ghost: 'bg-transparent border-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 disabled:opacity-50',
 };
 
 export function buttonVariants(options?: { variant?: ButtonProps['variant']; size?: ButtonProps['size'] }) {

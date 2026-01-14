@@ -160,7 +160,7 @@ const COMPONENTS: Components = {
     </a>
   ),
   blockquote: ({ children, ...props }) => (
-    <blockquote className="border-l-2 border-icon6 pl-4" {...props}>
+    <blockquote className="border-l-2 border-neutral6 pl-4" {...props}>
       {children}
     </blockquote>
   ),
@@ -198,13 +198,13 @@ const COMPONENTS: Components = {
     </li>
   ),
   table: ({ children, ...props }) => (
-    <table className="w-full border-collapse overflow-y-auto rounded-md border border-icon6/20" {...props}>
+    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
       {children}
     </table>
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-icon6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -212,7 +212,7 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-icon6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -228,7 +228,7 @@ const COMPONENTS: Components = {
       {children}
     </p>
   ),
-  hr: ({ ...props }) => <hr className="border-icon6/20" {...props} />,
+  hr: ({ ...props }) => <hr className="border-neutral6/20" {...props} />,
 };
 
 export default MarkdownRenderer;
