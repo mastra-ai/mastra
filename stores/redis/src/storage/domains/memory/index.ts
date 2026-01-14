@@ -162,8 +162,8 @@ export class StoreMemoryRedis extends MemoryStorage {
         },
         error,
       );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
       return {
         threads: [],
         total: 0,
@@ -193,8 +193,8 @@ export class StoreMemoryRedis extends MemoryStorage {
         },
         error,
       );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
       throw mastraError;
     }
   }
@@ -710,8 +710,8 @@ export class StoreMemoryRedis extends MemoryStorage {
         },
         error,
       );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      this.logger.trackException(mastraError);
       return {
         messages: [],
         total: 0,
