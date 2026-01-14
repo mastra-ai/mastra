@@ -3,7 +3,7 @@ import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-reac
 
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
-import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
+import { ToolFallback } from '../tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';

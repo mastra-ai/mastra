@@ -7,7 +7,7 @@ import {
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
+import { TooltipIconButton } from './tooltip-icon-button';
 import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';

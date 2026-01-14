@@ -3,7 +3,7 @@ import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon, PaperclipIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
+import { TooltipIconButton } from '../tooltip-icon-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import { Icon } from '@/ds/icons';
