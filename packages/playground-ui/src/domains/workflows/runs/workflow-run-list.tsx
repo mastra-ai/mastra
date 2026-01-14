@@ -3,7 +3,7 @@ import { Icon } from '@/ds/icons';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
+import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from 'date-fns';
 import { Skeleton } from '@/ds/components/Skeleton';

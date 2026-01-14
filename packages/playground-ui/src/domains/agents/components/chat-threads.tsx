@@ -1,4 +1,4 @@
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
+import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { Plus } from 'lucide-react';
