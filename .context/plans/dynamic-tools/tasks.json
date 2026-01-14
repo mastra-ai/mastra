@@ -195,7 +195,7 @@
       ],
       "estimatedComplexity": "medium",
       "dependencies": ["006"],
-      "passes": false
+      "passes": true
     },
     {
       "id": "009",
