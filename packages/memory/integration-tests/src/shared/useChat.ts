@@ -333,8 +333,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
               return {
                 body: {
                   messages: [messages.at(-1)],
-                  threadId,
-                  resourceId,
+                  memory: { thread: threadId, resource: resourceId },
                 },
               };
             },
@@ -405,8 +404,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
               return {
                 body: {
                   messages: [messages.at(-1)],
-                  threadId: localThreadId,
-                  resourceId,
+                  memory: { thread: localThreadId, resource: resourceId },
                 },
               };
             },
