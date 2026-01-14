@@ -7,11 +7,11 @@ import { cn } from '@/lib/utils';
 
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown } from 'lucide-react';
 import { getConditionIconAndColor } from './workflow-node-badges';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCurrentRun } from '../context/use-current-run';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';

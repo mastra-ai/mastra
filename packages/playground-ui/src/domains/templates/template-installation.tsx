@@ -1,7 +1,7 @@
 import { Container } from './shared';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
-import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/components/ui/elements/steps';
+import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/ds/components/Steps';
 import { OctagonXIcon } from 'lucide-react';
 
 type TemplateInstallationProps = {

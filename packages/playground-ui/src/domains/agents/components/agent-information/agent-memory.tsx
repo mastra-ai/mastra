@@ -6,9 +6,9 @@ import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
 import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
-import { MemorySearch } from '@/components/assistant-ui/memory-search';
+import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 interface AgentMemoryProps {
   agentId: string;

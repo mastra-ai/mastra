@@ -746,7 +746,7 @@
     },
     "siliconflow-cn": {
       "url": "https://api.siliconflow.cn/v1",
-      "apiKeyEnvVar": "SILICONFLOW_API_KEY",
+      "apiKeyEnvVar": "SILICONFLOW_CN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "SiliconFlow (China)",
       "models": [

@@ -4,10 +4,10 @@ import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { Button } from '@/ds/components/Button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
@@ -17,7 +17,7 @@ import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/ds/components/Dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
 import { isObjectEmpty } from '@/lib/object';

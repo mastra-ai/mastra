@@ -1,4 +1,4 @@
-import { SideDialog } from '@/components/ui/elements';
+import { SideDialog } from '@/ds/components/SideDialog';
 import { SpanRecord } from '@mastra/core/storage';
 import { AlertTriangleIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';

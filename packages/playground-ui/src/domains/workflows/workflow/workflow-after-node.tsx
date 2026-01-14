@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown, Footprints } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
