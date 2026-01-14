@@ -265,6 +265,8 @@ export interface StorageAgentType {
   workflows?: string[];
   /** Array of agent keys to resolve from Mastra's agent registry */
   agents?: string[];
+  /** Array of integration IDs to load tools from stored integrations */
+  integrations?: string[];
   /** Input processor configurations */
   inputProcessors?: Record<string, unknown>[];
   /** Output processor configurations */

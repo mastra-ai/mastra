@@ -625,3 +625,66 @@ The critical path is complete for the backend infrastructure and API layer.
 Alternatively, could jump to UI tasks (016-021) to build the frontend experience, or work on tool
 resolution integration (014-015) to complete the full end-to-end functionality.
 
+## Task 014: Integrate cached tools with tool resolution - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Added 'integrations' field to StorageAgentType interface in packages/core/src/storage/types.ts
+  - Field is an optional array of integration IDs: `integrations?: string[]`
+  - Follows the same pattern as tools/workflows/agents arrays
+- Added 'integrations' field to AgentConfig interface in packages/core/src/agent/types.ts
+  - Uses DynamicArgument pattern for runtime resolution: `integrations?: DynamicArgument<string[]>`
+  - Added comprehensive JSDoc documentation
+- Created private field `#integrations` in Agent class (packages/core/src/agent/agent.ts)
+  - Stored in constructor alongside other config fields
+- Created public method `listIntegrations()` in Agent class
+  - Resolves integration IDs from config (handles both static arrays and dynamic functions)
+  - Returns Promise<string[]> for consistency with other list methods
+- Created private method `listIntegrationTools()` in Agent class
+  - Fetches cached tools from integrations storage for the given integration IDs
+  - Converts each cached tool to CoreTool format using createTool()
+  - Handles missing storage gracefully (logs debug messages)
+  - Tool naming convention: `${provider}_${toolkitSlug}_${toolSlug}`
+  - Uses simple Zod schemas (z.record(z.unknown()) for input, z.unknown() for output)
+  - Execute function throws NOT_IMPLEMENTED error (Task 015 will implement actual execution)
+- Modified `convertTools()` method to call `listIntegrationTools()`
+  - Added call to listIntegrations() to get integration IDs
+  - Added call to listIntegrationTools() with resolved IDs
+  - Merged integration tools into the final tools object alongside assigned/memory/toolset/client/agent/workflow tools
+- Updated Mastra's `#createAgentFromStoredConfig()` method
+  - Passes integrations field when creating Agent from StorageAgentType
+  - Integration IDs are used directly - tools loaded from storage at runtime
+
+### Key implementation details:
+- Integration tools are loaded lazily at runtime from storage (not resolved upfront like code-defined tools)
+- This allows stored agents to reference integrations without requiring them to be registered in Mastra
+- Tool execution is intentionally not implemented - throws MastraError with clear message
+- Task 015 will implement the actual tool execution proxy to provider APIs
+- Follows established patterns from other dynamic tool sources (memory tools, MCP tools, etc.)
+- Comprehensive error handling: missing storage, missing integrations store, failed tool fetching
+
+### Build/Test status:
+- Full monorepo typecheck passes (pnpm typecheck)
+- Full monorepo build passes (pnpm build) - 121 successful tasks
+- All acceptance criteria met:
+  ✓ Agents can reference integrations by ID (via config.integrations field)
+  ✓ Tools from referenced integrations are available to the agent (loaded in convertTools)
+  ✓ Tool execution throws NOT_IMPLEMENTED error (will be completed in Task 015)
+
+### Files created:
+- None (only modified existing files)
+
+### Files modified:
+- packages/core/src/storage/types.ts (added integrations field to StorageAgentType)
+- packages/core/src/agent/types.ts (added integrations field to AgentConfig)
+- packages/core/src/agent/agent.ts (added #integrations field, listIntegrations method, listIntegrationTools method, updated convertTools)
+- packages/core/src/mastra/index.ts (updated #createAgentFromStoredConfig to pass integrations)
+- .context/plans/dynamic-tools/tasks.json (marked task 014 as passing)
+
+### Next recommended task:
+- Task 015: Add tool execution proxy for integration tools
+  This is the next P1 task that depends on task 014. It will implement the actual execution
+  layer that calls external provider APIs when integration tools are invoked.
+  This is critical to make integration tools actually functional.
+

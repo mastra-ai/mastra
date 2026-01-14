@@ -216,6 +216,11 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   agents?: DynamicArgument<Record<string, Agent>>;
   /**
+   * Integration IDs to load tools from stored integrations.
+   * Tools from these integrations will be automatically available to the agent.
+   */
+  integrations?: DynamicArgument<string[]>;
+  /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
   scorers?: DynamicArgument<MastraScorers>;

@@ -1024,6 +1024,9 @@ export class Mastra<
     // Resolve sub-agents from the stored agent references
     const agents = this.#resolveStoredAgents(storedAgent.agents);
 
+    // Integration IDs are used directly - tools will be loaded from storage at runtime
+    const integrations = storedAgent.integrations;
+
     // Resolve memory from the stored memory reference
     const memory = this.#resolveStoredMemory(storedAgent.memory);
 
@@ -1040,6 +1043,7 @@ export class Mastra<
       tools,
       workflows,
       agents,
+      integrations,
       memory,
       scorers,
       defaultOptions: storedAgent.defaultOptions,
