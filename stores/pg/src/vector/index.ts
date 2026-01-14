@@ -407,6 +407,45 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     ids,
     deleteFilter,
   }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
+    // Input validation
+    if (!vectors || vectors.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('PG', 'UPSERT', 'INVALID_INPUT'),
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        text: 'Cannot upsert with empty vectors array',
+        details: { indexName },
+      });
+    }
+
+    if (metadata && metadata.length !== vectors.length) {
+      throw new MastraError({
+        id: createVectorErrorId('PG', 'UPSERT', 'INVALID_INPUT'),
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        text: `Metadata length (${metadata.length}) must match vectors length (${vectors.length})`,
+        details: {
+          indexName,
+          vectorsLength: vectors.length,
+          metadataLength: metadata.length,
+        },
+      });
+    }
+
+    if (ids && ids.length !== vectors.length) {
+      throw new MastraError({
+        id: createVectorErrorId('PG', 'UPSERT', 'INVALID_INPUT'),
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        text: `IDs length (${ids.length}) must match vectors length (${vectors.length})`,
+        details: {
+          indexName,
+          vectorsLength: vectors.length,
+          idsLength: ids.length,
+        },
+      });
+    }
+
     const { tableName } = this.getTableName(indexName);
 
     // Start a transaction
