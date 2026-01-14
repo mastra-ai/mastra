@@ -23,6 +23,7 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
+    const justClosedRef = useRef(false);
 
     const filteredModels = useFilteredModels(allModels, currentProvider, search, isSearching);
 
@@ -35,10 +36,15 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
 
     const handleSelect = useCallback(
       (modelId: string) => {
+        justClosedRef.current = true;
         setShowSuggestions(false);
         setSearch('');
         setIsSearching(false);
         onSelect(modelId);
+        // Reset the flag after a delay - needs to be long enough to prevent focus reopening
+        setTimeout(() => {
+          justClosedRef.current = false;
+        }, 200);
       },
       [onSelect],
     );
@@ -80,10 +86,14 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
             break;
           case 'Escape':
             e.preventDefault();
+            justClosedRef.current = true;
             setShowSuggestions(false);
             setHighlightedIndex(-1);
             setIsSearching(false);
             setSearch('');
+            setTimeout(() => {
+              justClosedRef.current = false;
+            }, 200);
             break;
         }
       },
@@ -91,6 +101,11 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
     );
 
     const handleFocus = useCallback(() => {
+      // Don't reopen if we just closed after selection
+      if (justClosedRef.current) {
+        return;
+      }
+
       if (!showSuggestions) {
         setShowSuggestions(true);
       }
@@ -102,13 +117,18 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
 
     return (
       <Popover
+        modal={true}
         open={showSuggestions}
         onOpenChange={open => {
-          setShowSuggestions(open);
           if (!open) {
+            justClosedRef.current = true;
+            setTimeout(() => {
+              justClosedRef.current = false;
+            }, 200);
             setSearch('');
             setIsSearching(false);
           }
+          setShowSuggestions(open);
         }}
       >
         <PopoverTrigger asChild>

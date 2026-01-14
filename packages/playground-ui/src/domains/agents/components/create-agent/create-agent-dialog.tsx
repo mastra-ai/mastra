@@ -1,6 +1,6 @@
 'use client';
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/lib/toast';
 
 import { AgentForm } from './agent-form';
@@ -43,10 +43,9 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-surface1 border-border1 max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Agent</DialogTitle>
-          <DialogDescription>Create a new agent with custom instructions and capabilities.</DialogDescription>
         </DialogHeader>
         <AgentForm
           mode="create"

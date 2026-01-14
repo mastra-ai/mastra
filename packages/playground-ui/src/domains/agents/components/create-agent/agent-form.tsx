@@ -163,7 +163,7 @@ export function AgentForm({
   const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading;
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-6">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
       {/* Agent ID badge in edit mode */}
       {mode === 'edit' && agentId && (
         <div className="flex items-center gap-2">
@@ -173,38 +173,43 @@ export function AgentForm({
       )}
 
       {/* Basic Fields - Always Visible */}
-      <div className="flex flex-col gap-4">
-        {/* Name */}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="name" className="text-icon5">
-            Name <span className="text-accent2">*</span>
-          </Label>
-          <Input
-            id="name"
-            placeholder="Enter agent name"
-            {...register('name')}
-            className={cn(errors.name && 'border-accent2')}
-          />
-          {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
-        </div>
+      <div className="flex flex-col gap-3">
+        {/* Name and Description - Two Column Layout matching Model picker widths */}
+        <div className="@container">
+          <div className="flex flex-col @xs:flex-row gap-2">
+            {/* Name - matches Provider width (2/5) */}
+            <div className="flex flex-col gap-1.5 w-full @xs:w-2/5">
+              <Label htmlFor="name" className="text-xs text-icon5">
+                Name <span className="text-accent2">*</span>
+              </Label>
+              <Input
+                id="name"
+                placeholder="Enter agent name"
+                {...register('name')}
+                className={cn(errors.name && 'border-accent2')}
+              />
+              {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
+            </div>
 
-        {/* Description */}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="description" className="text-icon5">
-            Description
-          </Label>
-          <Input
-            id="description"
-            placeholder="Enter agent description (optional)"
-            {...register('description')}
-            className={cn(errors.description && 'border-accent2')}
-          />
-          {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
+            {/* Description - matches Model width (3/5) */}
+            <div className="flex flex-col gap-1.5 w-full @xs:w-3/5">
+              <Label htmlFor="description" className="text-xs text-icon5">
+                Description
+              </Label>
+              <Input
+                id="description"
+                placeholder="Description (optional)"
+                {...register('description')}
+                className={cn(errors.description && 'border-accent2')}
+              />
+              {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
+            </div>
+          </div>
         </div>
 
         {/* Model */}
-        <div className="flex flex-col gap-2">
-          <Label className="text-icon5">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-icon5">
             Model <span className="text-accent2">*</span>
           </Label>
           <Controller
@@ -221,8 +226,8 @@ export function AgentForm({
         </div>
 
         {/* Instructions */}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="instructions" className="text-icon5">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="instructions" className="text-xs text-icon5">
             Instructions <span className="text-accent2">*</span>
           </Label>
           <Controller

@@ -142,25 +142,30 @@ export function MultiSelectPicker<T>({
 
   const selectedOptions = options.filter(option => selected.includes(getOptionId(option)));
 
+  const MAX_VISIBLE_ITEMS = 3;
+
   const renderTriggerContent = () => {
     if (selectedOptions.length === 0) {
       return <span className="text-icon3">{placeholder}</span>;
     }
 
+    const visibleOptions = selectedOptions.slice(0, MAX_VISIBLE_ITEMS);
+    const remainingCount = selectedOptions.length - MAX_VISIBLE_ITEMS;
+
     return (
-      <div className="flex flex-wrap gap-1 items-center">
-        {selectedOptions.map(option => {
+      <div className="flex flex-wrap gap-1 items-center max-w-full overflow-hidden">
+        {visibleOptions.map(option => {
           const id = getOptionId(option);
           return (
             <span
               key={id}
-              className="inline-flex items-center gap-1 bg-surface4 text-icon5 text-ui-sm rounded-md px-1.5 h-badge-default"
+              className="inline-flex items-center gap-1 bg-surface4 text-icon5 text-ui-sm rounded-md px-1.5 h-badge-default shrink-0"
             >
-              {getOptionLabel(option)}
+              <span className="truncate max-w-[120px]">{getOptionLabel(option)}</span>
               <button
                 type="button"
                 onClick={e => handleRemove(id, e)}
-                className="hover:text-icon6 focus:outline-none"
+                className="hover:text-icon6 focus:outline-none shrink-0"
                 aria-label={`Remove ${getOptionLabel(option)}`}
               >
                 <X className="h-3 w-3" />
@@ -168,13 +173,18 @@ export function MultiSelectPicker<T>({
             </span>
           );
         })}
+        {remainingCount > 0 && (
+          <span className="inline-flex items-center bg-surface3 text-icon4 text-ui-sm rounded-md px-1.5 h-badge-default shrink-0">
+            +{remainingCount} more
+          </span>
+        )}
       </div>
     );
   };
 
   return (
     <div className="flex flex-col gap-2">
-      <Label className="text-icon5">{label}</Label>
+      <Label className="text-xs text-icon5">{label}</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button

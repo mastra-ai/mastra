@@ -25,6 +25,7 @@ export const ProviderSelect = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const justClosedRef = useRef(false);
 
   const currentProvider = cleanProviderId(selectedProvider);
   const filteredProviders = useFilteredProviders(providers, search, isSearching);
@@ -32,11 +33,15 @@ export const ProviderSelect = ({
 
   const handleSelect = useCallback(
     (provider: Provider) => {
+      justClosedRef.current = true;
       setSearch('');
       setIsSearching(false);
       setShowSuggestions(false);
       setHighlightedIndex(-1);
       onSelect(provider);
+      setTimeout(() => {
+        justClosedRef.current = false;
+      }, 100);
     },
     [onSelect],
   );
@@ -78,10 +83,14 @@ export const ProviderSelect = ({
           break;
         case 'Escape':
           e.preventDefault();
+          justClosedRef.current = true;
           setIsSearching(false);
           setSearch('');
           setHighlightedIndex(-1);
           setShowSuggestions(false);
+          setTimeout(() => {
+            justClosedRef.current = false;
+          }, 100);
           break;
       }
     },
@@ -89,6 +98,11 @@ export const ProviderSelect = ({
   );
 
   const handleFocus = useCallback(() => {
+    // Don't reopen if we just closed after selection
+    if (justClosedRef.current) {
+      return;
+    }
+
     if (!showSuggestions) {
       setShowSuggestions(true);
       const currentIndex = filteredProviders.findIndex(p => p.id === currentProvider);
@@ -113,11 +127,15 @@ export const ProviderSelect = ({
     <Popover
       open={showSuggestions}
       onOpenChange={open => {
-        setShowSuggestions(open);
         if (!open) {
+          justClosedRef.current = true;
+          setTimeout(() => {
+            justClosedRef.current = false;
+          }, 100);
           setSearch('');
           setIsSearching(false);
         }
+        setShowSuggestions(open);
       }}
     >
       <PopoverTrigger asChild>

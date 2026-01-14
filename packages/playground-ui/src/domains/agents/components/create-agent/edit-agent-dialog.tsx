@@ -64,7 +64,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-surface1 border-border1 sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Agent</DialogTitle>
             <DialogDescription>Update your agent configuration.</DialogDescription>
