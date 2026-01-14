@@ -39,13 +39,13 @@ You can mix and match approaches within a single scorer - for example, use a fun
 
 ### Initializing a Scorer
 
-Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a type specification and judge configuration.
+Every scorer starts with the `createScorer` factory function, which requires an id and description, and optionally accepts a type specification and judge configuration.
 
 ```typescript
 import { createScorer } from '@mastra/core/evals';
 
 const glutenCheckerScorer = createScorer({
-  name: 'Gluten Checker',
+  id: 'gluten-checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
     model: 'openai/gpt-5.1',
@@ -303,7 +303,7 @@ Return your response in this format:
 "This recipe is [gluten-free/contains gluten] because [explanation]"`;
 
 export const glutenCheckerScorer = createScorer({
-  name: "Gluten Checker",
+  id: "gluten-checker",
   description: "Check if the output contains any gluten",
   judge: {
     model: "openai/gpt-4.1-nano",

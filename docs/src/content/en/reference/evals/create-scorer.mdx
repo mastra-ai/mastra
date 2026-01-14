@@ -113,7 +113,7 @@ import { createScorer } from "@mastra/core/evals";
 
 // Agent scorer with automatic typing
 const agentScorer = createScorer({
-  name: "Agent Response Quality",
+  id: "agent-response-quality",
   description: "Evaluates agent responses",
   type: "agent", // Automatically provides ScorerRunInputForAgent/ScorerRunOutputForAgent
 })
@@ -140,7 +140,7 @@ type CustomInput = { query: string; context: string[] };
 type CustomOutput = { answer: string; confidence: number };
 
 const customScorer = createScorer<CustomInput, CustomOutput>({
-  name: "Custom Scorer",
+  id: "custom-scorer",
   description: "Evaluates custom data",
 }).generateScore(({ run }) => {
   // run.input is typed as CustomInput
@@ -162,7 +162,7 @@ When you use `type: 'agent'`, your scorer is compatible for both adding directly
 
 ```typescript
 const agentTraceScorer = createScorer({
-  name: "Agent Trace Length",
+  id: "agent-trace-length",
   description: "Evaluates agent response length",
   type: "agent",
 }).generateScore(({ run }) => {

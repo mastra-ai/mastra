@@ -6,7 +6,7 @@ import { Link2 } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from 'sonner';
-import { InputField } from '@/components/ui/elements/form-fields/input-field';
+import { InputField } from '@/ds/components/FormFields';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
