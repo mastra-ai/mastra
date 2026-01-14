@@ -130,6 +130,17 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   id: TAgentId;
   /**
+   * Source of the agent configuration.
+   * - 'code': Agent defined in code (default)
+   * - 'stored': Agent loaded from storage
+   */
+  source?: 'code' | 'stored';
+  /**
+   * Active version ID for stored agents.
+   * References the currently active version in the agent_versions table.
+   */
+  activeVersionId?: string;
+  /**
    * Unique identifier for the agent.
    */
   name: string;
@@ -204,6 +215,11 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
   agents?: DynamicArgument<Record<string, Agent>>;
+  /**
+   * Integration IDs to load tools from stored integrations.
+   * Tools from these integrations will be automatically available to the agent.
+   */
+  integrations?: DynamicArgument<string[]>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */

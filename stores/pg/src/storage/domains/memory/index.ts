@@ -57,6 +57,14 @@ function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
 
+/**
+ * Convert a date value to a Date object for PostgreSQL queries.
+ * Handles both Date objects and ISO string dates.
+ */
+function toDate(date: Date | string): Date {
+  return typeof date === 'string' ? new Date(date) : date;
+}
+
 export class MemoryPG extends MemoryStorage {
   #db: PgDB;
   #schema: string;
@@ -641,13 +649,13 @@ export class MemoryPG extends MemoryStorage {
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
         conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
-        queryParams.push(filter.dateRange.start);
+        queryParams.push(toDate(filter.dateRange.start));
       }
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
         conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
-        queryParams.push(filter.dateRange.end);
+        queryParams.push(toDate(filter.dateRange.end));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1157,11 +1165,11 @@ export class MemoryPG extends MemoryStorage {
         // Apply date filters
         if (options?.messageFilter?.startDate) {
           messageQuery += ` AND "createdAt" >= $${paramIndex++}`;
-          messageParams.push(options.messageFilter.startDate);
+          messageParams.push(toDate(options.messageFilter.startDate));
         }
         if (options?.messageFilter?.endDate) {
           messageQuery += ` AND "createdAt" <= $${paramIndex++}`;
-          messageParams.push(options.messageFilter.endDate);
+          messageParams.push(toDate(options.messageFilter.endDate));
         }
 
         // Apply message ID filter

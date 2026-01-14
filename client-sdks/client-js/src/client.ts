@@ -54,6 +54,20 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  ListMemoryConfigsResponse,
+  IntegrationProvider,
+  IntegrationConfig,
+  ListProvidersResponse,
+  ListProviderToolkitsParams,
+  ListProviderToolkitsResponse,
+  ListProviderToolsParams,
+  ListProviderToolsResponse,
+  ListIntegrationsParams,
+  ListIntegrationsResponse,
+  CreateIntegrationParams,
+  UpdateIntegrationParams,
+  DeleteIntegrationResponse,
+  RefreshIntegrationResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -145,6 +159,32 @@ export class MastraClient extends BaseResource {
     return this.request(
       `/api/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
     );
+  }
+
+  /**
+   * Lists all registered memory configurations
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing list of memory configurations
+   */
+  public listMemoryConfigs(requestContext?: Record<string, unknown>): Promise<ListMemoryConfigsResponse> {
+    return this.request(`/api/memory/configs${requestContextQueryString(requestContext)}`);
+  }
+
+  /**
+   * Enhances instructions using AI without requiring an existing agent.
+   * Useful when creating new agents.
+   * @param params - Enhancement parameters
+   * @returns Promise containing the enhanced instructions and explanation
+   */
+  public enhanceInstructions(params: {
+    instructions: string;
+    comment: string;
+    model: { provider: string; modelId: string };
+  }): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request('/api/agents/instructions/enhance', {
+      method: 'POST',
+      body: params,
+    });
   }
 
   /**
@@ -722,9 +762,13 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all stored agents with optional pagination
    * @param params - Optional pagination and ordering parameters
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing paginated list of stored agents
    */
-  public listStoredAgents(params?: ListStoredAgentsParams): Promise<ListStoredAgentsResponse> {
+  public listStoredAgents(
+    params?: ListStoredAgentsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListStoredAgentsResponse> {
     const searchParams = new URLSearchParams();
 
     if (params?.page !== undefined) {
@@ -741,6 +785,17 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.ownerId) {
+      searchParams.set('ownerId', params.ownerId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
 
     const queryString = searchParams.toString();
     return this.request(`/api/stored/agents${queryString ? `?${queryString}` : ''}`);
@@ -749,10 +804,14 @@ export class MastraClient extends BaseResource {
   /**
    * Creates a new stored agent
    * @param params - Agent configuration including id, name, instructions, model, etc.
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the created stored agent
    */
-  public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
-    return this.request('/api/stored/agents', {
+  public createStoredAgent(
+    params: CreateStoredAgentParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<StoredAgentResponse> {
+    return this.request(`/api/stored/agents${requestContextQueryString(requestContext)}`, {
       method: 'POST',
       body: params,
     });
@@ -777,5 +836,170 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/api/system/packages');
+  }
+
+  // ============================================================================
+  // Integrations
+  // ============================================================================
+
+  /**
+   * Lists all available integration providers with their connection status
+   * @returns Promise containing list of providers and their connection status
+   */
+  public listProviders(): Promise<ListProvidersResponse> {
+    return this.request('/api/integrations/providers');
+  }
+
+  /**
+   * Lists toolkits available from a specific provider
+   * @param provider - Integration provider ('composio' or 'arcade')
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing list of toolkits from the provider
+   */
+  public listProviderToolkits(
+    provider: IntegrationProvider,
+    params?: ListProviderToolkitsParams,
+  ): Promise<ListProviderToolkitsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.search) {
+      searchParams.set('search', params.search);
+    }
+    if (params?.category) {
+      searchParams.set('category', params.category);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.cursor) {
+      searchParams.set('cursor', params.cursor);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations/${provider}/toolkits${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Lists tools available from a specific provider
+   * @param provider - Integration provider ('composio' or 'arcade')
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing list of tools from the provider
+   */
+  public listProviderTools(
+    provider: IntegrationProvider,
+    params?: ListProviderToolsParams,
+  ): Promise<ListProviderToolsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.toolkitSlug) {
+      searchParams.set('toolkitSlug', params.toolkitSlug);
+    }
+    if (params?.toolkitSlugs) {
+      searchParams.set('toolkitSlugs', params.toolkitSlugs);
+    }
+    if (params?.search) {
+      searchParams.set('search', params.search);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.cursor) {
+      searchParams.set('cursor', params.cursor);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations/${provider}/tools${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Lists all configured integrations with optional filtering and pagination
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing paginated list of integrations
+   */
+  public listIntegrations(params?: ListIntegrationsParams): Promise<ListIntegrationsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.ownerId) {
+      searchParams.set('ownerId', params.ownerId);
+    }
+    if (params?.provider) {
+      searchParams.set('provider', params.provider);
+    }
+    if (params?.enabled !== undefined) {
+      searchParams.set('enabled', String(params.enabled));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a single integration by ID
+   * @param integrationId - ID of the integration to retrieve
+   * @returns Promise containing the integration configuration
+   */
+  public getIntegration(integrationId: string): Promise<IntegrationConfig> {
+    return this.request(`/api/integrations/${integrationId}`);
+  }
+
+  /**
+   * Creates a new integration configuration
+   * @param params - Integration configuration parameters
+   * @returns Promise containing the created integration
+   */
+  public createIntegration(params: CreateIntegrationParams): Promise<IntegrationConfig> {
+    return this.request('/api/integrations', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Updates an existing integration configuration
+   * @param integrationId - ID of the integration to update
+   * @param params - Fields to update
+   * @returns Promise containing the updated integration
+   */
+  public updateIntegration(integrationId: string, params: UpdateIntegrationParams): Promise<IntegrationConfig> {
+    return this.request(`/api/integrations/${integrationId}`, {
+      method: 'PATCH',
+      body: params,
+    });
+  }
+
+  /**
+   * Deletes an integration and all its cached tools
+   * @param integrationId - ID of the integration to delete
+   * @returns Promise containing success status
+   */
+  public deleteIntegration(integrationId: string): Promise<DeleteIntegrationResponse> {
+    return this.request(`/api/integrations/${integrationId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Refreshes cached tools for an integration by re-fetching from the provider
+   * @param integrationId - ID of the integration to refresh
+   * @returns Promise containing refresh status and count of tools updated
+   */
+  public refreshIntegrationTools(integrationId: string): Promise<RefreshIntegrationResponse> {
+    return this.request(`/api/integrations/${integrationId}/refresh`, {
+      method: 'POST',
+    });
   }
 }

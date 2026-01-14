@@ -29,6 +29,8 @@ const storageOrderBySchema = z.object({
  */
 export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  ownerId: z.string().optional().describe('Filter agents by owner identifier'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });
 
 // ============================================================================
@@ -62,9 +64,15 @@ const storedAgentBaseSchema = z.object({
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
   outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
-  memory: z.string().optional().describe('Memory key to resolve from Mastra registry'),
+  memory: z
+    .object({
+      id: z.string().describe('Memory key to resolve from Mastra registry'),
+    })
+    .optional()
+    .describe('Memory configuration to resolve from Mastra registry'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+  ownerId: z.string().optional().describe('Owner identifier for multi-tenant filtering'),
 });
 
 /**
@@ -88,6 +96,7 @@ export const updateStoredAgentBodySchema = storedAgentBaseSchema.partial();
  */
 export const storedAgentSchema = storedAgentBaseSchema.extend({
   id: z.string(),
+  ownerId: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

@@ -33,6 +33,7 @@ import {
   modelConfigIdPathParams,
   enhanceInstructionsBodySchema,
   enhanceInstructionsResponseSchema,
+  enhanceInstructionsGenericBodySchema,
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
@@ -109,6 +110,8 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  source?: 'code' | 'stored';
+  activeVersionId?: string;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -299,6 +302,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: agent.source ?? 'code',
   };
 }
 
@@ -311,12 +315,14 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
 
   let agent;
 
+  // First, try to get code-defined agent
   try {
     agent = mastra.getAgentById(agentId);
   } catch (error) {
     logger.debug('Error getting agent from mastra, searching agents for agent', error);
   }
 
+  // If not found, look through sub-agents
   if (!agent) {
     logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
     const agents = mastra.listAgents();
@@ -333,6 +339,16 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
           logger.debug('Error getting agent from agent', error);
         }
       }
+    }
+  }
+
+  // If still not found, try to get stored agent
+  if (!agent) {
+    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
     }
   }
 
@@ -454,6 +470,8 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: agent.source ?? 'code',
+    activeVersionId: agent.activeVersionId,
   };
 }
 
@@ -470,26 +488,59 @@ export const LIST_AGENTS_ROUTE = createRoute({
   }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
-  description: 'Returns a list of all available agents in the system',
+  description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const agents = mastra.listAgents();
+      const codeAgents = mastra.listAgents();
 
       const isPartial = partial === 'true';
-      const serializedAgentsMap = await Promise.all(
-        Object.entries(agents).map(async ([id, agent]) => {
+
+      // Serialize code-defined agents
+      const serializedCodeAgentsMap = await Promise.all(
+        Object.entries(codeAgents).map(async ([id, agent]) => {
           return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
-      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
         (acc, { id, ...rest }) => {
           acc[id] = { id, ...rest };
           return acc;
         },
         {},
       );
+
+      // Also fetch and include stored agents
+      try {
+        const storedAgentsResult = await mastra.listStoredAgents();
+        if (storedAgentsResult?.agents) {
+          // Process each agent individually to avoid one bad agent breaking the whole list
+          for (const agent of storedAgentsResult.agents) {
+            try {
+              const serialized = await formatAgentList({
+                id: agent.id,
+                mastra,
+                agent,
+                requestContext,
+                partial: isPartial,
+              });
+              // Don't overwrite code-defined agents with same ID
+              if (!serializedAgents[serialized.id]) {
+                serializedAgents[serialized.id] = serialized;
+              }
+            } catch (agentError) {
+              // Log but continue with other agents
+              const logger = mastra.getLogger();
+              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+            }
+          }
+        }
+      } catch (storageError) {
+        // Storage not configured or doesn't support agents - log and ignore
+        const logger = mastra.getLogger();
+        logger.debug('Failed to fetch stored agents', { error: storageError });
+      }
 
       return serializedAgents;
     } catch (error) {
@@ -1146,24 +1197,74 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   summary: 'Enhance agent instructions',
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
-  handler: async ({ mastra, agentId, instructions, comment }) => {
+  handler: async ({ mastra, agentId, instructions, comment, model: requestedModel }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent);
-      if (!model) {
-        throw new HTTPException(400, {
-          message:
-            'No model with a configured API key found. Please set the required environment variable for your model provider.',
-        });
+      let modelToUse: Awaited<ReturnType<Agent['getModel']>> | string;
+
+      if (requestedModel) {
+        // Use the model specified in the request (format: provider/modelId)
+        modelToUse = `${requestedModel.provider}/${requestedModel.modelId}`;
+      } else {
+        // Find the first model with a connected provider (similar to how chat works)
+        const connectedModel = await findConnectedModel(agent);
+        if (!connectedModel) {
+          throw new HTTPException(400, {
+            message:
+              'No model with a configured API key found. Please set the required environment variable for your model provider.',
+          });
+        }
+        modelToUse = connectedModel;
       }
 
       const systemPromptAgent = new Agent({
         id: 'system-prompt-enhancer',
         name: 'system-prompt-enhancer',
         instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
-        model,
+        model: modelToUse,
+      });
+
+      const result = await systemPromptAgent.generate(
+        `We need to improve the system prompt.
+Current: ${instructions}
+${comment ? `User feedback: ${comment}` : ''}`,
+        {
+          structuredOutput: {
+            schema: enhanceInstructionsResponseSchema,
+          },
+        },
+      );
+
+      return (await result.object) as unknown as EnhanceInstructionsResponse;
+    } catch (error) {
+      return handleError(error, 'Error enhancing instructions');
+    }
+  },
+});
+
+/**
+ * Generic enhance instructions endpoint that doesn't require an agent.
+ * Useful for creating new agents where no agent exists yet.
+ */
+export const ENHANCE_INSTRUCTIONS_GENERIC_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/instructions/enhance',
+  responseType: 'json',
+  bodySchema: enhanceInstructionsGenericBodySchema,
+  responseSchema: enhanceInstructionsResponseSchema,
+  summary: 'Enhance instructions (generic)',
+  description: 'Uses AI to enhance instructions without requiring an existing agent. Model must be specified.',
+  tags: ['Agents'],
+  handler: async ({ instructions, comment, model: requestedModel }) => {
+    try {
+      const modelToUse = `${requestedModel.provider}/${requestedModel.modelId}`;
+
+      const systemPromptAgent = new Agent({
+        id: 'system-prompt-enhancer',
+        name: 'system-prompt-enhancer',
+        instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
+        model: modelToUse,
       });
 
       const result = await systemPromptAgent.generate(

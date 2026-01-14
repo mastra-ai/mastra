@@ -441,3 +441,15 @@ export const cloneThreadResponseSchema = z.object({
   thread: threadSchema,
   clonedMessages: z.array(messageSchema),
 });
+
+/**
+ * Response schema for GET /api/memory/configs
+ */
+export const listMemoryConfigsResponseSchema = z.object({
+  configs: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  ),
+});

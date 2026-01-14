@@ -104,6 +104,8 @@ export const serializedAgentSchema = z.object({
   defaultOptions: z.record(z.string(), z.any()).optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  source: z.enum(['code', 'stored']).optional(),
+  activeVersionId: z.string().optional(),
 });
 
 /**
@@ -418,6 +420,13 @@ export const executeToolResponseSchema = z.any(); // Tool execution result varie
 export const enhanceInstructionsBodySchema = z.object({
   instructions: z.string().describe('The current agent instructions to enhance'),
   comment: z.string().describe('User comment describing how to enhance the instructions'),
+  model: z
+    .object({
+      provider: z.string().describe('The provider ID (e.g., "openai", "anthropic")'),
+      modelId: z.string().describe('The model ID (e.g., "gpt-4o", "claude-3-5-sonnet")'),
+    })
+    .optional()
+    .describe('Optional model to use for enhancement. If not provided, uses the agent default model.'),
 });
 
 /**
@@ -426,4 +435,18 @@ export const enhanceInstructionsBodySchema = z.object({
 export const enhanceInstructionsResponseSchema = z.object({
   explanation: z.string().describe('Explanation of the changes made'),
   new_prompt: z.string().describe('The enhanced instructions'),
+});
+
+/**
+ * Body schema for generic enhance instructions (without requiring an agent)
+ */
+export const enhanceInstructionsGenericBodySchema = z.object({
+  instructions: z.string().describe('The current instructions to enhance'),
+  comment: z.string().describe('User comment describing how to enhance the instructions'),
+  model: z
+    .object({
+      provider: z.string().describe('The provider ID (e.g., "openai", "anthropic")'),
+      modelId: z.string().describe('The model ID (e.g., "gpt-4o", "claude-3-5-sonnet")'),
+    })
+    .describe('The model to use for enhancement'),
 });

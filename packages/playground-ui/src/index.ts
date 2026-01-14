@@ -7,6 +7,7 @@ export * from './domains/workflows/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
 export * from './ds/components/Threads';
+export * from './domains/integrations/index';
 export * from './types';
 
 // DS Components - Existing

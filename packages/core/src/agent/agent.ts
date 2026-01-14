@@ -48,6 +48,7 @@ import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
+import { executeTool } from '../integrations';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -119,6 +120,8 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
 export class Agent<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> extends MastraBase {
   public id: TAgentId;
   public name: string;
+  public readonly source: 'code' | 'stored';
+  public readonly activeVersionId?: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -134,6 +137,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
+  #integrations?: DynamicArgument<string[]>;
   #voice: CompositeVoice;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
@@ -168,6 +172,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     this.name = config.name;
     this.id = config.id ?? config.name;
+    this.source = config.source ?? 'code';
+    this.activeVersionId = config.activeVersionId;
 
     this.#instructions = config.instructions;
     this.#description = config.description;
@@ -238,6 +244,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     this.#scorers = config.scorers || ({} as MastraScorers);
 
     this.#agents = config.agents || ({} as Record<string, Agent>);
+
+    this.#integrations = config.integrations;
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -649,6 +657,20 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     });
 
     return workflowRecord;
+  }
+
+  public async listIntegrations({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<string[]> {
+    if (!this.#integrations) {
+      return [];
+    }
+
+    if (typeof this.#integrations === 'function') {
+      return await Promise.resolve(this.#integrations({ requestContext, mastra: this.#mastra }));
+    }
+
+    return this.#integrations;
   }
 
   async listScorers({
@@ -2304,6 +2326,178 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
+   * Retrieves and converts integration tools from stored integrations to CoreTool format.
+   * Fetches cached tools from the integration storage and converts them to executable tools.
+   * @internal
+   */
+  private async listIntegrationTools({
+    integrationIds,
+    runId,
+    threadId,
+    resourceId,
+    requestContext,
+    tracingContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+  }: {
+    integrationIds?: string[];
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    requestContext: RequestContext;
+    tracingContext?: TracingContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  }): Promise<Record<string, CoreTool>> {
+    const convertedIntegrationTools: Record<string, CoreTool> = {};
+
+    if (!integrationIds || integrationIds.length === 0) {
+      return convertedIntegrationTools;
+    }
+
+    // Get storage to fetch cached tools
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug(`[Agent:${this.name}] - No storage configured, skipping integration tools`);
+      return convertedIntegrationTools;
+    }
+
+    const integrationsStore = await storage.getStore('integrations');
+    if (!integrationsStore) {
+      this.logger.debug(`[Agent:${this.name}] - Integrations storage not available, skipping integration tools`);
+      return convertedIntegrationTools;
+    }
+
+    this.logger.debug(
+      `[Agent:${this.name}] - Loading tools from ${integrationIds.length} integration(s): ${integrationIds.join(', ')}`,
+      { runId, threadId, resourceId },
+    );
+
+    const memory = await this.getMemory({ requestContext });
+
+    // Fetch cached tools for all integrations
+    for (const integrationId of integrationIds) {
+      try {
+        // List all cached tools for this integration
+        const { tools: cachedTools } = await integrationsStore.listCachedTools({
+          integrationId,
+          page: 0,
+          perPage: false, // Get all tools
+        });
+
+        this.logger.debug(
+          `[Agent:${this.name}] - Found ${cachedTools.length} cached tool(s) for integration ${integrationId}`,
+          { runId, threadId, resourceId },
+        );
+
+        // Convert each cached tool to a CoreTool
+        for (const cachedTool of cachedTools) {
+          // Build a unique tool name: provider_toolkit_toolSlug
+          const toolName = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
+
+          // Create a tool using the cached definition
+          // The schemas are stored as JSON and will be converted internally by createTool
+          const toolObj = createTool({
+            id: toolName,
+            description: cachedTool.description || `${cachedTool.name} from ${cachedTool.provider}`,
+            // Use the raw definition which contains the complete tool spec including schemas
+            // For now, use a simple schema until Task 015 implements proper conversion
+            inputSchema: z.record(z.unknown()).describe('Tool input parameters'),
+            outputSchema: z.unknown().describe('Tool output result'),
+            mastra: this.#mastra,
+            execute: async (inputData: Record<string, unknown>, context) => {
+              // Execute the tool via the provider's API
+              this.logger.debug(`[Agent:${this.name}] - Executing integration tool: ${toolName}`, {
+                runId,
+                threadId,
+                resourceId,
+                provider: cachedTool.provider,
+                integrationId,
+              });
+
+              try {
+                const result = await executeTool(cachedTool.provider, cachedTool.toolSlug, inputData);
+
+                if (!result.success) {
+                  throw new MastraError({
+                    id: 'AGENT_INTEGRATION_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.THIRD_PARTY,
+                    text: result.error?.message || 'Tool execution failed',
+                    details: {
+                      agentName: this.name,
+                      toolName,
+                      provider: cachedTool.provider,
+                      integrationId,
+                      cachedToolId: cachedTool.id,
+                      errorCode: result.error?.code || null,
+                    },
+                  });
+                }
+
+                this.logger.debug(`[Agent:${this.name}] - Integration tool executed successfully: ${toolName}`, {
+                  runId,
+                  threadId,
+                  resourceId,
+                  executionId: result.metadata?.executionId,
+                });
+
+                return result.output;
+              } catch (err) {
+                // If error is already a MastraError, rethrow it
+                if (err instanceof MastraError) {
+                  throw err;
+                }
+
+                // Otherwise wrap in a MastraError
+                throw new MastraError({
+                  id: 'AGENT_INTEGRATION_TOOL_EXECUTION_ERROR',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.THIRD_PARTY,
+                  text: err instanceof Error ? err.message : 'Unknown error executing integration tool',
+                  details: {
+                    agentName: this.name,
+                    toolName,
+                    provider: cachedTool.provider,
+                    integrationId,
+                    cachedToolId: cachedTool.id,
+                  },
+                });
+              }
+            },
+          });
+
+          const options: ToolOptions = {
+            name: toolName,
+            runId,
+            threadId,
+            resourceId,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            memory,
+            agentName: this.name,
+            requestContext,
+            tracingContext,
+            model: await this.getModel({ requestContext }),
+            tracingPolicy: this.#options?.tracingPolicy,
+          };
+
+          convertedIntegrationTools[toolName] = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        }
+      } catch (error) {
+        this.logger.error(`[Agent:${this.name}] - Failed to load tools from integration ${integrationId}: ${error}`, {
+          runId,
+          threadId,
+          resourceId,
+        });
+        // Continue with other integrations even if one fails
+      }
+    }
+
+    return convertedIntegrationTools;
+  }
+
+  /**
    * Assembles all tools from various sources into a unified CoreTool dictionary.
    * @internal
    */
@@ -2403,6 +2597,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       autoResumeSuspendedTools,
     });
 
+    const integrationIds = await this.listIntegrations({ requestContext });
+    const integrationTools = await this.listIntegrationTools({
+      integrationIds,
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      tracingContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+    });
+
     return this.formatTools({
       ...assignedTools,
       ...memoryTools,
@@ -2410,6 +2616,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...clientSideTools,
       ...agentTools,
       ...workflowTools,
+      ...integrationTools,
     });
   }
 

@@ -6,7 +6,9 @@ import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_VERSIONS_ROUTES } from './agent-versions';
 import { AGENTS_ROUTES } from './agents';
+import { INTEGRATIONS_ROUTES } from './integrations';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -100,6 +102,8 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...INTEGRATIONS_ROUTES,
+  ...AGENT_VERSIONS_ROUTES,
   ...SYSTEM_ROUTES,
 ];
 

@@ -18,7 +18,7 @@ declare global {
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
 
-import Agents from './pages/agents';
+import { Agents } from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';

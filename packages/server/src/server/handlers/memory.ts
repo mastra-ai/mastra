@@ -41,6 +41,7 @@ import {
   deleteMessagesResponseSchema,
   cloneThreadBodySchema,
   cloneThreadResponseSchema,
+  listMemoryConfigsResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -111,10 +112,20 @@ async function getMemoryFromContext({
         }
       }
     }
+  }
 
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
+  // Try to get stored agent if not found in code-defined agents
+  if (agentId && !agent) {
+    logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
     }
+  }
+
+  if (agentId && !agent) {
+    throw new HTTPException(404, { message: 'Agent not found' });
   }
 
   if (agent) {
@@ -864,6 +875,28 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error searching memory');
+    }
+  },
+});
+
+export const LIST_MEMORY_CONFIGS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/configs',
+  responseType: 'json',
+  responseSchema: listMemoryConfigsResponseSchema,
+  summary: 'List registered memory configurations',
+  description: 'Returns a list of all memory configurations registered with the Mastra instance',
+  tags: ['Memory'],
+  handler: async ({ mastra }) => {
+    try {
+      const memoryRegistry = mastra.listMemory();
+      const configs = Object.entries(memoryRegistry || {}).map(([key, memory]) => ({
+        id: key,
+        name: (memory as MastraMemory).id || key,
+      }));
+      return { configs };
+    } catch (error) {
+      return handleError(error, 'Error listing memory configs');
     }
   },
 });

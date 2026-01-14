@@ -107,6 +107,8 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  source?: 'code' | 'stored';
+  activeVersionId?: string;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -598,6 +600,7 @@ export interface StoredAgentResponse {
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -612,6 +615,8 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  ownerId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -643,6 +648,7 @@ export interface CreateStoredAgentParams {
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -662,6 +668,7 @@ export interface UpdateStoredAgentParams {
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -686,6 +693,84 @@ export interface Provider {
 }
 
 // ============================================================================
+// Agent Version Types
+// ============================================================================
+
+/**
+ * Response for a single agent version
+ */
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: StoredAgentResponse;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Parameters for listing agent versions
+ */
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  orderDirection?: 'ASC' | 'DESC';
+}
+
+/**
+ * Response for listing agent versions
+ */
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating an agent version
+ */
+export interface CreateAgentVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+/**
+ * Represents a single field difference between two versions
+ */
+export interface AgentVersionDiff {
+  field: string;
+  previousValue: unknown;
+  currentValue: unknown;
+}
+
+/**
+ * Response for comparing two agent versions
+ */
+export interface CompareVersionsResponse {
+  diffs: AgentVersionDiff[];
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
+}
+
+// ============================================================================
+// Memory Config Types
+// ============================================================================
+
+export interface MemoryConfigItem {
+  id: string;
+  name?: string;
+}
+
+export interface ListMemoryConfigsResponse {
+  configs: MemoryConfigItem[];
+}
+
+// ============================================================================
 // System Types
 // ============================================================================
 
@@ -696,4 +781,200 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Integration Types
+// ============================================================================
+
+/**
+ * Integration provider type
+ */
+export type IntegrationProvider = 'composio' | 'arcade';
+
+/**
+ * Integration configuration
+ */
+export interface IntegrationConfig {
+  id: string;
+  provider: IntegrationProvider;
+  name: string;
+  enabled: boolean;
+  selectedToolkits: string[];
+  selectedTools?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Cached tool definition
+ */
+export interface CachedTool {
+  id: string;
+  integrationId: string;
+  provider: IntegrationProvider;
+  toolkitSlug: string;
+  toolSlug: string;
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  rawDefinition?: Record<string, unknown>;
+  cachedAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Provider connection status
+ */
+export interface ProviderStatus {
+  provider: IntegrationProvider;
+  connected: boolean;
+  name: string;
+  description: string;
+  icon?: string;
+}
+
+/**
+ * Toolkit from provider API
+ */
+export interface ProviderToolkit {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  toolCount?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Tool from provider API
+ */
+export interface ProviderTool {
+  slug: string;
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  toolkit?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for listing integrations
+ */
+export interface ListIntegrationsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  ownerId?: string;
+  provider?: IntegrationProvider;
+  enabled?: boolean;
+}
+
+/**
+ * Response for listing integrations
+ */
+export interface ListIntegrationsResponse {
+  integrations: IntegrationConfig[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating an integration
+ */
+export interface CreateIntegrationParams {
+  id?: string;
+  name: string;
+  provider: IntegrationProvider;
+  enabled?: boolean;
+  selectedToolkits: string[];
+  selectedTools?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+}
+
+/**
+ * Parameters for updating an integration
+ */
+export interface UpdateIntegrationParams {
+  name?: string;
+  provider?: IntegrationProvider;
+  enabled?: boolean;
+  selectedToolkits?: string[];
+  selectedTools?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+}
+
+/**
+ * Response for deleting an integration
+ */
+export interface DeleteIntegrationResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Response for listing providers
+ */
+export interface ListProvidersResponse {
+  providers: ProviderStatus[];
+}
+
+/**
+ * Parameters for listing toolkits from a provider
+ */
+export interface ListProviderToolkitsParams {
+  search?: string;
+  category?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+/**
+ * Response for listing toolkits from a provider
+ */
+export interface ListProviderToolkitsResponse {
+  toolkits: ProviderToolkit[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for listing tools from a provider
+ */
+export interface ListProviderToolsParams {
+  toolkitSlug?: string;
+  toolkitSlugs?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+/**
+ * Response for listing tools from a provider
+ */
+export interface ListProviderToolsResponse {
+  tools: ProviderTool[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+/**
+ * Response for refreshing integration tools
+ */
+export interface RefreshIntegrationResponse {
+  success: boolean;
+  message: string;
+  toolsUpdated: number;
 }
