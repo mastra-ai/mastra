@@ -637,6 +637,10 @@ ol {
   visibility: hidden;
 }
 
+.table-of-contents li {
+  margin: var(--ifm-toc-padding-vertical) 0;
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;

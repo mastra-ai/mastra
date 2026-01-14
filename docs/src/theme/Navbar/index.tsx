@@ -1,5 +1,5 @@
 import Link from "@docusaurus/Link";
-import { GithubStarCount } from "@site/src/components/github-star-count";
+import { GitHubIconLink } from "@site/src/components/github-icon-link";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
@@ -25,7 +25,7 @@ function NavbarContentDesktop() {
 
       <div className="flex gap-2 items-center">
         <div className="flex items-center">
-          <GithubStarCount />
+          <GitHubIconLink />
         </div>
 
         <div className="hidden @[798px]:block">

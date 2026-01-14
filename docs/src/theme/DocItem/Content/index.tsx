@@ -7,6 +7,8 @@ import MDXContent from "@theme/MDXContent";
 import { type ReactNode } from "react";
 
 /**
+ * TODO: Check if we can remove this logic altogether
+ * 
  Title can be declared inside md content or declared through
  front matter and added manually. To make both cases consistent,
  the added title is added under the same div.markdown block
