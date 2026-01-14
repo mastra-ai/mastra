@@ -1126,3 +1126,54 @@ Date: 2025-01-14
 - Future enhancement: Add integration name input in final step (currently auto-generated)
 - Future enhancement: Remember wizard state if dialog is closed and reopened (currently resets)
 
+## Task 021: Add 'Add Tools' button to Tools page - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Updated packages/playground/src/pages/tools/index.tsx to integrate the Add Tools dialog
+- Added 'Add Tools' button to HeaderAction section with Plus icon from lucide-react
+- Imported and rendered AddToolsDialog component from @mastra/playground-ui
+- Added dialog open state management using useState hook
+- Positioned the "Add Tools" button before the "Tools documentation" button
+- Followed the same pattern as the Agents page for consistency
+
+### Key implementation details:
+- Used Plus icon from lucide-react (consistent with Agents page)
+- Button uses primary styling (no variant specified) while docs button uses variant="outline"
+- Dialog state is managed locally with isAddToolsDialogOpen state variable
+- Dialog opens via onClick handler: setIsAddToolsDialogOpen(true)
+- Dialog closes automatically via onOpenChange prop passed to AddToolsDialog
+- The AddToolsDialog component was already exported from @mastra/playground-ui (task 020)
+- No query invalidation needed - the AddToolsDialog handles mutations internally with proper query invalidation
+
+### Build/Test status:
+- Full monorepo typecheck passes (pnpm typecheck)
+- Full monorepo build passes (pnpm build) - 121 successful tasks
+- Playground-ui tests pass (18 tests)
+- All acceptance criteria met:
+  ✓ 'Add Tools' button visible on Tools page (added to HeaderAction)
+  ✓ Clicking opens the Add Tools dialog (onClick handler implemented)
+  ✓ After adding tools, Tools page refreshes (handled by AddToolsDialog mutations)
+
+### Files created:
+- None (only modified existing file)
+
+### Files modified:
+- packages/playground/src/pages/tools/index.tsx (added imports, state, button, and dialog)
+- .context/plans/dynamic-tools/tasks.json (marked task 021 as passing)
+
+### Next recommended task:
+- Task 022: Display integration tools in Tools table
+  This is the next P1 UI task that depends on task 021. It will update the Tools page to show
+  tools from stored integrations alongside code-defined tools.
+  This is a medium complexity task that involves merging data from multiple sources.
+
+### Notes for next engineer:
+- The "Add Tools" button is now live on the Tools page
+- The full add tools flow is functional: click button → select provider → select toolkits → review tools → save
+- Integration tools are being created and cached in the database when users complete the wizard
+- Task 022 is needed to make these integration tools visible in the Tools table
+- The integration tools are already available to agents via task 014 (tool resolution integration)
+- The UI is ready for end-to-end testing once task 022 is complete
+
