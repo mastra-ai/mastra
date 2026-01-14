@@ -457,3 +457,56 @@ Date: 2025-01-14
   - Provider status checking
   - Provider toolkit/tool listing (proxy to external APIs)
   - Tool caching on create/refresh
+
+## Task 011: Implement integration API handlers - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/server/src/server/handlers/integrations.ts with all required handlers
+- Implemented all CRUD operation handlers:
+  - LIST_INTEGRATIONS_ROUTE: Lists all configured integrations with pagination and filtering
+  - GET_INTEGRATION_ROUTE: Gets a single integration by ID
+  - CREATE_INTEGRATION_ROUTE: Creates a new integration and caches tools from the provider
+  - UPDATE_INTEGRATION_ROUTE: Updates integration and refreshes cached tools if toolkits/tools changed
+  - DELETE_INTEGRATION_ROUTE: Deletes integration and all its cached tools
+- Implemented provider proxy handlers:
+  - GET_PROVIDERS_ROUTE: Lists all available providers with connection status
+  - LIST_PROVIDER_TOOLKITS_ROUTE: Proxies toolkit listing to external provider API
+  - LIST_PROVIDER_TOOLS_ROUTE: Proxies tool listing to external provider API
+- Implemented tool caching and refresh handler:
+  - REFRESH_INTEGRATION_TOOLS_ROUTE: Re-fetches tools from provider and updates cache
+
+### Key implementation details:
+- All handlers follow the createRoute pattern from existing handlers (stored-agents.ts)
+- Provider connection status checked before fetching tools (validates ENV API key presence)
+- Tool caching happens automatically on integration creation
+- Tool refresh preserves the originally selected tools (respects selectedTools filtering)
+- Tools are batch cached using cacheTools() for efficiency
+- Proper error handling with HTTPException and handleError throughout
+- All storage operations use correct object signatures ({ id: ... }, { integration: ... }, etc.)
+- StorageCachedToolInput includes all required fields: id, integrationId, provider, toolkitSlug, toolSlug, name, inputSchema, rawDefinition
+- selectedTools parameter is used for filtering which tools to cache, not stored in integration record
+- UUID generation using crypto.randomUUID() for integration and tool IDs
+
+### Build/Test status:
+- Full monorepo build passes (pnpm -w build) - 121 successful tasks
+- Full monorepo typecheck passes (pnpm -w typecheck)
+- Server package tests pass - 410 passed, 2 skipped
+- All acceptance criteria met:
+  ✓ All CRUD operations work correctly
+  ✓ Provider proxy endpoints forward requests to external APIs
+  ✓ Proper error handling and status codes
+  ✓ Tool caching occurs on create/refresh
+
+### Files created:
+- packages/server/src/server/handlers/integrations.ts (new - 533 lines)
+
+### Files modified:
+- .context/plans/dynamic-tools/tasks.json (marked task 011 as passing)
+
+### Next recommended task:
+- Task 012: Register integration routes
+  This is the next P0 task that depends on task 011. It will create the routes file and register all handlers with the server adapter.
+  This is a small task that should be quick to complete.
+
