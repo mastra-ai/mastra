@@ -339,7 +339,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
     z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
-  const { retries, scorers, ...agentOptions } = options ?? {};
+  const { retries, scorers, ...agentOptions } =
+    options ?? ({} as AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> });
 
   return {
     id: params.id,
@@ -384,7 +385,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       if ((await params.getModel()).specificationVersion === 'v1') {
         const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
+          ...agentOptions,
           requestContext,
           tracingContext,
           onFinish: result => {
@@ -401,7 +402,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         stream = fullStream as any;
       } else {
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
+          ...agentOptions,
           requestContext,
           tracingContext,
           onFinish: result => {

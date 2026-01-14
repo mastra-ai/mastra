@@ -57,7 +57,7 @@ type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptions<OUTPUT = undefined> = {
+export type StructuredOutputOptions<OUTPUT = {}> = {
   /** Zod schema to validate the output against */
   schema: NonNullable<OutputSchema<OUTPUT>>;
 
@@ -94,7 +94,7 @@ export type StructuredOutputOptions<OUTPUT = undefined> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type SerializableStructuredOutputOptions<OUTPUT = undefined> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
   model?: ModelRouterModelId | OpenAICompatibleConfig;
 };
 
@@ -122,7 +122,11 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
-export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
+export interface AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+> {
   /**
    * Identifier for the agent.
    */
@@ -168,7 +172,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.

@@ -131,12 +131,14 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 export type StreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
->;
+> &
+  (OUTPUT extends {}
+    ? { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> }
+    : { structuredOutput?: never });
 
 export type UpdateModelParams = {
   modelId: string;

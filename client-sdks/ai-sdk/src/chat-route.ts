@@ -337,7 +337,7 @@ export function chatRoute<OUTPUT = undefined>({
         params: {
           ...params,
           requestContext: effectiveRequestContext,
-        },
+        } as any,
         defaultOptions,
         sendStart,
         sendFinish,

@@ -26,12 +26,12 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Configurable error handling strategies
  * - Automatic instruction generation based on schema
  */
-export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-output'> {
+export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'structured-output'> {
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
   public schema: NonNullable<OutputSchema<OUTPUT>>;
-  private structuringAgent: Agent;
+  private structuringAgent: Agent<any, any, undefined>;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
@@ -114,7 +114,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         structuredOutput: {
-          schema: this.schema,
+          schema: this.schema!,
           jsonPromptInjection: this.jsonPromptInjection,
         },
         providerOptions: this.providerOptions,
@@ -159,7 +159,7 @@ export class StructuredOutputProcessor<OUTPUT> implements Processor<'structured-
           }
         }
 
-        const newChunk = {
+        const newChunk: ChunkType<OUTPUT> = {
           ...chunk,
           metadata: {
             from: 'structured-output',

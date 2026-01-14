@@ -9,11 +9,12 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraModelOutput } from '@mastra/core/stream';
+import type { MastraModelOutput, SchemaWithValidation } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
@@ -1412,9 +1413,11 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async stream<OUTPUT>(
+  async stream<OUTPUT extends {}>(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    streamOptions: Omit<StreamParams<OUTPUT>, 'messages' | 'structuredOutput'> & {
+      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+    },
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1424,9 +1427,23 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  // Backward compatibility overload
-  async stream<OUTPUT = undefined>(
-    params: StreamParams<OUTPUT>,
+  // async stream<OUTPUT>(
+  //   messages: MessageListInput,
+  //   streamOptions: Omit<StreamParams<any>, 'messages' | 'structuredOutput'> & {
+  //     structuredOutput?: SerializableStructuredOutputOptions<any>;
+  //   },
+  // ): Promise<
+  //   Response & {
+  //     processDataStream: ({
+  //       onChunk,
+  //     }: {
+  //       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+  //     }) => Promise<void>;
+  //   }
+  // >;
+  async stream(
+    messages: MessageListInput,
+    streamOptions?: Omit<StreamParams, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1437,7 +1454,7 @@ export class Agent extends BaseResource {
     }
   >;
   async stream<OUTPUT = undefined>(
-    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    messagesOrParams: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
@@ -1449,26 +1466,19 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamParams<OUTPUT>;
-    if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
-      // Old signature: single parameter object
-      params = messagesOrParams;
-    } else {
-      // New signature: messages as first param, options as second
-      params = {
-        messages: messagesOrParams as MessageListInput,
-        ...options,
-      } as StreamParams<OUTPUT>;
-    }
+    let params: StreamParams<OUTPUT> = {
+      messages: messagesOrParams as MessageListInput,
+      ...options,
+    } as StreamParams<OUTPUT>;
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
-        ? {
+        ? ({
             ...params.structuredOutput,
             schema: zodToJsonSchema(params.structuredOutput.schema),
-          }
+          } as SerializableStructuredOutputOptions<OUTPUT>)
         : undefined,
     };
 

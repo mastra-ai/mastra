@@ -200,7 +200,7 @@ export function networkRoute<OUTPUT = undefined>({
         params: {
           ...params,
           requestContext: effectiveRequestContext,
-        },
+        } as any,
         defaultOptions,
       });
 

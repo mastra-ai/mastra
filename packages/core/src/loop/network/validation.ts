@@ -613,7 +613,7 @@ export interface StructuredFinalResult<OUTPUT = undefined> {
  *
  * @internal Used by the network loop when structuredOutput is provided
  */
-export async function generateStructuredFinalResult<OUTPUT = undefined>(
+export async function generateStructuredFinalResult<OUTPUT extends {}>(
   agent: Agent,
   context: CompletionContext,
   structuredOutputOptions: StructuredOutputOptions<OUTPUT>,
@@ -634,11 +634,9 @@ export async function generateStructuredFinalResult<OUTPUT = undefined>(
     Use the conversation history and primitive results to craft the response.
   `;
 
-  // Cast structuredOutputOptions to the expected type - OUTPUT already extends OutputSchema
-  // so the conditional OUTPUT ? OUTPUT : never evaluates to OUTPUT
-  const stream = await agent.stream(prompt, {
+  const stream = await agent.stream<OUTPUT>(prompt, {
     maxSteps: 1,
-    structuredOutput: structuredOutputOptions as StructuredOutputOptions<OUTPUT extends undefined ? never : OUTPUT>,
+    structuredOutput: structuredOutputOptions,
   });
 
   const { writer, stepId, runId: streamRunId } = streamContext ?? {};

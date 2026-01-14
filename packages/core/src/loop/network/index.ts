@@ -479,7 +479,7 @@ export async function createNetworkLoop({
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
-      const object = result.object;
+      const object = await result.object;
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 
@@ -1614,7 +1614,7 @@ export async function networkLoop<OUTPUT = undefined>({
   networkName: string;
   requestContext: RequestContext;
   runId: string;
-  routingAgent: Agent;
+  routingAgent: Agent<any, any, any>;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
   generateId: NetworkIdGenerator;
   maxIterations: number;
@@ -1647,7 +1647,7 @@ export async function networkLoop<OUTPUT = undefined>({
    * Structured output configuration for the network's final result.
    * When provided, generates a structured response matching the schema.
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
 
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
