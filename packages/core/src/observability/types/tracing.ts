@@ -1,6 +1,7 @@
 /**
  * Tracing interfaces
  */
+import { z } from 'zod';
 import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -372,37 +373,30 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // Score Types
 // ============================================================================
 
-/**
- * Score data attached to a span
- */
-export interface SpanScore {
-  /** ID of the scorer that generated this score */
-  scorerId: string;
-  /** Display name of the scorer (defaults to scorerId if not provided) */
-  scorerName: string;
-  /** Numeric score value */
-  score: number;
-  /** Optional explanation for the score */
-  reason?: string;
-  /** Scorer-specific metadata from runResult */
-  metadata?: Record<string, any>;
-  /** Timestamp when score was added */
-  timestamp: number;
-}
+/** Schema for score data attached to a span (scorerName is required after resolution) */
+export const spanScoreSchema = z.object({
+  scorerId: z.string().describe('ID of the scorer'),
+  scorerName: z.string().describe('Display name of the scorer'),
+  score: z.number().describe('Numeric score value'),
+  reason: z.string().optional().describe('Optional explanation for the score'),
+  metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata (from runResult, not span metadata)'),
+  timestamp: z.number().describe('Timestamp when score was added'),
+});
 
-/**
- * Arguments for adding a score to a span
- */
-export interface AddScoreArgs {
-  /** ID of the scorer */
-  scorerId: string;
-  /** Display name of the scorer (defaults to scorerId if not provided) */
-  scorerName?: string;
-  score: number;
-  reason?: string;
-  /** Scorer-specific metadata (from runResult, not span metadata) */
-  metadata?: Record<string, any>;
-}
+/** Score data attached to a span */
+export type SpanScore = z.infer<typeof spanScoreSchema>;
+
+/** Schema for arguments when adding a score to a span (scorerName optional, defaults to scorerId) */
+const addScoreArgsSchema = z.object({
+  scorerId: z.string().describe('ID of the scorer'),
+  scorerName: z.string().optional().describe('Display name of the scorer (defaults to scorerId if not provided)'),
+  score: z.number().describe('Numeric score value'),
+  reason: z.string().optional().describe('Optional explanation for the score'),
+  metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata (from runResult, not span metadata)'),
+});
+
+/** Arguments for adding a score to a span */
+export type AddScoreArgs = z.infer<typeof addScoreArgsSchema>;
 
 // ============================================================================
 // Span Interfaces

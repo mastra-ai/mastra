@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { scoreRowDataSchema } from '../../../evals/types';
-import { SpanType } from '../../../observability/types';
+import { SpanType, spanScoreSchema } from '../../../observability/types';
 import {
   dateRangeSchema,
   dbTimestamps,
@@ -61,15 +61,6 @@ const outputField = z.unknown().describe('Output data returned from the span');
 const errorField = z.unknown().describe('Error info - presence indicates failure (status derived from this)');
 const isEventField = z.boolean().describe('Whether this is an event (point-in-time) vs a span (duration)');
 
-/** Schema for evaluation scores attached to spans */
-const spanScoreSchema = z.object({
-  scorerId: z.string().describe('ID of the scorer that generated this score'),
-  scorerName: z.string().describe('Display name of the scorer (defaults to scorerId if not provided)'),
-  score: z.number().describe('Numeric score value'),
-  reason: z.string().optional().describe('Optional explanation for the score'),
-  metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata'),
-  timestamp: z.number().describe('Timestamp when score was added'),
-});
 const scoresField = z.array(spanScoreSchema).describe('Evaluation scores attached to this span');
 const startedAtField = z.date().describe('When the span started');
 const endedAtField = z.date().describe('When the span ended (null = running, status derived from this)');
