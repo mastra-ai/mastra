@@ -24,7 +24,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
         Headers
       </Txt>
 
-      <div className="bg-surface4 rounded-lg p-4 border-sm border-border2 space-y-4">
+      <div className="bg-surface4 rounded-lg p-4 border border-border2 space-y-4">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (

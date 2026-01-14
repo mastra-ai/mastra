@@ -73,7 +73,7 @@ const AttachmentThumbnail = () => {
           <Tooltip>
             <AttachmentPrimitive.Root>
               <TooltipTrigger asChild>
-                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border-sm border-border1 ">
+                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border border-border1 ">
                   {isImage ? (
                     <ImageEntry src={actualSrc ?? ''} />
                   ) : document?.contentType === 'application/pdf' ? (
