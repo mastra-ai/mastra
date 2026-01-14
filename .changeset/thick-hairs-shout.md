@@ -1,13 +1,15 @@
 ---
 '@mastra/express': patch
 '@mastra/hono': patch
+'@mastra/fastify': patch
+'@mastra/koa': patch
 '@mastra/server': patch
 '@mastra/core': patch
 ---
 
 feat(server): add configurable HTTP request logging middleware
 
-Server adapters (`@mastra/hono`, `@mastra/express`) now support built-in HTTP request logging. The existing `apiReqLogs` configuration flag has been enhanced to support both simple boolean activation and detailed configuration options.
+All server adapters (`@mastra/hono`, `@mastra/express`, `@mastra/fastify`, `@mastra/koa`) now support built-in HTTP request logging. The existing `apiReqLogs` configuration flag has been enhanced to support both simple boolean activation and detailed configuration options.
 
 **What's new:**
 
@@ -51,3 +53,12 @@ const mastra = new Mastra({
 - `redactHeaders` - Headers to redact from logs when `includeHeaders` is true (default: ['authorization', 'cookie'])
 
 Logging integrates with the existing Mastra logger and outputs structured log data including method, path, status code, and request duration. Sensitive headers are redacted by default to prevent accidental credential exposure.
+
+**Implementation details:**
+- Base `MastraServer` class provides parsing logic and helper methods
+- Each adapter implements `registerHttpLoggingMiddleware()` using framework-specific patterns
+- Hono: Uses `app.use('*', middleware)` with `await next()` pattern
+- Express: Uses `app.use(middleware)` with `res.on('finish')` event
+- Fastify: Uses `app.addHook('onRequest', middleware)` with `reply.raw.on('finish')` event
+- Koa: Uses `app.use(middleware)` with `await next()` pattern
+- Comprehensive test coverage with unit and integration tests
