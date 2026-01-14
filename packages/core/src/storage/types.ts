@@ -433,6 +433,8 @@ export type StorageUpdateIntegrationInput = {
   ownerId?: string;
 };
 
+export type StorageCachedToolInput = Omit<StorageCachedTool, 'cachedAt' | 'updatedAt'>;
+
 export type StorageListIntegrationsInput = {
   /**
    * Number of items per page, or `false` to fetch all records without pagination limit.
