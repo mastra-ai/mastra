@@ -6,7 +6,6 @@ import {
   BorderColors,
   Colors,
   BorderRadius,
-  BorderWidth,
   Spacings,
   Sizes,
 } from './src/ds/tokens';
@@ -38,9 +37,6 @@ export default {
       },
       borderRadius: {
         ...BorderRadius,
-      },
-      borderWidth: {
-        ...BorderWidth,
       },
       padding: {
         ...Spacings,

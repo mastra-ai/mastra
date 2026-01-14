@@ -12,5 +12,5 @@ const themeClasses: Record<NonNullable<KbdProps['theme']>, string> = {
 
 export const Kbd = ({ children, theme = 'dark' }: KbdProps) => {
   const themeClass = themeClasses[theme];
-  return <kbd className={cn('border-sm rounded-md px-1 py-0.5 font-mono', themeClass)}>{children}</kbd>;
+  return <kbd className={cn('border rounded-md px-1 py-0.5 font-mono', themeClass)}>{children}</kbd>;
 };

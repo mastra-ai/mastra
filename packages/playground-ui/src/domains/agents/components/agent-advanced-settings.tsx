@@ -73,7 +73,7 @@ export const AgentAdvancedSettings = () => {
     }
   };
 
-  const collapsibleClassName = 'rounded-lg border-sm border-border1 bg-surface3 overflow-clip';
+  const collapsibleClassName = 'rounded-lg border border-border1 bg-surface3 overflow-clip';
   const collapsibleTriggerClassName =
     'text-neutral3 text-ui-lg font-medium flex items-center gap-2 w-full p-[10px] justify-between';
   const collapsibleContentClassName = 'bg-surface2 p-[10px] @container/collapsible';

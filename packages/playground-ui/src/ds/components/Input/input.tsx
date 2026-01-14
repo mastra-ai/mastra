@@ -9,8 +9,8 @@ const inputVariants = cva(
   {
     variants: {
       variant: {
-        default: 'border-sm border-border1 placeholder:text-neutral3',
-        filled: 'border-sm bg-inputFill border-border1 placeholder:text-neutral3',
+        default: 'border border-border1 placeholder:text-neutral3',
+        filled: 'border bg-inputFill border-border1 placeholder:text-neutral3',
         unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
       },
       customSize: {

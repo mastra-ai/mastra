@@ -29,7 +29,7 @@ export interface TheadProps {
 export const Thead = ({ className, children }: TheadProps) => {
   return (
     <thead>
-      <tr className={cn('h-table-header border-b-sm border-border1 bg-surface2', className)}>{children}</tr>
+      <tr className={cn('h-table-header border-b border-border1 bg-surface2', className)}>{children}</tr>
     </thead>
   );
 };
@@ -82,7 +82,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     return (
       <tr
         className={cn(
-          'border-b-sm border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2',
+          'border-b border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,

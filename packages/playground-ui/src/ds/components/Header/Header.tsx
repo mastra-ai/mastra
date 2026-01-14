@@ -12,7 +12,7 @@ export const Header = ({ children, border = true }: HeaderProps) => {
   return (
     <header
       className={cn('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent px-5', {
-        'border-b-sm border-border1': border,
+        'border-b border-border1': border,
       })}
     >
       {children}

@@ -22,7 +22,7 @@ export function WorkflowStepDetailContent() {
   return (
     <div className="flex flex-col h-full">
       {/* Header with title and close button */}
-      <div className="flex items-center justify-between px-4 py-3 border-b-sm border-border1 bg-surface1">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border1 bg-surface1">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && <List className="w-4 h-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
