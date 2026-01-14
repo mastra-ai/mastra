@@ -55,7 +55,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
         data-workflow-step-status={previousDisplayStatus}
         data-testid="workflow-condition-node"
         className={cn(
-          'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
+          'bg-surface3 rounded-lg w-[300px] border border-border1',
           previousDisplayStatus === 'success' && nextStep && 'bg-accent1Darker',
           previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Darker',
           previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-950/40 border-amber-500/30',

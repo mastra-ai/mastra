@@ -25,7 +25,7 @@ export const TabList = ({ children, variant = 'default', className }: TabListPro
               variant === 'buttons',
             '[&>button]:flex-1 [&>button]:py-[0.5rem] [&>button]:px-[1rem] [&>button]:text-neutral3':
               variant === 'buttons',
-            '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:bg-[#222]':
+            '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:bg-surface4':
               variant === 'buttons',
           },
           className,
