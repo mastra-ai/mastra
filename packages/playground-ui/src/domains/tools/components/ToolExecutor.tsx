@@ -1,4 +1,4 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import { DynamicForm } from '@/lib/form';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { ZodType } from 'zod';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';

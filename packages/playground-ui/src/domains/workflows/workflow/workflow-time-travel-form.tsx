@@ -12,7 +12,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { z } from 'zod';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { cn } from '@/lib/utils';
