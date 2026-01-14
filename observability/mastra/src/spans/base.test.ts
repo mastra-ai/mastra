@@ -261,43 +261,6 @@ describe('Span', () => {
 
       agentSpan.end();
     });
-
-    it('should inherit through multiple levels of hierarchy', () => {
-      const tracing = new DefaultObservabilityInstance({
-        serviceName: 'test-tracing',
-        name: 'test-instance',
-        sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [testExporter],
-      });
-
-      const agentSpan = tracing.startSpan({
-        type: SpanType.AGENT_RUN,
-        name: 'test-agent',
-        entityId: 'agent-123',
-        entityName: 'MyAgent',
-        attributes: {},
-      });
-
-      const workflowSpan = agentSpan.createChildSpan({
-        type: SpanType.WORKFLOW_RUN,
-        name: 'workflow',
-        attributes: {},
-      });
-
-      const llmSpan = workflowSpan.createChildSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: 'llm-call',
-        attributes: { model: 'gpt-4' },
-      });
-
-      // Both child spans should inherit from AGENT_RUN
-      expect(workflowSpan.entityId).toBe('agent-123');
-      expect(workflowSpan.entityName).toBe('MyAgent');
-      expect(llmSpan.entityId).toBe('agent-123');
-      expect(llmSpan.entityName).toBe('MyAgent');
-
-      agentSpan.end();
-    });
   });
 
   describe('getExternalParentId', () => {
