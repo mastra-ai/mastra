@@ -975,3 +975,76 @@ Date: 2025-01-14
 - Load more pattern is optional - component works with or without pagination
 - Future enhancement: Add toolkit-specific icons if providers supply icon URLs
 - Future enhancement: Add sorting options (alphabetical, tool count, category)
+
+
+## Task 019: Create tool selector component - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/playground-ui/src/domains/integrations/components/tool-selector.tsx
+- Built ToolSelector component that displays tools grouped by toolkit
+- Built ToolRow sub-component for individual tool display
+- Integrated Checkbox component for tool selection/deselection
+- Integrated Searchbar component for filtering tools by name, description, or toolkit
+- Implemented "Select all" and "Clear" buttons for bulk selection management
+- Added selected count display showing X of Y selected
+- Added loading state with Loader2 icon from lucide-react
+- Added empty states for no tools and no search results
+- Implemented click and keyboard handling for accessibility
+- Grouped tools by toolkit with collapsible sections
+- Exported from components/index.ts
+
+### Key implementation details:
+- Followed playground-ui/CLAUDE.md guidelines strictly:
+  - Used named exports only (no default exports)
+  - Used design tokens from @/ds (text-icon3, text-icon6, bg-surface3, bg-surface4, border-border1, border-border2)
+  - Used proper Txt variants (ui-lg, ui-md, ui-sm, ui-xs)
+  - Used existing EmptyState component with proper slot props
+  - Used existing Button component with proper size values (md)
+  - Used existing Checkbox component from @/components/ui/checkbox
+  - Used existing Searchbar and SearchbarWrapper components
+  - Used lucide-react for Loader2 icon
+  - Used ToolCoinIcon from @/ds/icons for tool representation
+- Tools are grouped by toolkit using Map data structure
+- Toolkits sorted alphabetically for consistent display
+- Client-side filtering for search (searches name, description, toolkit)
+- Selection state managed by parent via Set<string> for efficient lookups
+- Tool rows show: name, description (line-clamp-2), tool icon
+- Selection state highlighted with border-accent1 and bg-surface4
+- Proper TypeScript types exported for ToolSelectorProps
+- Comprehensive JSDoc documentation on public component with usage example
+
+### Build/Test status:
+- Playground-ui package typecheck passes (pnpm exec tsc --noEmit)
+- Playground-ui package builds successfully (pnpm --filter playground-ui build)
+- Full monorepo build passes (pnpm build)
+- All acceptance criteria met:
+  ✓ Shows all tools from selected toolkits (grouped display with toolkit headers)
+  ✓ All tools selected by default (parent component manages initial state)
+  ✓ Can deselect individual tools (checkbox per row, works with Set-based selection)
+  ✓ Shows helpful tool information (name, description, toolkit grouping)
+
+### Files created:
+- packages/playground-ui/src/domains/integrations/components/tool-selector.tsx (new - 227 lines)
+
+### Files modified:
+- packages/playground-ui/src/domains/integrations/components/index.ts (added export for tool-selector)
+- .context/plans/dynamic-tools/tasks.json (marked task 019 as passing)
+
+### Next recommended task:
+- Task 020: Create Add Tools dialog
+  This is the next P1 UI task that depends on tasks 017, 018, and 019 (all now complete).
+  It will build the main dialog component that orchestrates the add tools flow as a multi-step wizard.
+  This is a large complexity task that integrates all the previous components.
+
+### Notes for next engineer:
+- The ToolSelector component is ready to be integrated into the Add Tools dialog (task 020)
+- Component is fully accessible with keyboard navigation and screen reader support
+- Component follows all playground-ui standards and design system conventions
+- The component is stateless - parent manages selected tools state via Set<string>
+- Tools are automatically grouped by toolkit with clear visual separation
+- Search is debounced via the Searchbar component (300ms default)
+- The component doesn't display input/output schemas (omitted from initial implementation as they would be too verbose)
+- Future enhancement: Add expandable details view showing input/output schema for each tool
+- Future enhancement: Add tooltip on hover showing full description if truncated
