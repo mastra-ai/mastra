@@ -169,7 +169,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 69+ AI providers and 1751+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 70+ AI providers and 1822+ models through Mastra's model router.
 - [Abacus | Models | Mastra](https://mastra.ai/en/models/providers/abacus): Use Abacus models with Mastra. 52 models available.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
@@ -198,7 +198,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 9 models available.
 - [Helicone | Models | Mastra](https://mastra.ai/en/models/providers/helicone): Use Helicone models with Mastra. 91 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
-- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 20 models available.
+- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 14 models available.
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
@@ -217,6 +217,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Morph | Models | Mastra](https://mastra.ai/en/models/providers/morph): Use Morph models with Mastra. 3 models available.
 - [NanoGPT | Models | Mastra](https://mastra.ai/en/models/providers/nano-gpt): Use NanoGPT models with Mastra. 21 models available.
 - [Nebius Token Factory | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius Token Factory models with Mastra. 15 models available.
+- [NovitaAI | Models | Mastra](https://mastra.ai/en/models/providers/novita-ai): Use NovitaAI models with Mastra. 77 models available.
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 66 models available.
 - [Ollama Cloud | Models | Mastra](https://mastra.ai/en/models/providers/ollama-cloud): Use Ollama Cloud models with Mastra. 12 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
@@ -326,7 +327,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: MastraModelGateway | Core](https://mastra.ai/en/reference/core/mastra-model-gateway): Base class for creating custom model gateways
 - [Reference: Mastra.setLogger() | Core](https://mastra.ai/en/reference/core/setLogger): Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.).
 - [Reference: Mastra.setStorage() | Core](https://mastra.ai/en/reference/core/setStorage): Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance.
-- [Reference: Mastra.setTelemetry() | Core](https://mastra.ai/en/reference/core/setTelemetry): Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components.
 - [Reference: CloudflareDeployer | Deployer](https://mastra.ai/en/reference/deployer/cloudflare): Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers.
 - [Reference: Deployer | Deployer](https://mastra.ai/en/reference/deployer/deployer): Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 - [Reference: NetlifyDeployer | Deployer](https://mastra.ai/en/reference/deployer/netlify): Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions.
@@ -407,7 +407,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 - [Reference: Cloudflare Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare): Documentation for the Cloudflare KV storage implementation in Mastra.
-- [Reference: Storage Composition | Storage](https://mastra.ai/en/reference/storage/composite): Documentation for combining multiple storage backends in Mastra.
+- [Reference: Composite Storage | Storage](https://mastra.ai/en/reference/storage/composite): Documentation for combining multiple storage backends in Mastra.
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.
 - [Reference: DynamoDB Storage | Storage](https://mastra.ai/en/reference/storage/dynamodb): Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB.
 - [Reference: LanceDB Storage | Storage](https://mastra.ai/en/reference/storage/lance): Documentation for the LanceDB storage implementation in Mastra.
@@ -493,9 +493,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Workflow.foreach() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/foreach): Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
 - [Reference: Workflow.map() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/map): Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
 - [Reference: Workflow.parallel() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/parallel): Documentation for the `Workflow.parallel()` method in workflows, which executes multiple steps in parallel.
-- [Reference: Workflow.sendEvent() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/sendEvent): Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
 - [Reference: Workflow.sleep() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/sleep): Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
 - [Reference: Workflow.sleepUntil() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/sleepUntil): Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
 - [Reference: Workflow.then() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/then): Documentation for the `Workflow.then()` method in workflows, which creates sequential dependencies between steps.
-- [Reference: Workflow.waitForEvent() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/waitForEvent): Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
 - [Reference: Workflow Class | Workflows](https://mastra.ai/en/reference/workflows/workflow): Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.

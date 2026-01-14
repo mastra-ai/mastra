@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { KeyValueList } from '@/components/ui/elements';
+import { KeyValueList } from '@/ds/components/KeyValueList';
 import { type UISpan } from '../types';
 import { format } from 'date-fns/format';
 import { useLinkComponent } from '@/lib/framework';
@@ -48,7 +48,7 @@ export function TimelineTimingCol({
         <div className={cn('w-full p-[0.6rem] rounded-lg bg-surface4 transition-colors duration-[1s]')}>
           <div className="relative w-full h-[0.4rem] rounded-sm">
             <div
-              className={cn('bg-icon1 absolute rounded-sm h-[0.4rem] top-0')}
+              className={cn('bg-neutral1 absolute rounded-sm h-[0.4rem] top-0')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -58,13 +58,13 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-icon3 text-[0.75rem]')}>
+        <div className={cn('flex justify-end text-neutral3 text-[0.75rem]')}>
           {(span.latency / 1000).toFixed(3)}&nbsp;s
         </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[25rem] rounded-md bg-[#222] p-[.5rem] px-[1rem] pr-[1.5rem] text-[.75rem] text-icon5 text-center border border-border1"
+          className="z-[100] w-auto max-w-[25rem] rounded-md bg-surface4 p-[.5rem] px-[1rem] pr-[1.5rem] text-[.75rem] text-neutral5 text-center border border-border1"
           sideOffset={5}
           side="top"
         >

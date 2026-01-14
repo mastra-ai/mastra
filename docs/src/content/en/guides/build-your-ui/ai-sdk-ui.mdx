@@ -451,9 +451,9 @@ export const weatherTool = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async ({ location }) => {
+  execute: async (inputData) => {
     const response = await fetch(
-      `https://api.weatherapi.com/v1/current.json?key=${process.env.WEATHER_API_KEY}&q=${location}`
+      `https://api.weatherapi.com/v1/current.json?key=${process.env.WEATHER_API_KEY}&q=${inputData.location}`
     );
     const data = await response.json();
     return {
