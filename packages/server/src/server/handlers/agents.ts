@@ -856,13 +856,24 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
+      // Use memory option if provided, otherwise construct from individual fields
+      const memoryOption = params.memory
+        ? {
+            thread: params.memory.thread,
+            resource: params.memory.resource,
+            options: params.memory.options ?? {},
+          }
+        : params.thread
+          ? {
+              thread: params.thread,
+              resource: '',
+              options: {},
+            }
+          : undefined;
+
       const streamResult = await agent.network(messages, {
         ...params,
-        memory: {
-          thread: params.thread ?? params.threadId ?? '',
-          resource: params.resourceId ?? '',
-          options: params.memory?.options ?? {},
-        },
+        memory: memoryOption,
       });
 
       return streamResult;
