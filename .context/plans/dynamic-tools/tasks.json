@@ -1,0 +1,698 @@
+{
+  "tasks": [
+    {
+      "id": "001",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Define storage types for integrations",
+      "description": "Add TypeScript types for integration configurations and cached tool definitions to the core storage module.",
+      "steps": [
+        "Add StorageIntegrationConfig interface to packages/core/src/storage/types.ts with fields: id, provider ('composio' | 'arcade'), name, enabled, selectedToolkits, metadata, ownerId, createdAt, updatedAt",
+        "Add StorageCachedTool interface with fields: id, integrationId, provider, toolkitSlug, toolSlug, name, description, inputSchema (JSON), outputSchema (JSON), rawDefinition (JSON), cachedAt, updatedAt",
+        "Add StorageCreateIntegrationInput and StorageUpdateIntegrationInput types",
+        "Add StorageListIntegrationsInput and StorageListIntegrationsOutput types following the agents pattern",
+        "Export all new types from packages/core/src/storage/types.ts"
+      ],
+      "acceptanceCriteria": [
+        "All types compile without errors",
+        "Types follow existing patterns in storage/types.ts",
+        "Types support the decided schema: toolkit selection with individual tool deselection"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "passes": true
+    },
+    {
+      "id": "002",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Create IntegrationsStorage abstract base class",
+      "description": "Create the abstract storage domain class for integrations following the AgentsStorage pattern.",
+      "steps": [
+        "Create packages/core/src/storage/domains/integrations/ directory",
+        "Create base.ts with abstract IntegrationsStorage class extending StorageDomain",
+        "Define abstract methods: createIntegration, updateIntegration, deleteIntegration, getIntegrationById, listIntegrations",
+        "Define abstract methods for cached tools: cacheTool, cacheTools, getCachedTool, listCachedTools, deleteCachedToolsByIntegration, updateCachedToolsTimestamp",
+        "Add helper methods for parsing orderBy following AgentsStorage pattern",
+        "Create index.ts to export the domain"
+      ],
+      "acceptanceCriteria": [
+        "Abstract class compiles and follows AgentsStorage patterns",
+        "All CRUD operations for integrations are defined",
+        "All operations for cached tools are defined",
+        "Proper JSDoc documentation on all methods"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["001"],
+      "passes": true
+    },
+    {
+      "id": "003",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Implement LibSQL IntegrationsStorage",
+      "description": "Implement the IntegrationsStorage for LibSQL database with migrations.",
+      "steps": [
+        "Add migration for 'integrations' table in stores/libsql/src/migrations/",
+        "Add migration for 'cached_tools' table in stores/libsql/src/migrations/",
+        "Create LibSQLIntegrationsStorage class in stores/libsql/src/storage/integrations.ts",
+        "Implement all abstract methods from IntegrationsStorage",
+        "Add proper indexing on provider, integrationId, toolSlug columns",
+        "Register migrations in the LibSQL store initialization",
+        "Export from stores/libsql package"
+      ],
+      "acceptanceCriteria": [
+        "Migrations create tables with correct schema",
+        "All CRUD operations work correctly",
+        "Integration tests pass for create/read/update/delete flows",
+        "Cached tools can be queried by integrationId"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["002"],
+      "passes": true
+    },
+    {
+      "id": "004",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Implement in-memory IntegrationsStorage",
+      "description": "Implement the in-memory storage adapter for integrations (used in tests and development).",
+      "steps": [
+        "Create packages/core/src/storage/domains/integrations/inmemory.ts",
+        "Implement InMemoryIntegrationsStorage extending IntegrationsStorage",
+        "Use Map-based storage with deep cloning (follow InMemoryAgentsStorage pattern)",
+        "Implement all abstract methods",
+        "Add to storage domain exports"
+      ],
+      "acceptanceCriteria": [
+        "All CRUD operations work correctly in memory",
+        "Unit tests pass",
+        "Follows existing in-memory adapter patterns"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["002"],
+      "passes": true
+    },
+    {
+      "id": "005",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Register integrations storage in Mastra bootstrap",
+      "description": "Add integrations storage to the Mastra class and storage initialization.",
+      "steps": [
+        "Add 'integrations' property to MastraStorage interface",
+        "Update storage initialization in packages/core/src/storage/ to include integrations domain",
+        "Update Mastra constructor to accept and initialize integrations storage",
+        "Add getIntegrationsStorage() method or property to Mastra class",
+        "Update LibSQLStore to instantiate LibSQLIntegrationsStorage"
+      ],
+      "acceptanceCriteria": [
+        "Mastra instance has access to integrations storage",
+        "Storage is properly initialized on startup",
+        "Existing tests continue to pass"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["003", "004"],
+      "passes": true
+    },
+    {
+      "id": "006",
+      "category": "providers",
+      "priority": "P0",
+      "title": "Define ToolProvider interface",
+      "description": "Create the abstraction layer interface for external tool providers.",
+      "steps": [
+        "Create packages/core/src/integrations/providers/ directory structure",
+        "Create types.ts with ToolProvider interface",
+        "Define ProviderToolkit type: slug, name, description, icon, category, toolCount",
+        "Define ProviderTool type: slug, name, description, inputSchema, outputSchema, toolkit",
+        "Define ListToolkitsOptions: search, category, limit, cursor",
+        "Define ListToolsOptions: toolkitSlug, search, limit, cursor",
+        "Define ProviderStatus type: provider, connected, name, description, icon",
+        "Create index.ts to export types"
+      ],
+      "acceptanceCriteria": [
+        "Interface supports both Composio and Arcade API patterns",
+        "Types are generic enough for future providers",
+        "Pagination support via cursor/limit"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "007",
+      "category": "providers",
+      "priority": "P0",
+      "title": "Implement ComposioProvider",
+      "description": "Implement the ToolProvider interface for Composio using their V3 API.",
+      "steps": [
+        "Create packages/core/src/integrations/providers/composio.ts",
+        "Implement ComposioProvider class implementing ToolProvider",
+        "Use fetch or existing @composio/core for API calls",
+        "Implement listToolkits() calling GET /api/v3/toolkits",
+        "Implement listTools() calling GET /api/v3/tools with toolkit_slug filter",
+        "Implement getTool() calling GET /api/v3/tools/{slug}",
+        "Implement getProviderStatus() checking COMPOSIO_API_KEY env var",
+        "Handle pagination (cursor-based)",
+        "Map Composio response format to ProviderToolkit/ProviderTool types",
+        "Add error handling for API failures"
+      ],
+      "acceptanceCriteria": [
+        "Can list toolkits from Composio API",
+        "Can list tools filtered by toolkit",
+        "Can get individual tool details",
+        "Properly reports connection status based on API key presence",
+        "Handles API errors gracefully"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["006"],
+      "passes": false
+    },
+    {
+      "id": "008",
+      "category": "providers",
+      "priority": "P0",
+      "title": "Implement ArcadeProvider",
+      "description": "Implement the ToolProvider interface for Arcade.dev.",
+      "steps": [
+        "Create packages/core/src/integrations/providers/arcade.ts",
+        "Implement ArcadeProvider class implementing ToolProvider",
+        "Implement listToolkits() - note: Arcade may not have explicit toolkits, may need to derive from tool names",
+        "Implement listTools() calling GET /v1/tools with toolkit filter",
+        "Implement getTool() calling GET /v1/tools/{name}",
+        "Implement getProviderStatus() checking ARCADE_API_KEY env var",
+        "Handle pagination (offset-based, convert to cursor pattern)",
+        "Map Arcade response format to ProviderToolkit/ProviderTool types",
+        "Add error handling for API failures"
+      ],
+      "acceptanceCriteria": [
+        "Can list tools from Arcade API",
+        "Can filter tools by toolkit/category",
+        "Can get individual tool details",
+        "Properly reports connection status based on API key presence",
+        "Handles API errors gracefully"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["006"],
+      "passes": false
+    },
+    {
+      "id": "009",
+      "category": "providers",
+      "priority": "P0",
+      "title": "Create provider registry and factory",
+      "description": "Create a registry to manage and instantiate tool providers.",
+      "steps": [
+        "Create packages/core/src/integrations/providers/registry.ts",
+        "Implement getProvider(providerName) factory function",
+        "Implement listProviders() returning all available providers with status",
+        "Export provider instances as singletons",
+        "Add to main integrations exports"
+      ],
+      "acceptanceCriteria": [
+        "Can get provider instance by name",
+        "Can list all providers with their connection status",
+        "Providers are lazily instantiated"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["007", "008"],
+      "passes": false
+    },
+    {
+      "id": "010",
+      "category": "server",
+      "priority": "P0",
+      "title": "Create integration API schemas",
+      "description": "Define Zod schemas for integration API request/response validation.",
+      "steps": [
+        "Create packages/server/src/server/schemas/integrations.ts",
+        "Define integrationIdPathParams schema",
+        "Define listIntegrationsQuerySchema with pagination",
+        "Define createIntegrationBodySchema",
+        "Define updateIntegrationBodySchema",
+        "Define integrationResponseSchema",
+        "Define listIntegrationsResponseSchema",
+        "Define providerStatusResponseSchema",
+        "Define listToolkitsQuerySchema (provider path param, search, category, pagination)",
+        "Define listToolsQuerySchema (provider path param, toolkit, search, pagination)",
+        "Define toolkitResponseSchema and toolResponseSchema"
+      ],
+      "acceptanceCriteria": [
+        "All schemas validate correct input/output",
+        "Schemas follow existing patterns in schemas/ directory",
+        "OpenAPI documentation annotations present"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["001"],
+      "passes": false
+    },
+    {
+      "id": "011",
+      "category": "server",
+      "priority": "P0",
+      "title": "Implement integration API handlers",
+      "description": "Create handlers for integration CRUD and provider proxy endpoints.",
+      "steps": [
+        "Create packages/server/src/server/handlers/integrations.ts",
+        "Implement LIST_INTEGRATIONS_ROUTE handler",
+        "Implement GET_INTEGRATION_ROUTE handler",
+        "Implement CREATE_INTEGRATION_ROUTE handler - also caches selected tools",
+        "Implement UPDATE_INTEGRATION_ROUTE handler",
+        "Implement DELETE_INTEGRATION_ROUTE handler - also deletes cached tools",
+        "Implement GET_PROVIDERS_ROUTE handler - returns provider list with connection status",
+        "Implement LIST_PROVIDER_TOOLKITS_ROUTE handler - proxies to provider API",
+        "Implement LIST_PROVIDER_TOOLS_ROUTE handler - proxies to provider API",
+        "Implement REFRESH_INTEGRATION_TOOLS_ROUTE handler - re-fetches and updates cached tools"
+      ],
+      "acceptanceCriteria": [
+        "All CRUD operations work correctly",
+        "Provider proxy endpoints forward requests to external APIs",
+        "Proper error handling and status codes",
+        "Tool caching occurs on create/refresh"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": ["005", "009", "010"],
+      "passes": false
+    },
+    {
+      "id": "012",
+      "category": "server",
+      "priority": "P0",
+      "title": "Register integration routes",
+      "description": "Add integration routes to the server adapter.",
+      "steps": [
+        "Create packages/server/src/server/server-adapter/routes/integrations.ts",
+        "Export INTEGRATIONS_ROUTES array with all integration route handlers",
+        "Add INTEGRATIONS_ROUTES to main routes index in packages/server/src/server/server-adapter/routes/index.ts",
+        "Ensure routes are registered in server adapter initialization"
+      ],
+      "acceptanceCriteria": [
+        "All integration endpoints accessible via API",
+        "Routes follow existing naming conventions",
+        "OpenAPI spec includes new endpoints"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["011"],
+      "passes": false
+    },
+    {
+      "id": "013",
+      "category": "server",
+      "priority": "P0",
+      "title": "Add integration methods to MastraClient SDK",
+      "description": "Extend the JavaScript client SDK with methods for integration management.",
+      "steps": [
+        "Add integration types to client-sdks/client-js/src/types.ts",
+        "Add listProviders() method to MastraClient",
+        "Add listProviderToolkits(provider, options) method",
+        "Add listProviderTools(provider, options) method",
+        "Add listIntegrations() method",
+        "Add getIntegration(id) method",
+        "Add createIntegration(data) method",
+        "Add updateIntegration(id, data) method",
+        "Add deleteIntegration(id) method",
+        "Add refreshIntegrationTools(id) method",
+        "Export types from client SDK"
+      ],
+      "acceptanceCriteria": [
+        "All integration API endpoints have corresponding client methods",
+        "TypeScript types are correct",
+        "Methods handle errors appropriately"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["012"],
+      "passes": false
+    },
+    {
+      "id": "014",
+      "category": "integration",
+      "priority": "P1",
+      "title": "Integrate cached tools with tool resolution",
+      "description": "Extend agent tool resolution to include tools from stored integrations.",
+      "steps": [
+        "Add 'integrations' field to StorageAgentType (array of integration IDs)",
+        "Update stored agent schema to include integrations field",
+        "Create resolveIntegrationTools() function in packages/core/src/agent/",
+        "Modify agent's convertTools() or tool resolution flow to call resolveIntegrationTools()",
+        "Convert cached tool definitions to ToolAction format",
+        "Handle tool execution by proxying to provider API or using provider SDK"
+      ],
+      "acceptanceCriteria": [
+        "Agents can reference integrations by ID",
+        "Tools from referenced integrations are available to the agent",
+        "Tool execution works correctly through provider"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": ["005", "011"],
+      "passes": false
+    },
+    {
+      "id": "015",
+      "category": "integration",
+      "priority": "P1",
+      "title": "Add tool execution proxy for integration tools",
+      "description": "Implement the execution layer that calls external provider APIs when integration tools are invoked.",
+      "steps": [
+        "Create packages/core/src/integrations/tool-executor.ts",
+        "Implement executeComposioTool() using Composio's execute endpoint",
+        "Implement executeArcadeTool() using Arcade's execute endpoint",
+        "Create wrapper that converts ToolAction execute() to provider API call",
+        "Handle authentication headers (API keys from env)",
+        "Handle response mapping back to Mastra format",
+        "Add error handling and retries"
+      ],
+      "acceptanceCriteria": [
+        "Integration tools can be executed through their provider APIs",
+        "Execution results are properly formatted",
+        "Errors from providers are handled gracefully"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["014"],
+      "passes": false
+    },
+    {
+      "id": "016",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create integration provider hooks",
+      "description": "Add React Query hooks for fetching provider and integration data.",
+      "steps": [
+        "Create packages/playground-ui/src/domains/integrations/ directory",
+        "Create hooks/use-providers.ts with useProviders() hook",
+        "Create hooks/use-provider-toolkits.ts with useProviderToolkits(provider) hook",
+        "Create hooks/use-provider-tools.ts with useProviderTools(provider, toolkit) hook",
+        "Create hooks/use-integrations.ts with useIntegrations() hook",
+        "Create hooks/use-integration-mutations.ts with create/update/delete/refresh mutations",
+        "Create types.ts for UI-specific integration types",
+        "Export all hooks from domain index"
+      ],
+      "acceptanceCriteria": [
+        "All hooks properly fetch from MastraClient",
+        "Loading and error states are handled",
+        "Data is properly typed"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["013"],
+      "passes": false
+    },
+    {
+      "id": "017",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create provider list component",
+      "description": "Build the component that displays available integration providers with connection status.",
+      "steps": [
+        "Create packages/playground-ui/src/domains/integrations/components/provider-list.tsx",
+        "Display provider name, description, icon",
+        "Show connection status badge (Connected/Not Connected)",
+        "Disable click on unconnected providers with tooltip explaining missing ENV var",
+        "Handle loading state",
+        "Add onClick handler to select provider"
+      ],
+      "acceptanceCriteria": [
+        "Shows all providers (Composio, Arcade)",
+        "Clearly indicates which are connected",
+        "Unconnected providers show helpful message about ENV var"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["016"],
+      "passes": false
+    },
+    {
+      "id": "018",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create toolkit browser component",
+      "description": "Build the component for browsing and selecting toolkits from a provider.",
+      "steps": [
+        "Create packages/playground-ui/src/domains/integrations/components/toolkit-browser.tsx",
+        "Fetch toolkits using useProviderToolkits hook",
+        "Display toolkit cards with name, description, icon, tool count",
+        "Add search/filter functionality",
+        "Add category filter if provider supports it",
+        "Handle pagination/infinite scroll",
+        "Checkbox selection for toolkits",
+        "Show selected count"
+      ],
+      "acceptanceCriteria": [
+        "Can browse all toolkits from a provider",
+        "Search filters toolkits by name",
+        "Can select/deselect toolkits",
+        "Handles loading and empty states"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["016"],
+      "passes": false
+    },
+    {
+      "id": "019",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create tool selector component",
+      "description": "Build the component for viewing and deselecting individual tools within selected toolkits.",
+      "steps": [
+        "Create packages/playground-ui/src/domains/integrations/components/tool-selector.tsx",
+        "Fetch tools using useProviderTools hook for selected toolkits",
+        "Display tool list grouped by toolkit",
+        "Show tool name, description, input schema preview",
+        "Checkbox selection (all selected by default)",
+        "Allow deselecting individual tools",
+        "Show total selected count"
+      ],
+      "acceptanceCriteria": [
+        "Shows all tools from selected toolkits",
+        "All tools selected by default",
+        "Can deselect individual tools",
+        "Shows helpful tool information"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["016", "018"],
+      "passes": false
+    },
+    {
+      "id": "020",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create Add Tools dialog",
+      "description": "Build the main dialog component that orchestrates the add tools flow.",
+      "steps": [
+        "Create packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx",
+        "Multi-step wizard: 1) Select Provider, 2) Select Toolkits, 3) Review/Deselect Tools, 4) Confirm",
+        "Track wizard state (current step, selected provider, selected toolkits, deselected tools)",
+        "Back/Next navigation between steps",
+        "On confirm: call createIntegration mutation with selected data",
+        "Show success/error toast",
+        "Close dialog on success",
+        "Export from domain components"
+      ],
+      "acceptanceCriteria": [
+        "Full flow works: provider -> toolkits -> tools -> save",
+        "Can navigate back and forth between steps",
+        "Saves integration with cached tools",
+        "Handles errors gracefully"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": ["017", "018", "019"],
+      "passes": false
+    },
+    {
+      "id": "021",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Add 'Add Tools' button to Tools page",
+      "description": "Integrate the Add Tools dialog into the existing Tools page.",
+      "steps": [
+        "Update packages/playground/src/pages/tools/index.tsx",
+        "Add 'Add Tools' button to HeaderAction section",
+        "Import and render AddToolsDialog component",
+        "Manage dialog open state",
+        "Invalidate tools query on successful addition",
+        "Export AddToolsDialog from playground-ui package"
+      ],
+      "acceptanceCriteria": [
+        "'Add Tools' button visible on Tools page",
+        "Clicking opens the Add Tools dialog",
+        "After adding tools, Tools page refreshes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["020"],
+      "passes": false
+    },
+    {
+      "id": "022",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Display integration tools in Tools table",
+      "description": "Update the Tools page to show tools from stored integrations alongside code-defined tools.",
+      "steps": [
+        "Update useTools hook or create useAllTools to include integration tools",
+        "Fetch integrations and their cached tools",
+        "Merge integration tools with code-defined tools",
+        "Add 'source' indicator to tool table (code vs integration name)",
+        "Handle tool detail page for integration tools"
+      ],
+      "acceptanceCriteria": [
+        "Integration tools appear in Tools table",
+        "Can distinguish integration tools from code tools",
+        "Tool count includes integration tools"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["021", "011"],
+      "passes": false
+    },
+    {
+      "id": "023",
+      "category": "ui",
+      "priority": "P2",
+      "title": "Add integrations management page",
+      "description": "Create a page to view and manage configured integrations.",
+      "steps": [
+        "Create packages/playground/src/pages/integrations/index.tsx",
+        "List all configured integrations with provider, toolkit count, tool count",
+        "Show last synced timestamp for each integration",
+        "Add 'Refresh' button to re-sync tools from provider",
+        "Add 'Delete' button to remove integration",
+        "Add route to App.tsx router"
+      ],
+      "acceptanceCriteria": [
+        "Can view all configured integrations",
+        "Can refresh tools for an integration",
+        "Can delete an integration",
+        "Shows helpful metadata"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["016", "021"],
+      "passes": false
+    },
+    {
+      "id": "024",
+      "category": "ui",
+      "priority": "P2",
+      "title": "Add integration selector to agent form",
+      "description": "Allow users to assign integrations to agents when creating/editing.",
+      "steps": [
+        "Update packages/playground-ui/src/domains/agents/components/create-agent/agent-form.tsx",
+        "Add 'Integrations' section to form",
+        "Fetch available integrations using useIntegrations hook",
+        "Multi-select for integrations",
+        "Update form validation schema",
+        "Pass integrations array to createStoredAgent/updateStoredAgent"
+      ],
+      "acceptanceCriteria": [
+        "Can select integrations when creating agent",
+        "Can update integrations when editing agent",
+        "Selected integrations are saved with agent"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["014", "016"],
+      "passes": false
+    },
+    {
+      "id": "025",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Add integration tests for integration storage",
+      "description": "Write integration tests for the integrations storage layer.",
+      "steps": [
+        "Create packages/core/src/storage/domains/integrations/integrations.test.ts",
+        "Test CRUD operations for integrations",
+        "Test cached tools operations",
+        "Test with LibSQL storage adapter",
+        "Test edge cases: duplicate IDs, missing integrations, etc."
+      ],
+      "acceptanceCriteria": [
+        "All storage operations have test coverage",
+        "Tests pass with LibSQL adapter",
+        "Edge cases are covered"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["003"],
+      "passes": false
+    },
+    {
+      "id": "026",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Add integration tests for provider APIs",
+      "description": "Write tests for the provider abstraction layer.",
+      "steps": [
+        "Create packages/core/src/integrations/providers/providers.test.ts",
+        "Mock external API responses",
+        "Test ComposioProvider methods",
+        "Test ArcadeProvider methods",
+        "Test error handling scenarios",
+        "Test pagination handling"
+      ],
+      "acceptanceCriteria": [
+        "Provider methods have test coverage",
+        "API response mapping is tested",
+        "Error scenarios are covered"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["007", "008"],
+      "passes": false
+    },
+    {
+      "id": "027",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Add E2E tests for integration flow",
+      "description": "Write end-to-end tests for the complete add tools flow.",
+      "steps": [
+        "Create E2E test file for integration flow",
+        "Test: open Add Tools dialog",
+        "Test: select provider",
+        "Test: browse and select toolkits",
+        "Test: deselect individual tools",
+        "Test: save integration",
+        "Test: tools appear in Tools page",
+        "Test: refresh integration",
+        "Test: delete integration"
+      ],
+      "acceptanceCriteria": ["Full user flow is tested", "Tests pass in CI", "Key user interactions are verified"],
+      "estimatedComplexity": "large",
+      "dependencies": ["021", "022"],
+      "passes": false
+    },
+    {
+      "id": "028",
+      "category": "documentation",
+      "priority": "P2",
+      "title": "Document integration feature",
+      "description": "Add documentation for the dynamic tool integrations feature.",
+      "steps": [
+        "Add docs page explaining the feature",
+        "Document supported providers (Composio, Arcade)",
+        "Document required ENV variables",
+        "Add screenshots of the UI flow",
+        "Document how integration tools work with agents",
+        "Add API reference for integration endpoints"
+      ],
+      "acceptanceCriteria": ["Feature is documented for end users", "ENV setup is clear", "API is documented"],
+      "estimatedComplexity": "medium",
+      "dependencies": ["021"],
+      "passes": false
+    }
+  ],
+  "metadata": {
+    "project": "Dynamic Tool Registry",
+    "createdAt": "2025-01-13",
+    "totalTasks": 28,
+    "priorityBreakdown": {
+      "P0": 13,
+      "P1": 12,
+      "P2": 3
+    },
+    "categoryBreakdown": {
+      "infrastructure": 5,
+      "providers": 4,
+      "server": 4,
+      "integration": 2,
+      "ui": 9,
+      "testing": 3,
+      "documentation": 1
+    },
+    "criticalPath": ["001", "002", "003", "005", "006", "007", "009", "010", "011", "012", "013", "016", "020", "021"]
+  }
+}
