@@ -3,3 +3,4 @@
  */
 
 export * from './providers';
+export * from './tool-executor';

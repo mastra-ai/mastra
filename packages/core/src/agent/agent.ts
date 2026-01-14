@@ -48,6 +48,7 @@ import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
+import { executeTool } from '../integrations';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -2405,22 +2406,64 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             outputSchema: z.unknown().describe('Tool output result'),
             mastra: this.#mastra,
             execute: async (inputData: Record<string, unknown>, context) => {
-              // Tool execution will be handled by the provider's execution API
-              // For now, we'll throw an error indicating this needs to be implemented
-              // This will be implemented in Task 015
-              throw new MastraError({
-                id: 'AGENT_INTEGRATION_TOOL_EXECUTION_NOT_IMPLEMENTED',
-                domain: ErrorDomain.AGENT,
-                category: ErrorCategory.USER,
-                text: `Integration tool execution not yet implemented. Tool: ${toolName}, Provider: ${cachedTool.provider}`,
-                details: {
-                  agentName: this.name,
-                  toolName,
-                  provider: cachedTool.provider,
-                  integrationId,
-                  cachedToolId: cachedTool.id,
-                },
+              // Execute the tool via the provider's API
+              this.logger.debug(`[Agent:${this.name}] - Executing integration tool: ${toolName}`, {
+                runId,
+                threadId,
+                resourceId,
+                provider: cachedTool.provider,
+                integrationId,
               });
+
+              try {
+                const result = await executeTool(cachedTool.provider, cachedTool.toolSlug, inputData);
+
+                if (!result.success) {
+                  throw new MastraError({
+                    id: 'AGENT_INTEGRATION_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.THIRD_PARTY,
+                    text: result.error?.message || 'Tool execution failed',
+                    details: {
+                      agentName: this.name,
+                      toolName,
+                      provider: cachedTool.provider,
+                      integrationId,
+                      cachedToolId: cachedTool.id,
+                      errorCode: result.error?.code || null,
+                    },
+                  });
+                }
+
+                this.logger.debug(`[Agent:${this.name}] - Integration tool executed successfully: ${toolName}`, {
+                  runId,
+                  threadId,
+                  resourceId,
+                  executionId: result.metadata?.executionId,
+                });
+
+                return result.output;
+              } catch (err) {
+                // If error is already a MastraError, rethrow it
+                if (err instanceof MastraError) {
+                  throw err;
+                }
+
+                // Otherwise wrap in a MastraError
+                throw new MastraError({
+                  id: 'AGENT_INTEGRATION_TOOL_EXECUTION_ERROR',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.THIRD_PARTY,
+                  text: err instanceof Error ? err.message : 'Unknown error executing integration tool',
+                  details: {
+                    agentName: this.name,
+                    toolName,
+                    provider: cachedTool.provider,
+                    integrationId,
+                    cachedToolId: cachedTool.id,
+                  },
+                });
+              }
             },
           });
 
