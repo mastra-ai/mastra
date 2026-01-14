@@ -76,8 +76,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     const { messageList, systemMessages: coreSystemMessages } = args;
 
-    // Use messageList to get ALL messages (memory + input), not just input messages
-    // This fixes issue #11902 where only input messages were being processed
+    // Use messageList to get ALL messages (memory + input)
     // Note: System messages are NOT in messageList.get.all.db() - they're in args.systemMessages
     const messages = messageList?.get.all.db() ?? args.messages;
     const limit = this.maxTokens;
