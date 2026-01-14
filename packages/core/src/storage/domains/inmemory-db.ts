@@ -7,9 +7,11 @@ import type {
   StorageWorkflowRun,
   StorageIntegrationConfig,
   StorageCachedTool,
+  StorageWorkflowDefinitionType,
 } from '../types';
 import type { AgentVersion } from './agents/base';
 import type { TraceEntry } from './observability';
+import type { WorkflowDefinitionVersion } from './workflow-definitions/base';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -29,6 +31,8 @@ export class InMemoryDB {
   readonly agentVersions = new Map<string, AgentVersion>();
   readonly integrations = new Map<string, StorageIntegrationConfig>();
   readonly cachedTools = new Map<string, StorageCachedTool>();
+  readonly workflowDefinitions = new Map<string, StorageWorkflowDefinitionType>();
+  readonly workflowDefinitionVersions = new Map<string, WorkflowDefinitionVersion>();
 
   /**
    * Clears all data from all collections.
@@ -45,5 +49,7 @@ export class InMemoryDB {
     this.agentVersions.clear();
     this.integrations.clear();
     this.cachedTools.clear();
+    this.workflowDefinitions.clear();
+    this.workflowDefinitionVersions.clear();
   }
 }

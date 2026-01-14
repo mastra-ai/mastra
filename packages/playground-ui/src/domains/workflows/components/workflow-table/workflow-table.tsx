@@ -17,24 +17,47 @@ import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface WorkflowTableProps {
   workflows: Record<string, GetWorkflowResponse>;
+  storedWorkflows?: WorkflowTableData[];
   isLoading: boolean;
+  isLoadingStored?: boolean;
 }
 
-export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
+export function WorkflowTable({ workflows, storedWorkflows = [], isLoading, isLoadingStored }: WorkflowTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const workflowData: WorkflowTableData[] = useMemo(() => {
-    const _workflowsData = Object.keys(workflows ?? {}).map(key => {
-      const workflow = workflows[key as keyof typeof workflows];
 
-      return {
+  // Combine all workflows into a single list with type labels, sorted by type then name
+  const workflowData: WorkflowTableData[] = useMemo(() => {
+    const result: WorkflowTableData[] = [];
+
+    // Add code-defined workflows
+    Object.keys(workflows ?? {}).forEach(key => {
+      const workflow = workflows[key as keyof typeof workflows];
+      result.push({
         id: key,
         ...workflow,
-      };
+        workflowType: workflow.isProcessorWorkflow ? 'processor' : 'code',
+      });
     });
 
-    return _workflowsData;
-  }, [workflows]);
+    // Add stored workflow definitions
+    storedWorkflows.forEach(w => {
+      result.push({
+        ...w,
+        workflowType: 'stored',
+      });
+    });
+
+    // Sort by type (code, stored, processor) then alphabetically by name
+    const typeOrder: Record<string, number> = { code: 0, stored: 1, processor: 2 };
+    return result.sort((a, b) => {
+      const typeA = a.workflowType || 'code';
+      const typeB = b.workflowType || 'code';
+      const typeCompare = typeOrder[typeA] - typeOrder[typeB];
+      if (typeCompare !== 0) return typeCompare;
+      return a.name.localeCompare(b.name);
+    });
+  }, [workflows, storedWorkflows]);
 
   const table = useReactTable({
     data: workflowData,
@@ -43,9 +66,11 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
+  const combinedLoading = isLoading || isLoadingStored;
+
+  if (rows.length === 0 && !combinedLoading) {
     return <EmptyWorkflowsTable />;
   }
 
@@ -57,7 +82,7 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
         <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
       </SearchbarWrapper>
 
-      {isLoading ? (
+      {combinedLoading ? (
         <WorkflowTableSkeleton />
       ) : (
         <ScrollableContainer>
@@ -91,7 +116,8 @@ const WorkflowTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      <Th width={300}>Steps</Th>
+      <Th width={130}>Type</Th>
+      <Th width={120}>Steps</Th>
     </Thead>
     <Tbody>
       {Array.from({ length: 3 }).map((_, index) => (
@@ -99,8 +125,11 @@ const WorkflowTableSkeleton = () => (
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          <Cell width={300}>
-            <Skeleton className="h-4 w-1/2" />
+          <Cell width={130}>
+            <Skeleton className="h-4 w-16" />
+          </Cell>
+          <Cell width={120}>
+            <Skeleton className="h-4 w-16" />
           </Cell>
         </Row>
       ))}

@@ -1,5 +1,6 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
+import { WorkflowDefinitionResolver } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
@@ -41,10 +42,36 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   }
 
   let workflow;
+  let isStoredWorkflow = false;
 
-  // First check registry for temporary workflows
-  workflow = WorkflowRegistry.getWorkflow(workflowId);
+  // First, check if this is a stored workflow definition (these should always be re-resolved
+  // to pick up any updates made in the workflow builder)
+  try {
+    const storage = mastra.getStorage();
+    if (storage) {
+      const workflowDefinitionsStore = await storage.getStore('workflowDefinitions');
+      if (workflowDefinitionsStore) {
+        const definition = await workflowDefinitionsStore.getWorkflowDefinitionById({ id: workflowId });
+        if (definition) {
+          logger.debug('Found stored workflow definition, resolving to executable workflow', { workflowId });
+          const resolver = new WorkflowDefinitionResolver(mastra);
+          workflow = resolver.resolve(definition);
+          isStoredWorkflow = true;
+          // Don't cache stored workflows - they should be re-resolved each time
+          // to pick up any updates from the workflow builder
+        }
+      }
+    }
+  } catch (error) {
+    logger.debug('Error checking for stored workflow definition', error);
+  }
 
+  // If not a stored workflow, check registry for temporary workflows (e.g., agent builder workflows)
+  if (!workflow) {
+    workflow = WorkflowRegistry.getWorkflow(workflowId);
+  }
+
+  // Check code-defined workflows
   if (!workflow) {
     try {
       workflow = mastra.getWorkflowById(workflowId);
@@ -53,6 +80,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
     }
   }
 
+  // Search agent workflows
   if (!workflow) {
     logger.debug('Workflow not found, searching agents for workflow', { workflowId });
     const agents = mastra.listAgents();
@@ -78,7 +106,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
     throw new HTTPException(404, { message: 'Workflow not found' });
   }
 
-  return { workflow };
+  return { workflow, isStoredWorkflow };
 }
 
 // ============================================================================

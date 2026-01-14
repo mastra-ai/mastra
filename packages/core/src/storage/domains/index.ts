@@ -5,6 +5,7 @@ export * from './scores';
 export * from './observability';
 export * from './operations';
 export * from './workflows';
+export * from './workflow-definitions';
 export * from './memory';
 export * from './inmemory-db';
 export * from './shared';

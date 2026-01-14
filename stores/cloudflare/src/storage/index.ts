@@ -43,7 +43,7 @@ export class CloudflareStore extends MastraStorage {
   private client?: Cloudflare;
   private accountId?: string;
   private namespacePrefix: string;
-  private bindings?: Record<TABLE_NAMES, KVNamespace>;
+  private bindings?: Partial<Record<TABLE_NAMES, KVNamespace>>;
 
   private validateWorkersConfig(config: CloudflareStoreConfig): asserts config is CloudflareWorkersConfig {
     if (!isWorkersConfig(config)) {

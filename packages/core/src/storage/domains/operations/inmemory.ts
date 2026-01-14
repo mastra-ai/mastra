@@ -20,6 +20,8 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_agent_versions: new Map(),
       mastra_integrations: new Map(),
       mastra_cached_tools: new Map(),
+      mastra_workflow_definitions: new Map(),
+      mastra_workflow_definition_versions: new Map(),
     };
   }
 

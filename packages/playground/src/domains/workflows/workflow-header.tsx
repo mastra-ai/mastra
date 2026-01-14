@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { Pencil } from 'lucide-react';
 
 import {
   Crumb,
@@ -20,10 +21,12 @@ export function WorkflowHeader({
   workflowName,
   workflowId,
   runId,
+  isStoredWorkflow = false,
 }: {
   workflowName: string;
   workflowId: string;
   runId?: string;
+  isStoredWorkflow?: boolean;
 }) {
   return (
     <div className="shrink-0">
@@ -54,6 +57,18 @@ export function WorkflowHeader({
           <Button as={Link} to={`/workflows/${workflowId}/graph`}>
             Graph
           </Button>
+
+          {isStoredWorkflow && (
+            <>
+              <DividerIcon />
+              <Button as={Link} to={`/workflows/${workflowId}/edit`}>
+                <Icon>
+                  <Pencil className="h-4 w-4" />
+                </Icon>
+                Edit
+              </Button>
+            </>
+          )}
 
           <DividerIcon />
 

@@ -808,6 +808,30 @@ export interface IntegrationConfig {
   updatedAt: string;
 }
 
+// ============================================================================
+// Workflow Definitions Types
+// ============================================================================
+
+/**
+ * Workflow definition data returned from API
+ */
+export interface WorkflowDefinitionResponse {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph: unknown[];
+  steps: Record<string, unknown>;
+  retryConfig?: { attempts?: number; delay?: number };
+  ownerId?: string;
+  activeVersionId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Cached tool definition
  */
@@ -851,6 +875,22 @@ export interface ProviderToolkit {
 }
 
 /**
+ * Parameters for creating a workflow definition
+ */
+export interface CreateWorkflowDefinitionInput {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph: unknown[];
+  steps: Record<string, unknown>;
+  retryConfig?: { attempts?: number; delay?: number };
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Tool from provider API
  */
 export interface ProviderTool {
@@ -860,6 +900,21 @@ export interface ProviderTool {
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   toolkit?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a workflow definition
+ */
+export interface UpdateWorkflowDefinitionInput {
+  name?: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph?: unknown[];
+  steps?: Record<string, unknown>;
+  retryConfig?: { attempts?: number; delay?: number };
   metadata?: Record<string, unknown>;
 }
 
@@ -883,6 +938,26 @@ export interface ListIntegrationsParams {
  */
 export interface ListIntegrationsResponse {
   integrations: IntegrationConfig[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for listing workflow definitions
+ */
+export interface ListWorkflowDefinitionsParams {
+  page?: number;
+  perPage?: number;
+  ownerId?: string;
+}
+
+/**
+ * Response for listing workflow definitions
+ */
+export interface ListWorkflowDefinitionsResponse {
+  definitions: WorkflowDefinitionResponse[];
   total: number;
   page: number;
   perPage: number | false;
@@ -951,6 +1026,39 @@ export interface ListProviderToolkitsResponse {
 }
 
 /**
+ * Workflow definition version data returned from API
+ */
+export interface WorkflowDefinitionVersionResponse {
+  id: string;
+  workflowDefinitionId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: WorkflowDefinitionResponse;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Parameters for listing workflow definition versions
+ */
+export interface ListWorkflowDefinitionVersionsParams {
+  page?: number;
+  perPage?: number;
+}
+
+/**
+ * Response for listing workflow definition versions
+ */
+export interface ListWorkflowDefinitionVersionsResponse {
+  versions: WorkflowDefinitionVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
  * Parameters for listing tools from a provider
  */
 export interface ListProviderToolsParams {
@@ -977,4 +1085,21 @@ export interface RefreshIntegrationResponse {
   success: boolean;
   message: string;
   toolsUpdated: number;
+}
+
+/**
+ * Parameters for creating a workflow definition version
+ */
+export interface CreateWorkflowDefinitionVersionInput {
+  name?: string;
+  changeMessage?: string;
+}
+
+/**
+ * Response for comparing workflow definition versions
+ */
+export interface CompareWorkflowDefinitionVersionsResponse {
+  version1: WorkflowDefinitionVersionResponse;
+  version2: WorkflowDefinitionVersionResponse;
+  changedFields: string[];
 }

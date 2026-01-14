@@ -1,14 +1,16 @@
 import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
 import {
+  TABLE_AGENTS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_WORKFLOW_DEFINITIONS,
+  TABLE_WORKFLOW_DEFINITION_VERSIONS,
   safelyParseJSON,
   TABLE_SPANS,
-  TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
   TABLE_INTEGRATIONS,
   TABLE_CACHED_TOOLS,
@@ -27,6 +29,8 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_AGENT_VERSIONS]: `ReplacingMergeTree()`,
   [TABLE_INTEGRATIONS]: `ReplacingMergeTree()`,
   [TABLE_CACHED_TOOLS]: `ReplacingMergeTree()`,
+  [TABLE_WORKFLOW_DEFINITIONS]: `ReplacingMergeTree()`,
+  [TABLE_WORKFLOW_DEFINITION_VERSIONS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

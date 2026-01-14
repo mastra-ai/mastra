@@ -13,6 +13,8 @@ export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 export const TABLE_INTEGRATIONS = 'mastra_integrations';
 export const TABLE_CACHED_TOOLS = 'mastra_cached_tools';
+export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
+export const TABLE_WORKFLOW_DEFINITION_VERSIONS = 'mastra_workflow_definition_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -25,7 +27,9 @@ export type TABLE_NAMES =
   | typeof TABLE_AGENTS
   | typeof TABLE_AGENT_VERSIONS
   | typeof TABLE_INTEGRATIONS
-  | typeof TABLE_CACHED_TOOLS;
+  | typeof TABLE_CACHED_TOOLS
+  | typeof TABLE_WORKFLOW_DEFINITIONS
+  | typeof TABLE_WORKFLOW_DEFINITION_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -136,6 +140,23 @@ export const INTEGRATIONS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const WORKFLOW_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  inputSchema: { type: 'jsonb', nullable: false },
+  outputSchema: { type: 'jsonb', nullable: false },
+  stateSchema: { type: 'jsonb', nullable: true },
+  stepGraph: { type: 'jsonb', nullable: false },
+  steps: { type: 'jsonb', nullable: false },
+  retryConfig: { type: 'jsonb', nullable: true },
+  ownerId: { type: 'text', nullable: true },
+  activeVersionId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const CACHED_TOOLS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true }, // UUID
   integrationId: { type: 'text', nullable: false }, // FK to integrations.id
@@ -150,6 +171,17 @@ export const CACHED_TOOLS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false }, // When tool was first cached (same as cachedAt for compatibility)
   cachedAt: { type: 'timestamp', nullable: false }, // When tool was cached
   updatedAt: { type: 'timestamp', nullable: false }, // When tool cache was last updated
+};
+
+export const WORKFLOW_DEFINITION_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  workflowDefinitionId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: true },
+  snapshot: { type: 'jsonb', nullable: false },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
@@ -217,4 +249,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
   [TABLE_INTEGRATIONS]: INTEGRATIONS_SCHEMA,
   [TABLE_CACHED_TOOLS]: CACHED_TOOLS_SCHEMA,
+  [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
+  [TABLE_WORKFLOW_DEFINITION_VERSIONS]: WORKFLOW_DEFINITION_VERSIONS_SCHEMA,
 };

@@ -7,6 +7,7 @@ import type {
   WorkflowsStorage,
   MemoryStorage,
   ObservabilityStorage,
+  WorkflowDefinitionsStorage,
 } from './domains';
 
 export type StorageDomains = {
@@ -16,6 +17,7 @@ export type StorageDomains = {
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   integrations?: IntegrationsStorage;
+  workflowDefinitions?: WorkflowDefinitionsStorage;
 };
 
 /**
@@ -204,6 +206,7 @@ export class MastraStorage extends MastraBase {
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
         integrations: domainOverrides.integrations ?? defaultStores?.integrations,
+        workflowDefinitions: domainOverrides.workflowDefinitions ?? defaultStores?.workflowDefinitions,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -262,6 +265,10 @@ export class MastraStorage extends MastraBase {
 
     if (this.stores?.integrations) {
       initTasks.push(this.stores.integrations.init());
+    }
+
+    if (this.stores?.workflowDefinitions) {
+      initTasks.push(this.stores.workflowDefinitions.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

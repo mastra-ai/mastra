@@ -503,6 +503,193 @@ export type StorageListCachedToolsOutput = PaginationInfo & {
   tools: StorageCachedTool[];
 };
 
+// Workflow Definition Types
+
+/**
+ * Variable reference for input mapping - references a value from workflow context
+ */
+export type VariableRef = { $ref: string };
+
+/**
+ * Literal value wrapper for input mapping
+ */
+export type LiteralValue = { $literal: unknown };
+
+/**
+ * Either a variable reference or a literal value
+ */
+export type ValueOrRef = VariableRef | LiteralValue;
+
+/**
+ * Operators for condition comparisons
+ */
+export type ConditionOperator =
+  | 'equals'
+  | 'notEquals'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'contains'
+  | 'startsWith'
+  | 'endsWith'
+  | 'matches'
+  | 'in'
+  | 'isNull'
+  | 'isNotNull';
+
+/**
+ * Condition definitions for branch/loop logic
+ */
+export type ConditionDef =
+  | { type: 'compare'; field: VariableRef; operator: ConditionOperator; value?: ValueOrRef }
+  | { type: 'and'; conditions: ConditionDef[] }
+  | { type: 'or'; conditions: ConditionDef[] }
+  | { type: 'not'; condition: ConditionDef }
+  | { type: 'expr'; expression: string };
+
+// Declarative Step Definitions
+
+/**
+ * Agent step - executes an agent with given input
+ */
+export interface AgentStepDef {
+  type: 'agent';
+  agentId: string;
+  input: { prompt: VariableRef; instructions?: string | VariableRef };
+  structuredOutput?: Record<string, unknown>;
+}
+
+/**
+ * Tool step - executes a tool with given input
+ */
+export interface ToolStepDef {
+  type: 'tool';
+  toolId: string;
+  input: Record<string, ValueOrRef>;
+}
+
+/**
+ * Workflow step - executes a nested workflow
+ */
+export interface WorkflowStepDef {
+  type: 'workflow';
+  workflowId: string;
+  input: Record<string, ValueOrRef>;
+}
+
+/**
+ * Transform step - transforms data and optionally updates state
+ */
+export interface TransformStepDef {
+  type: 'transform';
+  output: Record<string, ValueOrRef>;
+  outputSchema: Record<string, unknown>;
+  stateUpdates?: Record<string, ValueOrRef>;
+}
+
+/**
+ * Suspend step - suspends workflow execution until resumed
+ */
+export interface SuspendStepDef {
+  type: 'suspend';
+  resumeSchema: Record<string, unknown>;
+  payload?: Record<string, ValueOrRef>;
+}
+
+/**
+ * Union of all declarative step definition types
+ */
+export type DeclarativeStepDefinition =
+  | AgentStepDef
+  | ToolStepDef
+  | WorkflowStepDef
+  | TransformStepDef
+  | SuspendStepDef;
+
+// Step Graph Entries
+
+/**
+ * Step graph flow entry types for defining workflow execution order
+ */
+export type DefinitionStepFlowEntry =
+  | { type: 'step'; step: { id: string; description?: string } }
+  | { type: 'sleep'; id: string; duration: number }
+  | { type: 'sleepUntil'; id: string; timestamp: ValueOrRef }
+  | { type: 'parallel'; steps: Array<{ type: 'step'; step: { id: string } }> }
+  | { type: 'conditional'; branches: Array<{ condition: ConditionDef; stepId: string }>; default?: string }
+  | { type: 'loop'; stepId: string; condition: ConditionDef; loopType: 'dowhile' | 'dountil' }
+  | { type: 'foreach'; stepId: string; collection: VariableRef; concurrency?: number }
+  | { type: 'map'; output: Record<string, ValueOrRef> };
+
+// Main Storage Types
+
+/**
+ * Stored workflow definition type
+ */
+export interface StorageWorkflowDefinitionType {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph: DefinitionStepFlowEntry[];
+  steps: Record<string, DeclarativeStepDefinition>;
+  retryConfig?: { attempts?: number; delay?: number };
+  ownerId?: string;
+  activeVersionId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Workflow definition version for tracking changes
+ */
+export interface StorageWorkflowDefinitionVersionType {
+  id: string;
+  workflowDefinitionId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: StorageWorkflowDefinitionType;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: Date;
+}
+
+// CRUD Input Types
+
+/**
+ * Input for creating a workflow definition
+ */
+export type StorageCreateWorkflowDefinitionInput = Omit<StorageWorkflowDefinitionType, 'createdAt' | 'updatedAt'>;
+
+/**
+ * Input for updating a workflow definition
+ */
+export type StorageUpdateWorkflowDefinitionInput = { id: string } & Partial<
+  Omit<StorageWorkflowDefinitionType, 'id' | 'createdAt' | 'updatedAt'>
+>;
+
+/**
+ * Input for listing workflow definitions
+ */
+export interface StorageListWorkflowDefinitionsInput {
+  page?: number;
+  perPage?: number | false;
+  orderBy?: StorageOrderBy;
+  ownerId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Output for listing workflow definitions
+ */
+export interface StorageListWorkflowDefinitionsOutput extends PaginationInfo {
+  definitions: StorageWorkflowDefinitionType[];
+}
+
 // Basic Index Management Types
 export interface CreateIndexOptions {
   name: string;

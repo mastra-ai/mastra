@@ -24,6 +24,7 @@ import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
+import WorkflowEdit from './pages/workflows/workflow/edit';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import RequestContext from './pages/request-context';
@@ -59,6 +60,7 @@ const paths: LinkComponentProviderProps['paths'] = {
     messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
+  workflowEditLink: (workflowId: string) => `/workflows/${workflowId}/edit`,
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
@@ -102,6 +104,9 @@ function App() {
         <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>
             <Routes>
+              {/* Workflow builder - full screen without layout */}
+              <Route path="/workflows/:workflowId/edit" element={<WorkflowEdit />} />
+
               <Route
                 element={
                   <Layout>
