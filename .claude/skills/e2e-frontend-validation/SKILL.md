@@ -21,13 +21,13 @@ After completing frontend changes:
 1. **Build the CLI**
 
 ```sh
-   pnpm build:cli
+pnpm build:cli
 ```
 
 2. **Start the dev server**
 
 ```sh
-   cd examples/agent && node ../../packages/cli/dist/index.js dev
+cd examples/agent && node ../../packages/cli/dist/index.js dev
 ```
 
 3. **Verify server is running**
