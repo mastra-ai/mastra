@@ -2,6 +2,55 @@ import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraVector } from '@mastra/core/vector';
 import { createMetadataFilteringTest } from './domains/vector/metadata-filtering';
 import { createAdvancedOperationsTest } from './domains/vector/advanced-operations';
+import { createBasicOperationsTest } from './domains/vector/basic-operations';
+import { createFilterOperatorsTest } from './domains/vector/filter-operators';
+import { createEdgeCasesTest } from './domains/vector/edge-cases';
+import { createErrorHandlingTest } from './domains/vector/error-handling';
+
+/**
+ * Configuration for selective test domain execution.
+ * By default, all test domains are enabled. Set a domain to false to skip it.
+ *
+ * @example
+ * ```typescript
+ * // Run all tests (default)
+ * createVectorTestSuite({ vector, createIndex, deleteIndex });
+ *
+ * // Skip pattern matching tests if store doesn't support regex
+ * createVectorTestSuite({
+ *   vector,
+ *   createIndex,
+ *   deleteIndex,
+ *   testDomains: {
+ *     filterOps: false, // Skip if regex/pattern matching not supported
+ *   }
+ * });
+ *
+ * // Skip large batch tests for stores with strict rate limits
+ * createVectorTestSuite({
+ *   vector,
+ *   createIndex,
+ *   deleteIndex,
+ *   testDomains: {
+ *     edgeCases: false,
+ *   }
+ * });
+ * ```
+ */
+export interface TestDomains {
+  /** Basic operations: createIndex, upsert, query, listIndexes, describeIndex, deleteIndex */
+  basicOps?: boolean;
+  /** Filter operators: $gt, $lt, $gte, $lte, $ne, $not, $in, $nin, $all, $exists, $regex (optional) */
+  filterOps?: boolean;
+  /** Edge cases: empty indexes, dimension mismatch, large batches (1000+ vectors), concurrent operations */
+  edgeCases?: boolean;
+  /** Error handling: index not found, invalid filters, invalid data, parameter validation */
+  errorHandling?: boolean;
+  /** Metadata filtering: Memory system compatibility ($eq, $and, $or, thread_id, resource_id) */
+  metadataFiltering?: boolean;
+  /** Advanced operations: deleteVectors with filters, updateVector with filters */
+  advancedOps?: boolean;
+}
 
 export interface VectorTestConfig {
   vector: MastraVector<any>;
@@ -10,10 +59,50 @@ export interface VectorTestConfig {
   waitForIndexing?: (indexName: string) => Promise<void>;
   connect?: () => Promise<void>;
   disconnect?: () => Promise<void>;
+  /** Optional: selectively enable/disable test domains. All enabled by default. */
+  testDomains?: TestDomains;
 }
 
+/**
+ * Creates a comprehensive test suite for vector stores.
+ * This function generates tests across multiple domains to ensure consistent behavior.
+ *
+ * @param config - Vector test configuration including store instance and lifecycle hooks
+ *
+ * @remarks
+ * The test suite includes 6 domains (all enabled by default):
+ * 1. Basic Operations - Index lifecycle, upsert, query (14 tests)
+ * 2. Filter Operators - Comparison, negation, pattern matching (25+ tests)
+ * 3. Edge Cases - Empty indexes, large batches, concurrent operations (17 tests)
+ * 4. Error Handling - Invalid inputs, parameter validation (30+ tests)
+ * 5. Metadata Filtering - Memory system compatibility (existing)
+ * 6. Advanced Operations - deleteVectors/updateVector with filters (existing)
+ *
+ * Total: 90+ comprehensive test cases
+ *
+ * @example
+ * ```typescript
+ * // Full test suite (all domains)
+ * createVectorTestSuite({
+ *   vector: pgVector,
+ *   createIndex: async (name) => { await pgVector.createIndex({ indexName: name, dimension: 1536 }); },
+ *   deleteIndex: async (name) => { await pgVector.deleteIndex({ indexName: name }); },
+ *   waitForIndexing: async () => { await new Promise(r => setTimeout(r, 100)); }
+ * });
+ *
+ * // Selective domains (skip regex tests for stores without pattern matching)
+ * createVectorTestSuite({
+ *   vector: astraVector,
+ *   createIndex: async (name) => { /* ... *\/ },
+ *   deleteIndex: async (name) => { /* ... *\/ },
+ *   testDomains: {
+ *     filterOps: false, // Skip if $regex not supported
+ *   }
+ * });
+ * ```
+ */
 export function createVectorTestSuite(config: VectorTestConfig) {
-  const { connect, disconnect } = config;
+  const { connect, disconnect, testDomains = {} } = config;
 
   // Get the vector store name, handling cases where vector might be a getter or null initially
   let vectorName = 'VectorStore';
@@ -46,7 +135,29 @@ export function createVectorTestSuite(config: VectorTestConfig) {
       }
     }, 60 * 1000); // 1 minute timeout for cleanup
 
-    createMetadataFilteringTest(config);
-    createAdvancedOperationsTest(config);
+    // Run test domains (all enabled by default, can be selectively disabled)
+    if (testDomains.basicOps !== false) {
+      createBasicOperationsTest(config);
+    }
+
+    if (testDomains.filterOps !== false) {
+      createFilterOperatorsTest(config);
+    }
+
+    if (testDomains.edgeCases !== false) {
+      createEdgeCasesTest(config);
+    }
+
+    if (testDomains.errorHandling !== false) {
+      createErrorHandlingTest(config);
+    }
+
+    if (testDomains.metadataFiltering !== false) {
+      createMetadataFilteringTest(config);
+    }
+
+    if (testDomains.advancedOps !== false) {
+      createAdvancedOperationsTest(config);
+    }
   });
 }
