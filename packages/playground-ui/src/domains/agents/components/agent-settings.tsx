@@ -1,24 +1,24 @@
-import { Slider } from '@/components/ui/slider';
+import { Slider } from '@/ds/components/Slider';
 
-import { Label } from '@/components/ui/label';
+import { Label } from '@/ds/components/Label';
 
 import { RefreshCw, Info } from 'lucide-react';
 
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 
-import { Entry } from '@/components/ui/entry';
+import { Entry } from '@/ds/components/Entry';
 import { useAgentSettings } from '../context/agent-context';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import clsx from 'clsx';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 
 export interface AgentSettingsProps {

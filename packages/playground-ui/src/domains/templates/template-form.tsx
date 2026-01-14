@@ -1,9 +1,9 @@
-import { InputField, SelectField } from '@/components/ui/elements';
+import { InputField, SelectField } from '@/ds/components/FormFields';
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { Container } from './shared';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
 import { Button } from '@/ds/components/Button/Button';
 

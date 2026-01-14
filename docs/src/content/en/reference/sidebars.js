@@ -546,7 +546,7 @@ const sidebars = {
         {
           type: "doc",
           id: "storage/composite",
-          label: "Storage Composition",
+          label: "Composite Storage",
         },
         {
           type: "doc",

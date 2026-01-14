@@ -54118,12 +54118,12 @@ description: "Use SiliconFlow (China) models with Mastra. 72 models available."
 # <img src="https://models.dev/logos/siliconflow-cn.svg" alt="SiliconFlow (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow (China)
 [EN] Source: https://mastra.ai/en/models/providers/siliconflow-cn
 
-Access 72 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
+Access 72 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_CN_API_KEY` environment variable.
 
 Learn more in the [SiliconFlow (China) documentation](https://cloud.siliconflow.com/models).
 
 ```bash
-SILICONFLOW_API_KEY=your-api-key
+SILICONFLOW_CN_API_KEY=your-api-key
 ```
 
 ```typescript
@@ -55034,7 +55034,7 @@ const agent = new Agent({
   model: {
     url: "https://api.siliconflow.cn/v1",
     id: "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct",
-    apiKey: process.env.SILICONFLOW_API_KEY,
+    apiKey: process.env.SILICONFLOW_CN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
     }

@@ -1,4 +1,4 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates, type PackageUpdateInfo } from '../hooks/use-package-updates';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { SelectField } from '@/components/ui/elements/form-fields/select-field';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { SelectField } from '@/ds/components/FormFields';
 
 export interface MastraVersionFooterProps {
   collapsed?: boolean;
