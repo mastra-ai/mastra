@@ -52,13 +52,4 @@ test-output.log
 .playwright-mcp
 
 # Ralph Wiggum loop planning files (not part of codebase)
-tasks.json
-progress.txt
-IMPLEMENTATION_PLAN.md
-RALPH_WIGGUM_LOOP_GUIDE.md
-COMMIT_POLICY.md
-GAP_ANALYSIS.md
-CUSTOM_TEST_ANALYSIS.md
-TEST_RESULTS.md
-vector_test_suite_loop.sh
-ralph_wiggum_loop.sh
+.ralph-wiggum/
