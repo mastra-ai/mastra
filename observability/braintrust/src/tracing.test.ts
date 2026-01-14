@@ -171,6 +171,7 @@ describe('BraintrustExporter', () => {
         type: 'task', // Default span type mapping for AGENT_RUN
         // No parentSpanIds for root spans!
         startTime: rootSpan.startTime.getTime() / 1000,
+        event: { id: 'root-span-id' }, // Row ID for logFeedback() compatibility
         metadata: {
           spanType: 'agent_run',
           agentId: 'agent-123',
@@ -256,6 +257,7 @@ describe('BraintrustExporter', () => {
         name: 'child-tool',
         type: 'tool', // TOOL_CALL maps to 'tool'
         startTime: childSpan.startTime.getTime() / 1000,
+        event: { id: 'child-span-id' }, // Row ID for logFeedback() compatibility
         metadata: {
           spanType: 'tool_call',
           toolId: 'calculator',
@@ -572,6 +574,7 @@ describe('BraintrustExporter', () => {
         // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
         output: { role: 'assistant', content: 'Hi there!' },
         startTime: llmSpan.startTime.getTime() / 1000,
+        event: { id: 'llm-span' }, // Row ID for logFeedback() compatibility
         metrics: {
           prompt_tokens: 10,
           completion_tokens: 5,
@@ -616,6 +619,7 @@ describe('BraintrustExporter', () => {
         name: 'simple-llm',
         type: 'llm',
         startTime: llmSpan.startTime.getTime() / 1000,
+        event: { id: 'minimal-llm' }, // Row ID for logFeedback() compatibility
         // No parentSpanIds for root spans!
         metadata: {
           spanType: 'model_generation',
@@ -1400,6 +1404,7 @@ describe('BraintrustExporter', () => {
         type: 'task',
         // No parentSpanIds for root spans!
         startTime: eventSpan.startTime.getTime() / 1000,
+        event: { id: 'event-span' }, // Row ID for logFeedback() compatibility
         output: { message: 'Great response!' },
         metadata: {
           spanType: 'generic',
@@ -1459,6 +1464,7 @@ describe('BraintrustExporter', () => {
         name: 'tool-result',
         type: 'task',
         startTime: childEventSpan.startTime.getTime() / 1000,
+        event: { id: 'child-event' }, // Row ID for logFeedback() compatibility
         output: { result: 42 },
         metadata: {
           spanType: 'generic',
@@ -2001,6 +2007,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'root-agent',
       type: 'task',
       startTime: rootSpan.startTime.getTime() / 1000,
+      event: { id: 'root-span-id' }, // Row ID for logFeedback() compatibility
       // No parentSpanIds for root spans!
       metadata: {
         spanType: 'agent_run',
@@ -2056,6 +2063,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'mastra-agent',
       type: 'task',
       startTime: rootSpan.startTime.getTime() / 1000,
+      event: { id: 'mastra-span-id' }, // Row ID for logFeedback() compatibility
       // When attaching to external span, parentSpanIds should be omitted
       // (checked by NOT having parentSpanIds in the call)
       metadata: {
@@ -2131,6 +2139,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'parent-agent',
       type: 'task',
       startTime: parentSpan.startTime.getTime() / 1000,
+      event: { id: 'parent-span-id' }, // Row ID for logFeedback() compatibility
       metadata: {
         spanType: 'agent_run',
         agentId: 'parent-agent',
@@ -2145,6 +2154,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'child-tool',
       type: 'tool',
       startTime: childSpan.startTime.getTime() / 1000,
+      event: { id: 'child-span-id' }, // Row ID for logFeedback() compatibility
       // No parentSpanIds in external context - startSpan() chain handles relationships
       metadata: {
         spanType: 'tool_call',
@@ -2253,6 +2263,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'test-agent',
       type: 'task',
       startTime: agentSpan.startTime.getTime() / 1000,
+      event: { id: 'agent-span-id' }, // Row ID for logFeedback() compatibility
       // No parentSpanIds in external context
       metadata: {
         spanType: 'agent_run',
@@ -2268,6 +2279,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'gpt-4-call',
       type: 'llm',
       startTime: llmSpan.startTime.getTime() / 1000,
+      event: { id: 'llm-span-id' }, // Row ID for logFeedback() compatibility
       metadata: {
         spanType: 'model_generation',
         model: 'gpt-4',
@@ -2282,6 +2294,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'calculator',
       type: 'tool',
       startTime: toolSpan.startTime.getTime() / 1000,
+      event: { id: 'tool-span-id' }, // Row ID for logFeedback() compatibility
       metadata: {
         spanType: 'tool_call',
         toolId: 'calc',

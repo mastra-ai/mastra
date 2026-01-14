@@ -215,6 +215,7 @@ export class BraintrustExporter extends TrackingExporter<
       name: span.name,
       type: mapSpanType(span.type),
       startTime: span.startTime.getTime() / 1000,
+      event: { id: span.id }, // Use Mastra span ID as Braintrust row ID for logFeedback() compatibility
       ...payload,
     });
   }
