@@ -19,9 +19,7 @@ export const WorkflowCard = ({ header, children, footer }: WorkflowCardProps) =>
           <ChevronDownIcon className={cn('text-neutral3 transition-transform -rotate-90', expanded && 'rotate-0')} />
         </Icon>
       </button>
-      {children && expanded && (
-        <div className="border-t border-border1 max-h-[400px] overflow-y-auto">{children}</div>
-      )}
+      {children && expanded && <div className="border-t border-border1 max-h-[400px] overflow-y-auto">{children}</div>}
       {footer && <div className="py-1 px-2 border-t border-border1">{footer}</div>}
     </div>
   );

@@ -1,14 +1,6 @@
 import type { Config } from 'tailwindcss';
 import defaultFont from 'tailwindcss/defaultTheme';
-import {
-  FontSizes,
-  LineHeights,
-  BorderColors,
-  Colors,
-  BorderRadius,
-  Spacings,
-  Sizes,
-} from './src/ds/tokens';
+import { FontSizes, LineHeights, BorderColors, Colors, BorderRadius, Spacings, Sizes } from './src/ds/tokens';
 import animate from 'tailwindcss-animate';
 import assistantUi from '@assistant-ui/react-ui/tailwindcss';
 import containerQueries from '@tailwindcss/container-queries';
