@@ -35,7 +35,7 @@ export interface ExecuteStepParams {
   workflowId: string;
   runId: string;
   resourceId?: string;
-  step: Step<string, any, any>;
+  step: Step<string, any, any, any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   executionContext: ExecutionContext;
   restart?: RestartExecutionParams;
@@ -287,7 +287,7 @@ export async function executeStep(
         tracingContext: { currentSpan: stepSpan },
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
-        suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
+        suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
             step,

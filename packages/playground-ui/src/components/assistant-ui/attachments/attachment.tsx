@@ -1,5 +1,3 @@
-'use client';
-
 import { AttachmentPrimitive, AttachmentState, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon, PaperclipIcon } from 'lucide-react';
@@ -129,11 +127,7 @@ export const ComposerAttachments = () => {
 export const ComposerAddAttachment = () => {
   return (
     <ComposerPrimitive.AddAttachment asChild>
-      <TooltipIconButton
-        className="my-2.5 size-8 p-2 transition-opacity ease-in"
-        tooltip="Add Attachment"
-        variant="ghost"
-      >
+      <TooltipIconButton className="my-2.5 size-8 p-2 transition-opacity ease-in" tooltip="Add Attachment">
         <PaperclipIcon />
       </TooltipIconButton>
     </ComposerPrimitive.AddAttachment>

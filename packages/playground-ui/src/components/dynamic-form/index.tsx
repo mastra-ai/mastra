@@ -1,5 +1,3 @@
-'use client';
-
 import { Loader2 } from 'lucide-react';
 import { useMemo, useRef, useCallback } from 'react';
 import { Button } from '../../ds/components/Button';

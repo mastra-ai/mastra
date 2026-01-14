@@ -910,7 +910,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
           }),
           expect.objectContaining({
             role: 'assistant',
-            content: expect.any(String),
+            content: [expect.objectContaining({ type: 'text' })],
           }),
         ]);
       } else {
@@ -977,86 +977,13 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
             type: 'function_call_output',
             output: expect.stringContaining(`It is currently 70 degrees and feels like 65 degrees.`),
           }),
-          expect.objectContaining({ role: 'assistant' }),
+          expect.objectContaining({ type: 'item_reference' }),
           expect.objectContaining({ role: 'user' }),
         ]);
       }
 
       expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
     }, 30_000);
-
-    it.skip('should include assistant messages in onFinish callback with aisdk format', async () => {
-      // NOTE: This test is skipped because format: 'aisdk' has been removed
-      const mockModel = new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
-            { type: 'text-delta', id: 'text-2', delta: 'Nice to meet you!' },
-            {
-              type: 'finish',
-              id: '3',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          warnings: [],
-        }),
-      });
-
-      const agent = new Agent({
-        id: 'test-aisdk-onfinish',
-        name: 'Test AISDK onFinish',
-        model: mockModel,
-        instructions: 'You are a helpful assistant.',
-      });
-
-      let messagesInOnFinish: any[] | undefined;
-      let hasUserMessage = false;
-      let hasAssistantMessage = false;
-
-      const result = await agent.stream('Hello, please respond with a greeting.', {
-        format: 'aisdk',
-        onFinish: props => {
-          // Store the messages from onFinish
-          messagesInOnFinish = props.messages;
-
-          if (props.messages) {
-            props.messages.forEach((msg: any) => {
-              if (msg.role === 'user') hasUserMessage = true;
-              if (msg.role === 'assistant') hasAssistantMessage = true;
-            });
-          }
-        },
-      });
-
-      // Consume the stream
-      await result.consumeStream();
-
-      // Verify that messages were provided in onFinish
-      expect(messagesInOnFinish).toBeDefined();
-      expect(messagesInOnFinish).toBeInstanceOf(Array);
-
-      // response messages should not be user messages
-      expect(hasUserMessage).toBe(false);
-      // Verify that we have assistant messages
-      expect(hasAssistantMessage).toBe(true);
-
-      // Verify the assistant message content
-      const assistantMessage = messagesInOnFinish?.find((m: any) => m.role === 'assistant');
-      expect(assistantMessage).toBeDefined();
-      expect(assistantMessage?.content).toBeDefined();
-
-      // For the v2 model, the assistant message should contain the streamed text
-      if (typeof assistantMessage?.content === 'string') {
-        expect(assistantMessage.content).toContain('Hello!');
-      } else if (Array.isArray(assistantMessage?.content)) {
-        const textContent = assistantMessage.content.find((c: any) => c.type === 'text');
-        expect(textContent?.text).toContain('Hello!');
-      }
-    });
   });
 }
 

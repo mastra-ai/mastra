@@ -37,7 +37,7 @@ import type { ZodLikeSchema } from '../types/zod-compat';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
@@ -48,7 +48,7 @@ export type { LLMStepResult } from '../stream/types';
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
+export type ToolsInput = Record<string, ToolAction<any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
 
 export type AgentInstructions = SystemMessage;
 export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
@@ -172,6 +172,31 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Default options used when calling `stream()` in vNext mode.
    */
   defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  /**
+   * Default options used when calling `network()`.
+   * These are merged with options passed to each network() call.
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   // ...
+   *   defaultNetworkOptions: {
+   *     maxSteps: 20,
+   *     routing: {
+   *       verboseIntrospection: true,
+   *     },
+   *     completion: {
+   *       scorers: [testsScorer, buildScorer],
+   *       strategy: 'all',
+   *     },
+   *     onIterationComplete: ({ iteration, isComplete }) => {
+   *       console.log(`Iteration ${iteration} complete: ${isComplete}`);
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  defaultNetworkOptions?: DynamicArgument<NetworkOptions>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */

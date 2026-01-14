@@ -105,12 +105,32 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Start a new span of a specific SpanType
+   *
+   * Sampling Decision:
+   * - For root spans (no parent): Perform sampling check using the configured strategy
+   * - For child spans: Inherit the sampling decision from the parent
+   *   - If parent is a NoOpSpan (not sampled), child is also a NoOpSpan
+   *   - If parent is a valid span (sampled), child is also sampled
+   *
+   * This ensures trace-level sampling: either all spans in a trace are sampled or none are.
+   * See: https://github.com/mastra-ai/mastra/issues/11504
    */
   startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType> {
     const { customSamplerOptions, requestContext, metadata, tracingOptions, ...rest } = options;
 
-    if (!this.shouldSample(customSamplerOptions)) {
-      return new NoOpSpan<TType>({ ...rest, metadata }, this);
+    // Determine sampling: inherit from parent or make new decision for root spans
+    if (options.parent) {
+      // Child span: inherit sampling decision from parent
+      // If parent is a NoOpSpan (not sampled), child should also be a NoOpSpan
+      if (!options.parent.isValid) {
+        return new NoOpSpan<TType>({ ...rest, metadata }, this);
+      }
+      // Parent is valid (sampled), so child will also be sampled - continue to create actual span
+    } else {
+      // Root span: perform sampling check
+      if (!this.shouldSample(customSamplerOptions)) {
+        return new NoOpSpan<TType>({ ...rest, metadata }, this);
+      }
     }
 
     // Compute or inherit TraceState

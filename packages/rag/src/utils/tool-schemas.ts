@@ -30,9 +30,6 @@ export const filterSchema = z.object({
   filter: z.coerce.string().describe(filterDescription),
 });
 
-export type RagTool<
-  TInput extends z.ZodType<any, z.ZodTypeDef, any> | undefined,
-  TOutput extends z.ZodType<any, z.ZodTypeDef, any> | undefined,
-> = Tool<TInput, TOutput> & {
-  execute: NonNullable<Tool<TInput, TOutput>['execute']>;
+export type RagTool<TInput, TOutput> = Tool<TInput, TOutput, any, any> & {
+  execute: NonNullable<Tool<TInput, TOutput, any, any>['execute']>;
 };

@@ -58,5 +58,9 @@ export function createSampleScore({
       name: 'Sample entity',
     },
     requestContext: {},
+    metadata: {
+      scorerVersion: '1.0.0',
+      customField: 'test-value',
+    },
   };
 }

@@ -298,6 +298,11 @@ const toolCallActionBodySchema = z.object({
   toolCallId: z.string(),
   format: z.string().optional(),
 });
+const networkToolCallActionBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  format: z.string().optional(),
+});
 
 /**
  * Body schema for approving tool call
@@ -308,6 +313,16 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
  * Body schema for declining tool call
  */
 export const declineToolCallBodySchema = toolCallActionBodySchema;
+
+/**
+ * Body schema for approving network tool call
+ */
+export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+
+/**
+ * Body schema for declining network tool call
+ */
+export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
 
 /**
  * Response schema for tool approval/decline

@@ -25,6 +25,8 @@ import {
 import type { DiscoveredWorkflowSchema } from './schema';
 import { restrictedTaskManager } from './tools';
 
+type WorkflowBuilderInputSchemaType = z.infer<typeof WorkflowBuilderInputSchema>;
+
 // Step 1: Always discover existing workflows
 const workflowDiscoveryStep = createStep({
   id: 'workflow-discovery',
@@ -527,7 +529,7 @@ export const workflowBuilderWorkflow = createWorkflow({
     workflowDiscoveryStep,
     projectDiscoveryStep,
     workflowResearchStep,
-    planningAndApprovalWorkflow,
+    planningAndApprovalWorkflow as any,
     taskExecutionStep,
   ],
 })
@@ -539,7 +541,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   .then(workflowResearchStep)
   // Map research result to planning input format
   .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData();
+    const initData = getInitData<WorkflowBuilderInputSchemaType>();
     const discoveryResult = getStepResult(workflowDiscoveryStep);
     const projectResult = getStepResult(projectDiscoveryStep);
     // const researchResult = getStepResult(workflowResearchStep);
@@ -558,25 +560,25 @@ export const workflowBuilderWorkflow = createWorkflow({
     };
   })
   // Step 4: Planning and Approval Sub-workflow (loops until approved)
-  .dountil(planningAndApprovalWorkflow, async ({ inputData }) => {
+  .dountil(planningAndApprovalWorkflow as any, async ({ inputData }) => {
     // Continue looping until user approves the task list
     console.info(`Sub-workflow check: approved=${inputData.approved}`);
     return inputData.approved === true;
   })
   // Map sub-workflow result to task execution input
   .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData();
+    const initData = getInitData<WorkflowBuilderInputSchemaType>();
     const discoveryResult = getStepResult(workflowDiscoveryStep);
     const projectResult = getStepResult(projectDiscoveryStep);
     // const researchResult = getStepResult(workflowResearchStep);
-    const subWorkflowResult = getStepResult(planningAndApprovalWorkflow);
+    const subWorkflowResult = getStepResult(planningAndApprovalWorkflow as any);
 
     return {
       action: initData.action,
       workflowName: initData.workflowName,
       description: initData.description,
       requirements: initData.requirements,
-      tasks: subWorkflowResult.tasks,
+      tasks: (subWorkflowResult as any).tasks,
       discoveredWorkflows: discoveryResult.workflows,
       projectStructure: projectResult,
       // research: researchResult,

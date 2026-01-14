@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
-import { MessageList } from '../../agent/message-list';
+import { coreContentToString } from '../../agent/message-list';
+import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
@@ -11,7 +12,6 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
-import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -76,7 +76,6 @@ type DelayedPromises<OUTPUT extends OutputSchema = undefined> = {
 
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
-  #aisdkv5: AISDKV5OutputStream<OUTPUT>;
   #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
@@ -266,6 +265,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
+                    createSpan: true,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
@@ -659,9 +659,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   // Get text from the latest response message (the last assistant message)
                   const responseMessages = self.messageList.get.response.aiV4.core();
                   const lastResponseMessage = responseMessages[responseMessages.length - 1];
-                  const outputText = lastResponseMessage
-                    ? MessageList.coreContentToString(lastResponseMessage.content)
-                    : '';
+                  const outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct
@@ -747,7 +745,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
                   providerMetadata: baseFinishStep.providerMetadata,
-                  text: baseFinishStep.text,
+                  text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
@@ -867,16 +865,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         },
       }),
     );
-
-    this.#aisdkv5 = new AISDKV5OutputStream({
-      modelOutput: this,
-      messageList,
-      options: {
-        toolCallStreaming: options?.toolCallStreaming,
-        structuredOutput: options?.structuredOutput,
-        tracingContext: options?.tracingContext,
-      },
-    });
 
     if (initialState) {
       this.deserializeState(initialState);
@@ -1140,6 +1128,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       traceId: this.traceId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
+      // All messages from this execution (input + memory history + response)
+      messages: this.messageList.get.all.db(),
+      // Only messages loaded from memory (conversation history)
+      rememberedMessages: this.messageList.get.remembered.db(),
     };
 
     return fullOutput;
@@ -1162,18 +1154,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   get content(): Promise<LLMStepResult['content']> {
     return this.#getDelayedPromise(this.#delayedPromises.content);
-  }
-
-  /**
-   * Other output stream formats.
-   */
-  get aisdk() {
-    return {
-      /**
-       * The AI SDK v5 output stream format.
-       */
-      v5: this.#aisdkv5,
-    };
   }
 
   /**

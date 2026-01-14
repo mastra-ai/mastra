@@ -6,6 +6,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z, ZodType } from 'zod';
 import { Txt } from '@/ds/components/Txt';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ToolExecutor } from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
@@ -133,7 +134,14 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   // Show loading/error only on initial load, not during refetches
   if (!stableTool) {
-    if (isLoading) return null;
+    if (isLoading) {
+      return (
+        <div className="p-6">
+          <Skeleton className="h-8 w-48 mb-4" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      );
+    }
     if (error) return null;
     return (
       <div className="py-12 text-center px-6">

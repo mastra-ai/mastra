@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.1.0-beta.19",
+  "version": "0.1.0-beta.21",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -53,7 +53,8 @@
   },
   "peerDependencies": {
     "react": ">=19.0.0",
-    "react-dom": ">=19.0.0"
+    "react-dom": ">=19.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/react": "^2.0.57",
@@ -67,16 +68,17 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
-    "eslint-plugin-storybook": "^9.1.12",
+    "eslint-plugin-storybook": "^10.1.11",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "rollup-plugin-node-externals": "^8.0.1",
     "storybook": "^9.1.10",
     "tailwindcss": "^4",
     "typescript": "catalog:",
-    "vite": "^7.1.9",
+    "vite": "^7.3.0",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "^3.25.0"
   },
   "eslintConfig": {
     "extends": [

@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Txt } from '@/ds/components/Txt';
-import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { TooltipIconButton } from '../../tooltip-icon-button';
 import { Share2 } from 'lucide-react';
 import { useState } from 'react';
@@ -17,8 +17,7 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
 
   if (input) {
     try {
-      inputSlot =
-        typeof input === 'object' ? <SyntaxHighlighter data={input} /> : <SyntaxHighlighter data={JSON.parse(input)} />;
+      inputSlot = typeof input === 'object' ? <CodeEditor data={input} /> : <CodeEditor data={JSON.parse(input)} />;
     } catch {
       inputSlot = <pre className="whitespace-pre-wrap">{input as string}</pre>;
     }

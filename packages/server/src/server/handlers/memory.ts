@@ -363,7 +363,9 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         }
       }
 
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
+      // Return empty messages when memory is not configured (Issue #11765)
+      // This allows the playground UI to gracefully handle agents without memory
+      return { messages: [], uiMessages: [] };
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }

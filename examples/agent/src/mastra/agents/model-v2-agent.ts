@@ -15,6 +15,7 @@ import {
 } from '../workflows/content-moderation';
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
+import { createScorer } from '@mastra/core/evals';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -22,23 +23,18 @@ export const weatherInfo = createTool({
   suspendSchema: z.object({
     message: z.string(),
   }),
+  inputSchema: z.object({
+    city: z.string(),
+  }),
   requestContextSchema: z.object({
     userId: z.string(),
   }),
-  resumeSchema: z.object({
-    city: z.string(),
-  }),
-  execute: async (_inputData, context) => {
+  execute: async (inputData, context) => {
     // Access validated userId from request context
     const userId = context?.requestContext?.get('userId');
     console.log('[weatherInfo] Processing request for user:', userId);
-    if (!context?.agent?.resumeData) {
-      return context?.agent?.suspend({
-        message: 'What city do you want to know the weather for?',
-      });
-    }
     return {
-      city: context?.agent?.resumeData?.city,
+      city: inputData.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -140,6 +136,8 @@ const weatherAgent = new Agent({
   },
 });
 
+let count = 1;
+
 export const networkAgent = new Agent({
   id: 'network-agent',
   name: 'Chef Network',
@@ -150,13 +148,37 @@ export const networkAgent = new Agent({
   agents: {
     weatherAgent,
   },
-  // workflows: {
-  //   myWorkflow,
-  // },
+  workflows: {
+    myWorkflow,
+    findUserWorkflow,
+  },
   // tools: {
   //   weatherInfo,
   // },
   memory,
+  defaultNetworkOptions: {
+    autoResumeSuspendedTools: true,
+    completion: {
+      scorers: [
+        createScorer({
+          id: 'scorer12',
+          name: 'My Scorer 2',
+          description: 'Scorer 2',
+        }).generateScore(() => {
+          return 1;
+        }),
+        createScorer({
+          id: 'scorer15',
+          name: 'My Scorer 5',
+          description: 'Scorer 5',
+        }).generateScore(() => {
+          count++;
+          return count > 2 ? 1 : 0.7;
+        }),
+      ],
+      strategy: 'all',
+    },
+  },
 });
 
 // =============================================================================

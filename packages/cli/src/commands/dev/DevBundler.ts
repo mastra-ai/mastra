@@ -16,6 +16,8 @@ export class DevBundler extends Bundler {
   constructor(customEnvFile?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -47,8 +49,8 @@ export class DevBundler extends Bundler {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-    await fsExtra.copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+    const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
       overwrite: true,
     });
   }
@@ -67,7 +69,7 @@ export class DevBundler extends Bundler {
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
-      'node',
+      this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },

@@ -69,7 +69,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       validateInputs: false,
     },
   })
-    .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
+    .dowhile(agenticExecutionWorkflow as any, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 

@@ -13,9 +13,9 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   onSuccess: async () => {
-    const playgroundPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
+    const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
 
-    await copy(join(playgroundPath, 'dist'), 'dist/playground');
+    await copy(join(studioPath, 'dist'), join('dist', 'studio'));
     await generateTypes(process.cwd());
   },
 });

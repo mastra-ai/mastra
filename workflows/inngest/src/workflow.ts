@@ -13,7 +13,6 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
-import type { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
@@ -28,10 +27,10 @@ export class InngestWorkflow<
   TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TPrevSchema extends z.ZodType<any> = TInput,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
+  TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
@@ -114,25 +113,25 @@ export class InngestWorkflow<
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
-      this.runs.get(runIdToUse) ??
-      new InngestRun(
-        {
-          workflowId: this.id,
-          runId: runIdToUse,
-          resourceId: options?.resourceId,
-          executionEngine: this.executionEngine,
-          executionGraph: this.executionGraph,
-          serializedStepGraph: this.serializedStepGraph,
-          mastra: this.#mastra,
-          retryConfig: this.retryConfig,
-          cleanup: () => this.runs.delete(runIdToUse),
-          workflowSteps: this.steps,
-          workflowEngineType: this.engineType,
-          validateInputs: this.options.validateInputs,
-        },
-        this.inngest,
-      );
+    const existingInMemoryRun = this.runs.get(runIdToUse);
+    const newRun = new InngestRun<TEngineType, TSteps, TState, TInput, TOutput>(
+      {
+        workflowId: this.id,
+        runId: runIdToUse,
+        resourceId: options?.resourceId,
+        executionEngine: this.executionEngine,
+        executionGraph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        mastra: this.#mastra,
+        retryConfig: this.retryConfig,
+        cleanup: () => this.runs.delete(runIdToUse),
+        workflowSteps: this.steps,
+        workflowEngineType: this.engineType,
+        validateInputs: this.options.validateInputs,
+      },
+      this.inngest,
+    );
+    const run = (existingInMemoryRun ?? newRun) as Run<TEngineType, TSteps, TState, TInput, TOutput>;
 
     this.runs.set(runIdToUse, run);
 
@@ -141,12 +140,12 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
+    const existingStoredRun = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 
     // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+    const existsInStorage = existingStoredRun && !existingStoredRun.isFromInMemory;
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -190,6 +189,7 @@ export class InngestWorkflow<
       { cron: this.cronConfig?.cron ?? '' },
       async () => {
         const run = await this.createRun();
+        // @ts-ignore
         const result = await run.start({
           inputData: this.cronConfig?.inputData,
           initialState: this.cronConfig?.initialState,
@@ -231,12 +231,11 @@ export class InngestWorkflow<
         // Create InngestPubSub instance with the publish function from Inngest context
         const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
+        // Create requestContext before execute so we can reuse it in finalize
+        const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
+
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
-        const result = await engine.execute<
-          z.infer<TState>,
-          z.infer<TInput>,
-          WorkflowResult<TState, TInput, TOutput, TSteps>
-        >({
+        const result = await engine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
           workflowId: this.id,
           runId,
           resourceId,
@@ -246,7 +245,7 @@ export class InngestWorkflow<
           initialState,
           pubsub,
           retryConfig: this.retryConfig,
-          requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
+          requestContext,
           resume,
           timeTravel,
           perStep,
@@ -274,7 +273,19 @@ export class InngestWorkflow<
             // Invoke lifecycle callbacks (onFinish and onError)
             // Use invokeLifecycleCallbacksInternal to call the real implementation
             // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
-            await engine.invokeLifecycleCallbacksInternal(result as any);
+            await engine.invokeLifecycleCallbacksInternal({
+              status: result.status,
+              result: 'result' in result ? result.result : undefined,
+              error: 'error' in result ? result.error : undefined,
+              steps: result.steps,
+              tripwire: 'tripwire' in result ? result.tripwire : undefined,
+              runId,
+              workflowId: this.id,
+              resourceId,
+              input: inputData,
+              requestContext,
+              state: result.state ?? initialState ?? {},
+            });
           }
 
           // Throw NonRetriableError if failed to ensure Inngest marks the run as failed

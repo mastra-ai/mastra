@@ -120,7 +120,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'working-memory-template-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         // Create memory instance with working memory enabled
@@ -241,7 +241,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           }),
           vector: new LibSQLVector({
             id: 'disabled-working-memory-vector',
-            connectionUrl: `file:${dbPath}`,
+            url: `file:${dbPath}`,
           }),
           embedder: openai.embedding('text-embedding-3-small'),
           options: {
@@ -647,7 +647,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           });
           vector = new LibSQLVector({
             id: 'schema-working-memory-vector',
-            connectionUrl: `file:${dbPath}`,
+            url: `file:${dbPath}`,
           });
 
           memory = new Memory({
@@ -826,7 +826,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'jsonschema7-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         const jsonSchema: JSONSchema7 = {
@@ -1065,7 +1065,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'resource-scoped-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         // Create memory instance with resource-scoped working memory enabled
@@ -1426,7 +1426,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'thread-scoped-metadata-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         // Create memory instance with thread-scoped working memory
@@ -1568,7 +1568,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'agent-network-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
       });
 
@@ -1684,7 +1684,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     return textChunks
       .map(c => {
         if (c.type === 'agent-execution-event-text-delta') {
-          return c.payload?.payload?.textDelta || '';
+          return c.payload?.payload?.textDelta || c.payload?.payload?.text || '';
         }
         if (c.type === 'routing-agent-text-delta') {
           return c.payload?.text || '';

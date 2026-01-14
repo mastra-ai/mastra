@@ -33,6 +33,8 @@ import {
   modelConfigIdPathParams,
   enhanceInstructionsBodySchema,
   enhanceInstructionsResponseSchema,
+  approveNetworkToolCallBodySchema,
+  declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -911,6 +913,74 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       return streamResult;
     } catch (error) {
       return handleError(error, 'error streaming agent loop response');
+    }
+  },
+});
+
+export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/approve-network-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveNetworkToolCallBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Approve network tool call',
+  description: 'Approves a pending network tool call and continues network agent execution',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.approveNetworkToolCall({
+        ...params,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error approving network tool call');
+    }
+  },
+});
+
+export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/decline-network-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineNetworkToolCallBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Decline network tool call',
+  description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.declineNetworkToolCall({
+        ...params,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error declining network tool call');
     }
   },
 });
