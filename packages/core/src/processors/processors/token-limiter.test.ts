@@ -642,17 +642,18 @@ describe('TokenLimiterProcessor', () => {
       expect(result.some(m => m.id === 'message-1')).toBe(false);
     });
 
-    it('should handle empty messages array', async () => {
+    it('should throw TripWire for empty messages array', async () => {
       const processor = new TokenLimiterProcessor({
         limit: 1000,
       });
 
-      const result = await processor.processInput({
-        messages: [],
-        abort: mockAbort,
-        requestContext: new RequestContext(),
-      });
-      expect(result).toEqual([]);
+      await expect(
+        processor.processInput({
+          messages: [],
+          abort: mockAbort,
+          requestContext: new RequestContext(),
+        }),
+      ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
     });
 
     it('should handle system messages correctly', async () => {

@@ -3,6 +3,7 @@ import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputArgs, ProcessInputResult, Processor } from '../index';
 
@@ -81,9 +82,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     const messages = messageList?.get.all.db() ?? args.messages;
     const limit = this.maxTokens;
 
-    // If no messages or empty array, return as-is
+    // If no messages or empty array, throw TripWire - can't send LLM a request with no messages
     if (!messages || messages.length === 0) {
-      return messageList ?? messages;
+      throw new TripWire('TokenLimiterProcessor: No messages to process. Cannot send LLM a request with no messages.', {
+        retry: false,
+      });
     }
 
     // Calculate token count for system messages (always included, never filtered)
@@ -91,7 +94,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     let systemTokens = 0;
     if (coreSystemMessages && coreSystemMessages.length > 0) {
       for (const msg of coreSystemMessages) {
-        systemTokens += this.countCoreMessageTokens(msg);
+        systemTokens += this.countCoreSystemMessageTokens(msg);
       }
     }
 
@@ -145,20 +148,18 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
   }
 
   /**
-   * Count tokens for a CoreMessageV4 (system messages from args.systemMessages)
+   * Count tokens for a system message (CoreMessageV4 from args.systemMessages).
+   * This method only accepts system messages and will throw if called with other message types.
    */
-  private countCoreMessageTokens(message: CoreMessageV4): number {
-    let tokenString = message.role;
-
-    if (typeof message.content === 'string') {
-      tokenString += message.content;
-    } else if (Array.isArray(message.content)) {
-      for (const part of message.content) {
-        if ('text' in part && typeof part.text === 'string') {
-          tokenString += part.text;
-        }
-      }
+  private countCoreSystemMessageTokens(message: CoreMessageV4): number {
+    if (message.role !== 'system') {
+      throw new Error(
+        `countCoreSystemMessageTokens can only be used with system messages, received role: ${message.role}`,
+      );
     }
+
+    // System messages in the AI SDK always have string content
+    const tokenString = message.role + message.content;
 
     return this.encoder.encode(tokenString).length + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
