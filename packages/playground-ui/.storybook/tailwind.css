@@ -1,5 +1,5 @@
-@tailwind base;
 @import '../src/index.css';
+@tailwind base;
 @tailwind utilities;
 
 :root {
