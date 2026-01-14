@@ -13,7 +13,7 @@ const meta: Meta<typeof MainSidebar> = {
           <div className="flex h-[500px] bg-surface1 border border-border1 rounded-lg overflow-hidden">
             <Story />
             <div className="flex-1 p-4">
-              <p className="text-icon5">Main content area</p>
+              <p className="text-neutral5">Main content area</p>
             </div>
           </div>
         </MainSidebarProvider>

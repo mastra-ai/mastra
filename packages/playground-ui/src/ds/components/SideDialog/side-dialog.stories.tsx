@@ -43,8 +43,8 @@ const SideDialogDemo = ({
         </SideDialog.Top>
         <SideDialog.Content>
           <div className="p-6">
-            <p className="text-icon5">This is the side dialog content area.</p>
-            <p className="text-icon3 mt-2">You can put any content here.</p>
+            <p className="text-neutral5">This is the side dialog content area.</p>
+            <p className="text-neutral3 mt-2">You can put any content here.</p>
           </div>
         </SideDialog.Content>
       </SideDialog>
@@ -84,15 +84,15 @@ const SideDialogWithCodeDemo = () => {
         <SideDialog.Content>
           <div className="p-6 space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-icon6 mb-2">Configuration</h3>
+              <h3 className="text-sm font-medium text-neutral6 mb-2">Configuration</h3>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-icon3">Model</span>
-                  <span className="text-icon5">GPT-4</span>
+                  <span className="text-neutral3">Model</span>
+                  <span className="text-neutral5">GPT-4</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-icon3">Temperature</span>
-                  <span className="text-icon5">0.7</span>
+                  <span className="text-neutral3">Temperature</span>
+                  <span className="text-neutral5">0.7</span>
                 </div>
               </div>
             </div>
@@ -130,8 +130,8 @@ const ConfirmationDialogDemo = () => {
       >
         <SideDialog.Content>
           <div className="p-6 flex flex-col items-center justify-center h-full">
-            <h3 className="text-lg font-medium text-icon6 mb-2">Confirm deletion?</h3>
-            <p className="text-sm text-icon3 mb-6 text-center">
+            <h3 className="text-lg font-medium text-neutral6 mb-2">Confirm deletion?</h3>
+            <p className="text-sm text-neutral3 mb-6 text-center">
               This action cannot be undone. The agent will be permanently deleted.
             </p>
             <div className="flex gap-2">

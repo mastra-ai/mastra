@@ -17,7 +17,7 @@ export function ElementSelect({ name, onChange, value, options, placeholder }: S
       <SelectContent>
         {(options || []).map((option, idx) => (
           <SelectItem key={option} value={`${idx}`}>
-            <div className="flex items-center gap-2 [&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:text-icon3">
+            <div className="flex items-center gap-2 [&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:text-neutral3">
               {option}
             </div>
           </SelectItem>

@@ -13,7 +13,7 @@ export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> 
 
 export const Cell = ({ className, children, ...props }: CellProps) => {
   return (
-    <td className={clsx('text-icon5 first:pl-5 last:pr-5', className)} {...props}>
+    <td className={clsx('text-neutral5 first:pl-5 last:pr-5', className)} {...props}>
       <div className={clsx('flex h-full w-full shrink-0 items-center')}>{children}</div>
     </td>
   );
@@ -39,7 +39,7 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
   return (
     <Cell {...props}>
       <div className="shrink-0">
-        <Txt as="span" variant="ui-sm" className="text-icon3">
+        <Txt as="span" variant="ui-sm" className="text-neutral3">
           {day}
         </Txt>{' '}
         <Txt as="span" variant="ui-md">
@@ -62,17 +62,17 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
     <Cell {...props}>
       <div className="flex items-center gap-[14px]">
         {icon && (
-          <Icon size="lg" className="text-icon5">
+          <Icon size="lg" className="text-neutral5">
             {icon}
           </Icon>
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="text-icon6 font-medium !leading-tight">
+          <Txt as="span" variant="ui-md" className="text-neutral6 font-medium !leading-tight">
             {name}
           </Txt>
           {description && (
-            <Txt as="span" variant="ui-xs" className="text-icon3 w-full max-w-[300px] truncate !leading-tight">
+            <Txt as="span" variant="ui-xs" className="text-neutral3 w-full max-w-[300px] truncate !leading-tight">
               {description}
             </Txt>
           )}

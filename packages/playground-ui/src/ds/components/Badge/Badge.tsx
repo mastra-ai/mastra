@@ -11,7 +11,7 @@ export interface BadgeProps {
 }
 
 const variantClasses = {
-  default: 'text-icon3',
+  default: 'text-neutral3',
   success: 'text-accent1',
   error: 'text-accent2',
   info: 'text-accent3',
@@ -23,7 +23,7 @@ export const Badge = ({ icon, variant = 'default', className, children, ...props
       className={clsx(
         'font-mono bg-surface4 text-ui-sm gap-md h-badge-default inline-flex items-center rounded-md shrink-0',
         icon ? 'pl-md pr-1.5' : 'px-1.5',
-        icon || variant === 'default' ? 'text-icon5' : variantClasses[variant],
+        icon || variant === 'default' ? 'text-neutral5' : variantClasses[variant],
         className,
       )}
       {...props}

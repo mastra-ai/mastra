@@ -107,7 +107,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
-              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
@@ -192,12 +192,12 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">
+          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Cancel
           </button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">
+          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Send
           </button>
         </ComposerPrimitive.Send>

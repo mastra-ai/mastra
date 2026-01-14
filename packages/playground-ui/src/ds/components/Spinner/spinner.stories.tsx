@@ -54,7 +54,7 @@ export const Large: Story = {
 
 export const InButton: Story = {
   render: () => (
-    <button className="flex items-center gap-2 px-4 py-2 bg-surface2 border border-border1 rounded-md text-icon6">
+    <button className="flex items-center gap-2 px-4 py-2 bg-surface2 border border-border1 rounded-md text-neutral6">
       <Spinner className="h-4 w-4" />
       Loading...
     </button>

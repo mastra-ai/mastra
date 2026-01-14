@@ -610,7 +610,7 @@ export const AgentMetadataModelSwitcher = ({
                   <Loader2 className="h-4 w-4 animate-spin mx-auto" />
                 </div>
               ) : filteredModels.length === 0 ? (
-                <div className="p-4 text-center text-sm text-icon3">No models found</div>
+                <div className="p-4 text-center text-sm text-neutral3">No models found</div>
               ) : (
                 filteredModels.map((model, index) => {
                   const isHighlighted = index === highlightedModelIndex;
@@ -693,7 +693,7 @@ export const AgentMetadataModelSwitcher = ({
       {infoMsg && (
         <div
           className={cn(
-            'text-[0.75rem] text-icon3 flex gap-[.5rem] mt-[0.5rem] ml-[.5rem]',
+            'text-[0.75rem] text-neutral3 flex gap-[.5rem] mt-[0.5rem] ml-[.5rem]',
             '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-[0.1rem]',
           )}
         >

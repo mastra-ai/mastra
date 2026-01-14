@@ -40,9 +40,9 @@ export function SelectField({
       )}
     >
       {label && (
-        <label className={cn('text-[0.8125rem] text-icon3 flex justify-between items-center shrink-0')}>
+        <label className={cn('text-[0.8125rem] text-neutral3 flex justify-between items-center shrink-0')}>
           {label}
-          {required && <i className="text-icon2">(required)</i>}
+          {required && <i className="text-neutral2">(required)</i>}
         </label>
       )}
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
@@ -63,7 +63,7 @@ export function SelectField({
           ))}
         </SelectContent>
       </Select>
-      {helpMsg && <p className="text-icon3 text-[0.75rem]">{helpMsg}</p>}
+      {helpMsg && <p className="text-neutral3 text-[0.75rem]">{helpMsg}</p>}
     </div>
   );
 }

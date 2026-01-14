@@ -7,7 +7,7 @@ export const WorkflowRunOptions = () => {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
   return (
     <>
-      <Txt as="h3" variant="ui-md" className="text-icon3">
+      <Txt as="h3" variant="ui-md" className="text-neutral3">
         Debug Mode
       </Txt>
 

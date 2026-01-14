@@ -43,7 +43,7 @@ export function Notification({
   return (
     <div
       className={cn(
-        'grid grid-cols-[1fr_auto] gap-[0.5rem] rounded-lg bg-white/5 p-[1.5rem] py-[1rem] text-[0.875rem] text-icon3 items-center',
+        'grid grid-cols-[1fr_auto] gap-[0.5rem] rounded-lg bg-white/5 p-[1.5rem] py-[1rem] text-[0.875rem] text-neutral3 items-center',
         {
           'bg-red-900/10 border border-red-900': type === 'error',
         },

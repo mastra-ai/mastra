@@ -35,7 +35,7 @@ export function CodeDisplay({
             </span>
           )}
           {onCopy && (
-            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-surface4 text-icon4 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-surface4 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
               Click to copy
             </span>
           )}

@@ -37,7 +37,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
           aria-current={isCurrent ? 'page' : undefined}
           className={clsx(
             'text-ui-lg leading-ui-lg font-medium flex items-center gap-2',
-            isCurrent ? 'text-white' : 'text-icon3',
+            isCurrent ? 'text-white' : 'text-neutral3',
             className,
           )}
           {...props}
@@ -46,7 +46,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">
-          <Icon className="text-icon3">
+          <Icon className="text-neutral3">
             <SlashIcon />
           </Icon>
         </li>

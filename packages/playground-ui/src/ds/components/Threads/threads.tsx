@@ -73,7 +73,7 @@ export const ThreadDeleteButton = ({ onClick }: ThreadDeleteButtonProps) => {
       onClick={onClick}
     >
       <Icon>
-        <X aria-label="delete thread" className="text-icon3" />
+        <X aria-label="delete thread" className="text-neutral3" />
       </Icon>
     </Button>
   );

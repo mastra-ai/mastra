@@ -61,7 +61,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
           </ThreadItem>
 
           {actualRuns.length === 0 && (
-            <Txt variant="ui-md" className="text-icon3 py-3 px-5">
+            <Txt variant="ui-md" className="text-neutral3 py-3 px-5">
               Your run history will appear here once you run the workflow
             </Txt>
           )}
@@ -74,7 +74,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                     <WorkflowRunStatusBadge status={run.snapshot.status} />
                   </div>
                 )}
-                <span className="truncate max-w-32 text-icon3">{run.runId}</span>
+                <span className="truncate max-w-32 text-neutral3">{run.runId}</span>
                 <span>
                   {typeof run?.snapshot === 'string'
                     ? ''
@@ -135,7 +135,7 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
 
   if (status === 'canceled') {
     return (
-      <Badge variant="default" icon={<CircleSlash className="text-icon3" />}>
+      <Badge variant="default" icon={<CircleSlash className="text-neutral3" />}>
         {status}
       </Badge>
     );
@@ -143,7 +143,7 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
 
   if (status === 'pending' || status === 'waiting') {
     return (
-      <Badge variant="default" icon={<Clock className="text-icon3" />}>
+      <Badge variant="default" icon={<Clock className="text-neutral3" />}>
         {status}
       </Badge>
     );

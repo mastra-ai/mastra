@@ -100,7 +100,7 @@ export const TxtEntry = ({ data }: TxtEntryProps) => {
   return (
     <>
       <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
-        <FileText className="text-icon3" />
+        <FileText className="text-neutral3" />
       </button>
       <TxtPreviewDialog data={formattedContent} open={open} onOpenChange={setOpen} />
     </>
