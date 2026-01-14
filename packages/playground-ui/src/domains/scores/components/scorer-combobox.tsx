@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/components/ui/combobox';
+import { Combobox } from '@/ds/components/Combobox';
 import { useScorers } from '../hooks/use-scorers';
 import { useLinkComponent } from '@/lib/framework';
 

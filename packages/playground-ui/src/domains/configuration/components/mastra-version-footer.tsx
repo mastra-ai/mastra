@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates, type PackageUpdateInfo } from '../hooks/use-package-updates';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { SelectField } from '@/components/ui/elements/form-fields/select-field';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { SelectField } from '@/ds/components/FormFields';
 
 export interface MastraVersionFooterProps {
   collapsed?: boolean;
@@ -71,7 +71,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
             </Txt>
           </div>
           <div className="flex items-center gap-2">
-            <Txt as="span" variant="ui-sm" className="text-icon3 font-mono">
+            <Txt as="span" variant="ui-sm" className="text-neutral3 font-mono">
               {mainVersion}
             </Txt>
             {isLoadingUpdates && <Spinner className="w-3 h-3" color="currentColor" />}
@@ -170,9 +170,9 @@ const PackagesModalContent = ({
       </DialogHeader>
 
       {/* Status summary */}
-      <div className="text-sm text-icon3 py-2">
+      <div className="text-sm text-neutral3 py-2">
         {isLoadingUpdates ? (
-          <span className="text-icon3">Checking for updates...</span>
+          <span className="text-neutral3">Checking for updates...</span>
         ) : !hasUpdates ? (
           <span className="text-accent1">✓ All packages are up to date</span>
         ) : (
@@ -209,7 +209,7 @@ const PackagesModalContent = ({
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
               </div>
-              <div className="py-2 px-3 font-mono text-icon3 flex items-center gap-1.5">
+              <div className="py-2 px-3 font-mono text-neutral3 flex items-center gap-1.5">
                 {pkg.isOutdated || pkg.isDeprecated ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -232,10 +232,10 @@ const PackagesModalContent = ({
                   <span>{pkg.version}</span>
                 )}
               </div>
-              <div className="py-2 px-3 font-mono text-icon3 flex items-center">
+              <div className="py-2 px-3 font-mono text-neutral3 flex items-center">
                 {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                   <>
-                    <MoveRight className="w-4 h-4 mx-2 text-icon3" />
+                    <MoveRight className="w-4 h-4 mx-2 text-neutral3" />
                     <span className="text-accent1">{pkg.latestVersion}</span>
                   </>
                 )}
@@ -248,7 +248,7 @@ const PackagesModalContent = ({
       {/* Copy current versions button - always visible */}
       <button
         onClick={handleCopyAll}
-        className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-icon3 hover:text-icon1 transition-colors"
+        className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-neutral3 hover:text-neutral1 transition-colors"
       >
         {isCopiedAll ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
         <Txt as="span" variant="ui-sm">
@@ -259,7 +259,7 @@ const PackagesModalContent = ({
       {/* Update command section */}
       {hasUpdates && updateCommand && (
         <div className="space-y-3 pt-2 border-t border-border1">
-          <div className="flex items-center gap-2 text-sm text-icon3 pt-3">
+          <div className="flex items-center gap-2 text-sm text-neutral3 pt-3">
             <Info className="w-4 h-4" />
             <span>Use the command below to update your packages</span>
           </div>
@@ -276,14 +276,14 @@ const PackagesModalContent = ({
               ]}
             />
 
-            <pre className="flex-1 text-sm text-icon3 bg-surface2 rounded-md px-3 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
+            <pre className="flex-1 text-sm text-neutral3 bg-surface2 rounded-md px-3 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
               {updateCommand}
             </pre>
           </div>
 
           <button
             onClick={handleCopyCommand}
-            className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-icon3 hover:text-icon1 transition-colors"
+            className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-neutral3 hover:text-neutral1 transition-colors"
           >
             {isCopiedCommand ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
             <Txt as="span" variant="ui-sm">

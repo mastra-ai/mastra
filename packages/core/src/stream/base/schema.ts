@@ -4,6 +4,7 @@ import { isZodType } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import type { ZodLikeSchema } from '../../types/zod-compat';
 
 export type PartialSchemaOutput<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined
   ? undefined
@@ -27,6 +28,9 @@ export type OutputSchema<OBJECT = any> =
   | Schema<OBJECT>
   | JSONSchema7
   | undefined;
+
+export type InferZodLikeSchema<T> = T extends { parse: (data: unknown) => infer U } ? U : any;
+export type SchemaWithValidation<OBJECT = any> = ZodLikeSchema<OBJECT>;
 
 export type ZodLikePartialSchema<T = any> = (
   | z4.core.$ZodType<Partial<T>, any> // Zod v4 partial schema

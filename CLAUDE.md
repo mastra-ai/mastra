@@ -116,6 +116,10 @@ Follow `.cursor/rules/writing-documentation.mdc`:
 - Focus on technical details rather than benefits
 - Write for engineers, not marketing
 
+### Changeset Writing
+
+Changelogs are authored via changesets in the `.changeset/` folder. Follow the `.claude/commands/changeset.md` guidelines for creating changesets.
+
 ### Monorepo Management
 
 - Use pnpm (v9.7.0+) for package management

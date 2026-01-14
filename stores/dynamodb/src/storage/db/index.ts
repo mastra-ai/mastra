@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../../entities';
+import type { DynamoDBTtlConfig } from '../index';
 
 /**
  * Configuration for standalone domain usage.
@@ -16,6 +17,10 @@ export type DynamoDBDomainConfig = DynamoDBDomainServiceConfig | DynamoDBDomainR
  */
 export interface DynamoDBDomainServiceConfig {
   service: Service<Record<string, any>>;
+  /**
+   * TTL configuration for automatic data expiration.
+   */
+  ttl?: DynamoDBTtlConfig;
 }
 
 /**
@@ -29,16 +34,28 @@ export interface DynamoDBDomainRestConfig {
     accessKeyId: string;
     secretAccessKey: string;
   };
+  /**
+   * TTL configuration for automatic data expiration.
+   */
+  ttl?: DynamoDBTtlConfig;
 }
 
 /**
- * Resolves DynamoDBDomainConfig to an ElectroDB service.
+ * Resolved DynamoDB config with service and TTL settings.
+ */
+export interface ResolvedDynamoDBConfig {
+  service: Service<Record<string, any>>;
+  ttl?: DynamoDBTtlConfig;
+}
+
+/**
+ * Resolves DynamoDBDomainConfig to an ElectroDB service and TTL config.
  * Handles creating a new service if config is provided.
  */
-export function resolveDynamoDBConfig(config: DynamoDBDomainConfig): Service<Record<string, any>> {
+export function resolveDynamoDBConfig(config: DynamoDBDomainConfig): ResolvedDynamoDBConfig {
   // Existing service
   if ('service' in config) {
-    return config.service;
+    return { service: config.service, ttl: config.ttl };
   }
 
   // Config to create new service
@@ -49,5 +66,8 @@ export function resolveDynamoDBConfig(config: DynamoDBDomainConfig): Service<Rec
   });
 
   const client = DynamoDBDocumentClient.from(dynamoClient);
-  return getElectroDbService(client, config.tableName);
+  return {
+    service: getElectroDbService(client, config.tableName),
+    ttl: config.ttl,
+  };
 }

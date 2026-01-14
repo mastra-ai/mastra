@@ -27,6 +27,16 @@
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.cjs.js"
       }
+    },
+    "./tailwind-preset": {
+      "import": {
+        "types": "./dist/tailwind.preset.d.ts",
+        "default": "./dist/tailwind.preset.es.js"
+      },
+      "require": {
+        "types": "./dist/tailwind.preset.d.ts",
+        "default": "./dist/tailwind.preset.cjs.js"
+      }
     }
   },
   "scripts": {
