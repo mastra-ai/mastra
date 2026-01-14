@@ -17,7 +17,7 @@ const sizeClasses: Record<AvatarSize, string> = {
 export const Avatar = ({ src, name, size = 'sm' }: AvatarProps) => {
   return (
     <div
-      className={`${sizeClasses[size]} border border-border1 bg-surface-3 shrink-0 overflow-hidden rounded-full flex items-center justify-center`}
+      className={`${sizeClasses[size]} border border-border1 bg-surface3 shrink-0 overflow-hidden rounded-full flex items-center justify-center`}
     >
       {src ? (
         <img src={src} alt={name} className="h-full w-full object-cover" />
