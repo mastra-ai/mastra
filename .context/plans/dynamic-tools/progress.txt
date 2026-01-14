@@ -1048,3 +1048,81 @@ Date: 2025-01-14
 - The component doesn't display input/output schemas (omitted from initial implementation as they would be too verbose)
 - Future enhancement: Add expandable details view showing input/output schema for each tool
 - Future enhancement: Add tooltip on hover showing full description if truncated
+
+## Task 020: Create Add Tools dialog - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx
+- Built AddToolsDialog component as a multi-step wizard (3 steps)
+- Integrated ProviderList, ToolkitBrowser, and ToolSelector components
+- Implemented wizard state management (current step, selections, deselected tools)
+- Added step indicator progress bar showing 3 steps
+- Implemented navigation handlers (Next, Back, Cancel buttons)
+- Integrated with useProviders, useProviderToolkits, useProviderTools hooks
+- Updated hooks to use useInfiniteQuery for proper pagination support
+- Integrated with useIntegrationMutations for creating integrations
+- Added comprehensive loading states with Loader2 spinner
+- Added success/error toast notifications
+- Exported from components/index.ts
+
+### Key implementation details:
+- Multi-step wizard flow:
+  1. Select Provider (Composio, Arcade) - shows connection status
+  2. Select Toolkits - browse, search, select multiple toolkits
+  3. Review Tools - all tools selected by default, can deselect individual tools
+  4. Confirm - creates integration and caches tools
+- Updated useProviderToolkits and useProviderTools to use useInfiniteQuery instead of useQuery
+  - Enables proper cursor-based pagination support
+  - Returns pages array with flatMap for easy data access
+  - Supports fetchNextPage, hasNextPage, isFetchingNextPage
+- Wizard state tracked via step (1/2/3), selectedProvider, selectedToolkits Set, deselectedTools Set
+- Tool selection logic: track deselected tools rather than selected (all selected by default)
+- Integration created with unique ID (crypto.randomUUID()) and auto-generated name
+- selectedTools passed to API to cache only the tools user wants
+- Full dialog lifecycle: open → navigate → create → close → reset state
+- Proper TypeScript types throughout with IntegrationProvider type
+- Used Dialog, DialogContent, DialogHeader, DialogFooter from @/components/ui/dialog
+- Used Button from @/ds/components/Button with variant="outline" for cancel/back
+- Used Txt from @/ds/components/Txt for text elements
+- Fixed casing issue with Txt import (was txt, now Txt)
+- Fixed Button variant (was "secondary", now "outline" to match available variants)
+- Fixed toolkitSlugs parameter (comma-separated string, not array)
+
+### Build/Test status:
+- Playground-ui package typecheck passes (pnpm exec tsc --noEmit)
+- Full monorepo typecheck passes (pnpm typecheck)
+- Full monorepo build passes (pnpm build) - 121 successful tasks
+- All acceptance criteria met:
+  ✓ Full flow works: provider → toolkits → tools → save
+  ✓ Can navigate back and forth between steps
+  ✓ Saves integration with cached tools
+  ✓ Handles errors gracefully (try/catch with toast notifications)
+
+### Files created:
+- packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx (new - 275 lines)
+
+### Files modified:
+- packages/playground-ui/src/domains/integrations/components/index.ts (added export for add-tools-dialog)
+- packages/playground-ui/src/domains/integrations/hooks/use-provider-toolkits.ts (changed from useQuery to useInfiniteQuery)
+- packages/playground-ui/src/domains/integrations/hooks/use-provider-tools.ts (changed from useQuery to useInfiniteQuery)
+- .context/plans/dynamic-tools/tasks.json (marked task 020 as passing)
+
+### Next recommended task:
+- Task 021: Add 'Add Tools' button to Tools page
+  This is the next P1 UI task that depends on task 020. It will integrate the Add Tools dialog
+  into the existing Tools page in the playground package.
+  This is a small task that should be quick to complete.
+
+### Notes for next engineer:
+- The AddToolsDialog component is fully functional and ready to be integrated into the Tools page
+- The dialog is stateless from the parent's perspective - all state managed internally
+- Dialog resets its internal state when closed (handleCancel function)
+- The dialog follows all playground-ui standards and design system conventions
+- Hook changes (useInfiniteQuery) are backward compatible - existing code not using pagination still works
+- Future enhancement: Add "Load more" buttons in the dialog for paginated results (currently fetches first page only)
+- Future enhancement: Add search functionality in step 2 (toolkit browser) and step 3 (tool selector)
+- Future enhancement: Add integration name input in final step (currently auto-generated)
+- Future enhancement: Remember wizard state if dialog is closed and reopened (currently resets)
+

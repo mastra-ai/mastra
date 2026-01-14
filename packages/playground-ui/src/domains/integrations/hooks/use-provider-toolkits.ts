@@ -1,31 +1,42 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 import type { IntegrationProvider, ListProviderToolkitsParams } from '@mastra/client-js';
 
 /**
- * Hook to fetch toolkits from a specific integration provider.
+ * Hook to fetch toolkits from a specific integration provider with pagination support.
  *
  * @param provider - The integration provider name (e.g., 'composio', 'arcade')
- * @param params - Optional query parameters for filtering and pagination
- * @returns Query result containing list of toolkits from the provider
+ * @param options - Optional query options including params and enabled flag
+ * @returns Infinite query result containing paginated list of toolkits from the provider
  *
  * @example
  * ```tsx
- * const { data: toolkits, isLoading } = useProviderToolkits('composio', {
- *   search: 'github',
- *   limit: 20
+ * const { data, fetchNextPage, hasNextPage } = useProviderToolkits('composio', {
+ *   params: { search: 'github', limit: 20 },
+ *   enabled: true
  * });
  * ```
  */
-export const useProviderToolkits = (provider?: IntegrationProvider, params?: ListProviderToolkitsParams) => {
+export const useProviderToolkits = (
+  provider: string,
+  options?: { params?: Omit<ListProviderToolkitsParams, 'cursor'>; enabled?: boolean },
+) => {
   const client = useMastraClient();
+  const { params, enabled = true } = options || {};
 
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['integration-provider-toolkits', provider, params],
-    queryFn: () => {
+    queryFn: ({ pageParam }) => {
       if (!provider) throw new Error('Provider is required');
-      return client.listProviderToolkits(provider, params);
+      return client.listProviderToolkits(provider as IntegrationProvider, {
+        ...params,
+        cursor: pageParam,
+      });
     },
-    enabled: Boolean(provider),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: lastPage => {
+      return lastPage.hasMore ? lastPage.nextCursor : undefined;
+    },
+    enabled: Boolean(provider) && enabled,
   });
 };
