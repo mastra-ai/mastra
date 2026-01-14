@@ -115,7 +115,7 @@ const processor = new ModerationProcessor({
     },
     {
       name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
       description: "Processes input messages to moderate content before sending to LLM",
       isOptional: false,
     },

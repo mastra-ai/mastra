@@ -682,6 +682,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
+
+                  chunk.payload.response = response;
                 } else if (!self.#options.isLLMExecutionStep) {
                   // No processor runner, not in LLM execution step - resolve with buffered text
                   this.resolvePromises({
@@ -1128,6 +1130,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       traceId: this.traceId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
+      // All messages from this execution (input + memory history + response)
+      messages: this.messageList.get.all.db(),
+      // Only messages loaded from memory (conversation history)
+      rememberedMessages: this.messageList.get.remembered.db(),
     };
 
     return fullOutput;

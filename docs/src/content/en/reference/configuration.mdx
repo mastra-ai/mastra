@@ -190,6 +190,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: "mastra-storage",
     url: ":memory:",
   }),
   memory: {
@@ -347,7 +348,7 @@ const weatherTool = createTool({
   inputSchema: z.object({
     city: z.string(),
   }),
-  execute: async ({ city }) => {
+  execute: async () => {
     return { temperature: 20, conditions: "Sunny" };
   },
 });
@@ -401,6 +402,7 @@ import { PineconeVector } from "@mastra/pinecone";
 export const mastra = new Mastra({
   vectors: {
     pinecone: new PineconeVector({
+      id: 'pinecone-vector',
       apiKey: process.env.PINECONE_API_KEY,
     }),
   },

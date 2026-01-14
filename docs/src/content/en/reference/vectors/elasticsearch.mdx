@@ -22,6 +22,7 @@ npm install @mastra/elasticsearch@beta
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
 const store = new ElasticSearchVector({
+  id: "elasticsearch-vector",
   url: process.env.ELASTICSEARCH_URL,
 });
 
@@ -56,6 +57,11 @@ const results = await store.query({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
     {
       name: "url",
       type: "string",
