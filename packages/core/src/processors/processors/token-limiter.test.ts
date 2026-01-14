@@ -823,9 +823,9 @@ describe('TokenLimiterProcessor', () => {
       // Token budget breakdown:
       // - 24 tokens for conversation overhead (TOKENS_PER_CONVERSATION)
       // - ~3.8 tokens per message overhead (TOKENS_PER_MESSAGE)
-      // With 100 tokens, we can fit roughly 76 tokens of content plus ~3 messages of overhead
+      // With 50 tokens, only ~2 messages can fit after overhead (50 - 24 = 26 tokens for content)
       const processor = new TokenLimiterProcessor({
-        limit: 100,
+        limit: 50,
       });
 
       const runner = new ProcessorRunner({
@@ -940,6 +940,87 @@ describe('TokenLimiterProcessor', () => {
 
       // Specifically, memory-1 (oldest) should be filtered out
       expect(allMessagesAfter.some(m => m.id === 'memory-1')).toBe(false);
+    });
+
+    it('should account for system messages in token budget', async () => {
+      // Test that system messages (from args.systemMessages) are counted in the token budget
+      // This means fewer non-system messages can fit when system messages are large
+      const processor = new TokenLimiterProcessor({
+        limit: 55, // Tight budget: 24 overhead + ~14 system tokens = 38, leaving only ~17 for messages
+      });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      // Add a system message (stored separately, accessed via args.systemMessages)
+      // "You are a helpful assistant that answers questions concisely" ≈ 10 tokens + overhead
+      messageList.addSystem({
+        role: 'system',
+        content: 'You are a helpful assistant that answers questions concisely',
+      });
+
+      // Add memory messages
+      messageList.add(
+        {
+          id: 'memory-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello there',
+            parts: [{ type: 'text', text: 'Hello there' }],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'memory',
+      );
+
+      messageList.add(
+        {
+          id: 'memory-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Hi how can I help',
+            parts: [{ type: 'text', text: 'Hi how can I help' }],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'memory',
+      );
+
+      // Add input message
+      messageList.add(
+        {
+          id: 'input-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'What is the weather',
+            parts: [{ type: 'text', text: 'What is the weather' }],
+          },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        'input',
+      );
+
+      const allMessagesBefore = messageList.get.all.db();
+      expect(allMessagesBefore.length).toBe(3);
+
+      // Run the processor
+      const resultMessageList = await runner.runInputProcessors(messageList);
+      const allMessagesAfter = resultMessageList.get.all.db();
+
+      // With system message taking up budget, some messages should be filtered
+      // The newest message (input-1) should always be preserved
+      expect(allMessagesAfter.some(m => m.id === 'input-1')).toBe(true);
+
+      // Due to the system message consuming budget, we expect fewer messages
+      expect(allMessagesAfter.length).toBeLessThan(allMessagesBefore.length);
     });
 
     it('should preserve all messages when within token limit', async () => {

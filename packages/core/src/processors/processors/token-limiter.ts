@@ -1,11 +1,10 @@
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraDBMessage } from '../../agent/message-list';
-import type { TracingContext } from '../../observability';
-import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
-import type { Processor } from '../index';
+import type { ProcessInputArgs, ProcessInputResult, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -68,41 +67,54 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
    * Process input messages to limit them to the configured token limit.
    * This filters historical messages to fit within the token budget,
    * prioritizing the most recent messages.
+   *
+   * Uses messageList.get.all.db() to access ALL messages (memory + input),
+   * not just the input messages passed in the messages parameter.
+   * System messages are accessed via args.systemMessages (they're stored separately).
+   * Removes filtered messages directly from messageList and returns it.
    */
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+  async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
+    const { messageList, systemMessages: coreSystemMessages } = args;
+
+    // Use messageList to get ALL messages (memory + input), not just input messages
+    // This fixes issue #11902 where only input messages were being processed
+    // Note: System messages are NOT in messageList.get.all.db() - they're in args.systemMessages
+    const messages = messageList?.get.all.db() ?? args.messages;
     const limit = this.maxTokens;
 
     // If no messages or empty array, return as-is
     if (!messages || messages.length === 0) {
-      return messages;
+      return messageList ?? messages;
     }
 
-    // Separate system messages from other messages
-    const systemMessages = messages.filter(msg => msg.role === 'system');
-    const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
-
-    // Calculate token count for system messages (always included)
+    // Calculate token count for system messages (always included, never filtered)
+    // System messages come from args.systemMessages, not from the messages array
     let systemTokens = 0;
-    for (const msg of systemMessages) {
-      systemTokens += this.countInputMessageTokens(msg);
+    if (coreSystemMessages && coreSystemMessages.length > 0) {
+      for (const msg of coreSystemMessages) {
+        systemTokens += this.countCoreMessageTokens(msg);
+      }
     }
 
-    // If system messages alone exceed the limit (accounting for conversation overhead), return only system messages
+    // All messages from messageList.get.all.db() are non-system messages
+    const nonSystemMessages = messages;
+
+    // If system messages alone exceed the limit (accounting for conversation overhead),
+    // remove all non-system messages
     if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
-      return systemMessages;
+      if (messageList) {
+        const idsToRemove = nonSystemMessages.map(m => m.id);
+        messageList.removeByIds(idsToRemove);
+        return messageList;
+      }
+      return [];
     }
 
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
     // Process non-system messages in reverse order (newest first)
-    const result: MastraDBMessage[] = [];
+    const messagesToKeep: MastraDBMessage[] = [];
     let currentTokens = 0;
 
     // Iterate through messages in reverse to prioritize recent messages
@@ -113,14 +125,43 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
       const messageTokens = this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        result.unshift(message); // Add to beginning to maintain order
+        messagesToKeep.unshift(message); // Add to beginning to maintain order
         currentTokens += messageTokens;
       }
       // Continue checking all messages, don't break early
     }
 
-    // Return system messages followed by the filtered non-system messages
-    return [...systemMessages, ...result];
+    // If we have messageList, remove filtered messages directly and return messageList
+    if (messageList) {
+      const keepIds = new Set(messagesToKeep.map(m => m.id));
+      const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
+      if (idsToRemove.length > 0) {
+        messageList.removeByIds(idsToRemove);
+      }
+      return messageList;
+    }
+
+    // Fallback: return array of filtered non-system messages
+    return messagesToKeep;
+  }
+
+  /**
+   * Count tokens for a CoreMessageV4 (system messages from args.systemMessages)
+   */
+  private countCoreMessageTokens(message: CoreMessageV4): number {
+    let tokenString = message.role;
+
+    if (typeof message.content === 'string') {
+      tokenString += message.content;
+    } else if (Array.isArray(message.content)) {
+      for (const part of message.content) {
+        if ('text' in part && typeof part.text === 'string') {
+          tokenString += part.text;
+        }
+      }
+    }
+
+    return this.encoder.encode(tokenString).length + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
 
   /**
