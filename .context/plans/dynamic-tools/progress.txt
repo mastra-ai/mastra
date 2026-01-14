@@ -350,3 +350,49 @@ Date: 2025-01-14
   This is the next P0 task that depends on both 007 and 008. It will create a registry to manage and instantiate tool providers.
   All prerequisites are now complete (ComposioProvider and ArcadeProvider both implemented).
 
+## Task 009: Create provider registry and factory - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/core/src/integrations/providers/registry.ts
+- Implemented ProviderRegistry class to manage tool provider instances
+- Implemented getProvider() factory function to retrieve provider by name
+- Implemented listProviders() async function returning all provider statuses
+- Implemented registerProvider() function to register custom providers
+- Implemented hasProvider() function to check if provider is registered
+- Implemented getProviderNames() function to get all registered provider names
+- Exported all registry functions from packages/core/src/integrations/providers/index.ts
+- Used singleton pattern for global provider registry instance
+
+### Key implementation details:
+- ProviderRegistry class maintains Map<IntegrationProviderType, ToolProvider>
+- Default providers (Composio, Arcade) are registered in constructor
+- listProviders() is async to handle both sync and async getStatus() methods
+- getAllProviderStatuses() uses Promise.all() to resolve all status promises
+- Comprehensive JSDoc documentation on all public functions
+- Registry pattern allows for extension with custom providers
+
+### Build/Test status:
+- Full monorepo typecheck passes (pnpm typecheck)
+- Full monorepo build passes (pnpm build) - 121 successful tasks
+- Core package tests pass (exit code 0)
+- All acceptance criteria met:
+  ✓ Can get provider instance by name (getProvider function)
+  ✓ Can list all providers with their connection status (listProviders function)
+  ✓ Providers are lazily instantiated (singleton registry pattern)
+
+### Files created:
+- packages/core/src/integrations/providers/registry.ts (new)
+
+### Files modified:
+- packages/core/src/integrations/providers/index.ts (added export for registry functions)
+- .context/plans/dynamic-tools/tasks.json (marked task 009 as passing)
+
+### Next recommended task:
+- Task 010: Create integration API schemas
+  This is the next P0 task that can be started immediately. It will define Zod schemas for the integration API endpoints.
+  OR
+- Task 011: Implement integration API handlers
+  This depends on task 010 and will create the server-side handlers for integration CRUD operations.
+

@@ -8,3 +8,4 @@
 export * from './types';
 export * from './composio';
 export * from './arcade';
+export * from './registry';
