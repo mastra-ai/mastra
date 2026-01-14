@@ -1,24 +1,25 @@
-import { Slider } from '@/components/ui/slider';
+import { Slider } from '@/ds/components/Slider';
 
-import { Label } from '@/components/ui/label';
+import { Label } from '@/ds/components/Label';
 
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Info } from 'lucide-react';
 
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 
-import { Entry } from '@/components/ui/entry';
+import { Entry } from '@/ds/components/Entry';
 import { useAgentSettings } from '../context/agent-context';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import clsx from 'clsx';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -65,6 +66,13 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
+
+  const { hasSamplingRestriction } = useSamplingRestriction({
+    provider: agent?.provider,
+    modelId: agent?.modelId,
+    settings,
+    setSettings,
+  });
 
   if (isLoading || isMemoryLoading) {
     return <Skeleton className="h-full" />;
@@ -157,6 +165,18 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
             }
           />
         </Entry>
+
+        {hasSamplingRestriction &&
+          (settings?.modelSettings?.temperature !== undefined || settings?.modelSettings?.topP !== undefined) && (
+            <div className="flex items-center gap-2 text-xs text-icon3 bg-surface3 rounded px-3 py-2">
+              <Info className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>
+                {settings?.modelSettings?.temperature !== undefined
+                  ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
+                  : 'Claude 4.5+ models only accept Temperature OR Top P. Setting Temperature will clear Top P.'}
+              </span>
+            </div>
+          )}
 
         <div className="grid grid-cols-1 @xs:grid-cols-2 gap-8">
           <Entry label="Temperature">

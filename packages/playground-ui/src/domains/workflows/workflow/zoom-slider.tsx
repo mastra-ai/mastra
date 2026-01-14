@@ -3,7 +3,7 @@ import { Maximize, Minus, Plus } from 'lucide-react';
 
 import { Panel, useViewport, useReactFlow, PanelProps } from '@xyflow/react';
 
-import { Slider } from '@/components/ui/slider';
+import { Slider } from '@/ds/components/Slider';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 

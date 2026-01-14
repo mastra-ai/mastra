@@ -1,0 +1,174 @@
+import type { Config } from 'tailwindcss';
+import defaultFont from 'tailwindcss/defaultTheme';
+import {
+  FontSizes,
+  LineHeights,
+  IconColors,
+  BorderColors,
+  Colors,
+  BorderRadius,
+  BorderWidth,
+  Spacings,
+  Sizes,
+} from './src/ds/tokens';
+import animate from 'tailwindcss-animate';
+import assistantUi from '@assistant-ui/react-ui/tailwindcss';
+import containerQueries from '@tailwindcss/container-queries';
+
+export default {
+  darkMode: ['class'],
+  content: ['./src/**/*.{html,js,tsx,ts,jsx}'],
+  theme: {
+    container: {
+      center: true,
+      padding: '2rem',
+      screens: {
+        '2xl': '1400px',
+      },
+    },
+    extend: {
+      screens: {
+        '3xl': '1900px',
+        '4xl': '2000px',
+      },
+      fontSize: {
+        ...FontSizes,
+      },
+      lineHeight: {
+        ...LineHeights,
+      },
+      borderRadius: {
+        ...BorderRadius,
+      },
+      borderWidth: {
+        ...BorderWidth,
+      },
+      padding: {
+        ...Spacings,
+      },
+      margin: {
+        ...Spacings,
+      },
+      gap: {
+        ...Spacings,
+      },
+      height: {
+        ...Sizes,
+      },
+      maxHeight: {
+        ...Sizes,
+      },
+      width: {
+        ...Sizes,
+      },
+      maxWidth: {
+        ...Sizes,
+      },
+      colors: {
+        ...Colors,
+        ...IconColors,
+        ...BorderColors,
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsla(var(--accent))',
+          blue: 'hsla(var(--accent-blue))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        chart: {
+          1: 'hsl(var(--chart-1))',
+          2: 'hsl(var(--chart-2))',
+          3: 'hsl(var(--chart-3))',
+          4: 'hsl(var(--chart-4))',
+          5: 'hsl(var(--chart-5))',
+        },
+        sidebar: {
+          DEFAULT: 'hsl(var(--sidebar-background))',
+          foreground: 'hsl(var(--sidebar-foreground))',
+          primary: 'hsl(var(--sidebar-primary))',
+          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+          accent: 'hsl(var(--sidebar-accent))',
+          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+          black: 'hsl(var(--sidebar-black))',
+          border: 'hsl(var(--sidebar-border))',
+          ring: 'hsl(var(--sidebar-ring))',
+        },
+      },
+      fontFamily: {
+        serif: ['var(--tasa-explorer)', ...defaultFont.fontFamily.serif],
+        mono: ['var(--geist-mono)', ...defaultFont.fontFamily.mono],
+        sans: ['var(--font-inter)', ...defaultFont.fontFamily.sans],
+      },
+      animation: {
+        ripple: 'ripple var(--duration,2s) ease calc(var(--i, 0)*.2s) infinite',
+        'icon-right': 'animate-icon-right ease-out 250ms',
+        'typing-dot-bounce': 'typing-dot-bounce 1.4s infinite ease-in-out',
+        'fade-in': 'fade-in 1s ease-out',
+      },
+      keyframes: {
+        ripple: {
+          '0%, 100%': {
+            transform: 'translate(-50%, -50%) scale(1)',
+          },
+          '50%': {
+            transform: 'translate(-50%, -50%) scale(0.9)',
+          },
+        },
+        'animate-icon-right': {
+          '0%': {
+            transform: 'translateX(-6px)',
+          },
+          '100%': {
+            transform: 'translateX(0px)',
+          },
+        },
+        'typing-dot-bounce': {
+          '0%, 100%': {
+            transform: 'translateY(0)',
+          },
+          '50%': {
+            transform: 'translateY(-4px)',
+          },
+        },
+        'fade-in': {
+          '0%': {
+            opacity: '0.8',
+            backgroundColor: 'hsl(var(--muted))',
+          },
+          '100%': {
+            opacity: '1',
+            backgroundColor: 'transparent',
+          },
+        },
+      },
+    },
+  },
+  plugins: [animate, assistantUi, containerQueries],
+} satisfies Config;

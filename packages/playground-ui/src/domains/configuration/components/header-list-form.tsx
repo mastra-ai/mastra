@@ -1,6 +1,6 @@
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { InputField } from '@/components/ui/elements/form-fields/input-field';
+import { InputField } from '@/ds/components/FormFields';
 import { useId } from 'react';
 
 import { Plus, Trash } from 'lucide-react';

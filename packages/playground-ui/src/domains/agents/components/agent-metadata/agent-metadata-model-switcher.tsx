@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Input } from '@/components/ui/input';
-import Spinner from '@/components/ui/spinner';
+import { Input } from '@/ds/components/Input';
+import { Spinner } from '@/ds/components/Spinner';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';

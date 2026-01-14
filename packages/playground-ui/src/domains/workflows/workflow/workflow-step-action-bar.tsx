@@ -1,5 +1,5 @@
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useContext, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';

@@ -8,7 +8,7 @@ import { HTMLAttributes, useMemo } from 'react';
 
 import type { Extension } from '@codemirror/state';
 
-import { CopyButton } from '@/components/ui/copy-button';
+import { CopyButton } from '@/ds/components/CopyButton';
 
 export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => {

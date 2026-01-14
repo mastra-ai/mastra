@@ -36,7 +36,7 @@ After completing frontend changes:
 
 4. **Identify impacted routes**
    - Routes are defined in `packages/playground/src/App.tsx`
-   - Determine which routes are affected by your changes
+   - Browse them ALL to verify behavior
 
 5. **Test with Playwright MCP**
    - Use `browser_navigate` to visit each impacted route

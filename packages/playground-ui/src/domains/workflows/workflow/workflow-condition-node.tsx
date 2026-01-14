@@ -7,11 +7,11 @@ import { cn } from '@/lib/utils';
 
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown } from 'lucide-react';
 import { getConditionIconAndColor } from './workflow-node-badges';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCurrentRun } from '../context/use-current-run';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
@@ -179,7 +179,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Txt variant="ui-xs" className=" text-mastra-el-3 flex-1">
+                        <Txt variant="ui-xs" className=" text-icon3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
                         </Txt>
