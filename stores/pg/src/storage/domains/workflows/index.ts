@@ -26,6 +26,16 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
+/**
+ * Sanitizes JSON string by removing problematic Unicode sequences that PostgreSQL jsonb rejects.
+ * Removes:
+ * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
+ * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ */
+function sanitizeJsonForPg(jsonString: string): string {
+  return jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
+}
+
 export class WorkflowsPG extends WorkflowsStorage {
   #db: PgDB;
   #schema: string;
@@ -166,12 +176,14 @@ export class WorkflowsPG extends WorkflowsStorage {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
+      // Sanitize the snapshot JSON to remove problematic Unicode sequences
+      const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), createdAtValue, updatedAtValue],
+        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
       );
     } catch (error) {
       throw new MastraError(
@@ -318,7 +330,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
         // See: https://github.com/mastra-ai/mastra/issues/11563
         conditions.push(
-          `regexp_replace(snapshot, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
+          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
         );
         values.push(status);
         paramIndex++;
