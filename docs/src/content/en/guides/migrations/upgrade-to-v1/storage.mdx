@@ -195,7 +195,11 @@ To migrate, call `getStore()` with the domain name, then call methods on the ret
 
 The `getThreadsByResourceId()` method has been replaced with `listThreads()`. The new method adds pagination support and filtering by `resourceId`, `metadata`, or both.
 
-**Important:** The old `getThreadsByResourceId()` returned all matching threads without pagination. The new `listThreads()` requires pagination parameters. To preserve the old behavior of fetching all threads, use `perPage: false`.
+:::important
+
+The old `getThreadsByResourceId()` returned all matching threads without pagination. The new `listThreads()` requires pagination parameters. To preserve the old behavior of fetching all threads, use `perPage: false`.
+
+:::
 
 To migrate, use the memory store and the new `listThreads()` method with pagination and an optional filter object.
 
