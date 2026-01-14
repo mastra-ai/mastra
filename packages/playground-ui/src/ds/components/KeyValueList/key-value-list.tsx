@@ -71,7 +71,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
             <dd
               className={cn(
                 'flex flex-wrap gap-[.5rem] py-[0.25rem] min-h-[2.25rem] text-[0.875rem] items-center text-neutral5 text-wrap',
-                '[&>a]:text-neutral5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-[#222] [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:pt-[0.15rem] [&>a]:pb-[0.2rem] [&>a]:px-[.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem] [&>a]:min-h-[1.75rem] [&>a]:leading-0 ',
+                '[&>a]:text-neutral5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-surface4 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:pt-[0.15rem] [&>a]:pb-[0.2rem] [&>a]:px-[.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem] [&>a]:min-h-[1.75rem] [&>a]:leading-0 ',
                 '[&>a:hover]:text-neutral6 [&>a:hover]:bg-surface6',
                 '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-neutral3 [&>a>svg]:ml-[-0.5em]',
               )}
@@ -117,7 +117,7 @@ function RelationWrapper({ description, children }: RelationWrapperProps) {
       <HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[15rem] rounded-md bg-[#333] p-[.5rem] px-[1rem] text-[.75rem] text-neutral5 text-center"
+          className="z-[100] w-auto max-w-[15rem] rounded-md bg-surface5 p-[.5rem] px-[1rem] text-[.75rem] text-neutral5 text-center"
           sideOffset={5}
           side="top"
         >

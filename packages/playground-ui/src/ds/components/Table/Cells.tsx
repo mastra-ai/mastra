@@ -1,8 +1,8 @@
-import clsx from 'clsx';
 import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
+import { cn } from '@/lib/utils';
 
 import { formatDateCell } from './utils';
 
@@ -13,8 +13,8 @@ export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> 
 
 export const Cell = ({ className, children, ...props }: CellProps) => {
   return (
-    <td className={clsx('text-neutral5 first:pl-5 last:pr-5', className)} {...props}>
-      <div className={clsx('flex h-full w-full shrink-0 items-center')}>{children}</div>
+    <td className={cn('text-neutral5 first:pl-5 last:pr-5', className)} {...props}>
+      <div className={cn('flex h-full w-full shrink-0 items-center')}>{children}</div>
     </td>
   );
 };

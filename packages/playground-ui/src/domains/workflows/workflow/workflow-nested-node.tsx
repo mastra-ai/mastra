@@ -80,7 +80,7 @@ export function WorkflowNestedNode({
         data-workflow-node
         data-workflow-step-status={displayStatus}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          'bg-surface3 rounded-lg w-[274px] border border-border1',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
           displayStatus === 'success' && 'bg-accent1Darker',
           displayStatus === 'failed' && 'bg-accent2Darker',

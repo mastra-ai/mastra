@@ -30,7 +30,7 @@ const ToolEntity = ({ tool, agentId }: ToolEntityProps) => {
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
-        <ToolsIcon className="group-hover/entity:text-[#ECB047]" />
+        <ToolsIcon className="group-hover/entity:text-accent6" />
       </EntityIcon>
       <EntityContent>
         <EntityName>

@@ -14,8 +14,8 @@ import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
-import clsx from 'clsx';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { cn } from '@/lib/utils';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -32,7 +32,7 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={!isNetworkAvailable} />
       <Label
-        className={clsx('text-neutral6 text-ui-md', !isNetworkAvailable && '!text-neutral3 cursor-not-allowed')}
+        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && '!text-neutral3 cursor-not-allowed')}
         htmlFor="network"
       >
         Network
