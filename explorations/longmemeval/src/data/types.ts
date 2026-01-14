@@ -44,6 +44,8 @@ export interface EvaluationResult {
   improved_is_correct?: boolean;
   // Track if this question has any improvement info (for filtering uninvestigated failures)
   has_improvement_info?: boolean;
+  // Track when improved version performs worse than original (original ✓, improved ✗)
+  improved_regression?: boolean;
 }
 
 export type DatasetType = 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';

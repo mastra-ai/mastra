@@ -5,8 +5,40 @@ import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { join } from 'path';
-import { readdir, readFile, mkdir, writeFile } from 'fs/promises';
+import { readdir, readFile, mkdir, writeFile, stat, appendFile } from 'fs/promises';
 import { appendFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+
+/**
+ * Parse duration string (e.g., "1h", "30m", "2d") to milliseconds
+ */
+function parseDuration(duration: string): number {
+  const match = duration.match(/^(\d+)(m|h|d)$/);
+  if (!match) {
+    throw new Error(`Invalid duration format: ${duration}. Use format like "1h", "30m", "2d"`);
+  }
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  switch (unit) {
+    case 'm':
+      return value * 60 * 1000;
+    case 'h':
+      return value * 60 * 60 * 1000;
+    case 'd':
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      throw new Error(`Unknown duration unit: ${unit}`);
+  }
+}
+
+interface FailuresFile {
+  questionIds: string[];
+  runId: string;
+  config: MemoryConfigType;
+  dataset: string;
+  timestamp: string;
+  totalFailed: number;
+  totalQuestions: number;
+}
 
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
@@ -14,7 +46,7 @@ import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType
 import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling, applyCombSampling, type MemoryConfigDefinition } from '../config';
 import { DatasetLoader } from '../data/loader';
 import { reconcileQuestion } from './reconcile';
-import { ObservationSemanticFilter } from '../processors';
+import { ObservationSemanticFilter, DateInjector } from '../processors';
 import { fastembed } from '@mastra/fastembed';
 
 // Rate limit configuration
@@ -100,9 +132,65 @@ async function withRateLimitRetry<T>(
       updateRateLimiterFromResponse(result);
       return result;
     } catch (error: any) {
-      // Check if it's a 429 rate limit error
-      if (error?.statusCode === 429 || error?.message?.includes('Too Many Requests')) {
-        const retryAfter = parseInt(error?.responseHeaders?.['retry-after'] || '60', 10);
+      // Check if it's a 429 rate limit error (may be nested in MastraError)
+      const is429 =
+        error?.statusCode === 429 ||
+        error?.cause?.statusCode === 429 ||
+        error?.message?.includes('Too Many Requests') ||
+        error?.message?.includes('Rate limit') ||
+        error?.message?.includes('rate_limit');
+
+      // Check if it's a retryable connection error (ECONNRESET, ETIMEDOUT, etc.)
+      const isConnectionError =
+        error?.message?.includes('ECONNRESET') ||
+        error?.message?.includes('ETIMEDOUT') ||
+        error?.message?.includes('ENOTFOUND') ||
+        error?.message?.includes('ECONNREFUSED') ||
+        error?.message?.includes('Cannot connect to API') ||
+        error?.isRetryable === true ||
+        error?.cause?.code === 'ECONNRESET' ||
+        error?.cause?.code === 'ETIMEDOUT';
+
+      if (isConnectionError && !is429) {
+        // Connection error - wait a shorter time and retry
+        const waitTime = 10 + (attempt * 5); // 10s, 15s, 20s...
+        
+        const updateStatus = (status: string) => {
+          if (spinner && 'updateStatus' in spinner) {
+            spinner.updateStatus(status);
+          } else if (spinner && 'text' in spinner) {
+            spinner.text = status;
+          }
+        };
+        updateStatus(`Connection error - waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})...`);
+        console.error(`\n🔌 Connection error (${error?.cause?.code || 'unknown'}) - waiting ${waitTime}s before retry ${attempt + 1}/${maxRetries}`);
+
+        await waitForRateLimit(waitTime, `Connection error`);
+
+        if (attempt < maxRetries) {
+          continue; // Retry
+        }
+      }
+
+      if (is429) {
+        // Try to extract retry-after from nested error (check various header formats)
+        const headers = error?.responseHeaders || error?.cause?.responseHeaders || {};
+        let retryAfter = 60; // Default to 60 seconds
+
+        if (headers['retry-after']) {
+          retryAfter = parseInt(headers['retry-after'], 10);
+        } else if (headers['x-ratelimit-reset-tokens']) {
+          // Parse OpenAI format like "1m2.251s" or "4ms"
+          const resetStr = headers['x-ratelimit-reset-tokens'];
+          const minutes = resetStr.match(/(\d+)m(?!\s*s)/)?.[1];
+          const seconds = resetStr.match(/(\d+\.?\d*)s/)?.[1];
+          const ms = resetStr.match(/(\d+)ms/)?.[1];
+          retryAfter = (parseInt(minutes || '0', 10) * 60) + Math.ceil(parseFloat(seconds || '0')) + Math.ceil(parseInt(ms || '0', 10) / 1000);
+          retryAfter = Math.max(retryAfter, 5); // At least 5 seconds
+        }
+
+        // Add a small buffer to avoid hitting the limit again immediately
+        const waitTime = retryAfter + 5;
 
         const updateStatus = (status: string) => {
           if (spinner && 'updateStatus' in spinner) {
@@ -111,9 +199,10 @@ async function withRateLimitRetry<T>(
             spinner.text = status;
           }
         };
-        updateStatus(`Rate limited (429) - waiting ${retryAfter}s...`);
+        updateStatus(`Rate limited (429) - waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})...`);
+        console.error(`\n⏳ Rate limited by OpenAI - waiting ${waitTime}s before retry ${attempt + 1}/${maxRetries}`);
 
-        await waitForRateLimit(retryAfter, `Rate limited (429 error)`);
+        await waitForRateLimit(waitTime, `Rate limited (429 error)`);
 
         if (attempt < maxRetries) {
           continue; // Retry
@@ -142,6 +231,11 @@ export interface RunOptions {
   combStartOffset?: number;
   // Skip improved/fixed question evaluation
   skipFixed?: boolean;
+  // Re-run from failures
+  fromFailures?: string | boolean;
+  olderThan?: string;
+  // Resume a partial run
+  resume?: string | boolean;
 }
 
 interface PreparedQuestionMeta {
@@ -179,13 +273,49 @@ export class RunCommand {
   }
 
   async run(options: RunOptions): Promise<BenchmarkMetrics> {
-    const runId = `run_${Date.now()}`;
-    const runDir = join(options.outputDir || this.outputDir, options.memoryConfig, runId);
+    // Use existing run ID for resume, or generate new one
+    let runId = options.resume;
+    
+    // If --resume is passed without a value (true) or empty string, find the most recent run
+    if (options.resume === true || options.resume === '') {
+      const configDir = join(options.outputDir || this.outputDir, options.memoryConfig);
+      if (existsSync(configDir)) {
+        const runs = (await readdir(configDir))
+          .filter(d => d.startsWith('run_'))
+          .sort()
+          .reverse(); // Most recent first (timestamps sort correctly)
+        if (runs.length > 0) {
+          runId = runs[0];
+          console.log(chalk.yellow(`\n🔍 Auto-detected most recent run: ${runId}\n`));
+        }
+      }
+    }
+    
+    // Fall back to new run ID if no resume target found
+    if (!runId || runId === true) {
+      runId = `run_${Date.now()}`;
+    }
+    
+    const runDir = join(options.outputDir || this.outputDir, options.memoryConfig, runId as string);
     await mkdir(runDir, { recursive: true });
+
+    // Load existing results if resuming
+    let existingResults: EvaluationResult[] = [];
+    const resultsPath = join(runDir, 'results.jsonl');
+    if (options.resume && existsSync(resultsPath)) {
+      const content = await readFile(resultsPath, 'utf-8');
+      existingResults = content
+        .trim()
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => JSON.parse(line) as EvaluationResult);
+      console.log(chalk.yellow(`\n♻️  Resuming run ${runId} with ${existingResults.length} existing results\n`));
+    }
+    const completedQuestionIds = new Set(existingResults.map(r => r.question_id));
 
     console.log(
       chalk.blue(`
-🚀 Starting LongMemEval benchmark run: ${runId}
+🚀 ${options.resume ? 'Resuming' : 'Starting'} LongMemEval benchmark run: ${runId}
 `),
     );
     const configDef = getMemoryConfig(options.memoryConfig);
@@ -322,7 +452,102 @@ Please run 'longmemeval prepare' first.`);
 
     // Filter by questionId if specified
     let questionsToProcess = preparedQuestions;
-    if (options.questionId) {
+
+    // Handle --from-failures option
+    if (options.fromFailures) {
+      let failuresPath = typeof options.fromFailures === 'string' ? options.fromFailures : '';
+
+      // Handle flag with no value (true) or "latest" - find the most recent failures.json for this config
+      if (options.fromFailures === true || options.fromFailures === 'latest') {
+        const resultsDir = join(options.outputDir || this.outputDir, options.memoryConfig);
+        if (!existsSync(resultsDir)) {
+          throw new Error(`No results directory found for config: ${options.memoryConfig}`);
+        }
+
+        const runDirs = (await readdir(resultsDir))
+          .filter(d => d.startsWith('run_'))
+          .sort()
+          .reverse(); // Most recent first
+
+        let latestFailuresPath: string | null = null;
+        for (const runDir of runDirs) {
+          const candidatePath = join(resultsDir, runDir, 'failures.json');
+          if (existsSync(candidatePath)) {
+            latestFailuresPath = candidatePath;
+            break;
+          }
+        }
+
+        if (!latestFailuresPath) {
+          throw new Error(`No failures.json found in any run for config: ${options.memoryConfig}`);
+        }
+        failuresPath = latestFailuresPath;
+        console.log(chalk.gray(`Found latest failures: ${failuresPath}\n`));
+      }
+
+      // Load failures.json and filter to those question IDs
+      if (!existsSync(failuresPath)) {
+        throw new Error(`Failures file not found: ${failuresPath}`);
+      }
+      const fromFailuresData = JSON.parse(await readFile(failuresPath, 'utf-8')) as FailuresFile;
+      const failedIds = new Set(fromFailuresData.questionIds);
+      questionsToProcess = preparedQuestions.filter(q => failedIds.has(q.questionId));
+
+      if (questionsToProcess.length === 0) {
+        throw new Error(`No matching questions found for ${fromFailuresData.questionIds.length} failed IDs`);
+      }
+
+      // Filter by --older-than if specified (check meta.json mtime)
+      let skippedRecentCount = 0;
+      if (options.olderThan) {
+        const maxAgeMs = parseDuration(options.olderThan);
+        const cutoffTime = Date.now() - maxAgeMs;
+
+        const filteredQuestions: PreparedQuestionMeta[] = [];
+        for (const q of questionsToProcess) {
+          const metaPath = join(preparedDir, q.questionId, 'meta.json');
+          if (existsSync(metaPath)) {
+            const metaStat = await stat(metaPath);
+            if (metaStat.mtimeMs > cutoffTime) {
+              // Recently prepared, skip
+              skippedRecentCount++;
+              continue;
+            }
+          }
+          filteredQuestions.push(q);
+        }
+        questionsToProcess = filteredQuestions;
+
+        if (questionsToProcess.length === 0) {
+          console.log(
+            chalk.green(
+              `\n✓ All ${skippedRecentCount} failed questions were recently prepared (within ${options.olderThan})`,
+            ),
+          );
+          console.log(chalk.gray(`  Nothing to re-run.\n`));
+          // Return empty metrics
+          return {
+            total_questions: 0,
+            correct_answers: 0,
+            overall_accuracy: 0,
+            accuracy_by_type: {},
+            abstention_accuracy: 0,
+          };
+        }
+      }
+
+      console.log(
+        chalk.yellow(`\n🔄 Running ${questionsToProcess.length} failed questions from: ${options.fromFailures}`),
+      );
+      console.log(chalk.gray(`   Run ID: ${fromFailuresData.runId}`));
+      console.log(
+        chalk.gray(`   Original failures: ${fromFailuresData.totalFailed}/${fromFailuresData.totalQuestions}`),
+      );
+      if (skippedRecentCount > 0) {
+        console.log(chalk.gray(`   Skipped ${skippedRecentCount} recently prepared (within ${options.olderThan})`));
+      }
+      console.log();
+    } else if (options.questionId) {
       questionsToProcess = preparedQuestions.filter(q => q.questionId === options.questionId);
       if (questionsToProcess.length === 0) {
         throw new Error(`Question with ID "${options.questionId}" not found in prepared data`);
@@ -417,8 +642,17 @@ Evaluating ${questionsToProcess.length} question${questionsToProcess.length !== 
 `),
     );
 
+    // Filter out already-completed questions (for resume)
+    const remainingQuestions = questionsToProcess.filter(q => !completedQuestionIds.has(q.questionId));
+    if (options.resume && remainingQuestions.length < questionsToProcess.length) {
+      console.log(
+        chalk.yellow(
+          `Skipping ${questionsToProcess.length - remainingQuestions.length} already-completed questions`,
+        ),
+      );
+    }
+
     // Process questions with concurrency control
-    const results: EvaluationResult[] = [];
     const concurrency = options.concurrency || 5;
     const questionSpinner = ora('Evaluating questions...').start();
 
@@ -430,13 +664,14 @@ Evaluating ${questionsToProcess.length} question${questionsToProcess.length !== 
     const activeEvaluations = new Map<number, { questionId: string; status: string }>();
 
     // Function to update progress display
+    const totalToProcess = remainingQuestions.length;
     let lastText = '';
     const updateProgress = () => {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const rate = elapsed > 0 ? completedCount / elapsed : 0;
-      const remaining = rate > 0 ? Math.round((questionsToProcess.length - completedCount) / rate) : 0;
+      const remaining = rate > 0 ? Math.round((totalToProcess - completedCount) / rate) : 0;
 
-      let progressText = `Overall: ${completedCount}/${questionsToProcess.length} (${inProgressCount} in progress, ${Math.round(rate * 60)} q/min, ~${remaining}s remaining)`;
+      let progressText = `Overall: ${completedCount}/${totalToProcess} (${inProgressCount} in progress, ${Math.round(rate * 60)} q/min, ~${remaining}s remaining)`;
 
       if (activeEvaluations.size > 0 && concurrency > 1) {
         progressText += `
@@ -471,11 +706,10 @@ Active evaluations:`;
     };
 
     // Create a queue of questions to evaluate
-    const questionQueue = [...questionsToProcess];
+    const questionQueue = [...remainingQuestions];
 
     // Function to process next question from queue
-    const processNextQuestion = async (slotIndex: number): Promise<EvaluationResult[]> => {
-      const workerResults: EvaluationResult[] = [];
+    const processNextQuestion = async (slotIndex: number): Promise<void> => {
 
       while (questionQueue.length > 0) {
         const meta = questionQueue.shift();
@@ -538,11 +772,9 @@ Active evaluations:`;
           questionSpinner.render();
         }
 
-        // Don't update progress here - let the periodic timer handle it
-        workerResults.push(result);
+        // Append result to JSONL file immediately (crash-safe incremental save)
+        await appendFile(resultsPath, JSON.stringify(result) + '\n');
       }
-
-      return workerResults;
     };
 
     // Set up periodic progress updates
@@ -551,18 +783,21 @@ Active evaluations:`;
     // Create worker slots
     const workers = Array.from({ length: concurrency }, (_, i) => processNextQuestion(i));
 
-    // Wait for all workers to complete and collect results
-    const workerResults = await Promise.all(workers);
-
-    // Process results from all workers
-    for (const workerResultArray of workerResults) {
-      results.push(...workerResultArray);
-    }
+    // Wait for all workers to complete
+    await Promise.all(workers);
 
     // Clear the interval
     clearInterval(progressInterval);
 
-    questionSpinner.succeed(`Evaluated ${results.length} questions`);
+    questionSpinner.succeed(`Evaluated ${totalToProcess} questions`);
+
+    // Load all results from JSONL file (includes existing + new)
+    const allResultsContent = await readFile(resultsPath, 'utf-8');
+    const allResults = allResultsContent
+      .trim()
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line) as EvaluationResult);
 
     // Calculate metrics
     console.log(
@@ -570,13 +805,13 @@ Active evaluations:`;
 📊 Calculating metrics...
 `),
     );
-    const metrics = this.calculateMetrics(results);
+    const metrics = this.calculateMetrics(allResults);
 
-    // Save results
-    await this.saveResults(runDir, results, metrics, options);
+    // Save final metrics and failures (results.jsonl already saved incrementally)
+    await this.saveFinalResults(runDir, allResults, metrics, options);
 
     // Display uninvestigated failures first (questions for investigation)
-    this.displayUninvestigatedFailures(results);
+    this.displayUninvestigatedFailures(allResults);
 
     // Display results summary at the end
     this.displayMetrics(metrics, options, configDef);
@@ -706,12 +941,10 @@ When answering questions, carefully review the conversation history to identify 
     }
     const omDebugPath = join(questionOutputDir, 'om.md');
 
-    const today = `Todays date is ${new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(meta.questionDate || Date.now()))}`;
+    // Create date injector processor if we have a question date
+    // This injects the date into the user message in official LongMemEval format:
+    // "Current Date: {date}\nQuestion: {question}"
+    const dateInjector = meta.questionDate ? new DateInjector({ date: meta.questionDate }) : null;
 
     const agent = new Agent({
       id: 'longmemeval-agent',
@@ -719,14 +952,6 @@ When answering questions, carefully review the conversation history to identify 
       model: agentModelId,
       instructions: [
         { role: 'system', content: agentInstructions },
-        ...(meta.questionDate
-          ? [
-              {
-                role: 'system' as const,
-                content: today,
-              },
-            ]
-          : []),
         // prevent openai prompt caching
         { role: 'system', content: `
 cache: ${Math.random()}` },
@@ -745,6 +970,10 @@ cache: ${Math.random()}` },
             observationalMemory!,
             // Add RAG filter after OM if enabled - it will filter OM's injected observations
             ...(observationRagFilter ? [observationRagFilter] : []),
+            // Inject date into user message in official LongMemEval format
+            // Placed BEFORE RAG so the date is part of the RAG query (more authentic to benchmark)
+            // Can be moved after RAG to experiment with ordering
+            ...(dateInjector ? [dateInjector] : []),
             {
               id: 'debug',
               processInputStep: args => {
@@ -803,6 +1032,26 @@ ${JSON.stringify(responses, null, 2)}`);
     // Create a fresh thread for the evaluation question
     const evalThreadId = `eval_${meta.questionId}_${Date.now()}`;
 
+    // Parse questionDate for relative time annotations in OM context
+    // Format: "2023/05/30 (Tue) 10:18"
+    let questionDate: Date | undefined;
+    if (meta.questionDate) {
+      const match = meta.questionDate.match(/^(\d{4})\/(\d{2})\/(\d{2}).*?(\d{2}):(\d{2})/);
+      if (match) {
+        const [, year, month, day, hour, minute] = match;
+        questionDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1, // JS months are 0-indexed
+          parseInt(day),
+          parseInt(hour),
+          parseInt(minute),
+        );
+      }
+    }
+
+    // Create request context with currentDate for OM relative time annotations
+    const requestContext = new RequestContext([['currentDate', questionDate ?? new Date()]]);
+
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
     let response = await withRateLimitRetry(
@@ -830,8 +1079,11 @@ ${JSON.stringify(responses, null, 2)}`);
       id: 'longmemeval-metric-agent',
       name: 'LongMemEval Metric Agent',
       model: evalModelId,
-      instructions:
-        'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct. If the response contains the answer plus additional information, that is correct too.',
+      // Official LongMemEval uses no system prompt for the judge - just the per-question-type
+      // prompts sent as user messages. Keeping empty to match official methodology.
+      // Old instructions (non-standard):
+      // 'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct. If the response contains the answer plus additional information, that is correct too.',
+      instructions: '',
     });
 
     const metric = new LongMemEvalMetric({
@@ -947,9 +1199,7 @@ ${JSON.stringify(responses, null, 2)}`);
               modelSettings: {
                 temperature: 0,
               },
-              context: meta.questionDate
-                ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }]
-                : undefined,
+              // Date is injected via DateInjector processor in official LongMemEval format
             }),
           spinner,
         );
@@ -1001,6 +1251,9 @@ ${JSON.stringify(responses, null, 2)}`);
       }
     }
 
+    // Track when improved version performs worse than original
+    const improvedRegression = isCorrect && improvedQuestion !== undefined && !improvedIsCorrect;
+
     return {
       question_id: meta.questionId,
       question: meta.question,
@@ -1012,19 +1265,17 @@ ${JSON.stringify(responses, null, 2)}`);
       improved_hypothesis: improvedHypothesis,
       improved_is_correct: improvedIsCorrect,
       has_improvement_info: !!(meta.improvedQuestion || meta.improvedAnswer || meta.improvementNote),
+      improved_regression: improvedRegression,
     };
   }
 
-  private async saveResults(
+  private async saveFinalResults(
     runDir: string,
     results: EvaluationResult[],
     metrics: BenchmarkMetrics,
     options: RunOptions,
   ): Promise<void> {
-    // Save raw results
-    const resultsPath = join(runDir, 'results.jsonl');
-    const resultsContent = results.map(r => JSON.stringify(r)).join('\n');
-    await writeFile(resultsPath, resultsContent);
+    // Note: results.jsonl is already saved incrementally during the run
 
     // Save failures.json for re-preparation
     // Only include questions where BOTH original and improved failed (or no improved version exists)
@@ -1136,9 +1387,9 @@ Results saved to: ${runDir}`),
           }
           metrics.fixed_accuracy_by_type![type].total++;
 
-          // Use improved_is_correct if this question has an improved version, otherwise use is_correct
-          const isCorrectFixed =
-            result.improved_question !== undefined ? result.improved_is_correct : result.is_correct;
+          // Fixed score: correct if EITHER original OR improved passes
+          // This ensures we don't penalize when improved question regresses
+          const isCorrectFixed = result.is_correct || (result.improved_is_correct ?? false);
           if (isCorrectFixed) {
             metrics.fixed_accuracy_by_type![type].correct++;
           }

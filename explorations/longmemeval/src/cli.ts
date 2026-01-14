@@ -157,6 +157,8 @@ program
   .option('--session-limit <n>', 'Limit processing to n sessions after resume point', parseInt)
   .option('--session-offset <n>', 'Start processing from the nth session (1-based)', parseInt)
   .option('--from-failures [path]', 'Re-prepare failed questions (uses latest failures.json if no path given)')
+  .option('--older-than <duration>', 'Only re-prepare questions older than this duration (e.g., "1h", "30m", "2d")')
+  .option('--dry-run', 'Show what would be re-prepared without actually doing it (use with --from-failures)')
   .option('-y, --yes', 'Skip confirmation prompt')
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
@@ -295,6 +297,8 @@ program
         sessionLimit: options.sessionLimit,
         sessionOffset: options.sessionOffset,
         fromFailures: options.fromFailures,
+        olderThan: options.olderThan,
+        dryRun: options.dryRun,
       });
 
       // Force exit after completion
@@ -323,6 +327,9 @@ program
   .option('--comb-offset <n>', 'Comb sampling: stride between questions (for sample-comb variant)', parseInt)
   .option('--start-offset <n>', 'Comb sampling: starting index (for sample-comb variant)', parseInt)
   .option('--no-fixed', 'Skip improved/fixed question evaluation')
+  .option('--from-failures [path]', 'Re-run only failed questions from a previous run (path to failures.json or "latest")')
+  .option('--older-than <duration>', 'With --from-failures: only re-run questions prepared before this duration (e.g., "1h", "30m", "2d")')
+  .option('--resume [run-id]', 'Resume a partial run (omit run-id to auto-detect most recent)')
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
   .option('-c, --memory-config <config>', 'Memory configuration (legacy)')
@@ -422,6 +429,9 @@ program
         questionId: options.questionId,
         questionType: options.type,
         skipFixed: options.fixed === false, // --no-fixed sets options.fixed to false
+        fromFailures: options.fromFailures,
+        resume: options.resume,
+        olderThan: options.olderThan,
       });
 
       // Force exit after completion
@@ -656,9 +666,11 @@ program
   .option('-l, --latest', 'Show only the latest result per config')
   .option('--min-questions <n>', 'Minimum questions to include (default: 20)', parseInt)
   .option('-s, --sort <by>', 'Sort by: date, accuracy, fixed (default: date)', 'date')
+  .option('--no-fixed', 'Hide fixed accuracy numbers')
   .action(async options => {
     const minQuestions = options.minQuestions ?? 20;
     const sortBy = options.sort ?? 'date';
+    const showFixed = options.fixed !== false;
     try {
       console.log(chalk.blue('\n📊 Benchmark Results Summary\n'));
 
@@ -822,7 +834,7 @@ program
           metrics.overall_accuracy = recalculatedOverall;
 
           // Check if fixed accuracy data exists
-          const hasFixedAccuracy = metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
+          const hasFixedAccuracy = showFixed && metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
 
           // Question type breakdown
           if (hasFixedAccuracy) {
