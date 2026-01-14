@@ -3,7 +3,6 @@ import defaultFont from 'tailwindcss/defaultTheme';
 import {
   FontSizes,
   LineHeights,
-  IconColors,
   BorderColors,
   Colors,
   BorderRadius,
@@ -66,7 +65,6 @@ export default {
       },
       colors: {
         ...Colors,
-        ...IconColors,
         ...BorderColors,
       },
       fontFamily: {
