@@ -10,6 +10,8 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
+export const TABLE_WORKFLOW_DEFINITION_VERSIONS = 'mastra_workflow_definition_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +21,9 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_WORKFLOW_DEFINITIONS
+  | typeof TABLE_WORKFLOW_DEFINITION_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -105,6 +109,34 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const WORKFLOW_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  inputSchema: { type: 'jsonb', nullable: false },
+  outputSchema: { type: 'jsonb', nullable: false },
+  stateSchema: { type: 'jsonb', nullable: true },
+  stepGraph: { type: 'jsonb', nullable: false },
+  steps: { type: 'jsonb', nullable: false },
+  retryConfig: { type: 'jsonb', nullable: true },
+  ownerId: { type: 'text', nullable: true },
+  activeVersionId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const WORKFLOW_DEFINITION_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  workflowDefinitionId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: true },
+  snapshot: { type: 'jsonb', nullable: false },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +199,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
+  [TABLE_WORKFLOW_DEFINITION_VERSIONS]: WORKFLOW_DEFINITION_VERSIONS_SCHEMA,
 };

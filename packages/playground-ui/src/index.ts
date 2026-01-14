@@ -4,6 +4,8 @@ export * from './domains/agents/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
+export * from './domains/workflow-definitions/index';
+export * from './domains/workflow-builder/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
 export * from './components/dynamic-form/index';

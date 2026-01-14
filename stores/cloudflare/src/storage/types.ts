@@ -12,8 +12,12 @@ import type {
   TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_AGENTS,
+  TABLE_WORKFLOW_DEFINITIONS,
+  TABLE_WORKFLOW_DEFINITION_VERSIONS,
   SpanRecord,
   StorageAgentType,
+  StorageWorkflowDefinitionType,
+  StorageWorkflowDefinitionVersionType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
@@ -67,9 +71,9 @@ export interface CloudflareRestConfig extends CloudflareBaseConfig {
  */
 export interface CloudflareWorkersConfig extends CloudflareBaseConfig {
   /** KV namespace bindings from Workers environment */
-  bindings: {
+  bindings: Partial<{
     [key in TABLE_NAMES]: KVNamespace;
-  };
+  }>;
   /** Optional prefix for keys within namespaces */
   keyPrefix?: string;
 }
@@ -109,6 +113,8 @@ export type RecordTypes = {
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
+  [TABLE_WORKFLOW_DEFINITIONS]: StorageWorkflowDefinitionType;
+  [TABLE_WORKFLOW_DEFINITION_VERSIONS]: StorageWorkflowDefinitionVersionType;
 };
 
 export type ListOptions = {
@@ -140,9 +146,9 @@ export interface CloudflareDomainClientConfig {
  * Pass existing KV bindings (Workers Binding API)
  */
 export interface CloudflareDomainBindingsConfig {
-  bindings: {
+  bindings: Partial<{
     [key in TABLE_NAMES]: KVNamespace;
-  };
+  }>;
   keyPrefix?: string;
 }
 

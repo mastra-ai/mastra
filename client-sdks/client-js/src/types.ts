@@ -697,3 +697,128 @@ export interface MastraPackage {
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
 }
+
+// ============================================================================
+// Workflow Definitions Types
+// ============================================================================
+
+/**
+ * Workflow definition data returned from API
+ */
+export interface WorkflowDefinitionResponse {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph: unknown[];
+  steps: Record<string, unknown>;
+  retryConfig?: { attempts?: number; delay?: number };
+  ownerId?: string;
+  activeVersionId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Parameters for creating a workflow definition
+ */
+export interface CreateWorkflowDefinitionInput {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph: unknown[];
+  steps: Record<string, unknown>;
+  retryConfig?: { attempts?: number; delay?: number };
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a workflow definition
+ */
+export interface UpdateWorkflowDefinitionInput {
+  name?: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
+  stepGraph?: unknown[];
+  steps?: Record<string, unknown>;
+  retryConfig?: { attempts?: number; delay?: number };
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for listing workflow definitions
+ */
+export interface ListWorkflowDefinitionsParams {
+  page?: number;
+  perPage?: number;
+  ownerId?: string;
+}
+
+/**
+ * Response for listing workflow definitions
+ */
+export interface ListWorkflowDefinitionsResponse {
+  definitions: WorkflowDefinitionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Workflow definition version data returned from API
+ */
+export interface WorkflowDefinitionVersionResponse {
+  id: string;
+  workflowDefinitionId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: WorkflowDefinitionResponse;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Parameters for listing workflow definition versions
+ */
+export interface ListWorkflowDefinitionVersionsParams {
+  page?: number;
+  perPage?: number;
+}
+
+/**
+ * Response for listing workflow definition versions
+ */
+export interface ListWorkflowDefinitionVersionsResponse {
+  versions: WorkflowDefinitionVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a workflow definition version
+ */
+export interface CreateWorkflowDefinitionVersionInput {
+  name?: string;
+  changeMessage?: string;
+}
+
+/**
+ * Response for comparing workflow definition versions
+ */
+export interface CompareWorkflowDefinitionVersionsResponse {
+  version1: WorkflowDefinitionVersionResponse;
+  version2: WorkflowDefinitionVersionResponse;
+  changedFields: string[];
+}

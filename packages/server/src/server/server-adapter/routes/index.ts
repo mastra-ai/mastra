@@ -15,6 +15,8 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { MastraStreamReturn } from './stream-types';
+import { WORKFLOW_DEFINITIONS_ROUTES } from './workflow-definitions';
+import { WORKFLOW_DEFINITION_VERSIONS_ROUTES } from './workflow-definition-versions';
 import { SYSTEM_ROUTES } from './system';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
@@ -100,9 +102,15 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...WORKFLOW_DEFINITION_VERSIONS_ROUTES, // Version routes first to avoid path collisions
+  ...WORKFLOW_DEFINITIONS_ROUTES,
   ...SYSTEM_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities
 export { createRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
+
+// Export workflow definitions routes
+export * from './workflow-definitions';
+export * from './workflow-definition-versions';

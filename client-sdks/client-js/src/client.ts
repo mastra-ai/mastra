@@ -15,6 +15,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  WorkflowDefinition,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -54,6 +55,10 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  ListWorkflowDefinitionsParams,
+  ListWorkflowDefinitionsResponse,
+  CreateWorkflowDefinitionInput,
+  WorkflowDefinitionResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -765,6 +770,53 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Workflow Definitions
+  // ============================================================================
+
+  /**
+   * Lists all workflow definitions with optional pagination
+   * @param params - Optional pagination and filter parameters
+   * @returns Promise containing paginated list of workflow definitions
+   */
+  public listWorkflowDefinitions(params?: ListWorkflowDefinitionsParams): Promise<ListWorkflowDefinitionsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.ownerId) {
+      searchParams.set('ownerId', params.ownerId);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/workflow-definitions${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new workflow definition
+   * @param params - Workflow definition configuration
+   * @returns Promise containing the created workflow definition
+   */
+  public createWorkflowDefinition(params: CreateWorkflowDefinitionInput): Promise<WorkflowDefinitionResponse> {
+    return this.request('/api/workflow-definitions', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a workflow definition instance by ID for further operations (details, update, delete, versions)
+   * @param workflowDefinitionId - ID of the workflow definition to retrieve
+   * @returns WorkflowDefinition instance
+   */
+  public getWorkflowDefinition(workflowDefinitionId: string): WorkflowDefinition {
+    return new WorkflowDefinition(this.options, workflowDefinitionId);
   }
 
   // ============================================================================
