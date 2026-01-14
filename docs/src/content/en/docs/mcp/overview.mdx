@@ -59,7 +59,7 @@ Visit [MCPClient](/reference/v1/tools/mcp-client) for a full list of configurati
 
 ## Using `MCPClient` with an agent
 
-To use tools from an MCP server in an agent, import your `MCPClient` and call `.getTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
+To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
 ```typescript {3,15} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -67,6 +67,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -76,7 +77,7 @@ export const testAgent = new Agent({
 
       Answer questions using the information you find using the MCP Servers.`,
   model: "openai/gpt-5.1",
-  tools: await testMcpClient.getTools(),
+  tools: await testMcpClient.listTools(),
 });
 ```
 
@@ -131,20 +132,20 @@ export const mastra = new Mastra({
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
-| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)    |
-| :---------------- | :-------------------------------------------- | :--------------------------------------------------- |
-| **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)          |
-| **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                                 |
-| **Credentials**   | Shared across all uses                        | Can vary per user/request                            |
-| **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `.generate()` or `.stream()` options |
+| Feature           | Static Configuration (`await mcp.listTools()`) | Dynamic Configuration (`await mcp.listToolsets()`)   |
+| :---------------- | :--------------------------------------------- | :--------------------------------------------------- |
+| **Use Case**      | Single-user, static config (e.g., CLI tool)    | Multi-user, dynamic config (e.g., SaaS app)          |
+| **Configuration** | Fixed at agent initialization                  | Per-request, dynamic                                 |
+| **Credentials**   | Shared across all uses                         | Can vary per user/request                            |
+| **Agent Setup**   | Tools added in `Agent` constructor             | Tools passed in `.generate()` or `.stream()` options |
 
 ### Static tools
 
-Use the `.getTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
+Use the `.listTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
 :::info
 
-Visit [getTools()](/reference/v1/tools/mcp-client#gettools) for more information.
+Visit [listTools()](/reference/v1/tools/mcp-client#listtools) for more information.
 
 :::
 
@@ -154,13 +155,14 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
-  tools: await testMcpClient.getTools(),
+  id: "test-agent",
+  tools: await testMcpClient.listTools(),
 });
 ```
 
 ### Dynamic tools
 
-Use the `.getToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
+Use the `.listToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
 
 ```typescript {5-16,21}
 import { MCPClient } from "@mastra/mcp";
@@ -183,7 +185,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
   const agent = mastra.getAgent("testAgent");
 
   const response = await agent.generate(userPrompt, {
-    toolsets: await userMcp.getToolsets(),
+    toolsets: await userMcp.listToolsets(),
   });
 
   await userMcp.disconnect();
@@ -196,7 +198,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 
 :::info
 
-Visit [getToolsets()](/reference/v1/tools/mcp-client#gettoolsets) for more information.
+Visit [listToolsets()](/reference/v1/tools/mcp-client#listtoolsets) for more information.
 
 :::
 
