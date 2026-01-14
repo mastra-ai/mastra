@@ -186,19 +186,6 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
           processedAttributes[OUTPUT_VALUE] = outputMessages;
         }
 
-        // Map tool call arguments/result to OpenInference input/output
-        // These are set by Mastra's gen-ai-semantics.ts for TOOL_CALL spans
-        const toolCallArguments = attributes['gen_ai.tool.call.arguments'];
-        if (toolCallArguments && !processedAttributes[INPUT_VALUE]) {
-          processedAttributes[INPUT_MIME_TYPE] = 'application/json';
-          processedAttributes[INPUT_VALUE] = toolCallArguments;
-        }
-        const toolCallResult = attributes['gen_ai.tool.call.result'];
-        if (toolCallResult && !processedAttributes[OUTPUT_VALUE]) {
-          processedAttributes[OUTPUT_MIME_TYPE] = 'application/json';
-          processedAttributes[OUTPUT_VALUE] = toolCallResult;
-        }
-
         // Map generic Mastra span input/output to OpenInference input/output
         // These are set by Mastra's gen-ai-semantics.ts for non-LLM/tool spans
         // (e.g., mastra.processor_run.input, mastra.workflow_run.input, etc.)

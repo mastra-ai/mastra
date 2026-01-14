@@ -422,7 +422,7 @@ export class CoreToolBuilder extends MastraBase {
         // Skip validation if suspend was called without a result
         const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
         if (shouldSkipValidation) {
-          toolSpan?.end({ output: result });
+          toolSpan?.end({ output: result, attributes: { success: true } });
           return result;
         }
 
