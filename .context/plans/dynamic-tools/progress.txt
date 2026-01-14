@@ -396,3 +396,64 @@ Date: 2025-01-14
 - Task 011: Implement integration API handlers
   This depends on task 010 and will create the server-side handlers for integration CRUD operations.
 
+
+## Task 010: Create integration API schemas - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/server/src/server/schemas/integrations.ts with comprehensive Zod schemas
+- Defined path parameter schemas:
+  - integrationIdPathParams: Path parameter for integration ID
+  - providerPathParams: Path parameter for provider name (composio, arcade)
+- Defined query parameter schemas:
+  - listIntegrationsQuerySchema: Pagination, ordering, filtering by ownerId/provider/enabled
+  - listToolkitsQuerySchema: Search, category filtering, pagination with cursor
+  - listToolsQuerySchema: Toolkit filtering (single/multiple), search, cursor pagination
+- Defined body parameter schemas:
+  - createIntegrationBodySchema: Create new integration with optional custom ID
+  - updateIntegrationBodySchema: Partial updates to existing integration
+  - refreshIntegrationBodySchema: Empty schema for refresh endpoint
+- Defined response schemas:
+  - integrationSchema: Full integration object with all fields
+  - cachedToolSchema: Cached tool definition from provider
+  - providerStatusSchema: Provider connection status
+  - toolkitSchema: Toolkit from provider API
+  - toolSchema: Tool from provider API
+  - All list response schemas with proper pagination info
+  - All CRUD response schemas (create, update, get, delete)
+  - Provider-specific response schemas (listProviders, listToolkits, listTools)
+  - refreshIntegrationResponseSchema: Refresh result with tools updated count
+
+### Key implementation details:
+- Followed existing patterns from stored-agents.ts and agents.ts
+- Used createPagePaginationSchema(100) for page-based pagination on integrations list
+- Used cursor-based pagination for provider API endpoints (listToolkits, listTools)
+- All schemas include proper JSDoc descriptions for OpenAPI documentation
+- Provider types constrained to z.enum(['composio', 'arcade']) throughout
+- Metadata fields use z.record(z.string(), z.unknown()) for flexibility
+- Optional fields properly marked with .optional() or .default() values
+
+### Build/Test status:
+- Full monorepo typecheck passes (pnpm typecheck)
+- Full monorepo build passes (pnpm build) - 88 successful tasks
+- Server package tests pass (410 passed, 2 skipped)
+- All acceptance criteria met:
+  ✓ All schemas validate correct input/output
+  ✓ Schemas follow existing patterns in schemas/ directory
+  ✓ OpenAPI documentation annotations present (JSDoc descriptions on all fields)
+
+### Files created:
+- packages/server/src/server/schemas/integrations.ts (new)
+
+### Files modified:
+- .context/plans/dynamic-tools/tasks.json (marked task 010 as passing)
+
+### Next recommended task:
+- Task 011: Implement integration API handlers
+  This is the next P0 task that depends on task 010. It will create the server-side handlers for integration CRUD operations and provider proxy endpoints.
+  This is a large task that implements all the business logic for:
+  - Integration CRUD (create, read, update, delete, list)
+  - Provider status checking
+  - Provider toolkit/tool listing (proxy to external APIs)
+  - Tool caching on create/refresh
