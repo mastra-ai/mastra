@@ -1175,23 +1175,28 @@ describe('Lance Shared Test Suite', () => {
   // is initialized asynchronously in beforeAll
   const config: any = {
     createIndex: async (indexName: string) => {
-      // Lance requires table to exist before creating index
-      // Create table with 300 rows (Lance requires 256+ for index creation)
+      // Lance architecture: tables ARE indexes.
+      // We create an empty table so listIndexes()/describeIndex() work, but with NO metadata fields.
+      // This allows the schema to evolve when upsert adds vectors with metadata later.
       const tableName = indexName;
-      await vectorDB.createTable(tableName, generateTableData(300, 1536));
 
-      // Create index on the 'vector' column
-      await vectorDB.createIndex({
-        indexName: 'vector',
-        dimension: 1536,
-        metric: 'cosine',
-        tableName: tableName,
-        indexConfig: {
-          type: 'ivfflat',
-          numPartitions: 2,
-          numSubVectors: 1,
+      // Ensure table doesn't exist from previous test runs
+      const tables = await vectorDB.listTables();
+      if (tables.includes(tableName)) {
+        await vectorDB.deleteTable(tableName);
+      }
+
+      // Create empty table with minimal schema (just id and vector)
+      // LanceDB allows schema evolution - metadata fields will be added on first upsert
+      await vectorDB.createTable(tableName, [
+        {
+          id: '__placeholder__',
+          vector: Array.from({ length: 1536 }, () => 0),
         },
-      });
+      ]);
+
+      // Immediately delete the placeholder row, leaving an empty table with schema
+      await vectorDB.deleteVector({ indexName: 'vector', id: '__placeholder__' });
     },
     deleteIndex: async (indexName: string) => {
       // Lance uses deleteTable instead of deleteIndex

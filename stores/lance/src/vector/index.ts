@@ -652,16 +652,11 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     }
 
     try {
+      // Lance uses tables as indexes. Return table names instead of column index names.
+      // This aligns with how createIndex creates tables and how Memory system expects
+      // to use indexName parameter throughout operations (createIndex, query, upsert, etc.)
       const tables = await this.lanceClient.tableNames();
-      const allIndices: string[] = [];
-
-      for (const tableName of tables) {
-        const table = await this.lanceClient.openTable(tableName);
-        const tableIndices = await table.listIndices();
-        allIndices.push(...tableIndices.map(index => index.name));
-      }
-
-      return allIndices;
+      return tables;
     } catch (error: any) {
       throw new MastraError(
         {
@@ -696,37 +691,48 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     }
 
     try {
+      // Lance uses tables as indexes. Treat indexName as tableName.
+      // This aligns with listIndexes returning table names and createIndex creating tables.
+      const tableName = indexName;
       const tables = await this.lanceClient.tableNames();
 
-      for (const tableName of tables) {
-        this.logger.debug('Checking table:' + tableName);
-        const table = await this.lanceClient.openTable(tableName);
-        const tableIndices = await table.listIndices();
-        const foundIndex = tableIndices.find(index => index.name === indexName);
-
-        if (foundIndex) {
-          const stats = await table.indexStats(foundIndex.name);
-
-          if (!stats) {
-            throw new Error(`Index stats not found for index: ${indexName}`);
-          }
-
-          const schema = await table.schema();
-          const vectorCol = foundIndex.columns[0] || 'vector';
-
-          // Find the vector column in the schema
-          const vectorField = schema.fields.find(field => field.name === vectorCol);
-          const dimension = vectorField?.type?.['listSize'] || 0;
-
-          return {
-            dimension: dimension,
-            metric: stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined,
-            count: stats.numIndexedRows,
-          };
-        }
+      if (!tables.includes(tableName)) {
+        throw new Error(`Table (index) ${indexName} not found`);
       }
 
-      throw new Error(`IndexName: ${indexName} not found`);
+      const table = await this.lanceClient.openTable(tableName);
+      const schema = await table.schema();
+
+      // Try to find the vector column - typically 'vector' but could vary
+      const vectorField = schema.fields.find(
+        field => field.name === 'vector' || (field.type && typeof field.type === 'object' && 'listSize' in field.type),
+      );
+
+      const dimension = vectorField?.type?.['listSize'] || 0;
+
+      // Try to get index stats from the vector column's index if it exists
+      const tableIndices = await table.listIndices();
+      let count = 0;
+      let metric: 'cosine' | 'euclidean' | 'dotproduct' | undefined;
+
+      if (tableIndices.length > 0 && tableIndices[0]) {
+        // Use the first vector index found
+        const vectorIndex = tableIndices[0];
+        const stats = await table.indexStats(vectorIndex.name);
+        if (stats) {
+          count = stats.numIndexedRows;
+          metric = stats.distanceType as 'cosine' | 'euclidean' | 'dotproduct' | undefined;
+        }
+      } else {
+        // No index created yet - count all rows in table
+        count = await table.countRows();
+      }
+
+      return {
+        dimension: dimension,
+        metric: metric,
+        count: count,
+      };
     } catch (error: any) {
       throw new MastraError(
         {
