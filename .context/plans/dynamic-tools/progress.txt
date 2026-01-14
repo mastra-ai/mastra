@@ -764,3 +764,71 @@ Date: 2025-01-14
 - Authentication context (userId, connectedAccountId) should be passed from agent context when available
 - The current implementation uses API-level authentication (API keys) rather than per-user OAuth flows
 
+
+## Task 016: Create integration provider hooks - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Created packages/playground-ui/src/domains/integrations/ directory structure
+- Created types.ts to export integration types from @mastra/client-js
+- Created hooks/use-providers.ts for fetching available integration providers with connection status
+- Created hooks/use-provider-toolkits.ts for fetching toolkits from a specific provider
+- Created hooks/use-provider-tools.ts for fetching tools from a specific provider
+- Created hooks/use-integrations.ts for fetching configured integrations and individual integration details
+- Created hooks/use-integration-mutations.ts for CRUD operations (create, update, delete, refresh)
+- Created hooks/index.ts to export all hooks
+- Created domain index.ts to export hooks and types
+- Updated packages/playground-ui/src/index.ts to export the new integrations domain
+- All hooks follow existing patterns from agents/stored-agents hooks
+- All hooks include comprehensive JSDoc documentation with examples
+
+### Key implementation details:
+- useProviders: Fetches provider list with connection status (no requestContext needed)
+- useProviderToolkits: Fetches toolkits from provider, optional search/category/pagination
+- useProviderTools: Fetches tools from provider, supports single or multiple toolkit filtering
+- useIntegrations: Fetches configured integrations list with pagination/filtering
+- useIntegration: Fetches single integration by ID
+- useIntegrationMutations: Returns mutations for create/update/delete/refresh operations
+- All mutations properly invalidate relevant query keys (integrations, tools)
+- Refresh mutation updates cached tools from provider API
+- Used ListProviderToolkitsParams and ListProviderToolsParams from client-js types (not custom types)
+
+### Build/Test status:
+- Playground-ui package typecheck passes (pnpm exec tsc --noEmit)
+- Full monorepo build passes (pnpm build) - 121 successful tasks
+- All acceptance criteria met:
+  ✓ All hooks properly fetch from MastraClient
+  ✓ Loading and error states are handled (via React Query)
+  ✓ Data is properly typed (uses types from @mastra/client-js)
+
+### Files created:
+- packages/playground-ui/src/domains/integrations/types.ts (new)
+- packages/playground-ui/src/domains/integrations/hooks/use-providers.ts (new)
+- packages/playground-ui/src/domains/integrations/hooks/use-provider-toolkits.ts (new)
+- packages/playground-ui/src/domains/integrations/hooks/use-provider-tools.ts (new)
+- packages/playground-ui/src/domains/integrations/hooks/use-integrations.ts (new)
+- packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts (new)
+- packages/playground-ui/src/domains/integrations/hooks/index.ts (new)
+- packages/playground-ui/src/domains/integrations/index.ts (new)
+
+### Files modified:
+- packages/playground-ui/src/index.ts (added export for integrations domain)
+- .context/plans/dynamic-tools/tasks.json (marked task 016 as passing)
+
+### Next recommended task:
+- Task 017: Create provider list component
+  This is the next P1 UI task that depends on task 016. It will build the component that displays
+  available integration providers with connection status.
+  OR
+- Task 018: Create toolkit browser component
+  This can be started in parallel with task 017 as both depend on task 016.
+
+### Notes for next engineer:
+- All hooks use React Query (from @tanstack/react-query) for data fetching
+- Hooks use useMastraClient() from @mastra/react to get the client instance
+- Some hooks use usePlaygroundStore() for requestContext (following stored-agents pattern)
+- Provider endpoints don't require requestContext (stateless API calls)
+- Integration CRUD operations invalidate both 'integrations' and 'tools' query keys
+- The hooks are ready to be used in UI components (tasks 017-024)
+
