@@ -191,6 +191,11 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
 
     const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
 
+    // Validate topK parameter
+    if (topK <= 0) {
+      throw new Error('topK must be a positive integer');
+    }
+
     const tableName = this.escapeIdentifier(indexName);
     const distanceFunc = this.getDistanceFunction();
 
@@ -259,6 +264,20 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     await this.initialize();
 
     const { indexName, vectors, metadata, ids } = params;
+
+    // Validate input parameters
+    if (!vectors || vectors.length === 0) {
+      throw new Error('Vectors array cannot be empty');
+    }
+
+    if (metadata && metadata.length !== vectors.length) {
+      throw new Error(`Metadata length (${metadata.length}) must match vectors length (${vectors.length})`);
+    }
+
+    if (ids && ids.length !== vectors.length) {
+      throw new Error(`IDs length (${ids.length}) must match vectors length (${vectors.length})`);
+    }
+
     const tableName = this.escapeIdentifier(indexName);
 
     // Generate IDs if not provided
