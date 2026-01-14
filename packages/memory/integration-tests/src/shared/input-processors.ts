@@ -52,8 +52,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       // First message
       await agent.generate('My name is Alice', {
-        threadId,
-        resourceId,
+        memory: { thread: threadId, resource: resourceId },
       });
 
       // Small delay to ensure message persistence completes
@@ -61,8 +60,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       // Second message
       await agent.generate('I live in Paris', {
-        threadId,
-        resourceId,
+        memory: { thread: threadId, resource: resourceId },
       });
 
       // Small delay to ensure message persistence completes
@@ -75,8 +73,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       // Third message - MessageHistory processor should include previous conversation
       const thirdResponse = await agent.generate('What is my name and where do I live?', {
-        threadId,
-        resourceId,
+        memory: { thread: threadId, resource: resourceId },
       });
 
       // Check the actual request sent to the LLM
@@ -221,8 +218,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       // Generate a response - WorkingMemory processor should include the working memory
       const response = await agent.generate('What is my occupation?', {
-        threadId,
-        resourceId,
+        memory: { thread: threadId, resource: resourceId },
       });
 
       // Check the actual request sent to the LLM
@@ -295,8 +291,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       });
 
       const response = await agent.generate('What are my preferences?', {
-        threadId,
-        resourceId,
+        memory: { thread: threadId, resource: resourceId },
       });
 
       const requestMessages: CoreMessage[] = (response.request.body as any).input;
@@ -363,19 +358,16 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       // Thread 1: Discuss Python programming
       await agent.generate('I love programming in Python, especially for data science', {
-        threadId: thread1Id,
-        resourceId,
+        memory: { thread: thread1Id, resource: resourceId },
       });
 
       await agent.generate('Python has great libraries like pandas and numpy', {
-        threadId: thread1Id,
-        resourceId,
+        memory: { thread: thread1Id, resource: resourceId },
       });
 
       // Thread 2: Ask about programming (should recall Python messages from thread 1)
       const response = await agent.generate('What programming languages have we discussed?', {
-        threadId: thread2Id,
-        resourceId,
+        memory: { thread: thread2Id, resource: resourceId },
       });
 
       const requestMessages: CoreMessage[] = (response.request.body as any).input;

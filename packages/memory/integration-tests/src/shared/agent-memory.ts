@@ -290,8 +290,7 @@ export function getAgentMemoryTests({
             { role: 'user', content: 'Second message' },
           ],
           {
-            threadId,
-            resourceId,
+            memory: { thread: threadId, resource: resourceId },
           },
         );
       } else {
@@ -330,8 +329,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await agent.generate([{ role: 'user', content: 'What is 2+2?' }], {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         await agent.generateLegacy([{ role: 'user', content: 'What is 2+2?' }], {
@@ -346,8 +344,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
           structuredOutput: {
             schema: z.object({
               result: z.string(),
@@ -393,8 +390,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await agent.generate(userMessageContent, {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
           context: [
             { role: 'system', content: contextMessageContent1 },
             { role: 'user', content: contextMessageContent2 },
@@ -465,8 +461,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await agent.generate(messagesWithMetadata, {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         // Send messages with metadata
@@ -553,8 +548,7 @@ export function getAgentMemoryTests({
             ['v2', 'v3'].includes(reasoningModel.specificationVersion))
         ) {
           result = await reasoningAgent.generate('What is 2+2? Think through this carefully.', {
-            threadId,
-            resourceId,
+            memory: { thread: threadId, resource: resourceId },
           });
         } else {
           result = await reasoningAgent.generateLegacy('What is 2+2? Think through this carefully.', {
@@ -722,8 +716,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await agentWithDynamicModelTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
           requestContext,
         });
       } else {
@@ -819,8 +812,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         firstResponse = await memoryProcessorAgent.generate('What is the weather in London?', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         firstResponse = await memoryProcessorAgent.generateLegacy('What is the weather in London?', {
@@ -849,8 +841,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         secondResponse = await memoryProcessorAgent.generate('What was the tool you just used?', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         secondResponse = await memoryProcessorAgent.generateLegacy('What was the tool you just used?', {
@@ -959,8 +950,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         response = await agent.generate('What is my favorite color?', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         response = await agent.generateLegacy('What is my favorite color?', {
@@ -1022,12 +1012,12 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await mockStoreAgent.generate(`What's the weather in Tokyo?`, {
-          threadId: thread,
-          resourceId: resource,
+          memory: { thread, resource },
         });
       } else {
         await mockStoreAgent.generateLegacy(`What's the weather in Tokyo?`, {
-          memory: { resource, thread },
+          threadId: thread,
+          resourceId: resource,
         });
       }
 
@@ -1041,14 +1031,14 @@ export function getAgentMemoryTests({
       ) {
         await expect(
           mockStoreAgent.generate(`What's the weather in London?`, {
-            threadId: thread,
-            resourceId: resource,
+            memory: { thread, resource },
           }),
         ).resolves.not.toThrow();
       } else {
         await expect(
           mockStoreAgent.generateLegacy(`What's the weather in London?`, {
-            memory: { resource, thread },
+            threadId: thread,
+            resourceId: resource,
           }),
         ).resolves.not.toThrow();
       }
@@ -1082,8 +1072,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         firstResponse = await inputProcessorAgent.generate('My name is Alice', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         firstResponse = await inputProcessorAgent.generateLegacy('My name is Alice', {
@@ -1105,8 +1094,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         secondResponse = await inputProcessorAgent.generate('What is my name?', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         secondResponse = await inputProcessorAgent.generateLegacy('What is my name?', {
@@ -1180,8 +1168,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         result = await guardrailAgent.generate('Hello, save this message!', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         result = await guardrailAgent.generateLegacy('Hello, save this message!', {
@@ -1236,8 +1223,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         result = await passingGuardrailAgent.generate('Hello, save this message!', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         result = await passingGuardrailAgent.generateLegacy('Hello, save this message!', {
@@ -1304,8 +1290,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         result = await inputGuardrailAgent.generate('Hello, this should be blocked!', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         result = await inputGuardrailAgent.generateLegacy('Hello, this should be blocked!', {
@@ -1362,12 +1347,10 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Hello, my name is Alice!', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
         await cloneAgent.generate('I live in New York.', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Hello, my name is Alice!', {
@@ -1416,8 +1399,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Test message for cloning', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Test message for cloning', {
@@ -1447,8 +1429,7 @@ export function getAgentMemoryTests({
           ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
         ) {
           await cloneAgent.generate(`Message number ${i}`, {
-            threadId: sourceThreadId,
-            resourceId,
+            memory: { thread: sourceThreadId, resource: resourceId },
           });
         } else {
           await cloneAgent.generateLegacy(`Message number ${i}`, {
@@ -1481,8 +1462,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('My favorite color is blue.', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('My favorite color is blue.', {
@@ -1502,8 +1482,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Actually, my favorite color is red.', {
-          threadId: clonedThread.id,
-          resourceId,
+          memory: { thread: clonedThread.id, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Actually, my favorite color is red.', {
@@ -1534,8 +1513,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Test message', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Test message', {
@@ -1569,8 +1547,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Test message', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Test message', {
@@ -1610,8 +1587,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Test message', {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Test message', {
@@ -1642,8 +1618,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate('Original message', {
-          threadId: originalThreadId,
-          resourceId,
+          memory: { thread: originalThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy('Original message', {
@@ -1684,8 +1659,7 @@ export function getAgentMemoryTests({
         ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
       ) {
         await cloneAgent.generate(uniqueContent, {
-          threadId: sourceThreadId,
-          resourceId,
+          memory: { thread: sourceThreadId, resource: resourceId },
         });
       } else {
         await cloneAgent.generateLegacy(uniqueContent, {

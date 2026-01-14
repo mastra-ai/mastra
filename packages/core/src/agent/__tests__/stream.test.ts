@@ -116,8 +116,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         stream = await agent.stream(
           'Please echo this and then use the error tool. Be verbose and you must take multiple steps. Call tools 2x in parallel.',
           {
-            threadId: 'thread-partial-rescue',
-            resourceId: 'resource-partial-rescue',
+            memory: {
+              thread: 'thread-partial-rescue',
+              resource: 'resource-partial-rescue',
+            },
             savePerStep: true,
             onStepFinish: (result: any) => {
               if (result.toolCalls && result.toolCalls.length > 1) {
@@ -208,8 +210,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('Echo: Please echo this long message and explain why.', {
-          threadId: 'thread-echo',
-          resourceId: 'resource-echo',
+          memory: {
+            thread: 'thread-echo',
+            resource: 'resource-echo',
+          },
           savePerStep: true,
         });
       }
@@ -288,8 +292,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         stream = await agent.stream(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
-            threadId: 'thread-multi',
-            resourceId: 'resource-multi',
+            memory: {
+              thread: 'thread-multi',
+              resource: 'resource-multi',
+            },
             savePerStep: true,
           },
         );

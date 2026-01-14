@@ -4116,8 +4116,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             );
           } else {
             await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
-              threadId: 'thread-partial-rescue-generate',
-              resourceId: 'resource-partial-rescue-generate',
+              memory: {
+                thread: 'thread-partial-rescue-generate',
+                resource: 'resource-partial-rescue-generate',
+              },
               savePerStep: true,
               onStepFinish: (result: any) => {
                 if (result.toolCalls && result.toolCalls.length > 1) {
@@ -4200,8 +4202,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo-generate',
-            resourceId: 'resource-echo-generate',
+            memory: {
+              thread: 'thread-echo-generate',
+              resource: 'resource-echo-generate',
+            },
             savePerStep: true,
           });
         }
@@ -4278,8 +4282,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           await agent.generate(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
-              threadId: 'thread-multi-generate',
-              resourceId: 'resource-multi-generate',
+              memory: {
+                thread: 'thread-multi-generate',
+                resource: 'resource-multi-generate',
+              },
               savePerStep: true,
             },
           );
@@ -4364,8 +4370,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('no progress', {
-            threadId: `thread-2-${version}-generate`,
-            resourceId: `resource-2-${version}-generate`,
+            memory: {
+              thread: `thread-2-${version}-generate`,
+              resource: `resource-2-${version}-generate`,
+            },
           });
         }
 
@@ -4408,8 +4416,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('interrupt before step', {
-            threadId: 'thread-3-generate',
-            resourceId: 'resource-3-generate',
+            memory: {
+              thread: 'thread-3-generate',
+              resource: 'resource-3-generate',
+            },
           });
         }
       } catch (err: any) {
