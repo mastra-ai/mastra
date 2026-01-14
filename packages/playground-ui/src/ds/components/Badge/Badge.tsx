@@ -1,7 +1,7 @@
-import clsx from 'clsx';
 import React from 'react';
 
 import { Icon } from '../../icons/Icon';
+import { cn } from '@/lib/utils';
 
 export interface BadgeProps {
   icon?: React.ReactNode;
@@ -20,7 +20,7 @@ const variantClasses = {
 export const Badge = ({ icon, variant = 'default', className, children, ...props }: BadgeProps) => {
   return (
     <div
-      className={clsx(
+      className={cn(
         'font-mono bg-surface4 text-ui-sm gap-md h-badge-default inline-flex items-center rounded-md shrink-0',
         icon ? 'pl-md pr-1.5' : 'px-1.5',
         icon || variant === 'default' ? 'text-neutral5' : variantClasses[variant],

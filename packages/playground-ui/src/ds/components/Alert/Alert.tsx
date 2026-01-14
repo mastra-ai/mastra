@@ -1,5 +1,5 @@
 import { Icon } from '@/ds/icons';
-import clsx from 'clsx';
+import { cn } from '@/lib/utils';
 import { AlertCircle, InfoIcon, TriangleAlert } from 'lucide-react';
 import React from 'react';
 import { Txt, TxtProps } from '../Txt';
@@ -26,7 +26,7 @@ const variantIcons: Record<AlertVariant, React.FC<React.SVGProps<SVGSVGElement>>
 export const Alert = ({ children, variant = 'destructive' }: AlertProps) => {
   const Ico = variantIcons[variant];
   return (
-    <div className={clsx(variantClasses[variant], 'p-2 rounded-md')}>
+    <div className={cn(variantClasses[variant], 'p-2 rounded-md')}>
       <div className="flex items-start gap-2">
         <Icon className="mt-0.5">
           <Ico />

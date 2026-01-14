@@ -1,7 +1,7 @@
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
-import clsx from 'clsx';
 import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { ElementType } from 'react';
 
 export interface ThreadsProps {
@@ -27,7 +27,7 @@ export const ThreadLink = ({ children, as: Component = 'a', href, className, pre
       href={href}
       prefetch={prefetch}
       to={to}
-      className={clsx('text-ui-sm flex h-full w-full flex-col justify-center font-medium cursor-pointer', className)}
+      className={cn('text-ui-sm flex h-full w-full flex-col justify-center font-medium cursor-pointer', className)}
     >
       {children}
     </Component>
@@ -51,7 +51,7 @@ export interface ThreadItemProps {
 export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) => {
   return (
     <li
-      className={clsx(
+      className={cn(
         'border-b-sm border-border1 hover:bg-surface3 group flex h-[54px] items-center justify-between gap-2 px-3 py-2',
         isActive && 'bg-surface4',
         className,
