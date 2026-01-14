@@ -9,7 +9,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { useLinkComponent } from '@/lib/framework';

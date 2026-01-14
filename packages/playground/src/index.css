@@ -154,7 +154,7 @@
 }
 
 .react-flow__controls-button {
-  @apply !text-mastra-el-5 !bg-mastra-bg-1 !border-none;
+  @apply !text-icon5 !bg-surface2 !border-none;
 }
 
 .scorerListItem:has(+ .expanded) {

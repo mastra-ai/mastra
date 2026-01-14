@@ -12,7 +12,7 @@ import { AgentIcon } from '@/ds/icons';
 import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
-import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
 import {
@@ -22,7 +22,7 @@ import {
   useUpdateModelInModelList,
 } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
 
 export interface AgentMetadataProps {

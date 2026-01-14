@@ -59,6 +59,7 @@ npx @mastra/codemod@beta v1/mastra-core-imports .
 | `v1/memory-message-v2-type`          | Renames `MastraMessageV2` type → `MastraDBMessage` in imports and usages                                           |
 | `v1/memory-query-to-recall`          | Renames `memory.query()` → `memory.recall()`                                                                       |
 | `v1/memory-vector-search-param`      | Renames `vectorMessageSearch` parameter → `vectorSearchString` in `memory.recall()` calls                          |
+| `v1/memory-readonly-to-options`      | Moves `memory.readOnly` to `memory.options.readOnly` in agent method calls                                         |
 | `v1/runtime-context`                 | Renames `RuntimeContext` to `RequestContext` and updates parameter names from `runtimeContext` to `requestContext` |
 | `v1/storage-get-messages-paginated`  | Renames `storage.getMessagesPaginated()` → `storage.listMessages()` and `offset`/`limit` → `page`/`perPage`        |
 | `v1/storage-get-threads-by-resource` | Renames `storage.getThreadsByResourceId()` → `storage.listThreadsByResourceId()`                                   |

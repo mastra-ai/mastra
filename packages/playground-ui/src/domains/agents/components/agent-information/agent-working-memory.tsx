@@ -1,16 +1,16 @@
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import React, { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import MarkdownRenderer from '@/components/ui/markdown-renderer';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from './code-display';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
