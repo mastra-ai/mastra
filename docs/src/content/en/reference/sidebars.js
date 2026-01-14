@@ -324,7 +324,6 @@ const sidebars = {
           id: "memory/listThreadsByResourceId",
           label: ".listThreadsByResourceId()",
         },
-        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/recall", label: ".recall()" },
       ],
     },

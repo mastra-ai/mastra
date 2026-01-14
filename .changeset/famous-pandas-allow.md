@@ -24,5 +24,3 @@ await agent.stream('Hello', {
   },
 });
 ```
-
-Also updates the migration guide, API reference docs, and tests to use the new format. The legacy methods (`generateLegacy`, `streamLegacy`) still support the old fields.
