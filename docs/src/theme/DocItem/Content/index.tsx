@@ -1,6 +1,6 @@
 import { useDoc } from "@docusaurus/plugin-content-docs/client";
 import { ThemeClassNames } from "@docusaurus/theme-common";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import type { Props } from "@theme/DocItem/Content";
 import Heading from "@theme/Heading";
 import MDXContent from "@theme/MDXContent";

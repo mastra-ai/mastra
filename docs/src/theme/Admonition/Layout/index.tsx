@@ -3,7 +3,7 @@ import React, { type ReactNode } from "react";
 
 import type { Props } from "@theme/Admonition/Layout";
 
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import {
   GithubTipIcon,
   GithubCautionIcon,

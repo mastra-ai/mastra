@@ -1,7 +1,7 @@
 import { useNavbarMobileSidebar } from "@docusaurus/theme-common/internal";
 import { translate } from "@docusaurus/Translate";
 import { Button } from "@site/src/components/ui/button";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import { type ReactNode } from "react";
 
 export default function MobileSidebarToggle(): ReactNode {

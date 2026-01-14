@@ -1,4 +1,4 @@
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 
 export const NetlifyLogo = ({
   className,

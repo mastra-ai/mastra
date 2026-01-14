@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 import { BookOpen, Code2, FileText, Lightbulb, Search } from "lucide-react";
 import type { FC, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";

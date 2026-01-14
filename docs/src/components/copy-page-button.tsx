@@ -1,4 +1,4 @@
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import { useCallback, useState } from "react";
 import { useMarkdownContent } from "../hooks/useMarkdownContent";
 import {
