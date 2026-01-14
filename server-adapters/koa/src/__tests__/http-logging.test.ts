@@ -66,10 +66,18 @@ describe('Koa Server Adapter', () => {
           on: () => {}, // Add on method for event listeners
         };
 
+        const headers: Record<string, string> = {};
         const res: any = {
           statusCode,
-          setHeader: () => {},
-          removeHeader: () => {},
+          setHeader: (name: string, value: string) => {
+            headers[name.toLowerCase()] = value;
+          },
+          getHeader: (name: string) => {
+            return headers[name.toLowerCase()];
+          },
+          removeHeader: (name: string) => {
+            delete headers[name.toLowerCase()];
+          },
           end: () => {
             res.writableEnded = true;
             resolve({ status: statusCode });

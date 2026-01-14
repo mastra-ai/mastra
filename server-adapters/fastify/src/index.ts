@@ -504,7 +504,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       const method = request.method;
       const path = request.url;
 
-      reply.raw.on('finish', () => {
+      reply.raw.once('finish', () => {
         const duration = Date.now() - start;
         const status = reply.statusCode;
         const level = this.httpLoggingConfig?.level || 'info';

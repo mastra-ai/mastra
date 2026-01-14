@@ -10,6 +10,9 @@ describe('Fastify Server Adapter', () => {
   afterEach(async () => {
     if (app) {
       await app.close();
+      // Wait for all pending finish event handlers to complete
+      // Fastify's async hooks can take time to fully resolve
+      await new Promise(resolve => setTimeout(resolve, 10));
       app = null;
     }
   });
@@ -18,6 +21,7 @@ describe('Fastify Server Adapter', () => {
     suiteName: 'Fastify HTTP Logging',
 
     createApp: () => {
+      // Create a fresh app instance for each test to avoid hook accumulation
       app = Fastify({ logger: false });
       return app;
     },
@@ -68,9 +72,9 @@ describe('Fastify Server Adapter', () => {
 
       const response = await app.inject(injectOptions);
 
-      // Wait for finish event to complete before returning
-      // This ensures HTTP logging completes before the test continues
-      await new Promise(resolve => setImmediate(resolve));
+      // Fastify's inject() returns before the 'finish' event fires
+      // Wait a tick to ensure the finish event (which triggers logging) completes
+      await new Promise(resolve => process.nextTick(resolve));
 
       return { status: response.statusCode };
     },
