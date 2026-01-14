@@ -563,3 +563,65 @@ Date: 2025-01-14
   This is the next P0 task that depends on task 012. It will extend the JavaScript client SDK with methods for integration management.
   This will enable the frontend (playground) to interact with the integration API endpoints.
 
+
+## Task 013: Add integration methods to MastraClient SDK - COMPLETED
+
+Date: 2025-01-14
+
+### What was done:
+- Added comprehensive integration types to client-sdks/client-js/src/types.ts:
+  - IntegrationProvider type ('composio' | 'arcade')
+  - IntegrationConfig, CachedTool, ProviderStatus, ProviderToolkit, ProviderTool interfaces
+  - Request parameter types: ListIntegrationsParams, CreateIntegrationParams, UpdateIntegrationParams
+  - Response types: ListIntegrationsResponse, ListProvidersResponse, ListProviderToolkitsResponse, etc.
+  - All types properly documented with JSDoc comments
+- Added integration methods to MastraClient class in client-sdks/client-js/src/client.ts:
+  - listProviders(): Lists all available providers with connection status
+  - listProviderToolkits(provider, params): Lists toolkits from a specific provider
+  - listProviderTools(provider, params): Lists tools from a specific provider
+  - listIntegrations(params): Lists all configured integrations with pagination
+  - getIntegration(integrationId): Gets a single integration by ID
+  - createIntegration(params): Creates a new integration configuration
+  - updateIntegration(integrationId, params): Updates an existing integration
+  - deleteIntegration(integrationId): Deletes an integration and its cached tools
+  - refreshIntegrationTools(integrationId): Refreshes cached tools from provider
+- Imported all new types at the top of client.ts file
+- All methods follow existing patterns in MastraClient (query parameter construction, request handling)
+- All methods include comprehensive JSDoc documentation
+
+### Key implementation details:
+- Used URLSearchParams for building query strings consistently with existing methods
+- Provider parameter validation handled server-side (see task 012 notes on runtime validation)
+- Support for both single toolkit (toolkitSlug) and multiple toolkits (toolkitSlugs) filtering
+- orderBy parameter properly formatted as nested object: orderBy[field] and orderBy[direction]
+- All date fields returned as strings (JSON serialized) rather than Date objects
+- Methods use proper HTTP verbs: GET for listing, POST for create/refresh, PATCH for update, DELETE for delete
+
+### Build/Test status:
+- Full monorepo build passes (pnpm build) - 121 successful tasks
+- Full monorepo typecheck passes (pnpm typecheck)
+- Server package tests pass - 410 passed, 2 skipped (412 total)
+- All acceptance criteria met:
+  ✓ All integration API endpoints have corresponding client methods
+  ✓ TypeScript types are correct (typecheck passes)
+  ✓ Methods handle errors appropriately (use BaseResource.request which has error handling)
+
+### Files created:
+- None (only modified existing files)
+
+### Files modified:
+- client-sdks/client-js/src/types.ts (added integration types section)
+- client-sdks/client-js/src/client.ts (added integration methods and imports)
+- .context/plans/dynamic-tools/tasks.json (marked task 013 as passing)
+
+### Next recommended task:
+- Task 014: Integrate cached tools with tool resolution (P1)
+  This will extend agent tool resolution to include tools from stored integrations.
+  However, this is a P1 task, so may be lower priority than continuing with P0 tasks.
+
+Since all P0 tasks (001-013) are now complete, the next logical step would be to move on to P1 tasks.
+The critical path is complete for the backend infrastructure and API layer.
+
+Alternatively, could jump to UI tasks (016-021) to build the frontend experience, or work on tool
+resolution integration (014-015) to complete the full end-to-end functionality.
+
