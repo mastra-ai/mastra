@@ -911,3 +911,111 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 015 (Update) - Add scorer version methods to useStoredScorerMutations hook - COMPLETED
+========================================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Extended useStoredScorerMutations hook with version management capabilities
+- Added useScorerVersions query hook for fetching version lists with pagination
+- Added useScorerVersion query hook for fetching individual versions
+- Added useScorerVersionMutations hook with 4 version operations:
+  1. createScorerVersion - Manual snapshot creation
+  2. activateScorerVersion - Set a specific version as active
+  3. restoreScorerVersion - Restore scorer config from a version
+  4. deleteScorerVersion - Delete a specific version
+- All mutations properly invalidate related caches for optimistic UI updates
+- Follows exact same patterns as agent version mutations for consistency
+
+Files modified:
+- packages/playground-ui/src/domains/scores/hooks/use-stored-scorers.ts (added 107 lines)
+- packages/playground-ui/src/domains/scores/index.ts (exported new hooks)
+
+Hooks added:
+- useScorerVersions(scorerId?, params?) - Query hook with pagination
+- useScorerVersion(scorerId?, versionId?) - Single version query hook
+- useScorerVersionMutations(scorerId?) - Mutations hook with 4 operations
+
+Cache invalidation strategy:
+- createScorerVersion: Invalidates scorer-versions and stored-scorer queries
+- activateScorerVersion: Invalidates all scorer and version queries
+- restoreScorerVersion: Invalidates all scorer and version queries (creates new version)
+- deleteScorerVersion: Invalidates scorer-versions queries only
+
+Verification:
+- pnpm --filter playground-ui typecheck: PASSED
+- All acceptance criteria from task 015 met
+- Hooks properly typed with @mastra/client-js types
+- Ready for use in version history component (task 019)
+
+Next steps:
+- Task 018: Create edit scorer dialog component (P1, ready to start)
+- Task 019: Create scorer version history component (P1, depends on task 028 - now complete)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
+
+
+Task 018 - Create edit scorer dialog component - COMPLETED
+===========================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive EditScorerDialog component for editing existing scorers
+- Followed the exact same patterns as EditAgentDialog for consistency
+- Implemented delete confirmation dialog (DeleteScorerConfirm)
+- Integrated version information display (version number and last edit time)
+- Full loading states with skeleton screens matching agent edit dialog
+
+Files created:
+- packages/playground-ui/src/domains/scores/components/edit-scorer/edit-scorer-dialog.tsx (126 lines)
+- packages/playground-ui/src/domains/scores/components/edit-scorer/delete-scorer-confirm.tsx (39 lines)
+- packages/playground-ui/src/domains/scores/components/edit-scorer/index.ts (4 lines, exports)
+
+Files modified:
+- packages/playground-ui/src/domains/scores/index.ts (added edit-scorer exports)
+- .context/plans/dynamic-scorers/tasks.json (marked task 018 as passes: true)
+
+Key features implemented:
+1. EditScorerDialog component:
+   - Loads existing scorer data via useStoredScorer hook
+   - Fetches latest version info via useScorerVersions hook
+   - Pre-populates ScorerForm with existing values
+   - Shows version number and last edit timestamp
+   - Triggers auto-versioning on update via updateStoredScorer mutation
+   - Delete functionality with confirmation dialog
+   - Loading skeleton while data loads
+
+2. DeleteScorerConfirm component:
+   - AlertDialog pattern matching DeleteAgentConfirm
+   - Confirmation before deletion with scorer name display
+   - Loading state during deletion
+   - Red destructive button styling
+
+3. Form integration:
+   - Uses ScorerForm in edit mode
+   - Passes versionInfo prop with versionNumber and updatedAt
+   - Handles form submission with proper mutation calls
+   - Closes dialog and calls onSuccess after successful update
+   - Calls onDelete callback after successful deletion
+
+Verification:
+- pnpm --filter playground-ui typecheck: PASSED (no errors)
+- All acceptance criteria met:
+  ✓ Dialog loads existing scorer data
+  ✓ Form is pre-populated correctly
+  ✓ Version indicator shows current version number and last edit time
+  ✓ Update triggers auto-versioning on backend (via PATCH endpoint)
+  ✓ Delete removes scorer after confirmation
+- Only pre-existing MCP SDK import errors remain (unrelated to this task)
+
+Next steps:
+- Task 019: Create scorer version history component (P1 priority)
+- Task 020: Create scorers picker component with sampling config (P1 priority)
+- Task 021: Update agent form to include scorers picker (P1 priority)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
