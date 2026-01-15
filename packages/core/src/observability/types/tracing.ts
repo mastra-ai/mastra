@@ -1175,6 +1175,45 @@ export interface SpanOutputProcessor {
   shutdown(): Promise<void>;
 }
 
+/**
+ * Function type for formatting exported spans at the exporter level.
+ *
+ * This allows customization of how spans appear in vendor-specific observability platforms
+ * (e.g., Langfuse, Braintrust). Unlike SpanOutputProcessor which operates on the internal
+ * Span object before export, this formatter operates on the ExportedSpan data structure
+ * after the span has been prepared for export.
+ *
+ * Use cases:
+ * - Extract plain text from structured AI SDK messages for better readability
+ * - Transform input/output format for specific vendor requirements
+ * - Add or remove fields based on the target platform
+ * - Redact or transform sensitive data in a vendor-specific way
+ *
+ * @param span - The exported span to format
+ * @returns The formatted span (can be the same object with modifications, or a new object)
+ *
+ * @example
+ * ```typescript
+ * // Custom formatter that extracts plain text from AI messages
+ * const plainTextFormatter: ExporterSpanFormatter = (span) => {
+ *   if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+ *     const userMessage = span.input.find(m => m.role === 'user');
+ *     return {
+ *       ...span,
+ *       input: userMessage?.content ?? span.input,
+ *     };
+ *   }
+ *   return span;
+ * };
+ *
+ * // Use with an exporter
+ * new BraintrustExporter({
+ *   customSpanFormatter: plainTextFormatter,
+ * });
+ * ```
+ */
+export type ExporterSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan;
+
 // ============================================================================
 // Tracing Config Selector Interfaces
 // ============================================================================

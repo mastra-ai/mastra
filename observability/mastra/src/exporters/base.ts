@@ -9,7 +9,7 @@
 
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { TracingEvent, ObservabilityExporter, InitExporterOptions } from '@mastra/core/observability';
+import type { TracingEvent, ObservabilityExporter, InitExporterOptions, ExporterSpanFormatter } from '@mastra/core/observability';
 
 /**
  * Base configuration that all exporters should support
@@ -19,6 +19,31 @@ export interface BaseExporterConfig {
   logger?: IMastraLogger;
   /** Log level for the exporter (defaults to INFO) - accepts both enum and string */
   logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
+  /**
+   * Custom span formatter function to transform exported spans before they are
+   * processed by the exporter. This allows customization of how spans appear
+   * in vendor-specific observability platforms.
+   *
+   * Use cases:
+   * - Extract plain text from structured AI SDK messages for better readability
+   * - Transform input/output format for specific vendor requirements
+   * - Add or remove fields based on the target platform
+   *
+   * @example
+   * ```typescript
+   * const exporter = new BraintrustExporter({
+   *   customSpanFormatter: (span) => {
+   *     // Extract plain text user message for AGENT_RUN spans
+   *     if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+   *       const userMsg = span.input.find(m => m.role === 'user');
+   *       return { ...span, input: userMsg?.content ?? span.input };
+   *     }
+   *     return span;
+   *   },
+   * });
+   * ```
+   */
+  customSpanFormatter?: ExporterSpanFormatter;
 }
 
 /**
@@ -58,6 +83,9 @@ export abstract class BaseExporter implements ObservabilityExporter {
   /** Mastra logger instance */
   protected logger: IMastraLogger;
 
+  /** Base configuration (accessible by subclasses) */
+  protected readonly baseConfig: BaseExporterConfig;
+
   /** Whether this exporter is disabled */
   #disabled: boolean = false;
 
@@ -70,6 +98,7 @@ export abstract class BaseExporter implements ObservabilityExporter {
    * Initialize the base exporter with logger
    */
   constructor(config: BaseExporterConfig = {}) {
+    this.baseConfig = config;
     // Map string log level to LogLevel enum if needed
     const logLevel = this.resolveLogLevel(config.logLevel);
     // Use constructor name as fallback since this.name isn't set yet (subclass initializes it)
@@ -120,16 +149,45 @@ export abstract class BaseExporter implements ObservabilityExporter {
   }
 
   /**
+   * Apply the customSpanFormatter if configured.
+   * This is called automatically by exportTracingEvent before _exportTracingEvent.
+   *
+   * @param event - The incoming tracing event
+   * @returns The (possibly modified) event to process
+   */
+  protected applySpanFormatter(event: TracingEvent): TracingEvent {
+    if (this.baseConfig.customSpanFormatter) {
+      try {
+        const formattedSpan = this.baseConfig.customSpanFormatter(event.exportedSpan);
+        return {
+          ...event,
+          exportedSpan: formattedSpan,
+        };
+      } catch (error) {
+        this.logger.error(`${this.name}: Error in customSpanFormatter`, {
+          error,
+          spanId: event.exportedSpan.id,
+          traceId: event.exportedSpan.traceId,
+        });
+        // Fall through to return original event if formatter fails
+      }
+    }
+    return event;
+  }
+
+  /**
    * Export a tracing event
    *
-   * This method checks if the exporter is disabled before calling _exportEvent.
-   * Subclasses should implement _exportEvent instead of overriding this method.
+   * This method checks if the exporter is disabled, applies the customSpanFormatter,
+   * then calls _exportTracingEvent.
+   * Subclasses should implement _exportTracingEvent instead of overriding this method.
    */
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     if (this.isDisabled) {
       return;
     }
-    await this._exportTracingEvent(event);
+    const processedEvent = this.applySpanFormatter(event);
+    await this._exportTracingEvent(processedEvent);
   }
 
   /**

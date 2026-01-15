@@ -906,6 +906,10 @@ export abstract class TrackingExporter<
   /**
    * Hook called before processing each tracing event.
    * Override to transform or enrich the event before processing.
+   *
+   * Note: The customSpanFormatter is applied at the BaseExporter level before this hook.
+   * Subclasses can override this to add additional pre-processing logic.
+   *
    * @param event - The incoming tracing event
    * @returns The (possibly modified) event to process
    */
