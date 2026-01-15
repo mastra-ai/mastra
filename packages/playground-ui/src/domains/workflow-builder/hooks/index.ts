@@ -17,3 +17,5 @@ export {
 
 export { useSearch, highlightMatches } from './use-search';
 export type { SearchResult, UseSearchOptions } from './use-search';
+
+export { useTestWorkflow } from './use-test-workflow';

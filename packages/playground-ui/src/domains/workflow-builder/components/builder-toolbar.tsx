@@ -1,6 +1,7 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Undo2, Redo2, Save, Loader2, AlertTriangle, Keyboard } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, Save, Loader2, AlertTriangle, Keyboard, Play } from 'lucide-react';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
+import { useTestRunnerStore } from '../store/test-runner-store';
 import { useWorkflowDefinitionMutations } from '@/domains/workflow-definitions/hooks';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
@@ -59,6 +60,10 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
   const redo = useWorkflowBuilderStore(state => state.redo);
   const canUndo = useWorkflowBuilderStore(state => state.canUndo);
   const canRedo = useWorkflowBuilderStore(state => state.canRedo);
+
+  // Test runner
+  const isTestRunnerOpen = useTestRunnerStore(state => state.isOpen);
+  const toggleTestRunner = useTestRunnerStore(state => state.toggleOpen);
 
   const handleBack = useCallback(() => {
     navigate('/workflows');
@@ -174,6 +179,17 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
         )}
 
         <div className="h-6 w-px bg-border1" />
+
+        {/* Test button */}
+        <Button
+          variant={isTestRunnerOpen ? 'default' : 'outline'}
+          size="md"
+          onClick={toggleTestRunner}
+          className="gap-2"
+        >
+          <Play className="w-4 h-4" />
+          Test
+        </Button>
 
         {/* Save button with validation-aware tooltip */}
         <TooltipProvider>

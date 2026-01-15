@@ -1,10 +1,26 @@
-import type { BuilderNode, BuilderEdge, AgentNodeData, ToolNodeData, ConditionNodeData } from '../types';
+import type {
+  BuilderNode,
+  BuilderEdge,
+  AgentNodeData,
+  ToolNodeData,
+  ConditionNodeData,
+  ParallelNodeData,
+  LoopNodeData,
+  ForeachNodeData,
+  TransformNodeData,
+  SuspendNodeData,
+  WorkflowNodeData,
+  SleepNodeData,
+} from '../types';
 import type {
   StorageWorkflowDefinitionType,
   DeclarativeStepDefinition,
   DefinitionStepFlowEntry,
   AgentStepDef,
   ToolStepDef,
+  WorkflowStepDef,
+  TransformStepDef,
+  SuspendStepDef,
 } from '@mastra/core/storage';
 
 export interface SerializeOptions {
@@ -13,6 +29,7 @@ export interface SerializeOptions {
   description?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
+  stateSchema?: Record<string, unknown>;
 }
 
 export interface SerializedGraph {
@@ -29,8 +46,14 @@ export function serializeGraph(nodes: BuilderNode[], edges: BuilderEdge[]): Seri
   const steps: Record<string, DeclarativeStepDefinition> = {};
 
   for (const node of nodes) {
+    // Skip types that don't have step definitions (handled in stepGraph only)
     if (node.data.type === 'trigger') continue;
-    if (node.data.type === 'condition') continue; // Conditions are handled in stepGraph
+    if (node.data.type === 'condition') continue;
+    if (node.data.type === 'parallel') continue;
+    if (node.data.type === 'loop') continue;
+    if (node.data.type === 'foreach') continue;
+    if (node.data.type === 'sleep') continue;
+    if (node.data.type === 'agent-network') continue; // Not yet supported in core
 
     const stepDef = nodeToStepDef(node);
     if (stepDef) {
@@ -60,6 +83,7 @@ export function serializeGraphFull(
     description: options.description,
     inputSchema: options.inputSchema ?? {},
     outputSchema: options.outputSchema ?? {},
+    stateSchema: options.stateSchema,
     stepGraph,
     steps,
   };
@@ -106,6 +130,43 @@ function nodeToStepDef(node: BuilderNode): DeclarativeStepDefinition | null {
       return stepDef;
     }
 
+    case 'workflow': {
+      const data = node.data as WorkflowNodeData;
+      if (!data.workflowId) return null;
+
+      const stepDef: WorkflowStepDef = {
+        type: 'workflow',
+        workflowId: data.workflowId,
+        input: data.input,
+      };
+
+      return stepDef;
+    }
+
+    case 'transform': {
+      const data = node.data as TransformNodeData;
+
+      const stepDef: TransformStepDef = {
+        type: 'transform',
+        output: data.output,
+        outputSchema: data.outputSchema,
+      };
+
+      return stepDef;
+    }
+
+    case 'suspend': {
+      const data = node.data as SuspendNodeData;
+
+      const stepDef: SuspendStepDef = {
+        type: 'suspend',
+        resumeSchema: data.resumeSchema,
+        payload: data.payload,
+      };
+
+      return stepDef;
+    }
+
     default:
       return null;
   }
@@ -139,86 +200,221 @@ function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[]): DefinitionS
   const visited = new Set<string>();
 
   /**
+   * Add a step graph entry for a node
+   */
+  function addStepGraphEntry(node: BuilderNode): void {
+    switch (node.data.type) {
+      case 'sleep': {
+        const data = node.data as SleepNodeData;
+        if (data.sleepType === 'duration' && data.duration !== undefined) {
+          stepGraph.push({
+            type: 'sleep',
+            id: node.id,
+            duration: data.duration,
+          });
+        } else if (data.sleepType === 'timestamp' && data.timestamp !== undefined) {
+          stepGraph.push({
+            type: 'sleepUntil',
+            id: node.id,
+            timestamp: data.timestamp,
+          });
+        }
+        break;
+      }
+
+      case 'loop': {
+        const data = node.data as LoopNodeData;
+        // Get the step inside the loop (first outgoing edge target)
+        const loopEdges = adjacency.get(node.id) ?? [];
+        const loopBodyEdge = loopEdges.find(e => e.sourceHandle === 'loop-body' || !e.sourceHandle);
+        if (loopBodyEdge && data.condition) {
+          stepGraph.push({
+            type: 'loop',
+            stepId: loopBodyEdge.target,
+            condition: data.condition,
+            loopType: data.loopType,
+          });
+        }
+        break;
+      }
+
+      case 'foreach': {
+        const data = node.data as ForeachNodeData;
+        // Get the step inside the foreach (first outgoing edge target)
+        const foreachEdges = adjacency.get(node.id) ?? [];
+        const foreachBodyEdge = foreachEdges.find(e => e.sourceHandle === 'foreach-body' || !e.sourceHandle);
+        if (foreachBodyEdge && data.collection) {
+          stepGraph.push({
+            type: 'foreach',
+            stepId: foreachBodyEdge.target,
+            collection: data.collection,
+            concurrency: data.concurrency,
+          });
+        }
+        break;
+      }
+
+      case 'parallel': {
+        const data = node.data as ParallelNodeData;
+        const parallelEdges = adjacency.get(node.id) ?? [];
+        const parallelSteps: Array<{ type: 'step'; step: { id: string } }> = [];
+
+        for (const edge of parallelEdges) {
+          // Match edges to branches by sourceHandle
+          const branchId = edge.sourceHandle?.replace('branch-', '');
+          if (branchId && data.branches.some(b => b.id === branchId)) {
+            parallelSteps.push({
+              type: 'step',
+              step: { id: edge.target },
+            });
+          }
+        }
+
+        if (parallelSteps.length > 0) {
+          stepGraph.push({
+            type: 'parallel',
+            steps: parallelSteps,
+          });
+        }
+        break;
+      }
+
+      case 'condition': {
+        const data = node.data as ConditionNodeData;
+        const conditionEdges = adjacency.get(node.id) ?? [];
+        const branches: Array<{
+          condition: NonNullable<(typeof data.branches)[0]['condition']>;
+          stepId: string;
+        }> = [];
+        let defaultStepId: string | undefined;
+
+        for (const edge of conditionEdges) {
+          const branchId = edge.data?.branchId ?? edge.sourceHandle?.replace('branch-', '');
+
+          if (branchId === 'default' || branchId === data.defaultBranch) {
+            defaultStepId = edge.target;
+          } else {
+            const branch = data.branches.find(b => b.id === branchId);
+            if (branch?.condition) {
+              branches.push({
+                condition: branch.condition,
+                stepId: edge.target,
+              });
+            } else {
+              // Try matching by index
+              const branchIndex = parseInt(branchId ?? '0', 10);
+              if (!isNaN(branchIndex) && branchIndex < data.branches.length) {
+                const indexedBranch = data.branches[branchIndex];
+                if (indexedBranch?.condition) {
+                  branches.push({
+                    condition: indexedBranch.condition,
+                    stepId: edge.target,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        if (branches.length > 0) {
+          stepGraph.push({
+            type: 'conditional',
+            branches,
+            default: defaultStepId,
+          });
+        }
+        break;
+      }
+
+      case 'transform': {
+        // Transform nodes also add a map entry to stepGraph for inline transforms
+        const data = node.data as TransformNodeData;
+        if (Object.keys(data.output).length > 0) {
+          // Regular step entry (the step definition is in steps object)
+          stepGraph.push({
+            type: 'step',
+            step: {
+              id: node.id,
+              description: data.description,
+            },
+          });
+        }
+        break;
+      }
+
+      default: {
+        // Regular step entry
+        stepGraph.push({
+          type: 'step',
+          step: {
+            id: node.id,
+            description: node.data.description,
+          },
+        });
+        break;
+      }
+    }
+  }
+
+  /**
    * Traverse the graph from a given node and add entries to stepGraph
    */
   function traverse(nodeId: string): void {
     if (visited.has(nodeId)) return;
     visited.add(nodeId);
 
-    const outgoingEdges = adjacency.get(nodeId) ?? [];
-    if (outgoingEdges.length === 0) return;
-
     const node = nodeMap.get(nodeId);
+    const outgoingEdges = adjacency.get(nodeId) ?? [];
 
-    // Handle condition nodes specially
-    if (node?.data.type === 'condition') {
-      const conditionData = node.data as ConditionNodeData;
-      const branches: Array<{
-        condition: NonNullable<(typeof conditionData.branches)[0]['condition']>;
-        stepId: string;
-      }> = [];
-      let defaultStepId: string | undefined;
-
+    // Skip trigger node entry but process its children
+    if (node?.data.type === 'trigger') {
       for (const edge of outgoingEdges) {
-        // Determine which branch this edge corresponds to
-        const branchId = edge.data?.branchId ?? edge.sourceHandle?.replace('branch-', '');
-
-        // Check if this is the default branch
-        if (branchId === 'default' || branchId === conditionData.defaultBranch) {
-          defaultStepId = edge.target;
-        } else {
-          // Find the matching branch by ID
-          const branch = conditionData.branches.find(b => b.id === branchId);
-          if (branch?.condition) {
-            branches.push({
-              condition: branch.condition,
-              stepId: edge.target,
-            });
-          } else {
-            // Try matching by index
-            const branchIndex = parseInt(branchId ?? '0', 10);
-            if (!isNaN(branchIndex) && branchIndex < conditionData.branches.length) {
-              const indexedBranch = conditionData.branches[branchIndex];
-              if (indexedBranch?.condition) {
-                branches.push({
-                  condition: indexedBranch.condition,
-                  stepId: edge.target,
-                });
-              }
-            }
-          }
+        const targetNode = nodeMap.get(edge.target);
+        if (targetNode) {
+          addStepGraphEntry(targetNode);
+          traverse(edge.target);
         }
       }
+      return;
+    }
 
-      if (branches.length > 0) {
-        stepGraph.push({
-          type: 'conditional',
-          branches,
-          default: defaultStepId,
-        });
+    // Handle special flow control nodes
+    if (node?.data.type === 'condition') {
+      // For condition nodes, we already added the entry when we visited them
+      // Now traverse all branches
+      for (const edge of outgoingEdges) {
+        const targetNode = nodeMap.get(edge.target);
+        if (targetNode) {
+          addStepGraphEntry(targetNode);
+          traverse(edge.target);
+        }
       }
+      return;
+    }
 
-      // Continue traversal for each target
+    if (node?.data.type === 'parallel') {
+      // For parallel nodes, traverse all parallel branches
+      // The parallel entry was already added
       for (const edge of outgoingEdges) {
         traverse(edge.target);
       }
-    } else {
-      // Regular sequential steps
+      return;
+    }
+
+    if (node?.data.type === 'loop' || node?.data.type === 'foreach') {
+      // For loop/foreach, traverse the body and the continuation
       for (const edge of outgoingEdges) {
-        const targetNode = nodeMap.get(edge.target);
-        if (targetNode && targetNode.data.type !== 'trigger') {
-          // Only add step entries for non-condition nodes
-          if (targetNode.data.type !== 'condition') {
-            stepGraph.push({
-              type: 'step',
-              step: {
-                id: edge.target,
-                description: targetNode.data.description,
-              },
-            });
-          }
-          traverse(edge.target);
-        }
+        traverse(edge.target);
+      }
+      return;
+    }
+
+    // Regular sequential traversal
+    for (const edge of outgoingEdges) {
+      const targetNode = nodeMap.get(edge.target);
+      if (targetNode && targetNode.data.type !== 'trigger') {
+        addStepGraphEntry(targetNode);
+        traverse(edge.target);
       }
     }
   }

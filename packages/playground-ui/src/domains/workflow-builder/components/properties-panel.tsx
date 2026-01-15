@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Database,
+  PanelRightClose,
 } from 'lucide-react';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { TriggerConfig } from './panels/trigger-config';
@@ -36,6 +37,7 @@ import { useSelectedNodeDataContext } from '../hooks/use-data-context';
 
 export interface PropertiesPanelProps {
   className?: string;
+  onCollapse?: () => void;
 }
 
 const NODE_INFO: Record<BuilderNodeType, { label: string; icon: typeof PlayCircle; color: string }> = {
@@ -65,7 +67,7 @@ const DATA_CONSUMER_TYPES: BuilderNodeType[] = [
   'agent-network',
 ];
 
-export function PropertiesPanel({ className }: PropertiesPanelProps) {
+export function PropertiesPanel({ className, onCollapse }: PropertiesPanelProps) {
   const selectedNodeId = useWorkflowBuilderStore(state => state.selectedNodeId);
   const nodes = useWorkflowBuilderStore(state => state.nodes);
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
@@ -75,8 +77,13 @@ export function PropertiesPanel({ className }: PropertiesPanelProps) {
   if (!selectedNode) {
     return (
       <div className={cn('flex flex-col', className)}>
-        <div className="p-4 border-b border-border1">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border1">
           <h2 className="text-sm font-semibold text-icon6">Properties</h2>
+          {onCollapse && (
+            <button type="button" onClick={onCollapse} className="p-1 hover:bg-surface3 rounded" title="Collapse panel">
+              <PanelRightClose className="w-4 h-4 text-icon4" />
+            </button>
+          )}
         </div>
         <div className="flex-1 flex items-center justify-center p-4">
           <p className="text-sm text-icon3 text-center">Select a node to view and edit its properties</p>
@@ -93,7 +100,7 @@ export function PropertiesPanel({ className }: PropertiesPanelProps) {
   return (
     <div className={cn('flex flex-col h-full', className)}>
       {/* Header */}
-      <div className="p-4 border-b border-border1">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border1">
         <div className="flex items-center gap-2">
           <div
             className="w-8 h-8 rounded-md flex items-center justify-center"
@@ -106,6 +113,11 @@ export function PropertiesPanel({ className }: PropertiesPanelProps) {
             <p className="text-xs text-icon3">ID: {selectedNode.id.slice(0, 8)}...</p>
           </div>
         </div>
+        {onCollapse && (
+          <button type="button" onClick={onCollapse} className="p-1 hover:bg-surface3 rounded" title="Collapse panel">
+            <PanelRightClose className="w-4 h-4 text-icon4" />
+          </button>
+        )}
       </div>
 
       {/* Content */}

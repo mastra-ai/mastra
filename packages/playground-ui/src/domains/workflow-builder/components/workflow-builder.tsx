@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
+import { PanelLeftClose, PanelRightClose } from 'lucide-react';
 import type { WorkflowDefinitionInput } from '../types';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
+import { useTestRunnerStore } from '../store/test-runner-store';
 import { BuilderCanvas } from './builder-canvas';
 import { BuilderToolbar } from './builder-toolbar';
 import { BuilderSidebar } from './builder-sidebar';
 import { PropertiesPanel } from './properties-panel';
 import { KeyboardShortcutsPanel } from './keyboard-shortcuts-panel';
 import { CommandPalette } from './command-palette';
+import { TestRunnerPanel } from './test-runner-panel';
+import { TestInputModal } from './test-input-modal';
 import { ErrorBoundary, CanvasErrorBoundary, PanelErrorBoundary } from './error-boundary';
 import { PanelSeparator } from '@/lib/resize/separator';
+import { useTestWorkflow } from '../hooks/use-test-workflow';
 
 import '@xyflow/react/dist/style.css';
 
@@ -23,6 +28,14 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
   const loadedRef = useRef(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
+
+  // Test runner
+  const { runTest, resumeTest } = useTestWorkflow();
+  const isTestRunnerOpen = useTestRunnerStore(state => state.isOpen);
+  const currentRun = useTestRunnerStore(state => state.currentRun);
+  const isResume = currentRun?.status === 'suspended';
 
   // Resizable panel layout persistence
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
@@ -64,39 +77,88 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
       <ReactFlowProvider>
         <div className="h-screen flex flex-col bg-surface1">
           {/* Top toolbar */}
-          <BuilderToolbar onShowShortcuts={() => setShowShortcuts(true)} />
+          <BuilderToolbar />
 
           {/* Main content area with resizable panels */}
-          <Group className="flex-1 overflow-hidden" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
-            {/* Left sidebar - step palette (fixed width) */}
-            <Panel id="sidebar" defaultSize={240} minSize={200} maxSize={320}>
-              <BuilderSidebar className="h-full border-r border-border1 bg-surface2" />
-            </Panel>
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left sidebar - step palette (collapsible) */}
+            <div
+              className={`h-full border-r border-border1 bg-surface2 transition-all duration-200 ${
+                sidebarCollapsed ? 'w-10' : 'w-60'
+              }`}
+            >
+              {sidebarCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="w-full h-10 flex items-center justify-center hover:bg-surface3"
+                  title="Expand sidebar"
+                >
+                  <PanelRightClose className="w-4 h-4 text-icon4" />
+                </button>
+              ) : (
+                <div className="h-full flex flex-col">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border1">
+                    <span className="text-xs font-medium text-icon5">Steps</span>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarCollapsed(true)}
+                      className="p-1 hover:bg-surface3 rounded"
+                      title="Collapse sidebar"
+                    >
+                      <PanelLeftClose className="w-4 h-4 text-icon4" />
+                    </button>
+                  </div>
+                  <BuilderSidebar className="flex-1 overflow-y-auto" />
+                </div>
+              )}
+            </div>
 
-            <PanelSeparator />
-
-            {/* Center - canvas */}
-            <Panel id="canvas" minSize={400}>
+            {/* Center - canvas (flexible) */}
+            <div className="flex-1 min-w-0">
               <CanvasErrorBoundary>
                 <BuilderCanvas className="h-full" />
               </CanvasErrorBoundary>
-            </Panel>
+            </div>
 
-            <PanelSeparator />
-
-            {/* Right panel - properties (resizable) */}
-            <Panel id="properties" defaultSize={320} minSize={280} maxSize={500}>
-              <PanelErrorBoundary>
-                <PropertiesPanel className="h-full border-l border-border1 bg-surface2" />
-              </PanelErrorBoundary>
-            </Panel>
-          </Group>
+            {/* Right panel - properties (collapsible, wider) */}
+            <div
+              className={`h-full border-l border-border1 bg-surface2 transition-all duration-200 ${
+                propertiesCollapsed ? 'w-10' : 'w-96'
+              }`}
+            >
+              {propertiesCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => setPropertiesCollapsed(false)}
+                  className="w-full h-10 flex items-center justify-center hover:bg-surface3"
+                  title="Expand properties"
+                >
+                  <PanelLeftClose className="w-4 h-4 text-icon4" />
+                </button>
+              ) : (
+                <PanelErrorBoundary>
+                  <PropertiesPanel className="h-full" onCollapse={() => setPropertiesCollapsed(true)} />
+                </PanelErrorBoundary>
+              )}
+            </div>
+          </div>
 
           {/* Keyboard shortcuts modal */}
           <KeyboardShortcutsPanel isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
           {/* Command palette */}
           <CommandPalette isOpen={showCommandPalette} onClose={closeCommandPalette} />
+
+          {/* Test runner panel */}
+          {isTestRunnerOpen && <TestRunnerPanel onRunTest={runTest} />}
+
+          {/* Test input modal */}
+          <TestInputModal
+            onRun={isResume ? resumeTest : runTest}
+            isResume={isResume}
+            resumeSchema={currentRun?.suspend?.resumeSchema}
+          />
         </div>
       </ReactFlowProvider>
     </ErrorBoundary>
