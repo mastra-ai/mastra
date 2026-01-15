@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { getOrCreateSpan, SpanType, EntityType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
