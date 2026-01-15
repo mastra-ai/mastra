@@ -64,7 +64,7 @@ export function SpanDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-        <button className="ml-auto mr-[2rem]" onClick={onViewToggle}>
+        <button className="ml-auto mr-8" onClick={onViewToggle}>
           <PanelTopIcon />
           <VisuallyHidden>Switch to dialog view</VisuallyHidden>
         </button>

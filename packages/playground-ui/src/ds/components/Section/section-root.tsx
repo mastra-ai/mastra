@@ -6,5 +6,5 @@ export type SectionRootProps = {
 };
 
 export function SectionRoot({ children, className }: SectionRootProps) {
-  return <section className={cn(`grid gap-[1rem]`, className)}>{children}</section>;
+  return <section className={cn(`grid gap-4`, className)}>{children}</section>;
 }

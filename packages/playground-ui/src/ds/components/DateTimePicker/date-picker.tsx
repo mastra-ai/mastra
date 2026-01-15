@@ -11,7 +11,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
       className={cn('p-3', className)}
       classNames={{
         months: 'flex flex-col space-y-4 sm:space-y-0 ',
-        month: 'space-y-4 text-[0.75rem] ',
+        month: 'space-y-4 text-ui-sm ',
         caption: 'flex justify-between pt-1 items-center pl-2',
         caption_label: 'text-text font-medium ',
         nav: 'flex items-center',
@@ -38,7 +38,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_disabled: 'text-neutral3 opacity-50',
         day_range_middle: 'aria-selected:bg-surface5 aria-selected:text-neutral5',
         day_hidden: 'invisible',
-        head_cell: 'text-[0.625rem] text-neutral3',
+        head_cell: 'text-ui-xs text-neutral3',
         ...classNames,
       }}
       {...props}

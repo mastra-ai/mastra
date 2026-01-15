@@ -12,7 +12,7 @@ export interface BreadcrumbProps {
 export const Breadcrumb = ({ children, label }: BreadcrumbProps) => {
   return (
     <nav aria-label={label}>
-      <ol className="gap-sm flex items-center">{children}</ol>
+      <ol className="gap-0.5 flex items-center">{children}</ol>
     </nav>
   );
 };
@@ -36,7 +36,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
-            'text-ui-lg leading-ui-lg font-medium flex items-center gap-2',
+            'text-ui-md leading-ui-md flex items-center gap-2',
             isCurrent ? 'text-white' : 'text-neutral3',
             className,
           )}
