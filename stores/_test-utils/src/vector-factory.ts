@@ -44,6 +44,8 @@ export interface TestDomains {
   filterOps?: boolean;
   /** Edge cases: empty indexes, dimension mismatch, large batches (1000+ vectors), concurrent operations */
   edgeCases?: boolean;
+  /** Large batch operations: 1000+ vector upserts, large topK queries. Subset of edgeCases, can be disabled separately. */
+  largeBatch?: boolean;
   /** Error handling: index not found, invalid filters, invalid data, parameter validation */
   errorHandling?: boolean;
   /** Metadata filtering: Memory system compatibility ($eq, $and, $or, thread_id, resource_id) */
@@ -145,7 +147,7 @@ export function createVectorTestSuite(config: VectorTestConfig) {
     }
 
     if (testDomains.edgeCases !== false) {
-      createEdgeCasesTest(config);
+      createEdgeCasesTest(config, { skipLargeBatch: testDomains.largeBatch === false });
     }
 
     if (testDomains.errorHandling !== false) {

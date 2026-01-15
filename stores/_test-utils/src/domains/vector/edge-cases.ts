@@ -2,6 +2,11 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import type { VectorTestConfig } from '../../vector-factory';
 import { createUnitVector, createVector, VECTOR_DIMENSION } from './test-helpers';
 
+export interface EdgeCasesOptions {
+  /** Skip large batch operations (1000+ vectors). Useful for stores with slow batch inserts. */
+  skipLargeBatch?: boolean;
+}
+
 /**
  * Shared test suite for vector store edge cases and stress testing.
  * These tests cover boundary conditions and unusual scenarios:
@@ -13,7 +18,7 @@ import { createUnitVector, createVector, VECTOR_DIMENSION } from './test-helpers
  *
  * These tests ensure vector stores handle edge cases gracefully and scale properly.
  */
-export function createEdgeCasesTest(config: VectorTestConfig) {
+export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCasesOptions = {}) {
   const { createIndex, deleteIndex, waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)) } = config;
 
   describe('Vector Store Edge Cases', () => {
@@ -120,72 +125,75 @@ export function createEdgeCasesTest(config: VectorTestConfig) {
       });
     });
 
-    describe('Large Batch Operations', () => {
-      const largeBatchTestIndex = `large_batch_test_${Date.now()}`;
-      const LARGE_BATCH_SIZE = 1000;
+    // Large batch tests can be skipped for stores with slow batch inserts (e.g., libsql)
+    if (!options.skipLargeBatch) {
+      describe('Large Batch Operations', () => {
+        const largeBatchTestIndex = `large_batch_test_${Date.now()}`;
+        const LARGE_BATCH_SIZE = 1000;
 
-      beforeAll(async () => {
-        await createIndex(largeBatchTestIndex);
-        await waitForIndexing(largeBatchTestIndex);
+        beforeAll(async () => {
+          await createIndex(largeBatchTestIndex);
+          await waitForIndexing(largeBatchTestIndex);
+        });
+
+        afterAll(async () => {
+          try {
+            await deleteIndex(largeBatchTestIndex);
+          } catch {
+            // Ignore cleanup errors
+          }
+        });
+
+        it('should handle upserting 1000+ vectors', async () => {
+          // Generate 1000 test vectors
+          const vectors = Array.from({ length: LARGE_BATCH_SIZE }, (_, i) => createVector(i));
+          const metadata = Array.from({ length: LARGE_BATCH_SIZE }, (_, i) => ({ batch: 'large', index: i }));
+
+          const ids = await config.vector.upsert({
+            indexName: largeBatchTestIndex,
+            vectors,
+            metadata,
+          });
+
+          expect(ids.length).toBe(LARGE_BATCH_SIZE);
+
+          // Wait for indexing to complete
+          await waitForIndexing(largeBatchTestIndex);
+
+          // Verify count
+          const stats = await config.vector.describeIndex({ indexName: largeBatchTestIndex });
+          expect(stats.count).toBe(LARGE_BATCH_SIZE);
+        }, 120000); // 2 minute timeout for large batch
+
+        it('should handle querying with large topK', async () => {
+          const results = await config.vector.query({
+            indexName: largeBatchTestIndex,
+            queryVector: createVector(500),
+            topK: 500, // Query for 500 results
+          });
+
+          // Should return up to 500 results
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.length).toBeLessThanOrEqual(500);
+        }, 60000); // 1 minute timeout
+
+        it('should handle deleting large batch of vectors', async () => {
+          // Delete half the vectors (500)
+          const idsToDelete = Array.from({ length: 500 }, (_, i) => `${i}`);
+
+          await config.vector.deleteVectors({
+            indexName: largeBatchTestIndex,
+            filter: { batch: 'large', index: { $lt: 500 } },
+          });
+
+          await waitForIndexing(largeBatchTestIndex);
+
+          // Verify count decreased
+          const stats = await config.vector.describeIndex({ indexName: largeBatchTestIndex });
+          expect(stats.count).toBeLessThanOrEqual(LARGE_BATCH_SIZE);
+        }, 120000); // 2 minute timeout
       });
-
-      afterAll(async () => {
-        try {
-          await deleteIndex(largeBatchTestIndex);
-        } catch {
-          // Ignore cleanup errors
-        }
-      });
-
-      it('should handle upserting 1000+ vectors', async () => {
-        // Generate 1000 test vectors
-        const vectors = Array.from({ length: LARGE_BATCH_SIZE }, (_, i) => createVector(i));
-        const metadata = Array.from({ length: LARGE_BATCH_SIZE }, (_, i) => ({ batch: 'large', index: i }));
-
-        const ids = await config.vector.upsert({
-          indexName: largeBatchTestIndex,
-          vectors,
-          metadata,
-        });
-
-        expect(ids.length).toBe(LARGE_BATCH_SIZE);
-
-        // Wait for indexing to complete
-        await waitForIndexing(largeBatchTestIndex);
-
-        // Verify count
-        const stats = await config.vector.describeIndex({ indexName: largeBatchTestIndex });
-        expect(stats.count).toBe(LARGE_BATCH_SIZE);
-      }, 120000); // 2 minute timeout for large batch
-
-      it('should handle querying with large topK', async () => {
-        const results = await config.vector.query({
-          indexName: largeBatchTestIndex,
-          queryVector: createVector(500),
-          topK: 500, // Query for 500 results
-        });
-
-        // Should return up to 500 results
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.length).toBeLessThanOrEqual(500);
-      }, 60000); // 1 minute timeout
-
-      it('should handle deleting large batch of vectors', async () => {
-        // Delete half the vectors (500)
-        const idsToDelete = Array.from({ length: 500 }, (_, i) => `${i}`);
-
-        await config.vector.deleteVectors({
-          indexName: largeBatchTestIndex,
-          filter: { batch: 'large', index: { $lt: 500 } },
-        });
-
-        await waitForIndexing(largeBatchTestIndex);
-
-        // Verify count decreased
-        const stats = await config.vector.describeIndex({ indexName: largeBatchTestIndex });
-        expect(stats.count).toBeLessThanOrEqual(LARGE_BATCH_SIZE);
-      }, 120000); // 2 minute timeout
-    });
+    }
 
     describe('Concurrent Operations', () => {
       const concurrentTestIndex = `concurrent_test_${Date.now()}`;

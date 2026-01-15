@@ -22,4 +22,9 @@ createVectorTestSuite({
     }
   },
   waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 100)),
+  testDomains: {
+    // Skip large batch tests - libsql does individual INSERTs in a loop
+    // which is too slow for 1000+ vectors
+    largeBatch: false,
+  },
 });
