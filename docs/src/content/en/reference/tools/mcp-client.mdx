@@ -145,7 +145,7 @@ Retrieves all tools from all configured servers, with tool names namespaced by t
 Intended to be passed onto an Agent definition.
 
 ```ts
-new Agent({ tools: await mcp.listTools() });
+new Agent({ id: "agent", tools: await mcp.listTools() });
 ```
 
 ### listToolsets()
@@ -721,6 +721,7 @@ const mcp = new MCPClient({
 
 // Create an agent with access to all tools
 const agent = new Agent({
+  id: "multi-tool-agent",
   name: "Multi-tool Agent",
   instructions: "You have access to multiple tool servers.",
   model: "openai/gpt-5.1",
@@ -776,6 +777,7 @@ import { MCPClient } from "@mastra/mcp";
 
 // Create the agent first, without any tools
 const agent = new Agent({
+  id: "multi-tool-agent",
   name: "Multi-tool Agent",
   instructions: "You help users check stocks and weather.",
   model: "openai/gpt-5.1",

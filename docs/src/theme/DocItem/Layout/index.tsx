@@ -55,6 +55,7 @@ export default function DocItemLayout({ children }: Props): ReactNode {
             <DocVersionBadge />
             {docTOC.mobile}
             <DocItemContent>{children}</DocItemContent>
+            {/* TODO: Fix display of prev/next, especially on mobile since the arrows are missing and the click targets are unclear. Add slight borders making it more obvious */}
             <DocItemFooter />
           </article>
           <DocItemPaginator />
@@ -67,6 +68,7 @@ export default function DocItemLayout({ children }: Props): ReactNode {
         </div>
       ) : (
         <div id="toc-column" className={clsx("col col--3")}>
+          {/* TODO: Do not hide on mobile, properly add feedback and newsletter form */}
           <div className="hidden xl:flex flex-col gap-4 px-1.5">
             <SubscribeForm />
             <FeedbackTrigger />

@@ -539,10 +539,25 @@ export class ModelSpanTracker {
               this.#endStepSpan(chunk.payload);
               break;
 
-            case 'raw': // Skip raw chunks as they're redundant
-            case 'start':
-            case 'finish':
-              // don't output these chunks that don't have helpful output
+            // Infrastructure chunks - skip creating spans for these
+            // They are either redundant, metadata-only, or error/control flow
+            case 'raw': // Redundant raw data
+            case 'start': // Stream start marker
+            case 'finish': // Stream finish marker (step-finish already captures this)
+            case 'response-metadata': // Response metadata (not semantic content)
+            case 'source': // Source references (metadata)
+            case 'file': // Binary file data (too large/not semantic)
+            case 'error': // Error handling
+            case 'abort': // Abort signal
+            case 'tripwire': // Processor rejection
+            case 'watch': // Internal watch event
+            case 'tool-error': // Tool error handling
+            case 'tool-call-approval': // Approval request (not content)
+            case 'tool-call-suspended': // Suspension (not content)
+            case 'reasoning-signature': // Signature metadata
+            case 'redacted-reasoning': // Redacted content metadata
+            case 'step-output': // Step output wrapper (content is nested)
+              // Don't create spans for these chunks
               break;
 
             case 'tool-output':
@@ -567,28 +582,12 @@ export class ModelSpanTracker {
               break;
             }
 
-            // Default: auto-create event span for all other chunk types
-            default: {
-              let outputPayload = chunk.payload;
-
-              // Special handling: if payload has 'data' field, replace with size
-              if (outputPayload && typeof outputPayload === 'object' && 'data' in outputPayload) {
-                const typedPayload = outputPayload as any;
-                outputPayload = { ...typedPayload };
-                if (typedPayload.data) {
-                  (outputPayload as any).size =
-                    typeof typedPayload.data === 'string'
-                      ? typedPayload.data.length
-                      : typedPayload.data instanceof Uint8Array
-                        ? typedPayload.data.length
-                        : undefined;
-                  delete (outputPayload as any).data;
-                }
-              }
-
-              this.#createEventSpan(chunk.type, outputPayload);
+            // Default: skip creating spans for unrecognized chunk types
+            // All semantic content chunks should be explicitly handled above
+            // Unknown chunks are likely infrastructure or custom chunks that don't need tracing
+            default:
+              // No span created - reduces trace noise
               break;
-            }
           }
         },
       }),

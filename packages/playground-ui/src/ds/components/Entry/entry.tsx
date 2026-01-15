@@ -1,0 +1,19 @@
+import { Txt } from '@/ds/components/Txt/Txt';
+import { ReactNode } from 'react';
+
+export type EntryProps = {
+  label: ReactNode;
+  children: ReactNode;
+};
+
+export const Entry = ({ label, children }: EntryProps) => {
+  return (
+    <div className="space-y-2">
+      <Txt as="p" variant="ui-md" className="text-neutral3">
+        {label}
+      </Txt>
+
+      {children}
+    </div>
+  );
+};

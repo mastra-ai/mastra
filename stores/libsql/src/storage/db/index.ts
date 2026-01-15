@@ -12,6 +12,7 @@ import {
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
+  buildSelectColumns,
   createExecuteWriteOperationWithRetry,
   prepareDeleteStatement,
   prepareStatement,
@@ -375,6 +376,7 @@ export class LibSQLDB extends MastraBase {
    */
   async select<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const columns = buildSelectColumns(tableName);
 
     const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
 
@@ -382,7 +384,7 @@ export class LibSQLDB extends MastraBase {
     const values = Object.values(keys);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${parsedTableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
+      sql: `SELECT ${columns} FROM ${parsedTableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
       args: values,
     });
 
@@ -436,8 +438,9 @@ export class LibSQLDB extends MastraBase {
     args?: any[];
   }): Promise<R[]> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const columns = buildSelectColumns(tableName);
 
-    let statement = `SELECT * FROM ${parsedTableName}`;
+    let statement = `SELECT ${columns} FROM ${parsedTableName}`;
 
     if (whereClause?.sql) {
       statement += ` ${whereClause.sql}`;
@@ -460,7 +463,18 @@ export class LibSQLDB extends MastraBase {
       args: [...(whereClause?.args ?? []), ...(args ?? [])],
     });
 
-    return result.rows as R[];
+    // Parse JSON columns (same as select())
+    return (result.rows ?? []).map(row => {
+      return Object.fromEntries(
+        Object.entries(row || {}).map(([k, v]) => {
+          try {
+            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
+          } catch {
+            return [k, v];
+          }
+        }),
+      );
+    }) as R[];
   }
 
   /**
@@ -509,9 +523,9 @@ export class LibSQLDB extends MastraBase {
       case 'boolean':
         return 'INTEGER'; // SQLite uses 0/1 for booleans
       case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
+        return 'TEXT'; // SQLite: column stores TEXT, we use jsonb()/json() functions for binary optimization
       default:
-        return getSqlType(type); // text, integer, uuid all map to TEXT/INTEGER correctly
+        return getSqlType(type); // text, integer, uuid all map correctly
     }
   }
 

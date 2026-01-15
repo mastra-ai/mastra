@@ -416,9 +416,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       } else {
         // Set processorIndex on the processor for span attributes
         const processor = processorOrWorkflow;
-        // @ts-ignore - TODO: fix types
+        // @ts-expect-error - processorIndex is set at runtime for span attributes
         processor.processorIndex = index;
-        step = createStep(processor);
+        // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
+        step = createStep(processor as Parameters<typeof createStep>[0]);
       }
 
       workflow = workflow.then(step);
