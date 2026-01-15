@@ -16,7 +16,7 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
-import type { InferSchemaOutput, OutputSchema } from '../../../stream/base/schema';
+import type { OutputSchema } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
