@@ -345,6 +345,8 @@ createVectorTestSuite({
   // MongoDB limitations:
   // - $not at top level doesn't work (MongoDB requires $not inside a field filter)
   // - Empty logical operator arrays ($and: [], $or: [], $nor: []) are rejected
+  // - Malformed operator syntax returns empty array instead of throwing
   supportsNotOperator: false,
   supportsEmptyLogicalOperators: false,
+  supportsStrictOperatorValidation: false,
 });

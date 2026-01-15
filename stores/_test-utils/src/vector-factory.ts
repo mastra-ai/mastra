@@ -102,6 +102,17 @@ export interface VectorTestConfig {
   /** Whether the store allows empty logical operators ($and, $or). Default: true.
    *  Set to false for stores that throw validation errors on empty logical operators. */
   supportsEmptyLogicalOperators?: boolean;
+  /** Whether the store supports advanced $not syntax patterns. Default: true.
+   *  Set to false for stores that don't support:
+   *  - Field-level $not: { field: { $not: { $lt: value } } }
+   *  - Multiple logical operators at root: { $and: [...], field: { $gte: value } }
+   *  - Nested $not with $or: { $not: { $or: [...] } }
+   *  - Double negation: { field: { $not: { $ne: value } } } */
+  supportsAdvancedNotSyntax?: boolean;
+  /** Whether the store supports zero magnitude vectors. Default: true.
+   *  Set to false for stores using cosine similarity that reject zero vectors
+   *  (since cosine similarity requires normalization, which fails with zero vectors). */
+  supportsZeroVectors?: boolean;
 }
 
 /**

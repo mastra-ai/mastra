@@ -122,4 +122,8 @@ createVectorTestSuite({
   supportsElemMatch: false,
   supportsSize: false,
   supportsEmptyLogicalOperators: false,
+  // Elasticsearch doesn't support advanced $not patterns like field-level $not
+  supportsAdvancedNotSyntax: false,
+  // Cosine similarity doesn't support zero magnitude vectors (division by zero)
+  supportsZeroVectors: false,
 });

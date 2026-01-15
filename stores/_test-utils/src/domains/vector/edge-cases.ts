@@ -27,6 +27,7 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
     supportsNorOperator = true,
     supportsEmptyNot = false,
     supportsEmptyLogicalOperators = true,
+    supportsZeroVectors = true,
   } = config;
 
   describe('Vector Store Edge Cases', () => {
@@ -319,24 +320,27 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
         }
       });
 
-      it('should handle vectors with zero magnitude gracefully', async () => {
-        const zeroVector = new Array(VECTOR_DIMENSION).fill(0);
+      // Skip for stores using cosine similarity that reject zero vectors (division by zero)
+      if (supportsZeroVectors) {
+        it('should handle vectors with zero magnitude gracefully', async () => {
+          const zeroVector = new Array(VECTOR_DIMENSION).fill(0);
 
-        // Most stores accept zero vectors
-        await config.vector.upsert({
-          indexName: normalizationTestIndex,
-          vectors: [zeroVector],
-          metadata: [{ test: 'zero-magnitude' }],
-        });
-        await waitForIndexing(normalizationTestIndex);
+          // Most stores accept zero vectors
+          await config.vector.upsert({
+            indexName: normalizationTestIndex,
+            vectors: [zeroVector],
+            metadata: [{ test: 'zero-magnitude' }],
+          });
+          await waitForIndexing(normalizationTestIndex);
 
-        const results = await config.vector.query({
-          indexName: normalizationTestIndex,
-          queryVector: createVector(1),
-          topK: 10,
+          const results = await config.vector.query({
+            indexName: normalizationTestIndex,
+            queryVector: createVector(1),
+            topK: 10,
+          });
+          expect(results).toBeDefined();
         });
-        expect(results).toBeDefined();
-      });
+      }
 
       it('should reject vectors with NaN values', async () => {
         const nanVector = new Array(VECTOR_DIMENSION).fill(NaN);

@@ -33,6 +33,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     supportsNorOperator = true,
     supportsElemMatch = true,
     supportsSize = true,
+    supportsAdvancedNotSyntax = true,
   } = config;
 
   describe('Filter Operators', () => {
@@ -699,9 +700,9 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
       });
     }
 
-    // Advanced $not operator combinations - only run if store supports $not
+    // Advanced $not operator combinations - only run if store supports $not and advanced syntax
     // Note: If supportsNullValues is true, Null Handling tests add a 9th vector with category: 'test'
-    if (supportsNotOperator) {
+    if (supportsNotOperator && supportsAdvancedNotSyntax) {
       describe('Advanced $not Combinations', () => {
         it('should handle $not with $in operator', async () => {
           const results = await config.vector.query({
@@ -1036,7 +1037,8 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     }
 
     // Additional edge case for multiple logical operators at root level
-    if (supportsNotOperator) {
+    // This tests mixing explicit $and with implicit field conditions, which some stores don't support
+    if (supportsAdvancedNotSyntax) {
       describe('Multiple Logical Operators at Root', () => {
         it('should handle multiple logical operators at root level', async () => {
           const results = await config.vector.query({

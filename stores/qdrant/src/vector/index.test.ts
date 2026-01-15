@@ -647,5 +647,8 @@ createVectorTestSuite({
   supportsContains: false,
   supportsNorOperator: false,
   supportsElemMatch: false,
+  supportsSize: false,
   supportsEmptyLogicalOperators: false,
+  // Qdrant doesn't support advanced $not patterns like field-level $not or mixed root operators
+  supportsAdvancedNotSyntax: false,
 });

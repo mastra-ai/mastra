@@ -128,4 +128,6 @@ createVectorTestSuite({
   supportsElemMatch: false,
   supportsSize: false,
   supportsEmptyLogicalOperators: false,
+  // OpenSearch doesn't support advanced $not patterns like field-level $not
+  supportsAdvancedNotSyntax: false,
 });
