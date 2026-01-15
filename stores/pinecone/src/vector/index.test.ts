@@ -1,4 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
+import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
 
@@ -191,6 +192,241 @@ describe.skip('PineconeVector Integration Tests', () => {
     }
   }, 500000);
 
+  describe('Index Operations', () => {
+    it('should list indexes including our test index', async () => {
+      const indexes = await vectorDB.listIndexes();
+      expect(indexes).toContain(testIndexName);
+    }, 500000);
+
+    it('should describe index with correct properties', async () => {
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
+      expect(stats.dimension).toBe(dimension);
+      expect(stats.metric).toBe('cosine');
+      expect(typeof stats.count).toBe('number');
+    }, 500000);
+  });
+
+  describe('Vector Operations', () => {
+    const testVectors = [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0],
+    ];
+    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
+    let vectorIds: string[];
+
+    it('should upsert vectors with metadata', async () => {
+      vectorIds = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata });
+      expect(vectorIds).toHaveLength(3);
+      // Wait for vectors to be indexed
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+    }, 500000);
+
+    it.skip('should query vectors and return nearest neighbors', async () => {
+      const queryVector = [1.0, 0.1, 0.1];
+      const results = await vectorDB.query({ indexName: testIndexName, queryVector, topK: 3 });
+
+      expect(results).toHaveLength(3);
+      expect(results[0]!.score).toBeGreaterThan(0);
+      expect(results[0]!.metadata).toBeDefined();
+    }, 500000);
+
+    it('should query vectors with metadata filter', async () => {
+      const queryVector = [0.0, 1.0, 0.0];
+      const filter = { label: 'y-axis' };
+
+      const results = await vectorDB.query({ indexName: testIndexName, queryVector, topK: 1, filter });
+
+      expect(results).toHaveLength(1);
+      expect(results?.[0]?.metadata?.label).toBe('y-axis');
+    }, 500000);
+
+    it('should query vectors and return vectors in results', async () => {
+      const queryVector = [0.0, 1.0, 0.0];
+      const results = await vectorDB.query({ indexName: testIndexName, queryVector, topK: 1, includeVector: true });
+
+      expect(results).toHaveLength(1);
+      expect(results?.[0]?.vector).toBeDefined();
+      expect(results?.[0]?.vector).toHaveLength(dimension);
+    }, 500000);
+
+    describe('vector update operations', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName: indexNameUpdate, dimension, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexNameUpdate);
+      });
+
+      afterEach(async () => {
+        try {
+          await vectorDB.deleteIndex({ indexName: indexNameUpdate });
+          await waitUntilIndexDeleted(vectorDB, indexNameUpdate);
+        } catch {
+          // Ignore errors if index doesn't exist
+        }
+      });
+
+      it('should update the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: indexNameUpdate, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [1, 2, 4];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          vector: newVector,
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
+
+        await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: indexNameUpdate,
+          queryVector: newVector,
+          topK: 10,
+          includeVector: true,
+        });
+
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(newVector);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      }, 500000);
+
+      it('should only update the metadata by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: indexNameUpdate, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newMetaData = {
+          test: 'updates',
+        };
+
+        const update = {
+          metadata: newMetaData,
+        };
+
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
+
+        await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: indexNameUpdate,
+          queryVector: testVectors[0],
+          topK: 2,
+          includeVector: true,
+        });
+
+        expect(results[0]?.id).toBe(idToBeUpdated);
+        expect(results[0]?.vector).toEqual(testVectors[0]);
+        expect(results[0]?.metadata).toEqual(newMetaData);
+      }, 500000);
+
+      it('should only update vector embeddings by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: indexNameUpdate, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+
+        const idToBeUpdated = ids[0];
+        const newVector = [4, 4, 4];
+
+        const update = {
+          vector: newVector,
+        };
+
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
+
+        await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
+
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: indexNameUpdate,
+          queryVector: newVector,
+          topK: 10,
+          includeVector: true,
+        });
+
+        const updatedResult = results.find(r => r.id === idToBeUpdated);
+        expect(updatedResult).toBeDefined();
+        expect(updatedResult?.vector).toEqual(newVector);
+      }, 500000);
+
+      it('should throw exception when no updates are given', async () => {
+        await expect(vectorDB.updateVector({ indexName: indexNameUpdate, id: 'id', update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
+      });
+
+      it('should throw error for non-existent index', async () => {
+        const nonExistentIndex = 'non-existent-index';
+        await expect(
+          vectorDB.updateVector({ indexName: nonExistentIndex, id: 'test-id', update: { vector: [1, 2, 3] } }),
+        ).rejects.toThrow();
+      });
+
+      it('should throw error for invalid vector dimension', async () => {
+        const [id] = await vectorDB.upsert({
+          indexName: indexNameUpdate,
+          vectors: [[1, 2, 3]],
+          metadata: [{ test: 'initial' }],
+        });
+
+        await expect(
+          vectorDB.updateVector({ indexName: indexNameUpdate, id, update: { vector: [1, 2] } }), // Wrong dimension
+        ).rejects.toThrow();
+      }, 500000);
+    });
+
+    describe('vector delete operations', () => {
+      const testVectors = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
+      beforeEach(async () => {
+        await vectorDB.createIndex({ indexName: indexNameDelete, dimension, metric: 'cosine' });
+        await waitUntilReady(vectorDB, indexNameDelete);
+      });
+
+      afterEach(async () => {
+        try {
+          await vectorDB.deleteIndex({ indexName: indexNameDelete });
+          await waitUntilIndexDeleted(vectorDB, indexNameDelete);
+        } catch {
+          // Ignore errors if index doesn't exist
+        }
+      });
+
+      it('should delete the vector by id', async () => {
+        const ids = await vectorDB.upsert({ indexName: indexNameDelete, vectors: testVectors });
+        expect(ids).toHaveLength(3);
+        const idToBeDeleted = ids[0];
+
+        await vectorDB.deleteVector({ indexName: indexNameDelete, id: idToBeDeleted });
+        await waitUntilVectorsIndexed(vectorDB, indexNameDelete, 2, true);
+
+        // Query all vectors similar to the deleted one
+        const results: QueryResult[] = await vectorDB.query({
+          indexName: indexNameDelete,
+          queryVector: testVectors[0],
+          topK: 3,
+          includeVector: true,
+        });
+
+        const resultIds = results.map(r => r.id);
+        expect(resultIds).not.toContain(idToBeDeleted);
+      }, 500000);
+    });
+  });
+
   describe('Namespace Operations', () => {
     const namespace1 = 'test-namespace-1';
     const namespace2 = 'test-namespace-2';
@@ -340,6 +576,15 @@ describe.skip('PineconeVector Integration Tests', () => {
     afterAll(async () => {
       await vectorDB.deleteIndex({ indexName: testIndexName });
     });
+    it('should handle non-existent index query gracefully', async () => {
+      const nonExistentIndex = 'non-existent-index';
+      await expect(vectorDB.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();
+    }, 500000);
+
+    it('should handle incorrect dimension vectors', async () => {
+      const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
+      await expect(vectorDB.upsert({ indexName: testIndexName, vectors: wrongDimVector })).rejects.toThrow();
+    }, 500000);
 
     it('should handle duplicate index creation gracefully', async () => {
       const duplicateIndexName = `duplicate-test`;
@@ -393,6 +638,748 @@ describe.skip('PineconeVector Integration Tests', () => {
         // Cleanup
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
+    });
+  });
+
+  describe('Performance Tests', () => {
+    it('should handle batch upsert of 1000 vectors', async () => {
+      const batchSize = 1000;
+      const vectors = Array(batchSize)
+        .fill(null)
+        .map(() =>
+          Array(dimension)
+            .fill(null)
+            .map(() => Math.random()),
+        );
+      const metadata = vectors.map((_, i) => ({ id: i }));
+
+      const start = Date.now();
+      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
+      const duration = Date.now() - start;
+
+      expect(ids).toHaveLength(batchSize);
+      console.log(`Batch upsert of ${batchSize} vectors took ${duration}ms`);
+    }, 300000); // 5 minute timeout
+
+    it('should perform multiple concurrent queries', async () => {
+      const queryVector = [1, 0, 0];
+      const numQueries = 10;
+
+      const start = Date.now();
+      const promises = Array(numQueries)
+        .fill(null)
+        .map(() => vectorDB.query({ indexName: testIndexName, queryVector }));
+
+      const results = await Promise.all(promises);
+      const duration = Date.now() - start;
+
+      expect(results).toHaveLength(numQueries);
+      console.log(`${numQueries} concurrent queries took ${duration}ms`);
+    }, 500000);
+  });
+
+  describe('Filter Validation in Queries', () => {
+    it('rejects queries with null values', async () => {
+      await expect(
+        vectorDB.query({ indexName: testIndexName, queryVector: [1, 0, 0], topK: 10, filter: { field: null } }),
+      ).rejects.toThrow();
+
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { other: { $eq: null } },
+        }),
+      ).rejects.toThrow('the $eq operator must be followed by a string, boolean or a number, got null instead');
+    });
+
+    it('rejects invalid array operator values', async () => {
+      // Test non-undefined values
+      const invalidValues = [123, 'string', true, { key: 'value' }, null];
+      for (const op of ['$in', '$nin']) {
+        for (const val of invalidValues) {
+          await expect(
+            vectorDB.query({
+              indexName: testIndexName,
+              queryVector: [1, 0, 0],
+              filter: { field: { [op]: val } },
+            }),
+          ).rejects.toThrow(`the ${op} operator must be followed by a list of strings or a list of numbers`);
+        }
+      }
+    });
+
+    it('validates comparison operators', async () => {
+      const numOps = ['$gt', '$gte', '$lt', '$lte'];
+      const invalidNumericValues = ['not-a-number', true, [], {}, null]; // Removed undefined
+      for (const op of numOps) {
+        for (const val of invalidNumericValues) {
+          await expect(
+            vectorDB.query({
+              indexName: testIndexName,
+              queryVector: [1, 0, 0],
+              filter: { field: { [op]: val } },
+            }),
+          ).rejects.toThrow(`the ${op} operator must be followed by a number`);
+        }
+      }
+    });
+
+    it('rejects multiple invalid values', async () => {
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: {
+            field1: { $in: 'not-array' },
+            field2: { $exists: 'not-boolean' },
+            field3: { $gt: 'not-number' },
+          } as any,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('rejects invalid array values', async () => {
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { field: { $in: [null] } },
+        }),
+      ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
+
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { field: { $in: [undefined] } },
+        }),
+      ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
+
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { field: { $all: 'not-an-array' } } as any,
+        }),
+      ).rejects.toThrow('A non-empty array is required for the $all operator');
+    });
+
+    it('handles empty object filters', async () => {
+      // Test empty object at top level
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { field: { $eq: {} } },
+        }),
+      ).rejects.toThrow('the $eq operator must be followed by a string, boolean or a number, got {} instead');
+    });
+
+    it('handles empty/undefined filters by returning all results', async () => {
+      // Empty objects and undefined are ignored by Pinecone
+      // and will return all results without filtering
+      const noFilterCases = [{ field: {} }, { field: undefined }, { field: { $in: undefined } }];
+
+      for (const filter of noFilterCases) {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter,
+        });
+        expect(results.length).toBeGreaterThan(0);
+      }
+    });
+    it('handles empty object filters', async () => {
+      // Test empty object at top level
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: {},
+        }),
+      ).rejects.toThrow('You must enter a `filter` object with at least one key-value pair.');
+    });
+  });
+
+  describe('Metadata Filter Tests', () => {
+    const testVectors = [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0],
+      [0.5, 0.5, 0.0],
+      [0.3, 0.3, 0.3],
+      [0.8, 0.1, 0.1],
+      [0.1, 0.8, 0.1],
+      [0.1, 0.1, 0.8],
+    ];
+
+    const testMetadata = [
+      { category: 'electronics', price: 1000, tags: ['premium', 'new'], inStock: true, rating: 4.5 },
+      { category: 'books', price: 50, tags: ['bestseller'], inStock: true, rating: 4.8 },
+      { category: 'electronics', price: 500, tags: ['refurbished'], inStock: false, rating: 4.0 },
+      { category: 'clothing', price: 75, tags: ['summer', 'sale'], inStock: true, rating: 4.2 },
+      { category: 'books', price: 30, tags: ['paperback', 'sale'], inStock: true, rating: 4.1 },
+      { category: 'electronics', price: 800, tags: ['premium'], inStock: true, rating: 4.7 },
+      { category: 'clothing', price: 150, tags: ['premium', 'new'], inStock: false, rating: 4.4 },
+      { category: 'books', price: 25, tags: ['paperback', 'bestseller'], inStock: true, rating: 4.3 },
+    ];
+
+    beforeAll(async () => {
+      await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata });
+      // Wait for vectors to be indexed
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, testVectors.length);
+    }, 500000);
+
+    describe('Comparison Operators', () => {
+      it('should filter with implict $eq', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: 'electronics' },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+      it('should filter with $eq operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $eq: 'electronics' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+
+      it('should filter with $gt operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $gt: 500 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeGreaterThan(500);
+        });
+      });
+
+      it('should filter with $gte operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $gte: 500 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(500);
+        });
+      });
+
+      it('should filter with $lt operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $lt: 100 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeLessThan(100);
+        });
+      });
+
+      it('should filter with $lte operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $lte: 50 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(50);
+        });
+      });
+
+      it('should filter with $ne operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $ne: 'electronics' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toBe('electronics');
+        });
+      });
+
+      it('filters with $gte, $lt, $lte operators', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $gte: 25, $lte: 30 } },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(30);
+          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(25);
+        });
+      });
+    });
+
+    describe('Array Operators', () => {
+      it('should filter with $in operator for strings', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $in: ['electronics', 'books'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).toContain(result.metadata?.category);
+        });
+      });
+
+      it('should filter with $in operator for numbers', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $in: [50, 75, 1000] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect([50, 75, 1000]).toContain(result.metadata?.price);
+        });
+      });
+
+      it('should filter with $nin operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $nin: ['electronics', 'books'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should filter with $all operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $all: ['premium', 'new'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags).toContain('premium');
+          expect(result.metadata?.tags).toContain('new');
+        });
+      });
+    });
+
+    describe('Logical Operators', () => {
+      it('should filter with implict $and', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: 'electronics', price: { $gt: 700 }, inStock: true },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+          expect(Number(result.metadata?.price)).toBeGreaterThan(700);
+          expect(result.metadata?.inStock).toBe(true);
+        });
+      });
+      it('should filter with $and operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { inStock: true }] },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+          expect(Number(result.metadata?.price)).toBeGreaterThan(700);
+          expect(result.metadata?.inStock).toBe(true);
+        });
+      });
+
+      it('should filter with $or operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { $or: [{ price: { $gt: 900 } }, { tags: { $all: ['bestseller'] } }] },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const condition1 = Number(result.metadata?.price) > 900;
+          const condition2 = result.metadata?.tags?.includes('bestseller');
+          expect(condition1 || condition2).toBe(true);
+        });
+      });
+
+      it('should handle nested logical operators', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: {
+            $and: [
+              {
+                $or: [{ category: 'electronics' }, { category: 'books' }],
+              },
+              { price: { $lt: 100 } },
+              { inStock: true },
+            ],
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(['electronics', 'books']).toContain(result.metadata?.category);
+          expect(Number(result.metadata?.price)).toBeLessThan(100);
+          expect(result.metadata?.inStock).toBe(true);
+        });
+      });
+    });
+
+    describe('Complex Filter Combinations', () => {
+      it('should combine comparison and array operators', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { $and: [{ price: { $gte: 500 } }, { tags: { $in: ['premium', 'refurbished'] } }] },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(500);
+          expect(result.metadata?.tags?.some(tag => ['premium', 'refurbished'].includes(tag))).toBe(true);
+        });
+      });
+
+      it('should handle multiple conditions on same field', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { $and: [{ price: { $gte: 30 } }, { price: { $lte: 800 } }] },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const price = Number(result.metadata?.price);
+          expect(price).toBeGreaterThanOrEqual(30);
+          expect(price).toBeLessThanOrEqual(800);
+        });
+      });
+
+      it('should handle complex nested conditions', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: {
+            $or: [
+              {
+                $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { tags: { $all: ['premium'] } }],
+              },
+              {
+                $and: [{ category: 'books' }, { price: { $lt: 50 } }, { tags: { $in: ['paperback'] } }],
+              },
+            ],
+          },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          const isExpensiveElectronics =
+            result.metadata?.category === 'electronics' &&
+            Number(result.metadata?.price) > 700 &&
+            result.metadata?.tags?.includes('premium');
+
+          const isCheapBook =
+            result.metadata?.category === 'books' &&
+            Number(result.metadata?.price) < 50 &&
+            result.metadata?.tags?.includes('paperback');
+
+          expect(isExpensiveElectronics || isCheapBook).toBe(true);
+        });
+      });
+
+      it('combines existence checks with other operators', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { $and: [{ category: 'clothing' }, { optionalField: { $exists: false } }] },
+        });
+        expect(results.length).toBe(2);
+        expect(results[0]!.metadata!.category).toBe('clothing');
+        expect('optionalField' in results[0]!.metadata!).toBe(false);
+      });
+    });
+
+    describe('Edge Cases', () => {
+      it('should handle numeric comparisons with decimals', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { rating: { $gt: 4.5 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(Number(result.metadata?.rating)).toBeGreaterThan(4.5);
+        });
+      });
+
+      it('should handle boolean values', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { inStock: { $eq: false } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.inStock).toBe(false);
+        });
+      });
+
+      it('should handle empty array in $in operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $in: [] } },
+        });
+        expect(results).toHaveLength(0);
+      });
+
+      it('should handle single value in $all operator', async () => {
+        const results = await vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $all: ['premium'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags).toContain('premium');
+        });
+      });
+    });
+  });
+
+  describe('Additional Validation Tests', () => {
+    it('should reject non-numeric values in numeric comparisons', async () => {
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $gt: '500' } } as any, // string instead of number
+        }),
+      ).rejects.toThrow('the $gt operator must be followed by a number');
+    });
+
+    it('should reject invalid types in $in operator', async () => {
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $in: [true, false] } }, // booleans instead of numbers
+        }),
+      ).rejects.toThrow('the $in operator must be followed by a list of strings or a list of numbers');
+    });
+
+    it('should reject mixed types in $in operator', async () => {
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: [1, 0, 0],
+          filter: { field: { $in: ['string', 123] } }, // mixed string and number
+        }),
+      ).rejects.toThrow();
+    });
+    it('should handle undefined filter', async () => {
+      const results1 = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: undefined,
+      });
+      const results2 = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+      });
+      expect(results1).toEqual(results2);
+      expect(results1.length).toBeGreaterThan(0);
+    });
+
+    it('should handle null filter', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: null,
+      });
+      const results2 = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+      });
+      expect(results).toEqual(results2);
+      expect(results.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Additional Edge Cases', () => {
+    it('should handle exact boundary conditions', async () => {
+      // Test exact boundary values from our test data
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { $and: [{ price: { $gte: 25 } }, { price: { $lte: 1000 } }] },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      // Should include both boundary values
+      expect(results.some(r => r.metadata?.price === 25)).toBe(true);
+      expect(results.some(r => r.metadata?.price === 1000)).toBe(true);
+    });
+
+    it('should handle multiple $all conditions on same array field', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { $and: [{ tags: { $all: ['premium'] } }, { tags: { $all: ['new'] } }] },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.tags).toContain('premium');
+        expect(result.metadata?.tags).toContain('new');
+      });
+    });
+
+    it('should handle multiple array operator combinations', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { $and: [{ tags: { $all: ['premium'] } }, { tags: { $in: ['new', 'refurbished'] } }] },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(result.metadata?.tags).toContain('premium');
+        expect(result.metadata?.tags?.some(tag => ['new', 'refurbished'].includes(tag))).toBe(true);
+      });
+    });
+  });
+
+  describe('Additional Complex Logical Combinations', () => {
+    it('should handle deeply nested $or conditions', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: {
+          $or: [
+            {
+              $and: [{ category: 'electronics' }, { $or: [{ price: { $gt: 900 } }, { tags: { $all: ['premium'] } }] }],
+            },
+            {
+              $and: [{ category: 'books' }, { $or: [{ price: { $lt: 30 } }, { tags: { $all: ['bestseller'] } }] }],
+            },
+          ],
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        if (result.metadata?.category === 'electronics') {
+          expect(Number(result.metadata?.price) > 900 || result.metadata?.tags?.includes('premium')).toBe(true);
+        } else if (result.metadata?.category === 'books') {
+          expect(Number(result.metadata?.price) < 30 || result.metadata?.tags?.includes('bestseller')).toBe(true);
+        }
+      });
+    });
+
+    it('should handle multiple field comparisons with same value', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: { $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }] },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(Number(result.metadata?.price) > 500 || Number(result.metadata?.rating) > 4.5).toBe(true);
+      });
+    });
+
+    it('should handle combination of array and numeric comparisons', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: {
+          $and: [
+            { tags: { $in: ['premium', 'bestseller'] } },
+            { $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }] },
+          ],
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['premium', 'bestseller'].some(tag => result.metadata?.tags?.includes(tag))).toBe(true);
+        expect(Number(result.metadata?.price) > 500 || Number(result.metadata?.rating) > 4.5).toBe(true);
+      });
+    });
+  });
+
+  describe('Performance Edge Cases', () => {
+    it('should handle filters with many conditions', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: {
+          $and: Array(10)
+            .fill(null)
+            .map(() => ({
+              $or: [{ price: { $gt: 100 } }, { rating: { $gt: 4.0 } }],
+            })),
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(Number(result.metadata?.price) > 100 || Number(result.metadata?.rating) > 4.0).toBe(true);
+      });
+    });
+
+    it('should handle deeply nested conditions efficiently', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: {
+          $or: Array(5)
+            .fill(null)
+            .map(() => ({
+              $and: [{ category: { $in: ['electronics', 'books'] } }, { price: { $gt: 50 } }, { rating: { $gt: 4.0 } }],
+            })),
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      results.forEach(result => {
+        expect(['electronics', 'books']).toContain(result.metadata?.category);
+        expect(Number(result.metadata?.price)).toBeGreaterThan(50);
+        expect(Number(result.metadata?.rating)).toBeGreaterThan(4.0);
+      });
+    });
+
+    it('should handle large number of $or conditions', async () => {
+      const results = await vectorDB.query({
+        indexName: testIndexName,
+        queryVector: [1, 0, 0],
+        filter: {
+          $or: [
+            ...Array(5)
+              .fill(null)
+              .map((_, i) => ({
+                price: { $gt: i * 100 },
+              })),
+            ...Array(5)
+              .fill(null)
+              .map((_, i) => ({
+                rating: { $gt: 4.0 + i * 0.1 },
+              })),
+          ],
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
     });
   });
 

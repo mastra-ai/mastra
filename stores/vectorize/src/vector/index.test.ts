@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
@@ -292,10 +291,50 @@ describe('CloudflareVector', () => {
         await vectorDB.deleteIndex({ indexName: tempIndexNameCreateDescribeDelete });
       } catch {}
     });
+
+    it('should create and list indexes', async () => {
+      await vectorDB.createIndex({ indexName: tempIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+      await waitUntilReady(vectorDB, tempIndexName);
+      const indexes = await vectorDB.listIndexes();
+      expect(indexes).toContain(tempIndexName);
+    });
+
+    it('should create, describe, and delete an index', async () => {
+      // Create
+      await vectorDB.createIndex({
+        indexName: tempIndexNameCreateDescribeDelete,
+        dimension: VECTOR_DIMENSION,
+        metric: 'cosine',
+      });
+      await waitUntilReady(vectorDB, tempIndexNameCreateDescribeDelete);
+
+      // Describe
+      const stats = await vectorDB.describeIndex({ indexName: tempIndexNameCreateDescribeDelete });
+      expect(stats).toEqual({
+        dimension: VECTOR_DIMENSION,
+        metric: 'cosine',
+        count: 0,
+      });
+
+      try {
+        // Delete
+        await vectorDB.deleteIndex({ indexName: tempIndexNameCreateDescribeDelete });
+      } catch (e) {
+        console.error(`Failed deleting index ${tempIndexNameCreateDescribeDelete}`, e);
+      }
+      const indexes = await vectorDB.listIndexes();
+      expect(indexes).not.toContain(tempIndexNameCreateDescribeDelete);
+    });
   });
 
   describe('Vector Operations', () => {
     let vectorIds: string[];
+    it('should create index before operations', async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: VECTOR_DIMENSION, metric: 'cosine' });
+      await waitUntilReady(vectorDB, testIndexName);
+      const indexes = await vectorDB.listIndexes();
+      expect(indexes).toContain(testIndexName);
+    });
 
     // skipping because this fails in CI 80% of the time due to the test being stateful across all tests
     // when we figure out how to make it not fail when multiple tests are running, we can re-enable, for now this test failing just makes us ignore vectorize tests
@@ -321,6 +360,26 @@ describe('CloudflareVector', () => {
 
       if (results.length > 0) {
         expect(results[0].metadata).toEqual({ label: 'first-dimension' });
+      }
+    });
+
+    it('should query vectors and return vector in results', async () => {
+      await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
+
+      const queryVector = createVector(0, 0.9);
+      const results = await waitForQueryResults({
+        vector: vectorDB,
+        indexName: testIndexName,
+        queryVector,
+        expectedCount: 3,
+        includeVector: true,
+      });
+
+      expect(results).toHaveLength(3);
+
+      for (const result of results) {
+        expect(result.vector).toBeDefined();
+        expect(result.vector).toHaveLength(VECTOR_DIMENSION);
       }
     });
   });
@@ -392,6 +451,41 @@ describe('CloudflareVector', () => {
       expect(updatedResult).toBeDefined();
       expect(updatedResult?.vector).toEqual(newVector);
     });
+
+    it('should only update vector embeddings by id', async () => {
+      const ids = await vectorDB.upsert({ indexName: indexName2, vectors: testVectors });
+      expect(ids).toHaveLength(3);
+
+      const idToBeUpdated = ids[0];
+      const newVector = createVector(0, 4.0);
+
+      const update = {
+        vector: newVector,
+      };
+
+      await vectorDB.updateVector({ indexName: indexName2, id: idToBeUpdated, update });
+
+      await waitUntilVectorsIndexed(vectorDB, indexName2, 3);
+
+      const results = await waitForQueryResults({
+        vector: vectorDB,
+        indexName: indexName2,
+        queryVector: newVector,
+        expectedCount: 2,
+        includeVector: true,
+      });
+
+      expect(results).toHaveLength(2);
+      const updatedResult = results.find(result => result.id === idToBeUpdated);
+      expect(updatedResult).toBeDefined();
+      expect(updatedResult?.vector).toEqual(newVector);
+    });
+
+    it('should throw exception when no updates are given', async () => {
+      await expect(vectorDB.updateVector({ indexName: indexName3, id: 'id', update: {} })).rejects.toThrow(
+        'No update data provided',
+      );
+    });
   });
 
   describe('Vector delete operations', () => {
@@ -437,6 +531,75 @@ describe('CloudflareVector', () => {
   });
 
   describe('Error Handling', () => {
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
+      const dimension = 768;
+      const infoSpy = vi.spyOn(vectorDB['logger'], 'info');
+      const warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+        await waitUntilReady(vectorDB, duplicateIndexName);
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 2,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 2} dimensions were requested`,
+        );
+      } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
+      }
+    });
+
+    it('should handle invalid dimension vectors', async () => {
+      await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [[1.0, 0.0]] })).rejects.toThrow();
+    });
+
+    it('should handle querying with wrong dimensions', async () => {
+      await expect(vectorDB.query({ indexName: testIndexName, queryVector: [1.0, 0.0] })).rejects.toThrow();
+    });
+
+    it('should handle non-existent index operations', async () => {
+      const nonExistentIndex = 'non_existent_index';
+      await expect(
+        vectorDB.query({ indexName: nonExistentIndex, queryVector: createVector(0, 1.0) }),
+      ).rejects.toThrow();
+    });
+
     it('rejects queries with filter keys longer than 512 characters', async () => {
       const longKey = 'a'.repeat(513);
       const filter: VectorizeVectorFilter = { [longKey]: 'value' };
@@ -460,6 +623,20 @@ describe('CloudflareVector', () => {
       }
     });
 
+    it('allows queries with valid range operator combinations', async () => {
+      const validFilters = [
+        { field: { $gt: 5, $lt: 10 } },
+        { field: { $gte: 0, $lte: 100 } },
+        { field: { $gt: 5, $lte: 10 } },
+      ];
+
+      for (const filter of validFilters) {
+        await expect(
+          vectorDB.query({ indexName: testIndexName, queryVector: createVector(0, 0.9), topK: 10, filter }),
+        ).resolves.not.toThrow();
+      }
+    });
+
     it('rejects queries with empty object field values', async () => {
       const emptyFilters = { field: {} };
       await expect(
@@ -475,6 +652,26 @@ describe('CloudflareVector', () => {
 
       await expect(
         vectorDB.query({ indexName: testIndexName, queryVector: createVector(0, 0.9), topK: 10, filter: largeFilter }),
+      ).rejects.toThrow();
+    });
+
+    it('rejects queries with array values in comparison operators', async () => {
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: createVector(0, 0.9),
+          topK: 10,
+          filter: { field: { $gt: [] } } as any,
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        vectorDB.query({
+          indexName: testIndexName,
+          queryVector: createVector(0, 0.9),
+          topK: 10,
+          filter: { field: { $lt: [1, 2, 3] } } as any,
+        }),
       ).rejects.toThrow();
     });
   });
@@ -580,6 +777,159 @@ describe('CloudflareVector', () => {
       } catch {
         // Ignore errors if index doesn't exist
       }
+    });
+
+    describe('Basic Equality Operators', () => {
+      it('filters with $eq operator', async () => {
+        const queryVector = createVector(0, 1.0);
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector,
+          expectedCount: 2,
+          filter: { category: 'electronics' },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).toBe('electronics');
+        });
+      });
+
+      it('filters with $ne operator', async () => {
+        const queryVector = createVector(0, 1.0);
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector,
+          expectedCount: 2,
+          filter: { category: { $ne: 'electronics' } },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toBe('electronics');
+        });
+      });
+    });
+
+    describe('Numeric Comparison Operators', () => {
+      it('filters with $gt operator', async () => {
+        const queryVector = createVector(0, 1.0);
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector,
+          expectedCount: 1,
+          filter: { price: { $gt: 150 } },
+        });
+        expect(results.length).toBe(1);
+        results.forEach(result => {
+          expect(Number(result.metadata?.price)).toBeGreaterThan(150);
+        });
+      });
+
+      it('filters with $gte operator', async () => {
+        const queryVector = createVector(0, 1.0);
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector,
+          expectedCount: 3,
+          filter: { price: { $gte: 100 } },
+        });
+        expect(results.length).toBe(3);
+        results.forEach(result => {
+          const price = Number(result.metadata?.price);
+          expect(price).toBeGreaterThanOrEqual(100);
+        });
+      });
+
+      it('filters with $lt operator', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 2,
+          filter: { price: { $lt: 150 } },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          const price = Number(result.metadata?.price);
+          expect(price).toBeLessThan(150);
+        });
+      });
+
+      it('filters with $lte operator', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 3,
+          filter: { price: { $lte: 150 } },
+        });
+        expect(results.length).toBe(3);
+        results.forEach(result => {
+          const price = Number(result.metadata?.price);
+          expect(price).toBeLessThanOrEqual(150);
+        });
+      });
+    });
+
+    describe('Array Operators', () => {
+      it('filters with $in operator for exact matches', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 2,
+          filter: { category: { $in: ['electronics'] } },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).toContain('electronics');
+        });
+      });
+
+      it('filters with $nin operator', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 2,
+          filter: { category: { $nin: ['electronics'] } },
+        });
+        expect(results.length).toBe(2);
+        results.forEach(result => {
+          expect(result.metadata?.category).not.toContain('electronics');
+        });
+      });
+    });
+
+    describe('Boolean Operations', () => {
+      it('filters with boolean values', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 1,
+          filter: { isActive: true },
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]?.metadata?.isActive).toBe(true);
+      });
+
+      it('filters with $ne on boolean values', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 3,
+          filter: { isActive: { $ne: true } },
+        });
+        expect(results.length).toBe(3);
+        results.forEach(result => {
+          expect(result.metadata?.isActive).toBe(false);
+        });
+      });
     });
 
     describe('Nested Field Operations', () => {
@@ -721,6 +1071,18 @@ describe('CloudflareVector', () => {
           expect(price).toBeGreaterThan(75);
           expect(price).toBeLessThan(200);
         });
+      });
+
+      it('handles exact numeric equality', async () => {
+        const results = await waitForQueryResults({
+          vector: vectorDB,
+          indexName: testIndexName2,
+          queryVector: createVector(0, 1.0),
+          expectedCount: 1,
+          filter: { price: { $eq: 100 } },
+        });
+        expect(results.length).toBe(1);
+        expect(results[0]?.metadata?.price).toBe(100);
       });
 
       it('handles boundary conditions in ranges', async () => {
@@ -892,92 +1254,6 @@ describe('CloudflareVector', () => {
         expect(results).toEqual(results2);
         expect(results.length).toBeGreaterThan(0);
       });
-    });
-  });
-
-  // ============================================================================
-  // Shared Test Suite Integration
-  // ============================================================================
-  // This section integrates the shared test suite from @internal/storage-test-utils.
-  // The shared suite provides comprehensive test coverage across all vector stores:
-  //
-  // Test Domains Included:
-  // 1. Basic Operations (14 tests) - Index lifecycle, upsert, query, listIndexes, describeIndex
-  // 2. Filter Operators (25+ tests) - Comparison, negation, array operators, pattern matching
-  // 3. Edge Cases (17 tests) - Empty indexes, large batches (1000+ vectors), concurrent operations
-  // 4. Error Handling (30+ tests) - Invalid inputs, parameter validation, dimension mismatches
-  // 5. Metadata Filtering (existing) - Memory system compatibility
-  // 6. Advanced Operations (existing) - deleteVectors/updateVector with filters
-  //
-  // Total: 90+ comprehensive test cases
-  //
-  // ============================================================================
-
-  describe('Vectorize Shared Test Suite', () => {
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-
-    // Skip shared suite if env vars not set (CI/CD environments)
-    if (!accountId || !apiToken) {
-      console.warn('⚠️  Skipping Vectorize shared test suite - missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN');
-      return;
-    }
-
-    // Initialize Vectorize instance for shared suite
-    const sharedVectorizeDB = new CloudflareVector({
-      accountId,
-      apiToken,
-      id: 'cloudflare-vector-shared-suite',
-    });
-
-    // Run shared test suite with Vectorize-specific configuration
-    createVectorTestSuite({
-      vector: sharedVectorizeDB,
-
-      // Vectorize uses standard createIndex API
-      createIndex: async (indexName: string) => {
-        await sharedVectorizeDB.createIndex({
-          indexName,
-          dimension: 1536, // Standard dimension for shared suite
-          metric: 'cosine',
-        });
-
-        // CRITICAL: Wait for index to be ready (Vectorize has eventual consistency)
-        // This ensures the index is fully provisioned before tests run
-        await waitUntilReady(sharedVectorizeDB, indexName);
-      },
-
-      // Vectorize uses standard deleteIndex API
-      deleteIndex: async (indexName: string) => {
-        await sharedVectorizeDB.deleteIndex({ indexName });
-
-        // CRITICAL: Wait for index deletion to propagate (Vectorize has eventual consistency)
-        // This prevents conflicts with subsequent index creation in other tests
-        await waitForIndexDeletion(sharedVectorizeDB, indexName);
-      },
-
-      // CRITICAL: Vectorize has significant eventual consistency delays
-      // After upsert operations, vectors take time to be indexed and become queryable
-      // The shared suite calls this after upsert operations to ensure vectors are searchable
-      waitForIndexing: async () => {
-        // Vectorize indexing can take 5-10 seconds or more depending on load
-        // We use a fixed delay here since the shared suite handles its own upsert operations
-        // and we don't have access to expected counts at this level
-        await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay
-      },
-
-      // NOTE: All test domains are enabled by default. Vectorize supports all operations
-      // in the shared suite, so no opt-outs are needed.
-      //
-      // If specific test domains need to be disabled in the future, use:
-      // testDomains: {
-      //   basicOps: true,
-      //   filterOps: true,
-      //   edgeCases: true,
-      //   errorHandling: true,
-      //   metadataFiltering: true,
-      //   advancedOps: true,
-      // }
     });
   });
 });
