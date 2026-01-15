@@ -18,6 +18,15 @@ import type { ServerRoute } from '.';
  */
 export const INTEGRATIONS_ROUTES: ServerRoute<any, any, any>[] = [
   // ============================================================================
+  // Provider Discovery & Proxy Routes
+  // IMPORTANT: These must come BEFORE parameterized routes like /:integrationId
+  // to prevent "providers" from being matched as an integrationId
+  // ============================================================================
+  GET_PROVIDERS_ROUTE,
+  LIST_PROVIDER_TOOLKITS_ROUTE,
+  LIST_PROVIDER_TOOLS_ROUTE,
+
+  // ============================================================================
   // Integration CRUD Routes
   // ============================================================================
   LIST_INTEGRATIONS_ROUTE,
@@ -25,13 +34,6 @@ export const INTEGRATIONS_ROUTES: ServerRoute<any, any, any>[] = [
   CREATE_INTEGRATION_ROUTE,
   UPDATE_INTEGRATION_ROUTE,
   DELETE_INTEGRATION_ROUTE,
-
-  // ============================================================================
-  // Provider Discovery & Proxy Routes
-  // ============================================================================
-  GET_PROVIDERS_ROUTE,
-  LIST_PROVIDER_TOOLKITS_ROUTE,
-  LIST_PROVIDER_TOOLS_ROUTE,
 
   // ============================================================================
   // Tool Refresh Routes

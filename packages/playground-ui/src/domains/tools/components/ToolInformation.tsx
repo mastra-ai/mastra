@@ -21,15 +21,13 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
           </Icon>
         </div>
 
-        <div className="flex gap-4 justify-between w-full min-w-0">
-          <div>
-            <Txt variant="header-md" as="h2" className="font-medium truncate">
-              {toolId}
-            </Txt>
-            <Txt variant="ui-sm" className="text-icon3">
-              {toolDescription}
-            </Txt>
-          </div>
+        <div className="flex-1 min-w-0">
+          <Txt variant="header-md" as="h2" className="font-medium truncate block" title={toolId}>
+            {toolId}
+          </Txt>
+          <Txt variant="ui-sm" className="text-icon3 line-clamp-2">
+            {toolDescription}
+          </Txt>
         </div>
       </div>
     </div>
