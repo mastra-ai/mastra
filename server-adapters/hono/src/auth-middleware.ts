@@ -6,7 +6,20 @@ import {
   isDevPlaygroundRequest,
   isProtectedPath,
 } from '@mastra/server/auth';
+import {
+  resolvePermissionsFromMapping,
+  hasPermission as checkHasPermission,
+  type IRBACProvider,
+  type EEUser,
+} from '@mastra/core/ee';
 import type { Next } from 'hono';
+
+/**
+ * Type guard to check if auth provider implements IRBACProvider.
+ */
+function implementsRBAC(auth: unknown): auth is IRBACProvider<EEUser> {
+  return auth !== null && typeof auth === 'object' && 'getRoles' in auth;
+}
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
@@ -71,6 +84,28 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     // Store user in context
     c.get('requestContext').set('user', user);
+
+    // Resolve and store user permissions for permission-based route access (EE feature)
+    try {
+      const serverConfig = mastra.getServer();
+      const roleMapping = serverConfig?.roleMapping;
+
+      if (implementsRBAC(authConfig)) {
+        const roles = await authConfig.getRoles(user as EEUser);
+
+        // Resolve permissions using roleMapping if provided, otherwise use provider's getPermissions
+        let permissions: string[];
+        if (roleMapping) {
+          permissions = resolvePermissionsFromMapping(roles, roleMapping);
+        } else {
+          permissions = await authConfig.getPermissions(user as EEUser);
+        }
+
+        c.get('requestContext').set('userPermissions', permissions);
+      }
+    } catch {
+      // RBAC not available or failed, continue without permissions
+    }
 
     return next();
   } catch (err) {

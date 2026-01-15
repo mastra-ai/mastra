@@ -174,6 +174,12 @@ interface RouteConfig<
   tags?: string[];
   deprecated?: boolean;
   maxBodySize?: number;
+  /**
+   * Permission required to access this route (EE feature).
+   * If set, the user must have this permission to access the route.
+   * Uses the format: `resource:action` or `resource:action:resourceId`
+   */
+  requiresPermission?: string;
 }
 
 /**
@@ -220,7 +226,7 @@ export function createRoute<
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
   TResponseType
 > {
-  const { summary, description, tags, deprecated, ...baseRoute } = config;
+  const { summary, description, tags, deprecated, requiresPermission, ...baseRoute } = config;
 
   // Generate OpenAPI specification from the route config
   // Skip OpenAPI generation for 'ALL' method as it doesn't map to OpenAPI
@@ -244,5 +250,6 @@ export function createRoute<
     ...baseRoute,
     openapi: openapi as any,
     deprecated,
+    requiresPermission,
   };
 }

@@ -190,6 +190,15 @@ export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = 
 /**
  * Check if a permission matches (including wildcard support).
  *
+ * Permission format: `{resource}:{action}[:{resource-id}]`
+ *
+ * Examples:
+ * - `*` matches everything
+ * - `agents:*` matches `agents:read`, `agents:read:my-agent`
+ * - `agents:read` matches `agents:read`, `agents:read:my-agent`
+ * - `agents:read:my-agent` matches only `agents:read:my-agent`
+ * - `agents:*:my-agent` matches `agents:read:my-agent`, `agents:write:my-agent`
+ *
  * @param userPermission - Permission the user has
  * @param requiredPermission - Permission being checked
  * @returns True if permission matches
@@ -200,14 +209,46 @@ export function matchesPermission(userPermission: string, requiredPermission: st
     return true;
   }
 
-  // Resource wildcard (e.g., 'agents:*' matches 'agents:read')
-  if (userPermission.endsWith(':*')) {
-    const resource = userPermission.slice(0, -2);
-    return requiredPermission.startsWith(`${resource}:`);
+  const grantedParts = userPermission.split(':');
+  const requiredParts = requiredPermission.split(':');
+
+  // Must have at least resource:action
+  if (grantedParts.length < 2 || requiredParts.length < 2) {
+    return userPermission === requiredPermission;
   }
 
-  // Exact match
-  return userPermission === requiredPermission;
+  const [grantedResource, grantedAction, grantedId] = grantedParts;
+  const [requiredResource, requiredAction, requiredId] = requiredParts;
+
+  // Resource must match
+  if (grantedResource !== requiredResource) {
+    return false;
+  }
+
+  // Action wildcard: "agents:*" matches any action
+  if (grantedAction === '*') {
+    // If no granted ID, matches all resources
+    // If granted ID specified (agents:*:my-agent), must match required ID
+    if (grantedId === undefined) {
+      return true;
+    }
+    // agents:*:my-agent matches agents:read:my-agent but not agents:read:other
+    return grantedId === requiredId;
+  }
+
+  // Action must match
+  if (grantedAction !== requiredAction) {
+    return false;
+  }
+
+  // No resource ID in granted permission = access to all resources of this type
+  // "agents:read" matches "agents:read" and "agents:read:specific-id"
+  if (grantedId === undefined) {
+    return true;
+  }
+
+  // Both have resource IDs - must match exactly
+  return grantedId === requiredId;
 }
 
 /**
@@ -219,4 +260,59 @@ export function matchesPermission(userPermission: string, requiredPermission: st
  */
 export function hasPermission(userPermissions: string[], requiredPermission: string): boolean {
   return userPermissions.some(p => matchesPermission(p, requiredPermission));
+}
+
+/**
+ * Role mapping type for translating provider roles to permissions.
+ */
+export type RoleMapping = {
+  /** Map role name to array of permissions */
+  [role: string]: string[];
+};
+
+/**
+ * Resolve permissions from user roles using a role mapping.
+ *
+ * This function translates provider-defined roles (from WorkOS, Okta, etc.)
+ * to Mastra permissions using a configurable mapping.
+ *
+ * @example
+ * ```typescript
+ * const roleMapping = {
+ *   "Engineering": ["agents:*", "workflows:*"],
+ *   "Product": ["agents:read"],
+ *   "_default": [],
+ * };
+ *
+ * // User has "Engineering" and "QA" roles
+ * const permissions = resolvePermissionsFromMapping(
+ *   ["Engineering", "QA"],
+ *   roleMapping
+ * );
+ * // Result: ["agents:*", "workflows:*"] (QA is unmapped, gets _default)
+ * ```
+ *
+ * @param roles - User's roles from the identity provider
+ * @param mapping - Role to permission mapping
+ * @returns Array of resolved permissions
+ */
+export function resolvePermissionsFromMapping(roles: string[], mapping: RoleMapping): string[] {
+  const permissions = new Set<string>();
+  const defaultPerms = mapping['_default'] ?? [];
+
+  for (const role of roles) {
+    const rolePerms = mapping[role];
+    if (rolePerms) {
+      for (const perm of rolePerms) {
+        permissions.add(perm);
+      }
+    } else {
+      // Apply default permissions for unmapped roles
+      for (const perm of defaultPerms) {
+        permissions.add(perm);
+      }
+    }
+  }
+
+  return Array.from(permissions);
 }

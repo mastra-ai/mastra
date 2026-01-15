@@ -79,6 +79,15 @@ export type MastraAuthConfig<TUser = unknown> = {
   }[];
 };
 
+/**
+ * Role mapping configuration for EE RBAC.
+ * Maps provider-defined roles to Mastra permissions.
+ */
+export type RoleMapping = {
+  /** Map role name to array of permissions */
+  [role: string]: string[];
+};
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -143,6 +152,30 @@ export type ServerConfig = {
    * Authentication configuration for the server
    */
   auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * Role mapping for EE RBAC (Enterprise Edition).
+   *
+   * Maps provider-defined roles to Mastra permissions. Use this when your
+   * identity provider (WorkOS, Okta, Azure AD, etc.) has its own roles
+   * that need to be translated to Mastra's permission model.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: myAuthProvider,
+   *     roleMapping: {
+   *       "Engineering": ["agents:*", "workflows:*"],
+   *       "Product": ["agents:read", "workflows:read"],
+   *       "Admin": ["*"],
+   *       "_default": [],  // unmapped roles get no permissions
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  roleMapping?: RoleMapping;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

@@ -7,8 +7,10 @@ export {
   DEFAULT_ROLES,
   STUDIO_PERMISSIONS,
   type StudioPermission,
+  type RoleMapping,
   getDefaultRole,
   resolvePermissions,
+  resolvePermissionsFromMapping,
   matchesPermission,
   hasPermission,
 } from './roles';
