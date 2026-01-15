@@ -3,6 +3,8 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
+import { mastraAuth } from './auth';
+
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -90,6 +92,7 @@ const config = {
     sourcemap: true,
   },
   server: {
+    auth: mastraAuth,
     build: {
       swaggerUI: true,
     },

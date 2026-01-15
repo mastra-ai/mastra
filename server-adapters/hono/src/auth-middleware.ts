@@ -44,8 +44,12 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     token = c.req.query('apiKey') || null;
   }
 
-  // Handle missing token
-  if (!token) {
+  // Check if there are cookies that might contain session tokens
+  const hasCookies = !!c.req.header('Cookie');
+
+  // Handle missing token - but allow through if cookies are present
+  // (auth provider may use cookie-based sessions like Better Auth)
+  if (!token && !hasCookies) {
     return c.json({ error: 'Authentication required' }, 401);
   }
 
@@ -55,7 +59,8 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     // Client provided verify function
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token, c.req);
+      // Pass empty string if no token but cookies present - provider will check cookies
+      user = await authConfig.authenticateToken(token || '', c.req);
     } else {
       throw new Error('No token verification method configured');
     }
