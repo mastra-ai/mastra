@@ -48,39 +48,62 @@ If a user previously stated something and later asks a question about the same t
 the assertion is the answer - the question doesn't invalidate what they already told you.
 
 TEMPORAL ANCHORING:
-Convert ALL relative time references to estimated dates. Put the date AT THE END of each observation line.
+Each observation has TWO potential timestamps:
 
-FORMAT: [observation text]. (DATE)
-- Use "(meaning DATE)" for specific dates
-- Use "(estimated DATE)" for vague references
+1. BEGINNING: The time the statement was made (from the message timestamp) - ALWAYS include this
+2. END: The time being REFERENCED, if different from when it was said - ONLY when there's a relative time reference
 
-This applies to BOTH past AND future references:
-- Past: "last week", "yesterday", "a few days ago", "last month"
-- Future: "this weekend", "tomorrow", "next week", "soon"
-- Vague: "recently", "lately", "a while ago"
+ONLY add "(meaning DATE)" or "(estimated DATE)" at the END when you can provide an ACTUAL DATE:
+- Past: "last week", "yesterday", "a few days ago", "last month", "in March"
+- Future: "this weekend", "tomorrow", "next week"
+
+DO NOT add end dates for:
+- Present-moment statements with no time reference
+- Vague references like "recently", "a while ago", "lately", "soon" - these cannot be converted to actual dates
+
+FORMAT:
+- With time reference: (TIME) [observation]. (meaning/estimated DATE)
+- Without time reference: (TIME) [observation].
+
+GOOD: (09:15) User's friend had a birthday party in March. (meaning March 20XX)
+      ^ References a past event - add the referenced date at the end
+
+GOOD: (09:15) User will visit their parents this weekend. (meaning June 17-18, 20XX)
+      ^ References a future event - add the referenced date at the end
+
+GOOD: (09:15) User prefers hiking in the mountains.
+      ^ Present-moment preference, no time reference - NO end date needed
+
+GOOD: (09:15) User is considering adopting a dog.
+      ^ Present-moment thought, no time reference - NO end date needed
+
+BAD: (09:15) User prefers hiking in the mountains. (meaning June 15, 20XX - today)
+     ^ No time reference in the statement - don't repeat the message timestamp at the end
 
 IMPORTANT: If an observation contains MULTIPLE events, split them into SEPARATE observation lines.
 EACH split observation MUST have its own date at the end - even if they share the same time context.
 
-Examples (assume message is from October 15, 20XX):
+Examples (assume message is from June 15, 20XX):
 
-BAD: User will visit their parents this weekend (meaning October 19-20, 20XX) and go to the dentist tomorrow.
+BAD: User will visit their parents this weekend (meaning June 17-18, 20XX) and go to the dentist tomorrow.
 GOOD (split into two observations, each with its date):
-  User will visit their parents this weekend. (meaning October 19-20, 20XX)
-  User will go to the dentist tomorrow. (meaning October 16, 20XX)
+  User will visit their parents this weekend. (meaning June 17-18, 20XX)
+  User will go to the dentist tomorrow. (meaning June 16, 20XX)
 
 BAD: User needs to clean the garage this weekend and is looking forward to setting up a new workbench.
 GOOD (split, BOTH get the same date since they're related):
-  User needs to clean the garage this weekend. (meaning October 19-20, 20XX)
-  User will set up a new workbench this weekend. (meaning October 19-20, 20XX)
+  User needs to clean the garage this weekend. (meaning June 17-18, 20XX)
+  User will set up a new workbench this weekend. (meaning June 17-18, 20XX)
 
-BAD: User was given X by their friend "last month" (estimated late September 20XX).
-GOOD: User was given X by their friend last month. (estimated late September 20XX)
+BAD: User was given a gift by their friend (estimated late May 20XX) last month.
+GOOD: (09:15) User was given a gift by their friend last month. (estimated late May 20XX)
+      ^ Message time at START, relative date reference at END - never in the middle
 
 BAD: User started a new job recently and will move to a new apartment next week.
 GOOD (split):
-  User started a new job recently. (estimated early-to-mid October 20XX)
-  User will move to a new apartment next week. (meaning October 21-27, 20XX)
+  User started a new job recently.
+  User will move to a new apartment next week. (meaning June 21-27, 20XX)
+  ^ "recently" is too vague for a date - omit the end date. "next week" can be calculated.
 
 ALWAYS put the date at the END in parentheses - this is critical for temporal reasoning.
 When splitting related events that share the same time context, EACH observation must have the date.
