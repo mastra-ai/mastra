@@ -330,21 +330,14 @@ createVectorTestSuite({
     await mongodbVector.disconnect();
   },
   createIndex: async (indexName: string) => {
-    await mongodbVector.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
-    await mongodbVector.waitForIndexReady({ indexName });
+    await createIndexAndWait(mongodbVector, indexName, 1536, 'cosine');
   },
   deleteIndex: async (indexName: string) => {
-    try {
-      await mongodbVector.deleteIndex({ indexName });
-    } catch (error) {
-      console.error(`Error deleting index ${indexName}:`, error);
-    }
+    await deleteIndexAndWait(mongodbVector, indexName);
   },
   waitForIndexing: async () => {
-    // MongoDB Atlas Search needs time for vectors to become searchable after upsert
-    // waitForIndexReady only checks schema status, not vector availability
-    // A fixed wait is needed for eventual consistency
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Vectors still need time to be indexed after upsert
+    await new Promise(resolve => setTimeout(resolve, 1000));
   },
   supportsContains: false,
   // MongoDB limitations:
