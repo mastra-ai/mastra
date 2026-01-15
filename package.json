@@ -103,7 +103,8 @@
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3",
     "ssri": ">=6.0.2",
-    "jws": "^4.0.1"
+    "jws": "^4.0.1",
+    "storybook": "^9.1.17"
   },
   "pnpm": {
     "overrides": {
