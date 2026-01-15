@@ -10,7 +10,7 @@ import {
   BackgroundVariant,
   SelectionMode,
 } from '@xyflow/react';
-import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
+import { useWorkflowBuilderStore, selectLayoutVersion } from '../store/workflow-builder-store';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
 import { EmptyState } from './empty-state';
@@ -53,6 +53,10 @@ export function BuilderCanvas({ className }: BuilderCanvasProps) {
   const paste = useWorkflowBuilderStore(state => state.paste);
   const addNode = useWorkflowBuilderStore(state => state.addNode);
   const triggerQuickAdd = useWorkflowBuilderStore(state => state.triggerQuickAdd);
+  const layoutVersion = useWorkflowBuilderStore(selectLayoutVersion);
+
+  // Track layout version to trigger animation
+  const prevLayoutVersionRef = useRef(layoutVersion);
 
   // Fit view when nodes change (e.g., after loading a definition)
   useEffect(() => {
@@ -66,6 +70,18 @@ export function BuilderCanvas({ className }: BuilderCanvasProps) {
       return () => clearTimeout(timer);
     }
   }, [nodes.length, reactFlowInstance]);
+
+  // Animate fit view when layout changes (auto-layout triggered)
+  useEffect(() => {
+    if (layoutVersion > prevLayoutVersionRef.current) {
+      // Layout was triggered, animate to fit new positions
+      const timer = setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.2, duration: 300 });
+      }, 50);
+      prevLayoutVersionRef.current = layoutVersion;
+      return () => clearTimeout(timer);
+    }
+  }, [layoutVersion, reactFlowInstance]);
 
   // Keyboard shortcut: Tab to trigger quick-add on selected node
   useEffect(() => {

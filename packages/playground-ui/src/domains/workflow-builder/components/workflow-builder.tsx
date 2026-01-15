@@ -48,12 +48,30 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
     storage: localStorage,
   });
 
-  // Command palette keyboard shortcut
+  // Keyboard shortcuts callback
+  const handleShowShortcuts = useCallback(() => {
+    setShowShortcuts(true);
+  }, []);
+
+  // Command palette and shortcuts keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Command palette: Cmd/Ctrl + K
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setShowCommandPalette(prev => !prev);
+        return;
+      }
+
+      // Keyboard shortcuts help: ?
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // Don't trigger if in an input field
+        const target = e.target as HTMLElement;
+        const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        if (!isInputField) {
+          e.preventDefault();
+          setShowShortcuts(prev => !prev);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -93,7 +111,7 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
       <ReactFlowProvider>
         <div className="h-screen flex flex-col bg-surface1">
           {/* Top toolbar */}
-          <BuilderToolbar />
+          <BuilderToolbar onShowShortcuts={handleShowShortcuts} />
 
           {/* Main content area with resizable panels */}
           <div className="flex-1 flex overflow-hidden">

@@ -50,11 +50,12 @@ export interface KeyboardShortcutsPanelProps {
 // ============================================================================
 
 const CATEGORY_INFO: Record<ShortcutConfig['category'], { label: string; order: number }> = {
-  general: { label: 'General', order: 0 },
+  selection: { label: 'Selection', order: 0 },
   editing: { label: 'Editing', order: 1 },
-  selection: { label: 'Selection', order: 2 },
-  view: { label: 'View', order: 3 },
-  navigation: { label: 'Navigation', order: 4 },
+  navigation: { label: 'Navigation', order: 2 },
+  canvas: { label: 'Canvas', order: 3 },
+  general: { label: 'General', order: 4 },
+  view: { label: 'View', order: 5 },
 };
 
 function groupByCategory(shortcuts: ShortcutConfig[]): Record<string, ShortcutConfig[]> {

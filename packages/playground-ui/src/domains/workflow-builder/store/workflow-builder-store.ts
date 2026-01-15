@@ -33,6 +33,7 @@ import {
 import { deserializeDefinition } from '../utils/deserialize';
 import { validateWorkflow, type ValidationResult } from '../utils/validate';
 import { serializeGraph } from '../utils/serialize';
+import { autoLayout } from '../utils/auto-layout';
 
 // ============================================================================
 // Constants
@@ -104,6 +105,9 @@ interface WorkflowBuilderState {
   // Validation
   validationResult: ValidationResult | null;
 
+  // Layout version (incremented when auto-layout is triggered)
+  layoutVersion: number;
+
   // React Flow callbacks
   onNodesChange: OnNodesChange<BuilderNode>;
   onEdgesChange: OnEdgesChange<BuilderEdge>;
@@ -136,6 +140,9 @@ interface WorkflowBuilderState {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+
+  // Actions: Layout
+  autoLayout: () => void;
 
   // Actions: Persistence
   reset: () => void;
@@ -185,6 +192,7 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
   lastSavedAt: null,
   deserializationError: null,
   validationResult: null,
+  layoutVersion: 0,
 
   // ========================================================================
   // React Flow Callbacks
@@ -633,6 +641,26 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
   },
 
   // ========================================================================
+  // Layout
+  // ========================================================================
+
+  autoLayout: () => {
+    const { nodes, edges, layoutVersion } = get();
+
+    if (nodes.length === 0) return;
+
+    const result = autoLayout(nodes, edges);
+
+    set({
+      nodes: result.nodes,
+      isDirty: true,
+      layoutVersion: layoutVersion + 1,
+    });
+
+    get().pushHistory();
+  },
+
+  // ========================================================================
   // Persistence
   // ========================================================================
 
@@ -658,6 +686,7 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
       lastSavedAt: null,
       deserializationError: null,
       validationResult: null,
+      layoutVersion: 0,
     });
   },
 
@@ -855,3 +884,6 @@ export const selectStepResults = (state: WorkflowBuilderState) => state.stepResu
 export const selectStepResult = (stepId: string) => (state: WorkflowBuilderState) => state.stepResults[stepId];
 export const selectIsStepExecuting = (stepId: string) => (state: WorkflowBuilderState) =>
   state.executingStepId === stepId;
+
+// Layout selectors
+export const selectLayoutVersion = (state: WorkflowBuilderState) => state.layoutVersion;

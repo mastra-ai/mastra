@@ -1,5 +1,17 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Undo2, Redo2, Save, Loader2, AlertTriangle, Keyboard, Play } from 'lucide-react';
+import {
+  ArrowLeft,
+  Undo2,
+  Redo2,
+  Save,
+  Loader2,
+  AlertTriangle,
+  Keyboard,
+  Play,
+  Download,
+  Upload,
+  LayoutGrid,
+} from 'lucide-react';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { useTestRunnerStore } from '../store/test-runner-store';
 import { useWorkflowDefinitionMutations } from '@/domains/workflow-definitions/hooks';
@@ -61,6 +73,9 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
   const redo = useWorkflowBuilderStore(state => state.redo);
   const canUndo = useWorkflowBuilderStore(state => state.canUndo);
   const canRedo = useWorkflowBuilderStore(state => state.canRedo);
+  const toDefinition = useWorkflowBuilderStore(state => state.toDefinition);
+  const loadFromDefinition = useWorkflowBuilderStore(state => state.loadFromDefinition);
+  const autoLayoutAction = useWorkflowBuilderStore(state => state.autoLayout);
 
   // Test runner
   const isTestRunnerOpen = useTestRunnerStore(state => state.isOpen);
@@ -132,6 +147,54 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
     setDirty,
     updateWorkflowDefinition,
   ]);
+
+  const handleExport = useCallback(() => {
+    try {
+      const { definition } = toDefinition();
+      const json = JSON.stringify(definition, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${definition.name || 'workflow'}-workflow.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Workflow exported successfully');
+    } catch (error) {
+      console.error('Failed to export workflow:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      toast.error('Failed to export workflow', {
+        description: errorMessage,
+      });
+    }
+  }, [toDefinition]);
+
+  const handleImport = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async e => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const definition = JSON.parse(text);
+        // Validate required fields
+        if (!definition.stepGraph || !definition.steps) {
+          throw new Error('Invalid workflow file: missing stepGraph or steps');
+        }
+        loadFromDefinition(definition);
+        toast.success('Workflow imported successfully');
+      } catch (err) {
+        console.error('Failed to import workflow:', err);
+        const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+        toast.error('Failed to import workflow', {
+          description: errorMessage,
+        });
+      }
+    };
+    input.click();
+  }, [loadFromDefinition]);
 
   return (
     <div
@@ -211,12 +274,75 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
           </Tooltip>
         </TooltipProvider>
 
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={autoLayoutAction}
+                className="gap-1"
+                aria-label="Auto-arrange nodes"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Auto-arrange nodes</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         {/* Keyboard shortcuts button */}
         {onShowShortcuts && (
-          <Button variant="ghost" size="md" onClick={onShowShortcuts} className="gap-1" aria-label="Keyboard shortcuts">
-            <Keyboard className="w-4 h-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  onClick={onShowShortcuts}
+                  className="gap-1"
+                  aria-label="Keyboard shortcuts"
+                >
+                  <Keyboard className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Keyboard shortcuts (?)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
+
+        <div className="h-6 w-px bg-border1" />
+
+        {/* Export/Import buttons */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="md" onClick={handleExport} className="gap-1" aria-label="Export workflow">
+                <Download className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Export workflow</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="md" onClick={handleImport} className="gap-1" aria-label="Import workflow">
+                <Upload className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Import workflow</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <div className="h-6 w-px bg-border1" />
 
