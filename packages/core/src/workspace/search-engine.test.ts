@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { SearchEngine } from './search-engine';
-import type { IndexDocument, SearchResult, Embedder } from './search-engine';
+import type { Embedder } from './search-engine';
 
 describe('SearchEngine', () => {
   describe('BM25-only mode', () => {
@@ -227,7 +227,7 @@ Line 3`;
     let mockVectorStore: any;
 
     beforeEach(() => {
-      mockEmbedder = vi.fn(async (text: string) => [1, 2, 3]);
+      mockEmbedder = vi.fn(async (_text: string) => [1, 2, 3]);
 
       mockVectorStore = {
         upsert: vi.fn(async () => {}),
@@ -298,7 +298,7 @@ Line 3`;
     let mockVectorStore: any;
 
     beforeEach(() => {
-      mockEmbedder = vi.fn(async (text: string) => [1, 2, 3]);
+      mockEmbedder = vi.fn(async (_text: string) => [1, 2, 3]);
 
       mockVectorStore = {
         upsert: vi.fn(async () => {}),

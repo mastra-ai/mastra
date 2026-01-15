@@ -9,7 +9,7 @@ import type { SearchMode, LineRange } from '../artifacts';
 import type { MastraVector, VectorFilter } from '../vector';
 
 import { BM25Index, tokenize, findLineRange } from './bm25';
-import type { BM25Config, TokenizeOptions, BM25SearchResult } from './bm25';
+import type { BM25Config, TokenizeOptions } from './bm25';
 
 // Re-export SearchMode for consumers
 export type { SearchMode };

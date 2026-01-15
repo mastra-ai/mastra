@@ -1,5 +1,5 @@
 import { MastraBase } from '../base';
-import { RegisteredLogger } from '../logger';
+import type { RegisteredLogger } from '../logger';
 
 /**
  * Abstract base class for content storage backends.

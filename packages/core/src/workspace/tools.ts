@@ -16,7 +16,6 @@ import type { Workspace } from './workspace';
  * @returns Record of workspace tools
  */
 export function createWorkspaceTools(workspace: Workspace) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: Record<string, any> = {};
 
   // Only add filesystem tools if filesystem is available

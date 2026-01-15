@@ -32,6 +32,7 @@
 
 import type { MastraVector } from '../vector';
 
+import type { BM25Config } from './bm25';
 import type {
   WorkspaceFilesystem,
   WorkspaceState,
@@ -49,14 +50,8 @@ import type {
   ExecuteCodeOptions,
   ExecuteCommandOptions,
 } from './sandbox';
-import type { BM25Config } from './bm25';
-import {
-  SearchEngine,
-  type Embedder,
-  type SearchOptions,
-  type SearchResult,
-  type IndexDocument,
-} from './search-engine';
+import { SearchEngine } from './search-engine';
+import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills } from './skills';
 import { WorkspaceSkillsImpl } from './skills';
 

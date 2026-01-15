@@ -10,6 +10,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
+import type { WorkspaceFilesystem } from './filesystem';
 import type {
   WorkspaceSandbox,
   SandboxStatus,
@@ -23,7 +24,6 @@ import type {
   InstallPackageResult,
 } from './sandbox';
 import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
-import type { WorkspaceFilesystem } from './filesystem';
 
 const execFile = promisify(childProcess.execFile);
 

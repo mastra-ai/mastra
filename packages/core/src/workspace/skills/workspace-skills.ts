@@ -8,8 +8,7 @@
 
 import matter from 'gray-matter';
 
-import type { ContentSource } from '../../artifacts';
-
+import type { WorkspaceFilesystem } from '../filesystem';
 import type { SearchEngine } from '../search-engine';
 import { parseAllowedTools, validateSkillMetadata } from './schemas';
 import type {
@@ -22,7 +21,6 @@ import type {
   WorkspaceSkills,
   SkillSource,
 } from './types';
-import type { WorkspaceFilesystem } from '../filesystem';
 
 // =============================================================================
 // Internal Types
