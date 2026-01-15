@@ -1,8 +1,8 @@
 {
-  "name": "examples-skills-knowledge",
+  "name": "examples-unified-workspace",
   "type": "module",
   "private": true,
-  "description": "Example demonstrating Skills and Knowledge primitives with Mastra agents",
+  "description": "Example demonstrating the unified Workspace API with filesystem, skills, and search",
   "version": "0.0.1",
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
@@ -10,7 +10,6 @@
     "@mastra/core": "beta",
     "@mastra/libsql": "beta",
     "@mastra/memory": "beta",
-    "@mastra/skills": "beta",
     "ai": "^6.0.1",
     "mastra": "beta",
     "typescript": "^5.8.3",
@@ -21,14 +20,12 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/skills": "link:../../packages/skills",
       "mastra": "link:../../packages/cli"
     }
   },
   "scripts": {
     "demo": "npx bun src/demo.ts",
-    "demo:skills": "npx bun src/demo-skills.ts",
-    "demo:knowledge": "npx bun src/demo-knowledge.ts",
+    "demo:workspace": "npx bun src/demo-workspace.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },
