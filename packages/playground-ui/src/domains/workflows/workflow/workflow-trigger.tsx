@@ -21,6 +21,7 @@ import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/ds/component
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
 import { isObjectEmpty } from '@/lib/object';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 interface SuspendedStep {
   stepId: string;
@@ -95,6 +96,10 @@ export function WorkflowTrigger({
 }: WorkflowTriggerProps) {
   const { requestContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
+  const { canExecute } = usePermissions();
+
+  // Check if user can execute workflows
+  const canExecuteWorkflow = canExecute('workflows');
 
   const [isRunning, setIsRunning] = useState(false);
   const [innerRunId, setInnerRunId] = useState<string>('');
@@ -222,7 +227,7 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {!isSuspendedSteps && (
+        {!isSuspendedSteps && canExecuteWorkflow && (
           <>
             {zodSchemaToUse ? (
               <WorkflowInputData
@@ -253,6 +258,12 @@ export function WorkflowTrigger({
               </Button>
             )}
           </>
+        )}
+
+        {!isSuspendedSteps && !canExecuteWorkflow && (
+          <Txt variant="ui-sm" className="text-neutral3 py-2">
+            You don't have permission to execute workflows.
+          </Txt>
         )}
 
         {!isStreamingWorkflow &&

@@ -14,7 +14,6 @@ import type {
   ICredentialsProvider,
 } from './interfaces';
 import { isEELicenseValid } from './license';
-import { type RoleMapping, resolvePermissionsFromMapping } from './defaults/roles';
 
 /**
  * Public capabilities response (no authentication required).
@@ -128,11 +127,20 @@ function isMastraCloudAuth(auth: unknown): boolean {
  */
 export interface BuildCapabilitiesOptions {
   /**
-   * Role mapping to translate provider roles to Mastra permissions.
-   * If provided, permissions will be resolved from roles using this mapping
-   * instead of relying solely on the RBAC provider's getPermissions().
+   * RBAC provider for role-based access control (EE feature).
+   * Separate from the auth provider to allow mixing different providers.
+   *
+   * @example
+   * ```typescript
+   * const rbac = new StaticRBACProvider({
+   *   roles: DEFAULT_ROLES,
+   *   getUserRoles: (user) => [user.role],
+   * });
+   *
+   * buildCapabilities(auth, request, { rbac });
+   * ```
    */
-  roleMapping?: RoleMapping;
+  rbac?: IRBACProvider<EEUser>;
 }
 
 /**
@@ -219,31 +227,26 @@ export async function buildCapabilities(
     return { enabled: true, login };
   }
 
+  // Get RBAC provider from options (if configured)
+  const rbacProvider = options?.rbac;
+  const hasRBAC = !!rbacProvider && isLicensedOrCloud;
+
   // Build capability flags
   const capabilities: CapabilityFlags = {
     user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud,
     session: implementsInterface<ISessionProvider>(auth, 'createSession') && isLicensedOrCloud,
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
-    rbac: implementsInterface<IRBACProvider>(auth, 'getRoles') && isLicensedOrCloud,
+    rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
     audit: implementsInterface<IAuditLogger>(auth, 'log') && isLicensedOrCloud,
   };
 
-  // Get roles/permissions if RBAC available
+  // Get roles/permissions from RBAC provider (if available)
   let access: UserAccess | null = null;
-  if (capabilities.rbac && implementsInterface<IRBACProvider>(auth, 'getRoles')) {
+  if (hasRBAC && rbacProvider) {
     try {
-      const roles = await auth.getRoles(user);
-
-      // If roleMapping is provided, use it to resolve permissions
-      // Otherwise, fall back to the RBAC provider's getPermissions()
-      let permissions: string[];
-      if (options?.roleMapping) {
-        permissions = resolvePermissionsFromMapping(roles, options.roleMapping);
-      } else {
-        permissions = await auth.getPermissions(user);
-      }
-
+      const roles = await rbacProvider.getRoles(user);
+      const permissions = await rbacProvider.getPermissions(user);
       access = { roles, permissions };
     } catch {
       // RBAC failed, continue without access info

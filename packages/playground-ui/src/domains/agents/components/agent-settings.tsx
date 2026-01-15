@@ -20,6 +20,7 @@ import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -66,6 +67,10 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
+  const { canEdit } = usePermissions();
+
+  // Check if user can edit agent settings
+  const canEditSettings = canEdit('agents');
 
   const { hasSamplingRestriction } = useSamplingRestriction({
     provider: agent?.provider,
@@ -106,7 +111,9 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           <RadioGroup
             orientation="horizontal"
             value={radioValue}
+            disabled={!canEditSettings}
             onValueChange={(value: string) =>
+              canEditSettings &&
               setSettings({
                 ...settings,
                 modelSettings: {
@@ -157,7 +164,9 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
         <Entry label="Require Tool Approval">
           <Checkbox
             checked={settings?.modelSettings?.requireToolApproval}
+            disabled={!canEditSettings}
             onCheckedChange={value =>
+              canEditSettings &&
               setSettings({
                 ...settings,
                 modelSettings: { ...settings?.modelSettings, requireToolApproval: value as boolean },
@@ -186,7 +195,9 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 max={1}
                 min={-0.1}
                 step={0.1}
+                disabled={!canEditSettings}
                 onValueChange={value =>
+                  canEditSettings &&
                   setSettings({
                     ...settings,
                     modelSettings: { ...settings?.modelSettings, temperature: value[0] < 0 ? undefined : value[0] },
@@ -202,7 +213,9 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           <Entry label="Top P">
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider
+                disabled={!canEditSettings}
                 onValueChange={value =>
+                  canEditSettings &&
                   setSettings({
                     ...settings,
                     modelSettings: { ...settings?.modelSettings, topP: value[0] < 0 ? undefined : value[0] },
@@ -226,12 +239,14 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
         <AgentAdvancedSettings />
       </section>
 
-      <Button onClick={() => resetAll()} variant="light" className="w-full" size="lg">
-        <Icon>
-          <RefreshCw />
-        </Icon>
-        Reset
-      </Button>
+      {canEditSettings && (
+        <Button onClick={() => resetAll()} variant="light" className="w-full" size="lg">
+          <Icon>
+            <RefreshCw />
+          </Icon>
+          Reset
+        </Button>
+      )}
     </div>
   );
 };

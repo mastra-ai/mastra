@@ -1,6 +1,12 @@
 /**
  * RBAC provider interface for EE authentication.
  * Enables role-based access control in Studio.
+ *
+ * RBAC is designed to be separate from authentication.
+ * This allows users to mix auth providers with RBAC providers:
+ * - Use Better Auth for authentication + StaticRBACProvider for RBAC
+ * - Use Clerk for both auth and RBAC via MastraRBACClerk
+ * - Use Auth0 for auth + custom RBAC provider
  */
 
 /**
@@ -20,6 +26,30 @@ export interface RoleDefinition {
 }
 
 /**
+ * Role mapping configuration for translating provider roles to Mastra permissions.
+ *
+ * Use this when your identity provider (WorkOS, Okta, Azure AD, etc.) has its own
+ * roles that need to be translated to Mastra's permission model.
+ *
+ * Special keys:
+ * - `_default`: Permissions for roles not explicitly mapped
+ *
+ * @example
+ * ```typescript
+ * const roleMapping: RoleMapping = {
+ *   "Engineering": ["agents:*", "workflows:*"],
+ *   "Product": ["agents:read", "workflows:read"],
+ *   "Admin": ["*"],
+ *   "_default": [],  // unmapped roles get no permissions
+ * };
+ * ```
+ */
+export type RoleMapping = {
+  /** Map role name to array of permissions */
+  [role: string]: string[];
+};
+
+/**
  * Provider interface for role-based access control (read-only).
  *
  * Implement this interface to enable:
@@ -27,33 +57,49 @@ export interface RoleDefinition {
  * - Role display in user menu
  * - Access control checks
  *
- * @example
+ * RBAC providers can be used independently of auth providers:
+ *
+ * @example Using StaticRBACProvider with Better Auth
  * ```typescript
- * class StaticRBACProvider implements IRBACProvider {
- *   constructor(private roles: RoleDefinition[], private getUserRolesFn: (user) => string[]) {}
+ * // Better Auth handles authentication only
+ * const auth = new MastraAuthBetterAuth({ betterAuth });
  *
- *   async getRoles(user) {
- *     return this.getUserRolesFn(user);
- *   }
+ * // Static RBAC handles authorization
+ * const rbac = new StaticRBACProvider({
+ *   roles: DEFAULT_ROLES,
+ *   getUserRoles: (user) => [user.role],
+ * });
  *
- *   async getPermissions(user) {
- *     const roleIds = await this.getRoles(user);
- *     const permissions = new Set<string>();
- *     for (const roleId of roleIds) {
- *       const role = this.roles.find(r => r.id === roleId);
- *       role?.permissions.forEach(p => permissions.add(p));
- *     }
- *     return Array.from(permissions);
- *   }
+ * const mastra = new Mastra({
+ *   server: {
+ *     auth,
+ *     rbac,
+ *   },
+ * });
+ * ```
  *
- *   async hasPermission(user, permission) {
- *     const perms = await this.getPermissions(user);
- *     return perms.includes(permission) || perms.includes('*');
- *   }
- * }
+ * @example Using MastraRBACClerk with role mapping
+ * ```typescript
+ * const mastra = new Mastra({
+ *   server: {
+ *     auth: new MastraAuthClerk({ clerk }),
+ *     rbac: new MastraRBACClerk({
+ *       clerk,
+ *       roleMapping: {
+ *         "org:admin": ["*"],
+ *         "org:member": ["agents:read", "workflows:read"],
+ *       },
+ *     }),
+ *   },
+ * });
  * ```
  */
 export interface IRBACProvider<TUser = unknown> {
+  /**
+   * Optional role mapping for translating provider roles to Mastra permissions.
+   * If provided, permissions are resolved using this mapping instead of getPermissions().
+   */
+  roleMapping?: RoleMapping;
   /**
    * Get all roles for a user.
    *
