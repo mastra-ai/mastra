@@ -1,4 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
+import { describe, beforeAll, it, expect } from 'vitest';
 
 import { LibSQLVector } from './index.js';
 
@@ -7,6 +8,22 @@ import { LibSQLVector } from './index.js';
 const libSQLVectorDB = new LibSQLVector({
   url: 'file::memory:?cache=shared',
   id: 'libsql-shared-test',
+});
+
+// Warmup the database connection before running the shared test suite
+// This ensures the in-memory database is properly initialized
+describe('LibSQLVector Setup', () => {
+  beforeAll(async () => {
+    // Create and immediately delete a test table to prime the connection
+    const warmupIndex = '_libsql_warmup_test';
+    await libSQLVectorDB.createIndex({ indexName: warmupIndex, dimension: 3, metric: 'cosine' });
+    await libSQLVectorDB.deleteIndex({ indexName: warmupIndex });
+  });
+
+  it('should initialize the database connection', () => {
+    // This test exists to ensure the beforeAll warmup runs before the shared test suite
+    expect(libSQLVectorDB).toBeDefined();
+  });
 });
 
 createVectorTestSuite({
