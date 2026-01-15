@@ -5,6 +5,7 @@ export * from './components/scorer-combobox';
 export * from './components/scorers-table/scorers-table';
 export * from './components/create-scorer';
 export * from './components/edit-scorer';
+export * from './components/scorer-versions';
 export * from './hooks/use-trace-span-scores';
 export { useScorers, useScorer, useScoresByScorerId } from './hooks/use-scorers';
 export {

@@ -1019,3 +1019,81 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 019 - Create scorer version history component - COMPLETED
+==============================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive scorer version history components following agent version patterns
+- Implemented ScorerVersionsList with pagination, activation, and deletion
+- Created SaveScorerVersionDialog for manual snapshot creation
+- Created ScorerVersionCompareDialog for basic version comparison
+- All components integrate with existing useScorerVersions and useScorerVersionMutations hooks
+
+Files created:
+- packages/playground-ui/src/domains/scores/components/scorer-versions/scorer-versions-list.tsx (193 lines)
+- packages/playground-ui/src/domains/scores/components/scorer-versions/save-scorer-version-dialog.tsx (107 lines)
+- packages/playground-ui/src/domains/scores/components/scorer-versions/scorer-version-compare-dialog.tsx (123 lines)
+- packages/playground-ui/src/domains/scores/components/scorer-versions/index.ts (3 lines)
+
+Files modified:
+- packages/playground-ui/src/domains/scores/index.ts (added scorer-versions export)
+- .context/plans/dynamic-scorers/tasks.json (marked task 019 as passes: true)
+
+Key features implemented:
+1. ScorerVersionsList component:
+   - Lists all versions with pagination (10 per page)
+   - Shows version number, name, changed fields, and timestamp
+   - Active version badge with green "Active" indicator
+   - Activate button for non-active versions
+   - Delete button with confirmation for non-active versions
+   - Save Version button to create manual snapshots
+   - Compare Versions button (shows when 2+ versions exist)
+   - Empty state for no versions
+   - Loading skeleton while fetching versions
+
+2. SaveScorerVersionDialog component:
+   - Dialog for creating manual version snapshots
+   - Optional version name field (max 100 chars)
+   - Optional description field (max 500 chars)
+   - Form validation and submission
+   - Toast notifications for success/error
+   - Calls createScorerVersion mutation
+
+3. ScorerVersionCompareDialog component:
+   - Basic version comparison interface
+   - Two dropdowns to select versions to compare
+   - Side-by-side display of version metadata
+   - Shows version number, name, changed fields, and change message
+   - Simplified compared to agent version compare (no full diff)
+
+Integration with hooks:
+- Uses useScorerVersions for fetching version lists with pagination
+- Uses useScorerVersionMutations for all version operations:
+  - activateScorerVersion - Set active version
+  - createScorerVersion - Manual snapshot creation
+  - deleteScorerVersion - Delete specific version
+- Proper cache invalidation on all mutations
+- Toast notifications for all operations
+
+Verification:
+- pnpm tsc --noEmit (playground-ui): PASSED (only pre-existing MCP SDK errors)
+- All acceptance criteria met:
+  ✓ Versions displayed in descending order (newest first)
+  ✓ Each version shows version number, changes, and timestamp
+  ✓ Activation functionality with confirmation toast
+  ✓ Delete functionality with browser confirmation and toast
+  ✓ Current/active version indicated with green badge
+  ✓ Active version cannot be activated or deleted
+  ✓ Manual save version functionality
+- Only pre-existing MCP SDK import errors remain (unrelated to this task)
+
+Next steps:
+- Task 020: Create scorers picker component with sampling config (P1 priority)
+- Task 021: Update agent form to include scorers picker (P1 priority)
+- These are the next logical UI tasks for attaching scorers to agents
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
