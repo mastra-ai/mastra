@@ -669,6 +669,90 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Sampling high-volume traces
 - Enriching spans with business context
 
+## Custom Span Formatters
+
+Custom span formatters allow you to transform how spans appear in specific observability platforms. Unlike span processors (which operate at the observability level before export), custom span formatters are configured per-exporter, allowing different formatting for different destinations.
+
+### Use Cases
+
+- **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
+- **Transform input/output formats** - Customize how data appears in specific platforms
+- **Platform-specific field mapping** - Add or remove fields based on platform requirements
+
+### Configuration
+
+Add a `customSpanFormatter` to any exporter configuration:
+
+```ts title="src/mastra/index.ts"
+import { BraintrustExporter } from "@mastra/braintrust";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { SpanType } from "@mastra/core/observability";
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Formatter that extracts plain text from AI messages
+const plainTextFormatter: CustomSpanFormatter = (span) => {
+  if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+    const userMessage = span.input.find((m) => m.role === "user");
+    return {
+      ...span,
+      input: userMessage?.content ?? span.input,
+    };
+  }
+  return span;
+};
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          // Braintrust gets plain text formatting
+          new BraintrustExporter({
+            customSpanFormatter: plainTextFormatter,
+          }),
+          // Langfuse keeps the original structured format
+          new LangfuseExporter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+### Chaining Multiple Formatters
+
+Use `chainFormatters` to combine multiple formatters:
+
+```ts
+import { chainFormatters } from "@mastra/observability";
+
+const inputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  input: extractPlainText(span.input),
+});
+
+const outputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  output: extractPlainText(span.output),
+});
+
+const exporter = new BraintrustExporter({
+  customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
+});
+```
+
+### Comparison: Span Processors vs Custom Span Formatters
+
+| Feature | Span Processors | Custom Span Formatters |
+| --- | --- | --- |
+| Configuration level | Observability config | Per-exporter |
+| Operates on | Internal `Span` object | Exported `ExportedSpan` data |
+| Applies to | All exporters | Single exporter |
+| Use case | Security, filtering, enrichment | Platform-specific formatting |
+
+Use span processors for transformations that should apply to all exporters (like `SensitiveDataFilter`). Use custom span formatters when different exporters need different representations of the same data.
+
 ## Serialization Options
 
 Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, deeply nested objects, or when you need to optimize trace storage.

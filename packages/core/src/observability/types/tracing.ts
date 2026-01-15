@@ -1195,7 +1195,7 @@ export interface SpanOutputProcessor {
  * @example
  * ```typescript
  * // Custom formatter that extracts plain text from AI messages
- * const plainTextFormatter: ExporterSpanFormatter = (span) => {
+ * const plainTextFormatter: CustomSpanFormatter = (span) => {
  *   if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
  *     const userMessage = span.input.find(m => m.role === 'user');
  *     return {
@@ -1212,7 +1212,7 @@ export interface SpanOutputProcessor {
  * });
  * ```
  */
-export type ExporterSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan;
+export type CustomSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan;
 
 // ============================================================================
 // Tracing Config Selector Interfaces
