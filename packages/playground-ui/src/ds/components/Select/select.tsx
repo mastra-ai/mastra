@@ -3,6 +3,12 @@ import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import {
+  formElementSizes,
+  formElementFocus,
+  formElementRadius,
+  type FormElementSize,
+} from '@/ds/primitives/form-element';
 
 const Select = SelectPrimitive.Root;
 
@@ -10,24 +16,36 @@ const SelectGroup = SelectPrimitive.Group;
 
 const SelectValue = SelectPrimitive.Value;
 
-const SelectTrigger = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      'flex h-9 w-full items-center justify-between rounded-md border border-surface4 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-      className,
-    )}
-    {...props}
-  >
-    {children}
-    <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
-    </SelectPrimitive.Icon>
-  </SelectPrimitive.Trigger>
-));
+const selectTriggerSizeClasses = {
+  sm: `${formElementSizes.sm} px-2 text-ui-sm`,
+  md: `${formElementSizes.md} px-3 text-ui-sm`,
+  lg: `${formElementSizes.lg} px-3 text-ui-sm`,
+};
+
+export type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+  size?: FormElementSize;
+};
+
+const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Trigger>, SelectTriggerProps>(
+  ({ className, children, size = 'md', ...props }, ref) => (
+    <SelectPrimitive.Trigger
+      ref={ref}
+      className={cn(
+        'flex w-full items-center justify-between border border-border1 bg-transparent py-2 shadow-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
+        formElementRadius,
+        formElementFocus,
+        selectTriggerSizeClasses[size],
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <SelectPrimitive.Icon asChild>
+        <ChevronDown className="h-4 w-4 opacity-50" />
+      </SelectPrimitive.Icon>
+    </SelectPrimitive.Trigger>
+  ),
+);
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
 const SelectContent = React.forwardRef<

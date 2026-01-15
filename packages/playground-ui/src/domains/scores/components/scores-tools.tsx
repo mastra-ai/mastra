@@ -16,7 +16,7 @@ type ScoresToolsProps = {
 
 export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOptions, isLoading }: ScoresToolsProps) {
   return (
-    <div className={cn('flex flex-wrap gap-x-[2rem] gap-y-[1rem]')}>
+    <div className={cn('flex flex-wrap gap-x-8 gap-y-4')}>
       <SelectField
         label="Filter by Entity"
         name={'select-entity'}

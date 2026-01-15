@@ -63,6 +63,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Cloud Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/cloud): Send traces to Mastra Cloud for production monitoring
 - [Datadog Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/datadog): Send traces to Datadog for LLM observability and analytics
 - [Default Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/default): Store traces locally for development and debugging
+- [Laminar Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/laminar): Send traces to Laminar for LLM observability, evaluation, and analysis
 - [Langfuse Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/langfuse): Send traces to Langfuse for LLM observability and analytics
 - [LangSmith Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/langsmith): Send traces to LangSmith for LLM observability and evaluation
 - [OpenTelemetry Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/otel): Send traces to any OpenTelemetry-compatible observability platform
@@ -128,6 +129,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Express | Frameworks](https://mastra.ai/en/guides/getting-started/express): Get started with Mastra and Express
 - [Hono | Frameworks](https://mastra.ai/en/guides/getting-started/hono): Get started with Mastra and Hono
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
+- [Nuxt | Frameworks](https://mastra.ai/en/guides/getting-started/nuxt): Get started with Mastra and Nuxt
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 - [SvelteKit | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): Get started with Mastra and SvelteKit
 - [React + Vite | Frameworks](https://mastra.ai/en/guides/getting-started/vite-react): A step-by-step guide to integrating Mastra with React and Vite.
@@ -370,6 +372,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: ConsoleExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/console-exporter): API reference for the ConsoleExporter
 - [Reference: DatadogExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/datadog): Datadog LLM Observability exporter for Tracing
 - [Reference: DefaultExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/default-exporter): API reference for the DefaultExporter
+- [Reference: LaminarExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/laminar): Laminar exporter for Tracing
 - [Reference: LangfuseExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/langfuse): Langfuse exporter for Tracing
 - [Reference: LangSmithExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/langsmith): LangSmith exporter for Tracing
 - [Reference: OtelExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/otel): OpenTelemetry exporter for Tracing

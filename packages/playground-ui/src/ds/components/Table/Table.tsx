@@ -43,7 +43,7 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
       className={cn(
-        'text-neutral3 text-ui-sm h-full whitespace-nowrap text-left font-normal uppercase first:pl-5 last:pr-5',
+        'text-neutral3 text-ui-sm h-full whitespace-nowrap text-left font-normal uppercase first:pl-3 last:pr-3',
         className,
       )}
       {...props}

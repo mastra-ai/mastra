@@ -213,8 +213,8 @@ export const DateTimePickerContent = ({
       {localErrorMsg && (
         <div
           className={cn(
-            'text-[0.875rem] m-[1rem] mb-0 text-neutral3',
-            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mt-[0.2em] [&>svg]:text-red-500 [&>svg]:float-left [&>svg]:mr-[0.5rem]',
+            'text-ui-md m-4 mb-0 text-neutral3',
+            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mt-0.5 [&>svg]:text-red-500 [&>svg]:float-left [&>svg]:mr-2',
           )}
         >
           <CircleAlertIcon /> {localErrorMsg}
@@ -236,7 +236,7 @@ export const DateTimePickerContent = ({
         defaultValue={value ? formatDate(new Date(value), 'hh:mm a') : defaultTimeStrValue}
       />
 
-      <div className="grid grid-cols-[1fr_auto] gap-[0.5rem] m-4 mt-0">
+      <div className="grid grid-cols-[1fr_auto] gap-2 m-4 mt-0">
         <Button
           variant="light"
           size="lg"

@@ -20,7 +20,7 @@ vi.mock('inngest/hono', () => ({ serve: mocks.honoServe }));
 vi.mock('inngest/express', () => ({ serve: mocks.expressServe }));
 vi.mock('inngest/fastify', () => ({ serve: mocks.fastifyServe }));
 
-const { honoServe, expressServe, fastifyServe } = mocks;
+const { honoServe, expressServe: _expressServe, fastifyServe: _fastifyServe } = mocks;
 
 describe('Multi-framework serve', () => {
   afterAll(() => {
