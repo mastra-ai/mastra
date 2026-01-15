@@ -50,10 +50,11 @@ createVectorTestSuite({
   },
   waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 100)),
   testDomains: {
-    // DEBUGGING: Only enable filterOps to isolate CI failure
-    // Skip all other domains to see if issue is test interference or filterOps-specific
+    // DEBUGGING: Enable domains one at a time to find interference
+    // Round 1: filterOps only - PASSED
+    // Round 2: filterOps + basicOps
     filterOps: true,
-    basicOps: false,
+    basicOps: true,
     advancedOps: false,
     edgeCases: false,
     errorHandling: false,
