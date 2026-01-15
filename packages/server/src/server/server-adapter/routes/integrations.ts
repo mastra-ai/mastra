@@ -12,6 +12,8 @@ import {
   DELETE_CACHED_TOOL_ROUTE,
   LIST_SMITHERY_SERVERS_ROUTE,
   GET_SMITHERY_SERVER_ROUTE,
+  ARCADE_AUTHORIZE_ROUTE,
+  ARCADE_AUTH_STATUS_ROUTE,
 } from '../../handlers/integrations';
 import type { ServerRoute } from '.';
 
@@ -32,6 +34,10 @@ export const INTEGRATIONS_ROUTES: ServerRoute<any, any, any>[] = [
   // Smithery Registry Routes (before generic :provider routes)
   LIST_SMITHERY_SERVERS_ROUTE,
   GET_SMITHERY_SERVER_ROUTE,
+
+  // Arcade Authorization Routes (before generic :provider routes)
+  ARCADE_AUTHORIZE_ROUTE,
+  ARCADE_AUTH_STATUS_ROUTE,
 
   LIST_PROVIDER_TOOLKITS_ROUTE,
   LIST_PROVIDER_TOOLS_ROUTE,

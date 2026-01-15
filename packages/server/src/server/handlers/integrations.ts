@@ -25,6 +25,10 @@ import {
   smitheryServersQuerySchema,
   smitheryServersResponseSchema,
   smitheryServerDetailsResponseSchema,
+  arcadeAuthorizeBodySchema,
+  arcadeAuthorizeResponseSchema,
+  arcadeAuthStatusQuerySchema,
+  arcadeAuthStatusResponseSchema,
 } from '../schemas/integrations';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
@@ -35,6 +39,7 @@ import {
   getProvider,
   listProviders,
   SmitheryProvider,
+  ArcadeProvider,
   type MCPIntegrationMetadata,
   type SmitheryIntegrationMetadata,
 } from '@mastra/core/integrations';
@@ -1165,6 +1170,83 @@ export const GET_SMITHERY_SERVER_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, `Error getting Smithery server ${qualifiedName}`);
+    }
+  },
+});
+
+// ============================================================================
+// Arcade Authorization Routes
+// ============================================================================
+
+/**
+ * POST /api/integrations/arcade/authorize - Initiate authorization for an Arcade tool
+ */
+export const ARCADE_AUTHORIZE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/integrations/arcade/authorize',
+  responseType: 'json',
+  bodySchema: arcadeAuthorizeBodySchema,
+  responseSchema: arcadeAuthorizeResponseSchema,
+  summary: 'Authorize Arcade tool',
+  description: 'Initiate OAuth authorization for an Arcade tool that requires authentication',
+  tags: ['Integrations', 'Arcade'],
+  handler: async ({ toolName, userId }) => {
+    try {
+      const arcadeProvider = new ArcadeProvider();
+      const response = await arcadeProvider.authorize(toolName, userId);
+      return response;
+    } catch (error) {
+      return handleError(error, 'Error initiating Arcade authorization');
+    }
+  },
+});
+
+/**
+ * GET /api/integrations/arcade/auth/status - Check authorization status
+ */
+export const ARCADE_AUTH_STATUS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/integrations/arcade/auth/status',
+  responseType: 'json',
+  queryParamSchema: arcadeAuthStatusQuerySchema,
+  responseSchema: arcadeAuthStatusResponseSchema,
+  summary: 'Check Arcade auth status',
+  description: 'Check the status of a pending Arcade authorization',
+  tags: ['Integrations', 'Arcade'],
+  handler: async ({ authorizationId }) => {
+    try {
+      // Check auth status via the Arcade API
+      const url = `https://api.arcade.dev/v1/auth/status?id=${authorizationId}`;
+      const apiKey = process.env.ARCADE_API_KEY;
+
+      if (!apiKey) {
+        throw new HTTPException(500, { message: 'ARCADE_API_KEY is not configured' });
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new HTTPException(response.status as 400 | 401 | 403 | 404 | 500, {
+          message: `Arcade API error: ${response.statusText}`,
+        });
+      }
+
+      const data = (await response.json()) as { status: string };
+
+      const status: 'pending' | 'completed' | 'failed' =
+        data.status === 'completed' ? 'completed' : data.status === 'failed' ? 'failed' : 'pending';
+
+      return {
+        status,
+        completed: data.status === 'completed',
+      };
+    } catch (error) {
+      return handleError(error, 'Error checking Arcade authorization status');
     }
   },
 });

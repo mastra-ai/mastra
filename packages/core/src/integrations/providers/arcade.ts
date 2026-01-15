@@ -50,22 +50,52 @@ interface ArcadeInput {
   parameters?: ArcadeParameter[];
 }
 
+/** Arcade authorization requirement */
+interface ArcadeAuthorizationRequirement {
+  id?: string;
+  oauth2?: {
+    scopes?: string[];
+  };
+  provider_id?: string;
+  provider_type?: string;
+  status?: 'disabled' | 'enabled' | string;
+  status_reason?: string;
+  token_status?: 'not_started' | 'pending' | 'completed' | string;
+}
+
+/** Arcade secret requirement */
+interface ArcadeSecretRequirement {
+  key: string;
+  met: boolean;
+  status_reason?: string;
+}
+
+/** Arcade tool requirements */
+interface ArcadeToolRequirements {
+  authorization?: ArcadeAuthorizationRequirement;
+  met: boolean;
+  secrets?: ArcadeSecretRequirement[];
+}
+
 interface ArcadeToolResponse {
   fully_qualified_name: string;
   name: string;
   qualified_name?: string;
   description: string;
   toolkit?: {
-    name?: string;
     id?: string;
+    name?: string;
+    description?: string;
+    version?: string;
   };
   input?: ArcadeInput;
   output?: {
-    type?: string;
-    properties?: Record<string, unknown>;
+    available_modes?: string[];
+    description?: string;
+    value_schema?: ArcadeValueSchema;
   };
   formatted_schema?: unknown;
-  requirements?: unknown;
+  requirements?: ArcadeToolRequirements;
 }
 
 interface ArcadeListToolsResponse {
@@ -170,16 +200,32 @@ export class ArcadeProvider implements ToolProvider {
       }
     }
 
-    // Convert to toolkit array
-    let toolkits: ProviderToolkit[] = Array.from(toolkitMap.entries()).map(([slug, data]) => ({
-      slug,
-      name: data.name,
-      description: `${data.name} tools`,
-      toolCount: data.tools.length,
-      metadata: {
-        source: 'arcade',
-      },
-    }));
+    // Convert to toolkit array with auth info
+    let toolkits: ProviderToolkit[] = Array.from(toolkitMap.entries()).map(([slug, data]) => {
+      // Check if any tools in this toolkit require authorization
+      const toolsWithAuth = data.tools.filter(t => t.requirements?.authorization?.provider_id);
+      const authProvider = toolsWithAuth[0]?.requirements?.authorization?.provider_id;
+      const authProviderType = toolsWithAuth[0]?.requirements?.authorization?.provider_type;
+
+      // Check how many tools have unmet requirements
+      const toolsWithUnmetRequirements = data.tools.filter(t => t.requirements && !t.requirements.met);
+
+      return {
+        slug,
+        name: data.name,
+        description: data.tools[0]?.toolkit?.description || `${data.name} tools`,
+        toolCount: data.tools.length,
+        metadata: {
+          source: 'arcade',
+          // Auth info for the toolkit
+          requiresAuth: toolsWithAuth.length > 0,
+          authProvider,
+          authProviderType,
+          toolsRequiringAuth: toolsWithAuth.length,
+          toolsWithUnmetRequirements: toolsWithUnmetRequirements.length,
+        },
+      };
+    });
 
     // Apply search filter if provided
     if (options?.search) {
@@ -310,6 +356,101 @@ export class ArcadeProvider implements ToolProvider {
   }
 
   /**
+   * Initiate authorization for a tool that requires OAuth
+   *
+   * @param toolName - The fully qualified tool name (e.g., "Google.ListEmails")
+   * @param userId - The user ID for the authorization context
+   * @returns Authorization response with URL if auth is needed
+   */
+  async authorize(
+    toolName: string,
+    userId: string,
+  ): Promise<{
+    status: 'pending' | 'completed';
+    authorizationId?: string;
+    authorizationUrl?: string;
+    scopes?: string[];
+  }> {
+    if (!this.apiKey) {
+      throw new Error('ARCADE_API_KEY is not configured');
+    }
+
+    const url = `${this.baseUrl}/v1/auth/authorize`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tool_name: toolName,
+        user_id: userId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Arcade API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = (await response.json()) as {
+      status: string;
+      id?: string;
+      url?: string;
+      context?: {
+        scopes?: string[];
+      };
+    };
+
+    return {
+      status: data.status === 'completed' ? 'completed' : 'pending',
+      authorizationId: data.id,
+      authorizationUrl: data.url,
+      scopes: data.context?.scopes,
+    };
+  }
+
+  /**
+   * Wait for an authorization to complete
+   *
+   * @param authorizationId - The authorization ID from the authorize call
+   * @param timeoutMs - Maximum time to wait (default 5 minutes)
+   * @returns Whether authorization completed successfully
+   */
+  async waitForAuthorization(authorizationId: string, timeoutMs = 300000): Promise<boolean> {
+    if (!this.apiKey) {
+      throw new Error('ARCADE_API_KEY is not configured');
+    }
+
+    const url = `${this.baseUrl}/v1/auth/status`;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const response = await fetch(`${url}?id=${authorizationId}`, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Arcade API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as { status: string };
+
+      if (data.status === 'completed') {
+        return true;
+      }
+
+      // Wait 2 seconds before polling again
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    return false;
+  }
+
+  /**
    * Format toolkit slug to a readable name
    */
   private formatToolkitName(slug: string): string {
@@ -398,7 +539,38 @@ export class ArcadeProvider implements ToolProvider {
    * Map Arcade tool response to ProviderTool
    */
   private mapTool(tool: ArcadeToolResponse): ProviderTool {
-    const toolkitSlug = tool.toolkit?.name || tool.toolkit?.id || 'general';
+    const toolkitSlug = tool.toolkit?.name || 'general';
+
+    // Build metadata including authorization requirements
+    const metadata: Record<string, unknown> = {
+      arcadeId: tool.fully_qualified_name,
+      qualifiedName: tool.qualified_name,
+    };
+
+    // Include authorization info if present
+    if (tool.requirements) {
+      metadata.requirementsMet = tool.requirements.met;
+
+      if (tool.requirements.authorization) {
+        const auth = tool.requirements.authorization;
+        metadata.authorization = {
+          providerId: auth.provider_id,
+          providerType: auth.provider_type,
+          status: auth.status,
+          tokenStatus: auth.token_status,
+          scopes: auth.oauth2?.scopes,
+        };
+      }
+
+      // Include secrets requirements if any
+      if (tool.requirements.secrets && tool.requirements.secrets.length > 0) {
+        metadata.requiredSecrets = tool.requirements.secrets.map(s => ({
+          key: s.key,
+          met: s.met,
+        }));
+      }
+    }
+
     return {
       slug: tool.fully_qualified_name || tool.name,
       name: tool.name,
@@ -406,10 +578,7 @@ export class ArcadeProvider implements ToolProvider {
       inputSchema: this.convertArcadeInputToJsonSchema(tool.input),
       outputSchema: tool.output,
       toolkit: toolkitSlug,
-      metadata: {
-        arcadeId: tool.fully_qualified_name,
-        qualifiedName: tool.qualified_name,
-      },
+      metadata,
     };
   }
 }

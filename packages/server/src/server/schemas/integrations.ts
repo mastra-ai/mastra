@@ -382,3 +382,40 @@ export const smitheryServersResponseSchema = z.object({
 export const smitheryServerDetailsResponseSchema = smitheryServerSchema.extend({
   connection: smitheryServerConnectionSchema.optional(),
 });
+
+// ============================================================================
+// Arcade Authorization Schemas
+// ============================================================================
+
+/**
+ * Body schema for POST /api/integrations/arcade/authorize
+ */
+export const arcadeAuthorizeBodySchema = z.object({
+  toolName: z.string().describe('Fully qualified tool name (e.g., "Google.ListEmails")'),
+  userId: z.string().describe('User ID for the authorization context'),
+});
+
+/**
+ * Response schema for POST /api/integrations/arcade/authorize
+ */
+export const arcadeAuthorizeResponseSchema = z.object({
+  status: z.enum(['pending', 'completed']).describe('Authorization status'),
+  authorizationId: z.string().optional().describe('Authorization ID for tracking'),
+  authorizationUrl: z.string().optional().describe('URL for user to complete authorization'),
+  scopes: z.array(z.string()).optional().describe('OAuth scopes requested'),
+});
+
+/**
+ * Query schema for GET /api/integrations/arcade/auth/status
+ */
+export const arcadeAuthStatusQuerySchema = z.object({
+  authorizationId: z.string().describe('Authorization ID to check'),
+});
+
+/**
+ * Response schema for GET /api/integrations/arcade/auth/status
+ */
+export const arcadeAuthStatusResponseSchema = z.object({
+  status: z.enum(['pending', 'completed', 'failed']).describe('Current authorization status'),
+  completed: z.boolean().describe('Whether authorization is complete'),
+});
