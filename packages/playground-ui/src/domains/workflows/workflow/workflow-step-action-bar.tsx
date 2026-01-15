@@ -181,13 +181,15 @@ export const WorkflowStepActionBar = ({
           )}
         >
           {onShowNestedGraph && (
-            <Button onClick={handleNestedGraphClick} className={cn(isNestedGraphOpen && activeButtonClass)}>
+            <Button onClick={handleNestedGraphClick} className={cn(isNestedGraphOpen && activeButtonClass)} size="sm">
               View nested graph
             </Button>
           )}
           {showTimeTravel && (
             <>
-              <Button onClick={() => setIsTimeTravelOpen(true)}>Time travel</Button>
+              <Button onClick={() => setIsTimeTravelOpen(true)} size="sm">
+                Time travel
+              </Button>
               <Dialog open={isTimeTravelOpen} onOpenChange={setIsTimeTravelOpen}>
                 <DialogContent className={dialogContentClass}>
                   <DialogTitle className={dialogTitleClass}>Time travel to {stepKey}</DialogTitle>
@@ -209,6 +211,7 @@ export const WorkflowStepActionBar = ({
                     setIsPerStepRunOpen(true);
                   }
                 }}
+                size="sm"
               >
                 Run step
               </Button>
@@ -236,6 +239,7 @@ export const WorkflowStepActionBar = ({
                     setIsContinueRunOpen(true);
                   }
                 }}
+                size="sm"
               >
                 Continue run
               </Button>
@@ -257,13 +261,15 @@ export const WorkflowStepActionBar = ({
             </>
           )}
           {mapConfig && (
-            <Button onClick={handleMapConfigClick} className={cn(isMapConfigOpen && activeButtonClass)}>
+            <Button onClick={handleMapConfigClick} className={cn(isMapConfigOpen && activeButtonClass)} size="sm">
               Map config
             </Button>
           )}
           {input && (
             <>
-              <Button onClick={() => setIsInputOpen(true)}>Input</Button>
+              <Button onClick={() => setIsInputOpen(true)} size="sm">
+                Input
+              </Button>
 
               <Dialog open={isInputOpen} onOpenChange={setIsInputOpen}>
                 <DialogContent className={dialogContentClass}>
@@ -279,7 +285,9 @@ export const WorkflowStepActionBar = ({
 
           {resumeData && (
             <>
-              <Button onClick={() => setIsResumeDataOpen(true)}>Resume data</Button>
+              <Button onClick={() => setIsResumeDataOpen(true)} size="sm">
+                Resume data
+              </Button>
 
               <Dialog open={isResumeDataOpen} onOpenChange={setIsResumeDataOpen}>
                 <DialogContent className={dialogContentClass}>
@@ -295,7 +303,9 @@ export const WorkflowStepActionBar = ({
 
           {(output ?? suspendOutput) && (
             <>
-              <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
+              <Button onClick={() => setIsOutputOpen(true)} size="sm">
+                Output
+              </Button>
 
               <Dialog open={isOutputOpen} onOpenChange={setIsOutputOpen}>
                 <DialogContent className={dialogContentClass}>
@@ -310,7 +320,9 @@ export const WorkflowStepActionBar = ({
 
           {error && (
             <>
-              <Button onClick={() => setIsErrorOpen(true)}>Error</Button>
+              <Button onClick={() => setIsErrorOpen(true)} size="sm">
+                Error
+              </Button>
 
               <Dialog open={isErrorOpen} onOpenChange={setIsErrorOpen}>
                 <DialogContent className={dialogContentClass}>
@@ -326,7 +338,7 @@ export const WorkflowStepActionBar = ({
 
           {tripwire && (
             <>
-              <Button onClick={() => setIsTripwireOpen(true)} className="text-amber-400 hover:text-amber-300">
+              <Button onClick={() => setIsTripwireOpen(true)} className="text-amber-400 hover:text-amber-300" size="sm">
                 Tripwire
               </Button>
 
