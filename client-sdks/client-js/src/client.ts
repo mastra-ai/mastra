@@ -59,6 +59,13 @@ import type {
   UpdateStoredScorerParams,
   StoredScorerResponse,
   DeleteStoredScorerResponse,
+  ListScorerVersionsParams,
+  ListScorerVersionsResponse,
+  ScorerVersionResponse,
+  CreateScorerVersionParams,
+  ActivateScorerVersionResponse,
+  RestoreScorerVersionResponse,
+  DeleteScorerVersionResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   ListMemoryConfigsResponse,
@@ -952,6 +959,146 @@ export class MastraClient extends BaseResource {
   ): Promise<DeleteStoredScorerResponse> {
     return this.request(
       `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  // ============================================================================
+  // Scorer Versions
+  // ============================================================================
+
+  /**
+   * Lists all versions for a scorer with optional pagination
+   * @param scorerId - ID of the scorer to get versions for
+   * @param params - Optional pagination and ordering parameters
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing paginated list of scorer versions
+   */
+  public listScorerVersions(
+    scorerId: string,
+    params?: ListScorerVersionsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListScorerVersionsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      searchParams.set('orderBy', params.orderBy);
+    }
+    if (params?.orderDirection) {
+      searchParams.set('orderDirection', params.orderDirection);
+    }
+
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions${queryString ? `?${queryString}` : ''}`,
+    );
+  }
+
+  /**
+   * Gets a specific scorer version by ID
+   * @param scorerId - ID of the scorer
+   * @param versionId - ID of the version to retrieve
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the scorer version
+   */
+  public getScorerVersion(
+    scorerId: string,
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ScorerVersionResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+    );
+  }
+
+  /**
+   * Creates a new version snapshot of a scorer
+   * @param scorerId - ID of the scorer to create a version for
+   * @param params - Optional name and change message for the version
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the created version
+   */
+  public createScorerVersion(
+    scorerId: string,
+    params?: CreateScorerVersionParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ScorerVersionResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+        body: params || {},
+      },
+    );
+  }
+
+  /**
+   * Activates a specific scorer version, making it the active version
+   * @param scorerId - ID of the scorer
+   * @param versionId - ID of the version to activate
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing activation confirmation
+   */
+  public activateScorerVersion(
+    scorerId: string,
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateScorerVersionResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Restores a scorer to a specific version, creating a new version with the restored configuration
+   * @param scorerId - ID of the scorer
+   * @param versionId - ID of the version to restore from
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the updated scorer and new version
+   */
+  public restoreScorerVersion(
+    scorerId: string,
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<RestoreScorerVersionResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Deletes a specific scorer version
+   * @param scorerId - ID of the scorer
+   * @param versionId - ID of the version to delete
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing deletion confirmation
+   */
+  public deleteScorerVersion(
+    scorerId: string,
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteScorerVersionResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

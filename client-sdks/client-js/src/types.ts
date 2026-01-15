@@ -810,6 +810,80 @@ export interface DeleteStoredScorerResponse {
   message: string;
 }
 
+// ============================================================================
+// Scorer Version Types
+// ============================================================================
+
+/**
+ * Response for a single scorer version
+ */
+export interface ScorerVersionResponse {
+  id: string;
+  scorerId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: StoredScorerResponse;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Parameters for listing scorer versions
+ */
+export interface ListScorerVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  orderDirection?: 'ASC' | 'DESC';
+}
+
+/**
+ * Response for listing scorer versions
+ */
+export interface ListScorerVersionsResponse {
+  versions: ScorerVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a scorer version
+ */
+export interface CreateScorerVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+/**
+ * Response for activating a scorer version
+ */
+export interface ActivateScorerVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+/**
+ * Response for restoring a scorer version
+ */
+export interface RestoreScorerVersionResponse {
+  success: boolean;
+  message: string;
+  scorer: StoredScorerResponse;
+  newVersion: ScorerVersionResponse;
+}
+
+/**
+ * Response for deleting a scorer version
+ */
+export interface DeleteScorerVersionResponse {
+  success: boolean;
+  message: string;
+}
+
 export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }

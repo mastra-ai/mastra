@@ -829,3 +829,85 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 028 - Add scorer version methods to client SDK - COMPLETED
+================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Extended @mastra/client-js with comprehensive scorer version management methods
+- Added all TypeScript types for scorer versions matching the server API schemas
+- Implemented 6 version-related methods following the exact patterns from stored agents
+- All methods support optional RequestContext parameter for proper context propagation
+- Methods properly encode IDs and serialize parameters for API calls
+
+Files modified:
+- client-sdks/client-js/src/types.ts (added lines 814-893)
+- client-sdks/client-js/src/client.ts (added imports and methods lines 61-68, 961-1106)
+
+Types added:
+1. ScorerVersionResponse - Full version object with snapshot
+2. ListScorerVersionsParams - Pagination and ordering parameters
+3. ListScorerVersionsResponse - Paginated list response
+4. CreateScorerVersionParams - Optional name and change message
+5. ActivateScorerVersionResponse - Activation confirmation
+6. RestoreScorerVersionResponse - Restoration result with new version
+7. DeleteScorerVersionResponse - Deletion confirmation
+
+Methods implemented:
+1. listScorerVersions(scorerId, params?, requestContext?)
+   - GET /api/stored/scorers/:scorerId/versions
+   - Supports pagination with page, perPage, orderBy, orderDirection
+
+2. getScorerVersion(scorerId, versionId, requestContext?)
+   - GET /api/stored/scorers/:scorerId/versions/:versionId
+   - Returns full version object including snapshot
+
+3. createScorerVersion(scorerId, params?, requestContext?)
+   - POST /api/stored/scorers/:scorerId/versions
+   - Creates manual snapshot with optional name and change message
+
+4. activateScorerVersion(scorerId, versionId, requestContext?)
+   - POST /api/stored/scorers/:scorerId/versions/:versionId/activate
+   - Sets specified version as the active version
+
+5. restoreScorerVersion(scorerId, versionId, requestContext?)
+   - POST /api/stored/scorers/:scorerId/versions/:versionId/restore
+   - Restores scorer config from version and creates new version
+
+6. deleteScorerVersion(scorerId, versionId, requestContext?)
+   - DELETE /api/stored/scorers/:scorerId/versions/:versionId
+   - Deletes specific version (cannot delete active version)
+
+Key implementation details:
+- All methods match API endpoints from task 009 (stored-scorers version routes)
+- Followed exact same patterns as stored agent methods for consistency
+- Proper URL encoding for scorerId and versionId parameters
+- Query string building with pagination and ordering support
+- RequestContext support via base64RequestContext and requestContextQueryString helpers
+- All methods properly typed with JSDoc comments
+
+Verification:
+- pnpm typecheck: PASSED (client-js has no type errors)
+- cd client-sdks/client-js && pnpm tsc --noEmit: PASSED (no type errors)
+- cd client-sdks/client-js && pnpm build:lib: PASSED (build successful)
+- pnpm build: Client-js build passed, only playground-ui fails on pre-existing MCP SDK errors
+- All acceptance criteria met:
+  ✓ All 6 version methods are implemented (including create, activate, restore, delete)
+  ✓ Methods are properly typed with full JSDoc comments
+  ✓ Methods call correct API endpoints matching task 009 routes
+  ✓ restoreScorerVersion returns updated scorer and new version
+  ✓ All types exported via index.ts
+
+Note: Full build fails on playground-ui due to pre-existing MCP SDK import errors
+(add-tools-dialog.tsx, smithery-oauth-provider.ts) that are unrelated to task 028.
+The client-js package builds successfully.
+
+Next steps:
+- Task 015: Update useStoredScorerMutations to add rollback mutation (depends on task 028)
+- Task 018: Create edit scorer dialog component (P1 priority)
+- Task 019: Create scorer version history component (P1 priority, depends on task 028)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
