@@ -19,6 +19,7 @@ import type {
   TABLE_WORKFLOW_DEFINITION_VERSIONS,
   TABLE_STORED_SCORERS,
   TABLE_STORED_SCORER_VERSIONS,
+  TABLE_AUDIT,
   SpanRecord,
   StorageAgentType,
   StorageAgentVersionType,
@@ -28,9 +29,6 @@ import type {
   StorageWorkflowDefinitionVersionType,
   StoredScorerType,
   StoredScorerVersionType,
-  TABLE_AUDIT,
-  SpanRecord,
-  StorageAgentType,
   AuditEvent,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';

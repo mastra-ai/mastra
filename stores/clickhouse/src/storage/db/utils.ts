@@ -36,7 +36,6 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_WORKFLOW_DEFINITION_VERSIONS]: `MergeTree()`,
   [TABLE_STORED_SCORERS]: `ReplacingMergeTree()`,
   [TABLE_STORED_SCORER_VERSIONS]: `MergeTree()`,
-  mastra_agents: `ReplacingMergeTree()`,
   [TABLE_AUDIT]: `MergeTree()`,
 };
 

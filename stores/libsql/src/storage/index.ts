@@ -16,6 +16,7 @@ import { WorkflowsLibSQL } from './domains/workflows';
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsLibSQL,
+  AuditLibSQL,
   IntegrationsLibSQL,
   MemoryLibSQL,
   ObservabilityLibSQL,
@@ -24,7 +25,6 @@ export {
   WorkflowDefinitionsLibSQL,
   WorkflowsLibSQL,
 };
-export { AgentsLibSQL, AuditLibSQL, MemoryLibSQL, ObservabilityLibSQL, ScoresLibSQL, WorkflowsLibSQL };
 export type { LibSQLDomainConfig } from './db';
 
 /**
