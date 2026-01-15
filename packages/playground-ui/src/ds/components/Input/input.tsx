@@ -14,9 +14,9 @@ const inputVariants = cva(
         unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
       },
       customSize: {
-        default: 'px-[13px] text-ui-sm h-8',
-        sm: 'h-[30px] px-[13px] text-xs',
-        lg: 'h-10 px-[17px] text-ui-sm',
+        default: 'px-3 text-ui-sm h-8',
+        sm: 'h-8 px-3 text-xs',
+        lg: 'h-10 px-4 text-ui-sm',
       },
     },
     defaultVariants: {

@@ -11,7 +11,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
   const completedSteps = steps.filter(step => step.status === 'success').length;
 
   return (
-    <div className="flex justify-center flex-col gap-[1rem] content-center w-full">
+    <div className="flex justify-center flex-col gap-4 content-center w-full">
       <div className="grid grid-cols-[0_repeat(9,1fr)] w-full">
         {steps.map((step: ProcessStep, idx: number) => {
           return (

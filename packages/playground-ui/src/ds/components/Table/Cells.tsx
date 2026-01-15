@@ -60,7 +60,7 @@ export interface EntryCellProps extends Omit<CellProps, 'children'> {
 export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCellProps) => {
   return (
     <Cell {...props}>
-      <div className="flex items-center gap-[14px]">
+      <div className="flex items-center gap-3.5">
         {icon && (
           <Icon size="lg" className="text-neutral5">
             {icon}

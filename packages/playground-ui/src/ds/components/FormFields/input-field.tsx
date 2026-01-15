@@ -37,7 +37,7 @@ export function InputField({
   return (
     <div
       className={cn(
-        'grid gap-[.5rem] ',
+        'grid gap-2',
         {
           'grid-rows-[auto_1fr]': !labelIsHidden && !helpMsg,
           'grid-rows-[auto_1fr_auto]': !labelIsHidden && helpMsg,
@@ -56,7 +56,7 @@ export function InputField({
         name={name}
         value={value}
         className={cn(
-          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none rounded-lg bg-transparent min-h-[2.5rem] px-[0.75rem] py-[0.5rem] w-full',
+          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none rounded-lg bg-transparent min-h-10 px-3 py-2 w-full',
           'focus:outline-none focus:shadow-[inset_0_0_0_1px_#18fb6f]',
           'placeholder:text-neutral3 placeholder:text-ui-sm',
           {
@@ -71,7 +71,7 @@ export function InputField({
       {errorMsg && (
         <p
           className={cn(
-            'text-ui-sm text-neutral4 flex items-center gap-[.5rem]',
+            'text-ui-sm text-neutral4 flex items-center gap-2',
             '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:text-red-400',
           )}
         >

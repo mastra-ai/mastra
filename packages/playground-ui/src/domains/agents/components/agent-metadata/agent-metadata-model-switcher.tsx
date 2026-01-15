@@ -693,8 +693,8 @@ export const AgentMetadataModelSwitcher = ({
       {infoMsg && (
         <div
           className={cn(
-            'text-ui-sm text-neutral3 flex gap-[.5rem] mt-[0.5rem] ml-[.5rem]',
-            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-[0.1rem]',
+            'text-ui-sm text-neutral3 flex gap-2 mt-2 ml-2',
+            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-0.5',
           )}
         >
           <Info /> {infoMsg}

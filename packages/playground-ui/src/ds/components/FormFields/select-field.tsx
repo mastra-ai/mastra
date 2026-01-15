@@ -31,7 +31,7 @@ export function SelectField({
   return (
     <div
       className={cn(
-        'flex gap-[.5rem] items-center',
+        'flex gap-2 items-center',
         {
           'grid-rows-[auto_1fr]': label,
           'grid-rows-[auto_1fr_auto]': helpMsg,
@@ -49,7 +49,7 @@ export function SelectField({
         <SelectTrigger
           id="select-dataset"
           className={cn(
-            'w-full border border-border1 rounded-lg min-h-[2.5rem] min-w-[5rem] gap-[0.5rem]',
+            'w-full border border-border1 rounded-lg min-h-10 min-w-20 gap-2',
             'focus:outline-none focus:shadow-[inset_0_0_0_1px_rgba(24,251,111,0.75)]',
           )}
         >

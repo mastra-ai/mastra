@@ -215,20 +215,20 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     .sort((a, b) => usageKeyOrder.indexOf(a.key) - usageKeyOrder.indexOf(b.key));
 
   return (
-    <div className={cn('flex gap-[1.5rem] flex-wrap', className)}>
+    <div className={cn('flex gap-6 flex-wrap', className)}>
       {usageAsArray.map(({ key, value }) => {
         const isObject = isTokenDetailsObject(value);
 
         return (
           <div
-            className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-ui-md flex-grow', {
+            className={cn('bg-white/5 p-3 px-4 rounded-lg text-ui-md flex-grow', {
               'min-h-[5.5rem]': traceUsage,
             })}
             key={key}
           >
             <div
               className={cn(
-                'grid grid-cols-[1.5rem_1fr_auto] gap-[.5rem] items-center',
+                'grid grid-cols-[1.5rem_1fr_auto] gap-2 items-center',
                 '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em] [&>svg]:opacity-70',
               )}
             >
@@ -237,13 +237,13 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
               {!isObject && <b className="text-ui-lg">{value}</b>}
             </div>
             {isObject && (
-              <div className="text-ui-md mt-[0.5rem] pl-[2rem]">
+              <div className="text-ui-md mt-2 pl-8">
                 {Object.entries(value).map(([detailKey, detailValue]) => {
                   if (typeof detailValue !== 'number') return null;
                   return (
                     <dl
                       key={detailKey}
-                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem] justify-between text-neutral3"
+                      className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 justify-between text-neutral3"
                     >
                       <dt>{detailKeyLabels[detailKey] || detailKey}</dt>
                       <dd>{detailValue}</dd>
@@ -253,14 +253,14 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
               </div>
             )}
             {!isObject && tokensByProviderValid && (
-              <div className="text-ui-md mt-[0.5rem] pl-[2rem]">
+              <div className="text-ui-md mt-2 pl-8">
                 {Object.entries(tokensByProvider).map(([provider, providerTokens]) => {
                   const tokenValue = providerTokens?.[key as keyof typeof providerTokens];
                   if (typeof tokenValue !== 'number') return null;
                   return (
                     <dl
                       key={provider}
-                      className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem]  justify-between text-neutral3"
+                      className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1  justify-between text-neutral3"
                     >
                       <dt>{provider}</dt>
                       <dd>{tokenValue}</dd>

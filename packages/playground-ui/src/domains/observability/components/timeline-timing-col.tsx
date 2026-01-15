@@ -37,7 +37,7 @@ export function TimelineTimingCol({
     <HoverCard.Root openDelay={250}>
       <HoverCard.Trigger
         className={cn(
-          'h-[3rem] p-[0.5rem] grid grid-cols-[1fr_auto] gap-4 items-center cursor-help pr-3 rounded-r-lg col-span-2 xl:col-span-1',
+          'h-12 p-2 grid grid-cols-[1fr_auto] gap-4 items-center cursor-help pr-3 rounded-r-lg col-span-2 xl:col-span-1',
           '[&:hover>div]:bg-surface5',
           {
             'opacity-30 [&:hover]:opacity-60': isFaded,
@@ -45,10 +45,10 @@ export function TimelineTimingCol({
           },
         )}
       >
-        <div className={cn('w-full p-[0.6rem] rounded-lg bg-surface4 transition-colors duration-[1s]')}>
-          <div className="relative w-full h-[0.4rem] rounded-sm">
+        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 transition-colors duration-1000')}>
+          <div className="relative w-full h-1.5 rounded-sm">
             <div
-              className={cn('bg-neutral1 absolute rounded-sm h-[0.4rem] top-0')}
+              className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -62,13 +62,13 @@ export function TimelineTimingCol({
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[25rem] rounded-md bg-surface4 p-[.5rem] px-[1rem] pr-[1.5rem] text-ui-sm text-neutral5 text-center border border-border1"
+          className="z-50 w-auto max-w-[25rem] rounded-md bg-surface4 p-2 px-4 pr-6 text-ui-sm text-neutral5 text-center border border-border1"
           sideOffset={5}
           side="top"
         >
           <div
             className={cn(
-              'text-ui-md flex items-center gap-[0.5rem] mb-[1rem]',
+              'text-ui-md flex items-center gap-2 mb-4',
               '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
