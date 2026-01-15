@@ -1212,6 +1212,8 @@ program
   .option('--list-sessions', 'List all sessions with dates for a question')
   .option('--check-stale', 'Check if prepared data is stale (pre-cursor-fix)')
   .option('--stale-only', 'Only list stale questions (use with --check-stale)')
+  .option('--check-duplicates', 'Check for duplicate thread blocks in observations')
+  .option('--baseline', 'Run comprehensive data quality check for a question')
   .option('--search-original <keyword>', 'Search original dataset for a keyword (shows full context)')
   .option('--improve <question-id>', 'Add improvements to a question in the dataset')
   .option('--improve-question <text>', 'Improved question text (use with --improve)')
@@ -1245,6 +1247,8 @@ program
         listSessions: options.listSessions,
         checkStale: options.checkStale,
         staleOnly: options.staleOnly,
+        checkDuplicates: options.checkDuplicates,
+        baseline: options.baseline,
         searchOriginal: options.searchOriginal,
         improve: options.improve,
         improveQuestion: options.improveQuestion,

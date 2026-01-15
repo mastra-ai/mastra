@@ -67,6 +67,10 @@ export interface InvestigateOptions {
   improveQuestion?: string; // Improved question text
   improveAnswer?: string;   // Improved answer text
   improveNote?: string;     // Improvement note
+  // Check for duplicate observations
+  checkDuplicates?: boolean; // Check for duplicate thread blocks in observations
+  // Baseline check - comprehensive data quality check
+  baseline?: boolean; // Run all data quality checks for a question
 }
 
 interface FailuresFile {
@@ -269,6 +273,18 @@ export class InvestigateCommand {
     // Improve question/answer in dataset
     if (options.improve) {
       await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote);
+      return;
+    }
+
+    // Check for duplicate observations
+    if (options.checkDuplicates) {
+      await this.checkDuplicateObservations(options.questionId);
+      return;
+    }
+
+    // Baseline check - comprehensive data quality check
+    if (options.baseline && options.questionId) {
+      await this.runBaselineCheck(options.questionId);
       return;
     }
 
@@ -1992,6 +2008,265 @@ export class InvestigateCommand {
     console.log('   Run `pnpm run sync-improved-om-qa` to sync to prepared data');
   }
 
+  // --------------------------------------------------------------------------
+  // Check Duplicate Observations
+  // --------------------------------------------------------------------------
+
+  private async checkDuplicateObservations(questionId?: string): Promise<void> {
+    if (!questionId) {
+      console.log('❌ Please provide a question ID with -q <question-id>');
+      return;
+    }
+
+    console.log(`\n🔍 Checking for duplicate observations in ${questionId}...\n`);
+
+    // Find the om.json file
+    const configs = ['observational-memory', 'om-gpt5-mini', 'om-gpt5', 'om-gemini-3-pro', 'om-gemini-3-flash'];
+    let omJsonPath: string | null = null;
+    let foundConfig: string | null = null;
+
+    for (const config of configs) {
+      const path = join(this.preparedDataDir, 'longmemeval_s', config, questionId, 'om.json');
+      if (existsSync(path)) {
+        omJsonPath = path;
+        foundConfig = config;
+        break;
+      }
+    }
+
+    if (!omJsonPath) {
+      console.log(`❌ Could not find om.json for question ${questionId}`);
+      return;
+    }
+
+    console.log(`📁 Found data in config: ${foundConfig}`);
+
+    // Load and parse om.json using PersistableInMemoryMemory
+    const storage = new PersistableInMemoryMemory({ readOnly: true });
+    await storage.hydrate(omJsonPath);
+
+    // Get OM records
+    const resourceId = `resource_${questionId}`;
+    const records = await storage.getObservationalMemoryHistory(null, resourceId);
+
+    if (!records || records.length === 0) {
+      console.log('❌ No observational memory records found');
+      return;
+    }
+
+    const latestRecord = records[0];
+    const activeObservations = latestRecord.activeObservations || '';
+
+    // Parse thread blocks from activeObservations
+    const threadRegex = /<thread id="([^"]+)">([\s\S]*?)<\/thread>/g;
+    const threadBlocks: { id: string; content: string; startIndex: number }[] = [];
+    let match;
+
+    while ((match = threadRegex.exec(activeObservations)) !== null) {
+      threadBlocks.push({
+        id: match[1],
+        content: match[2].trim(),
+        startIndex: match.index
+      });
+    }
+
+    console.log(`📊 Found ${threadBlocks.length} total thread blocks\n`);
+
+    // Count occurrences of each thread ID
+    const threadCounts: Record<string, number> = {};
+    for (const block of threadBlocks) {
+      threadCounts[block.id] = (threadCounts[block.id] || 0) + 1;
+    }
+
+    // Find duplicates
+    const duplicates = Object.entries(threadCounts)
+      .filter(([_, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1]);
+
+    const uniqueThreads = Object.keys(threadCounts).length;
+
+    console.log(`📈 Statistics:`);
+    console.log(`   Total thread blocks: ${threadBlocks.length}`);
+    console.log(`   Unique thread IDs: ${uniqueThreads}`);
+    console.log(`   Duplicate ratio: ${(threadBlocks.length / uniqueThreads).toFixed(2)}x\n`);
+
+    if (duplicates.length === 0) {
+      console.log('✅ No duplicate thread blocks found!');
+      return;
+    }
+
+    console.log(`⚠️  Found ${duplicates.length} thread IDs with duplicates:\n`);
+
+    for (const [threadId, count] of duplicates.slice(0, 10)) {
+      console.log(`   ${threadId}: ${count} occurrences`);
+      
+      // Show the content of each duplicate to see if they're identical
+      const blocks = threadBlocks.filter(b => b.id === threadId);
+      const contents = blocks.map(b => b.content);
+      const uniqueContents = new Set(contents);
+      
+      if (uniqueContents.size === 1) {
+        console.log(`      └─ ⚠️  All ${count} blocks have IDENTICAL content`);
+      } else {
+        console.log(`      └─ ℹ️  ${uniqueContents.size} unique content variations (may be legitimate)`);
+      }
+    }
+
+    if (duplicates.length > 10) {
+      console.log(`\n   ... and ${duplicates.length - 10} more`);
+    }
+
+    // Calculate token waste estimate
+    const avgBlockSize = activeObservations.length / threadBlocks.length;
+    const duplicateBlocks = threadBlocks.length - uniqueThreads;
+    const estimatedWaste = Math.round(duplicateBlocks * avgBlockSize);
+    
+    console.log(`\n📉 Estimated token waste from duplicates: ~${estimatedWaste} characters`);
+  }
+
+  // --------------------------------------------------------------------------
+  // Baseline Check - Comprehensive Data Quality Check
+  // --------------------------------------------------------------------------
+
+  private async runBaselineCheck(questionId: string): Promise<void> {
+    console.log(`\n📊 BASELINE CHECK for ${questionId}\n`);
+    console.log('═'.repeat(60));
+
+    // 1. Find the prepared data
+    const configs = ['observational-memory', 'om-gpt5-mini', 'om-gpt5', 'om-gemini-3-pro', 'om-gemini-3-flash'];
+    let omJsonPath: string | null = null;
+    let foundConfig: string | null = null;
+    let questionDir: string | null = null;
+
+    for (const config of configs) {
+      const path = join(this.preparedDataDir, 'longmemeval_s', config, questionId, 'om.json');
+      if (existsSync(path)) {
+        omJsonPath = path;
+        foundConfig = config;
+        questionDir = join(this.preparedDataDir, 'longmemeval_s', config, questionId);
+        break;
+      }
+    }
+
+    if (!omJsonPath || !questionDir) {
+      console.log(`❌ Could not find prepared data for question ${questionId}`);
+      return;
+    }
+
+    // 2. Get file modification time (preparation date)
+    const { stat } = await import('fs/promises');
+    const metaPath = join(questionDir, 'meta.json');
+    let preparedDate = 'Unknown';
+    if (existsSync(metaPath)) {
+      const stats = await stat(metaPath);
+      preparedDate = stats.mtime.toLocaleString();
+    }
+
+    console.log(`\n📁 DATA LOCATION`);
+    console.log(`   Config: ${foundConfig}`);
+    console.log(`   Path: ${questionDir}`);
+    console.log(`   Prepared: ${preparedDate}`);
+
+    // 3. Load storage and check for per-thread cursors (staleness)
+    const storage = new PersistableInMemoryMemory({ readOnly: true });
+    await storage.hydrate(omJsonPath);
+
+    const resourceId = `resource_${questionId}`;
+    
+    // Get threads and check for cursors
+    const threadsResult = await storage.listThreadsByResourceId({ resourceId });
+    const threads = threadsResult.threads || [];
+    let threadsWithCursor = 0;
+    let totalThreads = 0;
+
+    for (const thread of threads) {
+      totalThreads++;
+      const metadata = thread.metadata as Record<string, unknown> | undefined;
+      const mastraOm = (metadata?.mastra as Record<string, unknown>)?.om as Record<string, unknown> | undefined;
+      if (metadata?.lastObservedAt || mastraOm?.lastObservedAt) {
+        threadsWithCursor++;
+      }
+    }
+
+    const isStale = totalThreads > 0 && threadsWithCursor === 0;
+
+    console.log(`\n🕐 DATA FRESHNESS`);
+    console.log(`   Threads: ${totalThreads}`);
+    console.log(`   With per-thread cursors: ${threadsWithCursor}/${totalThreads}`);
+    if (isStale) {
+      console.log(`   ⚠️  STATUS: STALE (prepared before per-thread cursor fix)`);
+      console.log(`   → Recommend: pnpm prepare om -v full --question-id ${questionId} --force-regenerate -y`);
+    } else {
+      console.log(`   ✅ STATUS: FRESH (has per-thread cursors)`);
+    }
+
+    // 4. Check for duplicate observations
+    const records = await storage.getObservationalMemoryHistory(null, resourceId);
+    let duplicateRatio = 1.0;
+    let totalBlocks = 0;
+    let uniqueBlocks = 0;
+
+    if (records && records.length > 0) {
+      const latestRecord = records[0];
+      const activeObservations = latestRecord.activeObservations || '';
+      
+      const threadRegex = /<thread id=\"([^\"]+)\">[\s\S]*?<\/thread>/g;
+      const threadIds: string[] = [];
+      let match;
+      while ((match = threadRegex.exec(activeObservations)) !== null) {
+        threadIds.push(match[1]);
+      }
+      
+      totalBlocks = threadIds.length;
+      uniqueBlocks = new Set(threadIds).size;
+      duplicateRatio = totalBlocks > 0 ? totalBlocks / uniqueBlocks : 1.0;
+    }
+
+    console.log(`\n🔄 DUPLICATE OBSERVATIONS`);
+    console.log(`   Total thread blocks: ${totalBlocks}`);
+    console.log(`   Unique thread IDs: ${uniqueBlocks}`);
+    console.log(`   Duplicate ratio: ${duplicateRatio.toFixed(2)}x`);
+    if (duplicateRatio > 1.5) {
+      console.log(`   ⚠️  HIGH DUPLICATION - may waste tokens`);
+      console.log(`   → Run: pnpm investigate --check-duplicates -q ${questionId}`);
+    } else if (duplicateRatio > 1.0) {
+      console.log(`   ℹ️  Minor duplication (may be legitimate)`);
+    } else {
+      console.log(`   ✅ No duplicates`);
+    }
+
+    // 5. Get message and observation counts
+    const messagesResult = await storage.listMessages({ resourceId, perPage: false });
+    const messageCount = messagesResult.messages.length;
+
+    // Count observation lines
+    let observationLineCount = 0;
+    if (records && records.length > 0) {
+      const activeObservations = records[0].activeObservations || '';
+      observationLineCount = (activeObservations.match(/^\s*\*\s+/gm) || []).length;
+    }
+
+    console.log(`\n📈 DATA VOLUME`);
+    console.log(`   Messages stored: ${messageCount}`);
+    console.log(`   Observation lines: ${observationLineCount}`);
+    console.log(`   OM records: ${records?.length || 0}`);
+
+    // 6. Summary
+    console.log(`\n${'═'.repeat(60)}`);
+    console.log(`📋 SUMMARY`);
+    
+    const issues: string[] = [];
+    if (isStale) issues.push('STALE DATA');
+    if (duplicateRatio > 1.5) issues.push('HIGH DUPLICATION');
+    
+    if (issues.length === 0) {
+      console.log(`   ✅ No data quality issues detected`);
+    } else {
+      console.log(`   ⚠️  Issues found: ${issues.join(', ')}`);
+    }
+    console.log('');
+  }
+
   private showHelp(): void {
     console.log(`
 📋 Investigation Workflow
@@ -2008,10 +2283,12 @@ Investigation Utilities:
   pnpm investigate --search <keyword> -q <id>        Search observations
   pnpm investigate --trace <keyword> -q <id>         Trace info through pipeline
 
-Data Freshness:
+Data Quality:
+  pnpm investigate --baseline -q <id>                Comprehensive data quality check
   pnpm investigate --check-stale                     Check all data for staleness
   pnpm investigate --check-stale -q <id>             Check specific question
   pnpm investigate --check-stale --stale-only        List only stale questions
+  pnpm investigate --check-duplicates -q <id>        Check for duplicate thread blocks
 
 Dataset Improvements:
   pnpm investigate --improve <id> --improve-question "..." --improve-answer "..." --improve-note "..."

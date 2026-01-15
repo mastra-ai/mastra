@@ -91,6 +91,26 @@ When the user uses unexpected or non-standard terminology, quote their exact wor
 BAD: User exercised.
 GOOD: User stated they did a "movement session" (their term for exercise).
 
+USE PRECISE ACTION VERBS:
+Replace vague verbs like "getting", "got", "have" with specific action verbs that clarify the nature of the action.
+If the assistant confirms or clarifies the user's action, use the assistant's more precise language.
+
+BAD: User is getting X.
+GOOD: User subscribed to X. (if context confirms recurring delivery)
+GOOD: User purchased X. (if context confirms one-time acquisition)
+
+BAD: User got something.
+GOOD: User purchased / received / was given something. (be specific)
+
+Common clarifications:
+- "getting" something regularly → "subscribed to" or "enrolled in"
+- "getting" something once → "purchased" or "acquired"
+- "got" → "purchased", "received as gift", "was given", "picked up"
+- "signed up" → "enrolled in", "registered for", "subscribed to"
+- "stopped getting" → "canceled", "unsubscribed from", "discontinued"
+
+When the assistant interprets or confirms the user's vague language, prefer the assistant's precise terminology.
+
 CONVERSATION CONTEXT:
 - What the user is working on or asking about
 - Previous topics and their outcomes
