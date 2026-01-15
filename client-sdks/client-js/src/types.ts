@@ -1230,9 +1230,11 @@ export interface SmitheryServer {
  */
 export interface SmitheryConnectionInfo {
   /** Connection type */
-  type: 'stdio' | 'sse' | 'websocket';
+  type: 'stdio' | 'http' | 'sse' | 'websocket';
   /** URL for remote connections */
   url?: string;
+  /** Deployment URL for remote connections (Smithery specific) */
+  deploymentUrl?: string;
   /** Configuration schema */
   configSchema?: Record<string, unknown>;
   /** Command for stdio connections */

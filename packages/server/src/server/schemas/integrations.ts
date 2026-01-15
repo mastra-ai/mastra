@@ -318,8 +318,9 @@ export const smitheryServersQuerySchema = z.object({
  * Smithery connection info schema (from API)
  */
 export const smitheryConnectionInfoSchema = z.object({
-  type: z.enum(['stdio', 'sse', 'websocket']),
+  type: z.enum(['stdio', 'http', 'sse', 'websocket']),
   url: z.string().optional(),
+  deploymentUrl: z.string().optional(),
   configSchema: z.record(z.string(), z.unknown()).optional(),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),

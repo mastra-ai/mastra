@@ -215,28 +215,30 @@ export class SmitheryProvider implements ToolProvider {
 
     const server = await response.json();
 
-    // Helper to map remote connection types to 'http' for MCP transport
-    const mapToMCPTransport = (type: string): 'http' | 'stdio' => {
-      // SSE and WebSocket are URL-based connections, map to 'http' for MCP
-      if (type === 'sse' || type === 'websocket') {
-        return 'http';
-      }
-      return type === 'stdio' ? 'stdio' : 'http';
+    // Helper to extract URL from connection (Smithery uses deploymentUrl or url)
+    const getConnectionUrl = (conn: Record<string, unknown>): string | undefined => {
+      return (conn.deploymentUrl as string) || (conn.url as string);
+    };
+
+    // Helper to check if connection is URL-based (http, sse, websocket)
+    const isUrlBasedConnection = (type: string): boolean => {
+      return type === 'http' || type === 'sse' || type === 'websocket';
     };
 
     // Check for connections array from the API response
     if (server.connections && Array.isArray(server.connections) && server.connections.length > 0) {
-      // Prefer remote connections (sse, websocket) over stdio
-      const remoteConnection = server.connections.find(
-        (c: { type: string }) => c.type === 'sse' || c.type === 'websocket'
-      );
+      // Prefer URL-based connections (http, sse, websocket) over stdio
+      const remoteConnection = server.connections.find((c: { type: string }) => isUrlBasedConnection(c.type));
 
       if (remoteConnection) {
-        return {
-          type: mapToMCPTransport(remoteConnection.type),
-          url: remoteConnection.url,
-          configSchema: remoteConnection.configSchema,
-        };
+        const url = getConnectionUrl(remoteConnection);
+        if (url) {
+          return {
+            type: 'http',
+            url,
+            configSchema: remoteConnection.configSchema,
+          };
+        }
       }
 
       // Fall back to stdio if available
@@ -255,14 +257,25 @@ export class SmitheryProvider implements ToolProvider {
       // Use first connection if nothing else matches
       const firstConnection = server.connections[0];
       const isStdio = firstConnection.type === 'stdio';
-      return {
-        type: mapToMCPTransport(firstConnection.type),
-        url: isStdio ? undefined : firstConnection.url,
-        command: isStdio ? firstConnection.command : undefined,
-        args: isStdio ? firstConnection.args : undefined,
-        env: isStdio ? firstConnection.env : undefined,
-        configSchema: firstConnection.configSchema,
-      };
+      const url = getConnectionUrl(firstConnection);
+
+      if (isStdio) {
+        return {
+          type: 'stdio',
+          command: firstConnection.command,
+          args: firstConnection.args,
+          env: firstConnection.env,
+          configSchema: firstConnection.configSchema,
+        };
+      }
+
+      if (url) {
+        return {
+          type: 'http',
+          url,
+          configSchema: firstConnection.configSchema,
+        };
+      }
     }
 
     // Legacy: check for deploymentUrl on remote servers
