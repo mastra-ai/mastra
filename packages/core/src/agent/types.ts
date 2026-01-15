@@ -144,7 +144,6 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   instructions: DynamicAgentInstructions;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
-   * Can also be a function that returns an array of models for dynamic fallback configuration.
    */
   model: MastraModelConfig | DynamicModel | ModelWithRetries[];
   /**
