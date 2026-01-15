@@ -76,6 +76,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
       workflows: values.workflows,
       agents: values.agents,
       memory: values.memory ? { id: values.memory } : undefined,
+      scorers: values.scorers,
     });
     onOpenChange(false);
     onSuccess?.();
@@ -105,6 +106,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         workflows: agent.workflows,
         agents: agent.agents,
         memory: (agent.memory as { id?: string } | undefined)?.id,
+        scorers: agent.scorers,
       }
     : undefined;
 

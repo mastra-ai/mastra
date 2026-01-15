@@ -54,6 +54,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
         workflows: values.workflows,
         agents: values.agents,
         memory: values.memory ? { id: values.memory } : undefined,
+        scorers: values.scorers,
       });
       onOpenChange(false);
       onSuccess?.(agentId);

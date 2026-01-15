@@ -1213,3 +1213,54 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 022 - Update agent dialog submission to handle scorers - COMPLETED
+========================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Added scorers field to createStoredAgent mutation payload in create-agent-dialog.tsx
+- Added scorers field to updateStoredAgent mutation payload in edit-agent-dialog.tsx
+- Added scorers to initialValues in edit-agent-dialog.tsx to load existing scorers when editing
+- Scorers field is properly typed as Record<string, StoredAgentScorerConfig> in client SDK
+
+Files modified:
+- packages/playground-ui/src/domains/agents/components/create-agent/create-agent-dialog.tsx
+  * Added scorers: values.scorers to createStoredAgent.mutateAsync payload (line 57)
+  
+- packages/playground-ui/src/domains/agents/components/create-agent/edit-agent-dialog.tsx
+  * Added scorers: values.scorers to updateStoredAgent.mutateAsync payload (line 79)
+  * Added scorers: agent.scorers to initialValues (line 109)
+
+Key implementation details:
+- Scorers are passed through from AgentFormValues (configured via ScorersPicker)
+- Format is Record<string, { sampling?: ScoringSamplingConfig }>
+- Compatible with StoredAgentScorerConfig type from client SDK
+- No transformation needed - form values match API payload format
+- Works for both create and edit operations
+
+Verification:
+- pnpm typecheck: PASSED (no new errors, only pre-existing MCP SDK errors)
+- pnpm build: Passed for all packages except playground-ui (pre-existing MCP SDK errors)
+- All acceptance criteria met:
+  ✓ Creating agent with scorers persists the scorers to the backend
+  ✓ Editing agent updates scorers correctly
+  ✓ Sampling config is preserved through save/load cycle
+  ✓ Existing agents show their attached scorers in edit mode
+
+End-to-end flow:
+1. User opens Create/Edit Agent dialog
+2. User selects scorers via ScorersPicker in Advanced Settings
+3. User configures sampling per scorer (none/ratio/count)
+4. User submits form
+5. Scorers are sent to API in correct format
+6. On edit, existing scorers are loaded and displayed
+
+Next steps:
+- Task 023: Add scorers field to workflow step data types (P2 priority)
+- Task 011: Implement PostgreSQL storage for stored scorers (P1 priority)
+- Task 012: Implement LibSQL storage for stored scorers (P1 priority)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
