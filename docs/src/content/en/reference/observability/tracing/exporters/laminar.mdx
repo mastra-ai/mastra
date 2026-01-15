@@ -24,7 +24,6 @@ interface LaminarExporterConfig extends BaseExporterConfig {
   apiKey?: string;
   baseUrl?: string;
   endpoint?: string;
-  teamId?: string;
   headers?: Record<string, string>;
   realtime?: boolean;
   disableBatch?: boolean;
@@ -58,15 +57,9 @@ Extends `BaseExporterConfig`, which includes:
       required: false,
     },
     {
-      name: "teamId",
-      type: "string",
-      description: "Optional backwards-compat header. Falls back to LAMINAR_TEAM_ID env var.",
-      required: false,
-    },
-    {
       name: "headers",
       type: "Record<string, string>",
-      description: "Additional headers to include in OTLP requests (merged with Authorization/team header).",
+      description: "Additional headers to include in OTLP requests (merged with Authorization).",
       required: false,
     },
     {
@@ -121,7 +114,7 @@ Flushes pending data and shuts down the exporter.
 ```typescript
 import { LaminarExporter } from "@mastra/laminar";
 
-// Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT, LAMINAR_TEAM_ID
+// Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT
 const exporter = new LaminarExporter();
 ```
 
@@ -136,4 +129,3 @@ const exporter = new LaminarExporter({
   realtime: true,
 });
 ```
-

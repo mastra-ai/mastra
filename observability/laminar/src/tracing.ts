@@ -86,11 +86,6 @@ export interface LaminarExporterConfig extends BaseExporterConfig {
    */
   endpoint?: string;
   /**
-   * Optional Laminar team ID header for backwards compatibility.
-   * Defaults to `process.env.LAMINAR_TEAM_ID`.
-   */
-  teamId?: string;
-  /**
    * Additional headers to include in OTLP requests.
    */
   headers?: Record<string, string>;
@@ -148,15 +143,10 @@ export class LaminarExporter extends BaseExporter {
     const baseUrl = stripTrailingSlash(config.baseUrl ?? process.env.LMNR_BASE_URL ?? 'https://api.lmnr.ai');
     const endpoint = config.endpoint ?? envEndpoint ?? `${baseUrl}/v1/traces`;
 
-    const teamId = config.teamId ?? process.env.LAMINAR_TEAM_ID;
-
     const headers: Record<string, string> = {
       ...config.headers,
       Authorization: `Bearer ${apiKey}`,
     };
-    if (teamId) {
-      headers['x-laminar-team-id'] = teamId;
-    }
 
     this.config = {
       apiKey,
@@ -402,12 +392,6 @@ export class LaminarExporter extends BaseExporter {
         Authorization: `Bearer ${this.config.apiKey}`,
         'content-type': 'application/json',
       };
-
-      // Backwards compatibility header (if configured for OTLP exports)
-      const teamHeader = this.config.headers['x-laminar-team-id'];
-      if (teamHeader) {
-        scoreHeaders['x-laminar-team-id'] = teamHeader;
-      }
 
       const response = await fetch(`${stripTrailingSlash(this.config.baseUrl)}/v1/evaluators/score`, {
         method: 'POST',
