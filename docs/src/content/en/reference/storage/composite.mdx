@@ -1,5 +1,5 @@
 ---
-title: "Reference: Storage Composition | Storage"
+title: "Reference: Composite Storage | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
 packages:
   - "@mastra/clickhouse"
@@ -8,25 +8,25 @@ packages:
   - "@mastra/pg"
 ---
 
-# Storage Composition
+# Composite Storage
 
-MastraStorage can compose storage domains from different adapters. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
+`MastraStorage` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
 
 ## Installation
 
-MastraStorage is included in `@mastra/core`:
+`MastraStorage` is included in `@mastra/core`:
 
 ```bash
 npm install @mastra/core@beta
 ```
 
-You'll also need to install the storage adapters you want to compose:
+You'll also need to install the storage providers you want to compose:
 
 ```bash
 npm install @mastra/pg@beta @mastra/libsql@beta
 ```
 
-## Storage Domains
+## Storage domains
 
 Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
 
@@ -44,13 +44,13 @@ Mastra organizes storage into five specialized domains, each handling a specific
 
 Import domain classes directly from each store package and compose them:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new MastraStorage({
     id: "composite",
     domains: {
@@ -66,7 +66,7 @@ const mastra = new Mastra({
 
 Use `default` to specify a fallback storage, then override specific domains:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { PostgresStore } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
@@ -77,7 +77,7 @@ const pgStore = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
 });
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new MastraStorage({
     id: "composite",
     default: pgStore,
@@ -154,9 +154,9 @@ const mastra = new Mastra({
 
 ## Initialization
 
-MastraStorage initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
+`MastraStorage` initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { Mastra } from "@mastra/core";
@@ -170,7 +170,7 @@ const storage = new MastraStorage({
   },
 });
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage, // init() called automatically
 });
 ```
@@ -195,7 +195,7 @@ const memoryStore = await storage.getStore("memory");
 const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
-## Use Cases
+## Use cases
 
 ### Separate databases for different workloads
 

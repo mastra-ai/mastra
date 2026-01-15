@@ -532,4 +532,123 @@ describe('ArizeExporter', () => {
       );
     });
   });
+
+  describe('Tool Call Span Support', () => {
+    it('maps tool call input/output to OpenInference INPUT_VALUE/OUTPUT_VALUE', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const toolCallSpan: Mutable<AnyExportedSpan> = {
+        id: 'tool-call-span',
+        traceId: 'trace-tool-call',
+        parentSpanId: 'parent-span',
+        type: SpanType.TOOL_CALL,
+        name: 'execute_tool weatherTool',
+        entityId: 'weatherTool',
+        entityName: 'weatherTool',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { city: 'Tokyo' },
+        output: { temperature: 72, condition: 'sunny' },
+        attributes: {
+          toolDescription: 'Get weather information for a city',
+          toolType: 'function',
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: toolCallSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Tool call input/output should be mapped to OpenInference INPUT_VALUE/OUTPUT_VALUE
+      expect(attrs[SemanticConventions.INPUT_VALUE]).toBe(JSON.stringify({ city: 'Tokyo' }));
+      expect(attrs[SemanticConventions.OUTPUT_VALUE]).toBe(JSON.stringify({ temperature: 72, condition: 'sunny' }));
+      expect(attrs[SemanticConventions.INPUT_MIME_TYPE]).toBe('application/json');
+      expect(attrs[SemanticConventions.OUTPUT_MIME_TYPE]).toBe('application/json');
+
+      // Should have TOOL span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('TOOL');
+    });
+  });
+
+  describe('Model Step Span Support', () => {
+    it('maps model_step input/output to OpenInference INPUT_VALUE/OUTPUT_VALUE', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const modelStepSpan: Mutable<AnyExportedSpan> = {
+        id: 'model-step-span',
+        traceId: 'trace-model-step',
+        parentSpanId: 'parent-span',
+        type: SpanType.MODEL_STEP,
+        name: 'model_step gpt-4',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        output: { text: 'Hi there!' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: modelStepSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Model step input/output should be mapped to OpenInference INPUT_VALUE/OUTPUT_VALUE
+      expect(attrs[SemanticConventions.INPUT_VALUE]).toBe(
+        JSON.stringify({ messages: [{ role: 'user', content: 'Hello' }] }),
+      );
+      expect(attrs[SemanticConventions.OUTPUT_VALUE]).toBe(JSON.stringify({ text: 'Hi there!' }));
+      expect(attrs[SemanticConventions.INPUT_MIME_TYPE]).toBe('application/json');
+      expect(attrs[SemanticConventions.OUTPUT_MIME_TYPE]).toBe('application/json');
+    });
+  });
+
+  describe('Model Chunk Span Support', () => {
+    it('maps model_chunk output to OpenInference OUTPUT_VALUE and sets span name', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const modelChunkSpan: Mutable<AnyExportedSpan> = {
+        id: 'model-chunk-span',
+        traceId: 'trace-model-chunk',
+        parentSpanId: 'parent-span',
+        type: SpanType.MODEL_CHUNK,
+        name: 'model_chunk',
+        entityName: 'gpt-4o',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        output: { delta: 'Hello' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: modelChunkSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Model chunk output should be mapped to OpenInference OUTPUT_VALUE
+      expect(attrs[SemanticConventions.OUTPUT_VALUE]).toBe(JSON.stringify({ delta: 'Hello' }));
+      expect(attrs[SemanticConventions.OUTPUT_MIME_TYPE]).toBe('application/json');
+
+      // Span name should include entity name
+      expect(exportedSpans[0].name).toBe('model_chunk gpt-4o');
+    });
+  });
 });

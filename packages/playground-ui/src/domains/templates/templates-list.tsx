@@ -53,7 +53,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
           >
             <LinkComponent
               to={`/templates/${template.slug}`}
-              className={cn('grid [&:hover_p]:text-icon5', {
+              className={cn('grid [&:hover_p]:text-neutral5', {
                 'grid-cols-[8rem_1fr] lg:grid-cols-[12rem_1fr]': template.imageURL,
               })}
             >
@@ -70,17 +70,17 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               <div
                 className={cn(
                   'grid py-[.75rem] px-[1.5rem] w-full gap-[0.1rem]',
-                  '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
+                  '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3',
                 )}
               >
-                <h2 className="text-[1rem] text-icon5">{template.title}</h2>
-                <p className="text-[0.875rem] text-icon4 transition-colors duration-500">{template.description}</p>
-                <div className="hidden 2xl:flex text-icon3 text-[0.875rem] flex-wrap items-center gap-[1rem] mt-[0.75rem]">
+                <h2 className="text-[1rem] text-neutral5">{template.title}</h2>
+                <p className="text-[0.875rem] text-neutral4 transition-colors duration-500">{template.description}</p>
+                <div className="hidden 2xl:flex text-neutral3 text-[0.875rem] flex-wrap items-center gap-[1rem] mt-[0.75rem]">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
-                        'flex gap-[1rem] text-[0.875rem] text-icon3 m-0 p-0 list-none',
-                        '[&>li]:flex [&>li]:items-center [&>li]:gap-[0.1rem] text-icon4',
+                        'flex gap-[1rem] text-[0.875rem] text-neutral3 m-0 p-0 list-none',
+                        '[&>li]:flex [&>li]:items-center [&>li]:gap-[0.1rem] text-neutral4',
                       )}
                     >
                       {template?.agents && template.agents.length > 0 && (
@@ -111,7 +111,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                     </ul>
                   )}
                   {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="flex items-center text-icon3 gap-[1rem]">
+                  <div className="flex items-center text-neutral3 gap-[1rem]">
                     {template.supportedProviders.map(provider => (
                       <span key={provider} className="">
                         {provider}
@@ -127,7 +127,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="flex items-center gap-[0.5rem]  px-[0.5rem] py-[0.25rem] rounded bg-surface1 group-hover:bg-surface2 text-icon3 transition-colors group-hover:text-icon5 ">
+              <span className="flex items-center gap-[0.5rem]  px-[0.5rem] py-[0.25rem] rounded bg-surface1 group-hover:bg-surface2 text-neutral3 transition-colors group-hover:text-neutral5 ">
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
             </a>

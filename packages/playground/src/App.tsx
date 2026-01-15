@@ -12,6 +12,7 @@ declare global {
     MASTRA_TELEMETRY_DISABLED?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
+    MASTRA_CLOUD_API_ENDPOINT: string;
   }
 }
 
@@ -199,7 +200,8 @@ export default function AppWrapper() {
   const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
   const host = window.MASTRA_SERVER_HOST || 'localhost';
   const port = window.MASTRA_SERVER_PORT || 4111;
-  const endpoint = `${protocol}://${host}:${port}`;
+  const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
+  const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
 
   return (
     <PlaygroundQueryClient>

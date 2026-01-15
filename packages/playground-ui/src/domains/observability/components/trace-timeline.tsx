@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { TraceTimelineSpan } from './trace-timeline-span';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { UISpan } from '../types';
 
 type TraceTimelineProps = {
@@ -33,7 +33,7 @@ export function TraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center text-[0.875rem] gap-[1rem] bg-surface3/50 rounded-md p-[1.5rem] justify-center text-icon3',
+            'flex items-center text-[0.875rem] gap-[1rem] bg-surface3/50 rounded-md p-[1.5rem] justify-center text-neutral3',
             '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
           )}
         >

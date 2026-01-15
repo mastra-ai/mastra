@@ -9,7 +9,7 @@ import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { providerMapToIcon } from '../provider-map-icon';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { extractPrompt } from '../../utils/extractPrompt';
 

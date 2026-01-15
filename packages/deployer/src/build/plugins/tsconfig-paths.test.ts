@@ -65,6 +65,29 @@ describe('tsconfig-paths plugin', () => {
       const tsConfigPath = join(tempDir, 'non-existent.json');
       expect(hasPaths(tsConfigPath)).toBe(false);
     });
+
+    it('should detect paths in tsconfig.json that extends another config', () => {
+      // Create base config with paths
+      const baseConfig = JSON.stringify({
+        compilerOptions: {
+          paths: {
+            '@lib/*': ['src/lib/*'],
+          },
+        },
+      });
+      fs.writeFileSync(join(tempDir, 'tsconfig.base.json'), baseConfig);
+
+      // Create extended config
+      const extendedConfig = JSON.stringify({
+        extends: './tsconfig.base.json',
+        compilerOptions: {},
+      });
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(tsConfigPath, extendedConfig);
+
+      // hasPaths should return true because it extends a config (optimistic check)
+      expect(hasPaths(tsConfigPath)).toBe(true);
+    });
   });
 
   describe('plugin integration', () => {
@@ -122,6 +145,65 @@ describe('tsconfig-paths plugin', () => {
 
       const result = await bundle.generate({ format: 'esm' });
       expect(result.output[0].code).toContain('hello');
+    });
+
+    it('should resolve aliases from extended tsconfig', async () => {
+      // Create base config
+      const baseConfig = JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@lib/*': ['lib/*'],
+          },
+        },
+      });
+      fs.writeFileSync(join(tempDir, 'tsconfig.base.json'), baseConfig);
+
+      // Create extended config
+      const extendedConfig = JSON.stringify({
+        extends: './tsconfig.base.json',
+      });
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(tsConfigPath, extendedConfig);
+
+      // Create source files
+      fs.mkdirSync(join(tempDir, 'lib'), { recursive: true });
+      const libFile = join(tempDir, 'lib/utils.ts');
+      fs.writeFileSync(libFile, `export const value = 42;`);
+
+      const indexFile = join(tempDir, 'index.ts');
+      fs.writeFileSync(indexFile, `import { value } from '@lib/utils';\nconsole.log(value);`);
+
+      // Create plugin
+      const plugin = tsConfigPaths({ tsConfigPath });
+
+      // Build using rollup
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [
+          plugin,
+          {
+            name: 'mock-resolver',
+            resolveId(id) {
+              const normalized = id.replaceAll('\\', '/');
+              if (normalized.endsWith('/lib/utils') || normalized.endsWith('/lib/utils.ts')) {
+                return { id: libFile, external: false };
+              }
+              return null;
+            },
+            load(id) {
+              if (id === libFile) return `export const value = 42;`;
+              if (id === indexFile) return `import { value } from '@lib/utils';\nconsole.log(value);`;
+              return null;
+            },
+          },
+        ],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].code).not.toContain(`'@lib/utils'`);
+      expect(result.output[0].code).toContain(42);
     });
   });
 });
