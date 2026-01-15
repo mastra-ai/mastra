@@ -175,8 +175,8 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
 
     const entries = Object.entries(node as Record<string, any>);
 
-    // Handle logical operators first
-    const logicalResult = this.handleLogicalOperators(entries, isNested);
+    // Handle logical operators first (but not $not when we have a fieldKey - that's handled as a field operator)
+    const logicalResult = this.handleLogicalOperators(entries, isNested, fieldKey);
     if (logicalResult) {
       return logicalResult;
     }
@@ -205,8 +205,14 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
     }
   }
 
-  private handleLogicalOperators(entries: [string, any][], isNested: boolean): any | null {
+  private handleLogicalOperators(entries: [string, any][], isNested: boolean, fieldKey?: string): any | null {
     const firstKey = entries[0]?.[0];
+
+    // When we have a fieldKey and see $not, it's a field-level $not operator, not a logical operator
+    // Let handleFieldConditions handle it via the _specialNot path
+    if (firstKey === '$not' && fieldKey) {
+      return null;
+    }
 
     if (firstKey && this.isLogicalOperator(firstKey) && !this.isCustomOperator(firstKey)) {
       const [key, value] = entries[0]!;
