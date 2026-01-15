@@ -39,7 +39,7 @@ Extends `BaseExporterConfig`, which includes:
     {
       name: "dsn",
       type: "string",
-      description: "Data Source Name - tells the SDK where to send events. Required. Falls back to SENTRY_DSN env var.",
+      description: "Data Source Name - tells the SDK where to send events. Either this parameter or the SENTRY_DSN env var must be set. Falls back to SENTRY_DSN env var.",
       required: false,
     },
     {

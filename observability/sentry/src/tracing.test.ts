@@ -101,16 +101,28 @@ describe('SentryExporter', () => {
     });
 
     it('should warn and disable exporter when DSN is missing', () => {
-      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Ensure no DSN is available from environment
+      const originalEnv = process.env.SENTRY_DSN;
+      delete process.env.SENTRY_DSN;
+
+      // ConsoleLogger uses console.info for warn level logging
+      const mockConsoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      // Clear mock to isolate this test from previous Sentry.init calls
+      SentryMock.init.mockClear();
 
       const exporterWithoutDsn = new SentryExporter({});
 
       expect(exporterWithoutDsn.name).toBe('sentry');
+      // Verify warning was logged about missing DSN
+      expect(mockConsoleInfo).toHaveBeenCalledWith(expect.stringContaining('DSN'));
+      // Verify exporter is disabled
+      expect(exporterWithoutDsn.isDisabled).toBe(true);
       // Should not have initialized Sentry without DSN
-      const initCallsCount = SentryMock.init.mock.calls.length;
-      expect(initCallsCount).toBeGreaterThanOrEqual(0); // Previous tests may have called it
+      expect(SentryMock.init).not.toHaveBeenCalled();
 
-      mockConsoleWarn.mockRestore();
+      mockConsoleInfo.mockRestore();
+      process.env.SENTRY_DSN = originalEnv;
     });
 
     it('should apply default values', () => {
@@ -211,8 +223,12 @@ describe('SentryExporter', () => {
 
       // Check attributes were set on the span returned by startInactiveSpan
       expect(mockSpan.setAttributes).toHaveBeenCalled();
-      const secondSetAttributesCall = mockSpan.setAttributes.mock.calls[1];
-      expect(secondSetAttributesCall[0]).toEqual(
+      // Find the call that set MODEL_GENERATION attributes
+      const modelGenCall = mockSpan.setAttributes.mock.calls.find(
+        (call: any) => call[0]['gen_ai.request.model'] === 'gpt-4',
+      );
+      expect(modelGenCall).toBeDefined();
+      expect(modelGenCall[0]).toEqual(
         expect.objectContaining({
           'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
@@ -617,7 +633,7 @@ describe('SentryExporter', () => {
         exportedSpan: span,
       });
 
-      // Update span
+      // Update span attributes
       span.attributes = {
         ...span.attributes,
         success: true,
@@ -628,6 +644,24 @@ describe('SentryExporter', () => {
         type: TracingEventType.SPAN_UPDATED,
         exportedSpan: span,
       });
+
+      // End the span to finalize attributes (updates are applied on SPAN_ENDED)
+      span.endTime = new Date();
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: span,
+      });
+
+      // Verify the updated attributes were applied when span ended
+      const setAttributesCalls = mockSpan.setAttributes.mock.calls;
+      const finalAttributesCall = setAttributesCalls.find((call: any) => call[0]['tool.success'] === true);
+      expect(finalAttributesCall).toBeDefined();
+      expect(finalAttributesCall[0]).toEqual(
+        expect.objectContaining({
+          'tool.success': true,
+          output: JSON.stringify({ result: 42 }),
+        }),
+      );
     });
 
     it('should handle missing span gracefully', async () => {
@@ -987,7 +1021,13 @@ describe('SentryExporter', () => {
         exportedSpan: llmSpan,
       });
 
+      // End agent span to trigger token attribute application
       agentSpan.endTime = new Date();
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: agentSpan,
+      });
+
       const setAttributeCalls = mockSpan.setAttribute.mock.calls.filter((call: any) =>
         call[0].startsWith('gen_ai.usage.'),
       );
