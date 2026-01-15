@@ -16,7 +16,7 @@ export const LoopNode = memo(function LoopNode({ id, data, selected }: NodeProps
       selected={selected}
       accentColor={LOOP_COLOR}
       quickAddExcludeTypes={['trigger']}
-      comment={data.comment}
+      showComment={false}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">

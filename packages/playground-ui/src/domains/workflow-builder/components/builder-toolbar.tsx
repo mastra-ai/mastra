@@ -84,7 +84,13 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
 
     try {
       // Serialize the graph to workflow definition format
-      const { stepGraph, steps } = serializeGraph(nodes, edges);
+      const { stepGraph, steps, nodeComments } = serializeGraph(nodes, edges);
+
+      // Build metadata with node comments (only include if there are comments)
+      const metadata =
+        Object.keys(nodeComments).length > 0
+          ? { nodeComments }
+          : undefined;
 
       await updateWorkflowDefinition.mutateAsync({
         id: workflowId,
@@ -95,6 +101,7 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
         stateSchema: Object.keys(stateSchema).length > 0 ? stateSchema : undefined,
         stepGraph,
         steps,
+        metadata,
       });
 
       setDirty(false);

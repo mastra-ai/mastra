@@ -55,18 +55,25 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
   const nodes: BuilderNode[] = [];
   const edges: BuilderEdge[] = [];
 
+  // Extract node comments from metadata (if present)
+  const nodeComments: Record<string, string> =
+    (definition.metadata?.nodeComments as Record<string, string>) ?? {};
+
   // Create trigger node
   const triggerNode: BuilderNode = {
     id: 'trigger',
     type: 'trigger',
     position: { x: 0, y: 0 },
-    data: createTriggerNodeData(),
+    data: {
+      ...createTriggerNodeData(),
+      comment: nodeComments['trigger'],
+    },
   };
   nodes.push(triggerNode);
 
   // Create nodes for each step in the steps object
   for (const [stepId, stepDef] of Object.entries(definition.steps)) {
-    const node = stepDefToNode(stepId, stepDef);
+    const node = stepDefToNode(stepId, stepDef, nodeComments[stepId]);
     if (node) {
       nodes.push(node);
     }
@@ -90,7 +97,7 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
       loopCounter,
       foreachCounter,
       parallelCounter,
-    });
+    }, nodeComments);
 
     // Update counters
     conditionCounter = result.counters.conditionCounter;
@@ -137,6 +144,7 @@ function processStepGraphEntry(
   edges: BuilderEdge[],
   processedSteps: Set<string>,
   counters: ProcessingCounters,
+  nodeComments: Record<string, string>,
 ): ProcessingResult {
   switch (entry.type) {
     case 'step': {
@@ -157,11 +165,13 @@ function processStepGraphEntry(
     }
 
     case 'sleep': {
-      const sleepNodeId = `sleep-${counters.sleepCounter++}`;
+      // Use the stored ID to preserve node identity (important for comments)
+      const sleepNodeId = entry.id;
       const sleepData: SleepNodeData = {
         ...createSleepNodeData('Sleep'),
         sleepType: 'duration',
         duration: entry.duration,
+        comment: nodeComments[sleepNodeId],
       };
 
       nodes.push({
@@ -179,17 +189,19 @@ function processStepGraphEntry(
       });
 
       return {
-        counters: { ...counters, sleepCounter: counters.sleepCounter },
+        counters,
         nextNodeId: sleepNodeId,
       };
     }
 
     case 'sleepUntil': {
-      const sleepNodeId = `sleep-${counters.sleepCounter++}`;
+      // Use the stored ID to preserve node identity (important for comments)
+      const sleepNodeId = entry.id;
       const sleepData: SleepNodeData = {
         ...createSleepNodeData('Sleep Until'),
         sleepType: 'timestamp',
         timestamp: entry.timestamp,
+        comment: nodeComments[sleepNodeId],
       };
 
       nodes.push({
@@ -207,7 +219,7 @@ function processStepGraphEntry(
       });
 
       return {
-        counters: { ...counters, sleepCounter: counters.sleepCounter },
+        counters,
         nextNodeId: sleepNodeId,
       };
     }
@@ -218,6 +230,7 @@ function processStepGraphEntry(
         ...createLoopNodeData('Loop'),
         loopType: entry.loopType,
         condition: entry.condition,
+        comment: nodeComments[loopNodeId],
       };
 
       nodes.push({
@@ -258,6 +271,7 @@ function processStepGraphEntry(
         collection: entry.collection,
         concurrency: entry.concurrency,
         itemVariable: 'item',
+        comment: nodeComments[foreachNodeId],
       };
 
       nodes.push({
@@ -301,6 +315,7 @@ function processStepGraphEntry(
       const parallelData: ParallelNodeData = {
         ...createParallelNodeData('Parallel'),
         branches,
+        comment: nodeComments[parallelNodeId],
       };
 
       nodes.push({
@@ -362,6 +377,7 @@ function processStepGraphEntry(
         ...createConditionNodeData('Condition'),
         branches,
         defaultBranch: entry.default ? 'default' : undefined,
+        comment: nodeComments[conditionNodeId],
       };
 
       nodes.push({
@@ -436,7 +452,7 @@ function processStepGraphEntry(
 /**
  * Convert a step definition to a React Flow node
  */
-function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): BuilderNode | null {
+function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition, comment?: string): BuilderNode | null {
   switch (stepDef.type) {
     case 'agent': {
       const agentDef = stepDef as AgentStepDef;
@@ -448,6 +464,7 @@ function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): Buil
         prompt: agentDef.input.prompt as VariableRef,
         instructions: typeof agentDef.input.instructions === 'string' ? agentDef.input.instructions : undefined,
         structuredOutput: agentDef.structuredOutput,
+        comment,
       };
 
       return {
@@ -466,6 +483,7 @@ function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): Buil
         ...createToolNodeData(label),
         toolId: toolDef.toolId,
         input: toolDef.input ?? {},
+        comment,
       };
 
       return {
@@ -483,6 +501,7 @@ function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): Buil
         ...createWorkflowNodeData(label),
         workflowId: workflowDef.workflowId,
         input: workflowDef.input ?? {},
+        comment,
       };
 
       return {
@@ -499,6 +518,7 @@ function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): Buil
         ...createTransformNodeData('Transform'),
         output: transformDef.output,
         outputSchema: transformDef.outputSchema,
+        comment,
       };
 
       return {
@@ -515,6 +535,7 @@ function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): Buil
         ...createSuspendNodeData('Human Input'),
         resumeSchema: suspendDef.resumeSchema,
         payload: suspendDef.payload,
+        comment,
       };
 
       return {

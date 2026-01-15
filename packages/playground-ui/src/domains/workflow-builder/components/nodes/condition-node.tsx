@@ -22,7 +22,7 @@ export const ConditionNode = memo(function ConditionNode({
       accentColor={CONDITION_COLOR}
       bottomHandleCount={Math.max(totalHandles, 2)}
       quickAddExcludeTypes={['trigger']}
-      comment={data.comment}
+      showComment={false}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
