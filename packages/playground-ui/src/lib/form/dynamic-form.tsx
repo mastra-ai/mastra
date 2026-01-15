@@ -74,7 +74,7 @@ export function DynamicForm<T extends z.ZodSchema>({
     uiComponents: {
       SubmitButton: ({ children }) =>
         onSubmit ? (
-          <Button variant="light" className="w-full" size="lg" disabled={isSubmitLoading}>
+          <Button variant="light" className="w-full" size="md" disabled={isSubmitLoading}>
             {isSubmitLoading ? (
               <Icon>
                 <Loader2 className="animate-spin" />

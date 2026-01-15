@@ -50,7 +50,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   if (!tool)
     return (
       <div className="py-12 text-center px-6">
-        <Txt variant="header-md" className="text-icon3">
+        <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
       </div>

@@ -168,17 +168,17 @@ export default function ChatbotSidebar() {
 
       {!hiddenChatbotSidebar && (
         <div className="flex flex-col h-[calc(100%-165px)] ">
-          <p className="text-sm p-3 z-200 items-center flex backdrop-blur-md bg-white/50 dark:bg-black py-2 absolute w-full top-0 border-b-[0.5px] border-(--border) font-medium text-(--mastra-text-tertiary)">
+          <div className="text-sm p-2 z-200 items-center flex backdrop-blur-md bg-white/50 dark:bg-black py-2 absolute w-full top-0 border-b-[0.5px] border-(--border) font-medium text-(--mastra-text-tertiary)">
             <button
               className={cn(
-                "hover:bg-(--mastra-surface-1) w-fit p-1.5 rounded-lg cursor-pointer",
+                "hover:bg-(--mastra-surface-1) w-fit p-1.5 rounded-lg cursor-pointer mr-2",
               )}
               onClick={toggleSidebar}
             >
-              <PanelRightClose className="size-3" />
+              <PanelRightClose className="size-4" />
             </button>
             <span>Chat with Mastra docs</span>
-          </p>
+          </div>
           <Conversation className="mt-[41px] flex-1 relative font-sans overflow-y-auto">
             <ConversationContent>
               {conversation.length > 0

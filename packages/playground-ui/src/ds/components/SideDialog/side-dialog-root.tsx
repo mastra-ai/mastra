@@ -56,8 +56,8 @@ export function SideDialogRoot({
             <Dialog.Close asChild>
               <button
                 className={cn(
-                  'flex appearance-none items-center justify-center rounded-bl-lg h-[3.5rem] w-[3.5rem] absolute top-0 left-[-3.5rem] bg-surface2 text-icon4 border-l border-b border-border2',
-                  'hover:surface5 hover:text-icon5',
+                  'flex appearance-none items-center justify-center rounded-bl-lg h-[3.5rem] w-[3.5rem] absolute top-0 left-[-3.5rem] bg-surface2 text-neutral4 border-l border-b border-border2',
+                  'hover:surface5 hover:text-neutral5',
                 )}
                 aria-label="Close"
               >

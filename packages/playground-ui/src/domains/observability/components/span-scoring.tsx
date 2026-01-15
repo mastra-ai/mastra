@@ -87,8 +87,8 @@ export const SpanScoring = ({
 
   return (
     <div>
-      <div className="grid grid-cols-[3fr_1fr] gap-[1rem] items-start">
-        <div className="grid gap-[0.5rem]">
+      <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
+        <div className="grid gap-2">
           <SelectField
             name={'select-scorer'}
             placeholder="Select a scorer..."
@@ -102,7 +102,7 @@ export const SpanScoring = ({
             disabled={isWaiting}
           />
           {selectedScorerDescription && (
-            <TextAndIcon className="text-icon3">
+            <TextAndIcon className="text-neutral3">
               <InfoIcon /> {selectedScorerDescription}
             </TextAndIcon>
           )}
@@ -113,7 +113,7 @@ export const SpanScoring = ({
         </Button>
       </div>
 
-      <Notification isVisible={notificationIsVisible} className="mt-[1rem]">
+      <Notification isVisible={notificationIsVisible} className="mt-4">
         <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
         moment.
       </Notification>

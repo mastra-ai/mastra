@@ -1,8 +1,9 @@
-import { Button as DSButton, ButtonProps as DSButtonProps } from '@/ds/components/Button/Button';
+import { Button as DSButton } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
+import { type FormElementSize } from '@/ds/primitives/form-element';
 
 export type ComboboxOption = {
   label: string;
@@ -18,7 +19,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: DSButtonProps['variant'];
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  size?: FormElementSize;
 };
 
 export function Combobox({
@@ -31,6 +33,7 @@ export function Combobox({
   className,
   disabled = false,
   variant = 'default',
+  size = 'md',
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -121,20 +124,21 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           variant={variant}
+          size={size}
           className={cn('w-full justify-between', className)}
           disabled={disabled}
         >
-          <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
+          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </DSButton>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-fit" align="start">
-        <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
+        <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-surface3 text-neutral5">
           <div className="flex items-center border-b px-3 py-2">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
               ref={inputRef}
-              className="flex h-8 w-full rounded-md bg-transparent py-1 text-sm placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 outline-none"
+              className="flex h-8 w-full rounded-md bg-transparent py-1 text-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50 outline-none"
               placeholder={searchPlaceholder}
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -164,9 +168,9 @@ export function Combobox({
                     aria-selected={isSelected}
                     className={cn(
                       'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm transition-colors',
-                      'hover:bg-accent hover:text-accent-foreground',
-                      isHighlighted && 'bg-accent text-accent-foreground',
-                      isSelected && !isHighlighted && 'bg-accent/50',
+                      'hover:bg-surface5 hover:text-neutral5',
+                      isHighlighted && 'bg-surface5 text-neutral5',
+                      isSelected && !isHighlighted && 'bg-surface5/50',
                     )}
                     onClick={() => handleSelect(option.value)}
                     onMouseEnter={() => setHighlightedIndex(index)}

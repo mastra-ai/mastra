@@ -2,8 +2,14 @@ import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { TriangleAlertIcon } from 'lucide-react';
 import * as React from 'react';
+import {
+  formElementSizes,
+  formElementFocus,
+  formElementRadius,
+  type FormElementSize,
+} from '@/ds/primitives/form-element';
 
-export type InputFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
+export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   name?: string;
   testId?: string;
   label?: string;
@@ -14,6 +20,13 @@ export type InputFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
   helpMsg?: string;
   error?: boolean;
   errorMsg?: string;
+  size?: FormElementSize;
+};
+
+const inputFieldSizeClasses = {
+  sm: `${formElementSizes.sm} px-2`,
+  md: `${formElementSizes.md} px-3`,
+  lg: `${formElementSizes.lg} px-3 py-2`,
 };
 
 export function InputField({
@@ -28,6 +41,7 @@ export function InputField({
   helpMsg,
   error,
   errorMsg,
+  size = 'lg',
   ...props
 }: InputFieldProps) {
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -37,7 +51,7 @@ export function InputField({
   return (
     <div
       className={cn(
-        'grid gap-[.5rem] ',
+        'grid gap-2',
         {
           'grid-rows-[auto_1fr]': !labelIsHidden && !helpMsg,
           'grid-rows-[auto_1fr_auto]': !labelIsHidden && helpMsg,
@@ -46,12 +60,9 @@ export function InputField({
       )}
     >
       <LabelWrapper>
-        <label
-          htmlFor={`input-${name}`}
-          className={cn('text-[0.8125rem] text-icon3 flex justify-between items-center')}
-        >
+        <label htmlFor={`input-${name}`} className={cn('text-ui-sm text-neutral3 flex justify-between items-center')}>
           {label}
-          {required && <i className="text-icon2 text-xs">(required)</i>}
+          {required && <i className="text-neutral2 text-xs">(required)</i>}
         </label>
       </LabelWrapper>
       <input
@@ -59,22 +70,24 @@ export function InputField({
         name={name}
         value={value}
         className={cn(
-          'flex grow items-center cursor-pointer text-[0.875rem] text-[rgba(255,255,255,0.8)] border border-[rgba(255,255,255,0.15)] leading-none rounded-lg bg-transparent min-h-[2.5rem] px-[0.75rem] py-[0.5rem] w-full',
-          'focus:outline-none focus:shadow-[inset_0_0_0_1px_#18fb6f]',
-          'placeholder:text-icon3 placeholder:text-[.8125rem]',
+          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none bg-transparent w-full',
+          formElementRadius,
+          formElementFocus,
+          inputFieldSizeClasses[size],
+          'placeholder:text-neutral3 placeholder:text-ui-sm',
           {
             'cursor-not-allowed opacity-50': disabled,
-            'border-red-800 focus:border-[rgba(255,255,255,0.15)]': error || errorMsg,
+            'border-red-800 focus:border-border1': error || errorMsg,
           },
         )}
         data-testid={testId}
         {...props}
       />
-      {helpMsg && <p className="text-icon3 text-[0.75rem]">{helpMsg}</p>}
+      {helpMsg && <p className="text-neutral3 text-ui-sm">{helpMsg}</p>}
       {errorMsg && (
         <p
           className={cn(
-            'text-[0.75rem] text-icon4 flex items-center gap-[.5rem]',
+            'text-ui-sm text-neutral4 flex items-center gap-2',
             '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:text-red-400',
           )}
         >

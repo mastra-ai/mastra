@@ -20,7 +20,7 @@ export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, i
       defaultChecked={field.default}
       disabled={inputProps.disabled || inputProps.readOnly}
     />
-    <Txt as="label" variant="ui-sm" className="text-icon3" htmlFor={id}>
+    <Txt as="label" variant="ui-sm" className="text-neutral3" htmlFor={id}>
       {label}
       {field.required && <span className="text-accent2"> *</span>}
     </Txt>

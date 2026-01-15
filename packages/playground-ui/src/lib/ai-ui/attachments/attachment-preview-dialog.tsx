@@ -1,4 +1,11 @@
-import { Dialog, DialogTitle, DialogContent } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
 
@@ -40,11 +47,12 @@ interface PdfPreviewDialogProps {
 export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl bg-surface2">
-        <div className="h-full w-full">
-          <DialogTitle className="pb-4">PDF preview</DialogTitle>
-          {open && <iframe src={data} width="100%" height="600px"></iframe>}
-        </div>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>PDF preview</DialogTitle>
+          <DialogDescription>Preview of the PDF document</DialogDescription>
+        </DialogHeader>
+        <DialogBody>{open && <iframe src={data} width="100%" height="600px"></iframe>}</DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -76,11 +84,12 @@ interface ImagePreviewDialogProps {
 export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl bg-surface2">
-        <div className="h-full w-full">
-          <DialogTitle className="pb-4">Image preview</DialogTitle>
-          {open && <img src={src} alt="Image" />}
-        </div>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Image preview</DialogTitle>
+          <DialogDescription>Preview of the image</DialogDescription>
+        </DialogHeader>
+        <DialogBody>{open && <img src={src} alt="Image" />}</DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -100,7 +109,7 @@ export const TxtEntry = ({ data }: TxtEntryProps) => {
   return (
     <>
       <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
-        <FileText className="text-icon3" />
+        <FileText className="text-neutral3" />
       </button>
       <TxtPreviewDialog data={formattedContent} open={open} onOpenChange={setOpen} />
     </>
@@ -116,11 +125,12 @@ interface TxtPreviewDialogProps {
 export const TxtPreviewDialog = ({ data, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl bg-surface2 h-[80vh] overflow-y-auto">
-        <div className="h-full w-full">
-          <DialogTitle className="pb-4">Text preview</DialogTitle>
-          {open && <div className="whitespace-pre-wrap">{data}</div>}
-        </div>
+      <DialogContent className="max-w-4xl h-[80vh]">
+        <DialogHeader>
+          <DialogTitle>Text preview</DialogTitle>
+          <DialogDescription>Preview of the text file</DialogDescription>
+        </DialogHeader>
+        <DialogBody>{open && <div className="whitespace-pre-wrap">{data}</div>}</DialogBody>
       </DialogContent>
     </Dialog>
   );

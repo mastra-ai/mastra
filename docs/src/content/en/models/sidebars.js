@@ -288,6 +288,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/novita-ai",
+          label: "NovitaAI",
+        },
+        {
+          type: "doc",
           id: "providers/nvidia",
           label: "Nvidia",
         },

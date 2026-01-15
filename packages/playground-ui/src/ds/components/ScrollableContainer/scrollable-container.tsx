@@ -1,5 +1,5 @@
-import clsx from 'clsx';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { cn } from '@/lib/utils';
 
 const INDICATOR_WIDTH = 40;
 const INDICATOR_HEIGHT = 150;
@@ -116,7 +116,7 @@ export const ScrollableContainer = ({
         onMouseUp={onStopScrolling}
         onTouchEnd={onStopScrolling}
         onTouchCancel={onStopScrolling}
-        className="bg-surface4 text-muted-foreground border-surface5 hover:border-muted-foreground fixed z-10 flex items-center justify-center rounded-lg border text-2xl hover:text-white"
+        className="bg-surface4 text-neutral3 border-surface5 hover:border-neutral3 fixed z-10 flex items-center justify-center rounded-lg border text-2xl hover:text-white"
         style={{
           ...styles,
           left:
@@ -170,7 +170,7 @@ export const ScrollableContainer = ({
   }, []);
 
   return (
-    <div ref={containerRef} className={clsx('relative max-h-full overflow-auto', className)}>
+    <div ref={containerRef} className={cn('relative max-h-full overflow-auto', className)}>
       {children}
       <ScrollIndicator
         isVisible={showLeftIndicator}

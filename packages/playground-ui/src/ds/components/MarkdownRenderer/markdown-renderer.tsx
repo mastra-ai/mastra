@@ -79,7 +79,7 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
   const code = typeof children === 'string' ? children : childrenTakeAllStringContents(children);
 
   const preClass = cn(
-    'overflow-x-scroll rounded-md border bg-background/50 p-4 font-mono text-sm [scrollbar-width:none]',
+    'overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm [scrollbar-width:none]',
     className,
   );
 
@@ -160,7 +160,7 @@ const COMPONENTS: Components = {
     </a>
   ),
   blockquote: ({ children, ...props }) => (
-    <blockquote className="border-l-2 border-primary pl-4" {...props}>
+    <blockquote className="border-l-2 border-neutral6 pl-4" {...props}>
       {children}
     </blockquote>
   ),
@@ -173,7 +173,7 @@ const COMPONENTS: Components = {
     ) : (
       <code
         className={cn(
-          'font-mono [:not(pre)>&]:rounded-md [:not(pre)>&]:bg-background/50 [:not(pre)>&]:px-1 [:not(pre)>&]:py-0.5',
+          'font-mono [:not(pre)>&]:rounded-md [:not(pre)>&]:bg-surface1/50 [:not(pre)>&]:px-1 [:not(pre)>&]:py-0.5',
         )}
         {...rest}
       >
@@ -198,13 +198,13 @@ const COMPONENTS: Components = {
     </li>
   ),
   table: ({ children, ...props }) => (
-    <table className="w-full border-collapse overflow-y-auto rounded-md border border-foreground/20" {...props}>
+    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
       {children}
     </table>
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-foreground/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -212,14 +212,14 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-foreground/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
       {...props}
     >
       {children}
     </td>
   ),
   tr: ({ children, ...props }) => (
-    <tr className="m-0 border-t p-0 even:bg-muted" {...props}>
+    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
       {children}
     </tr>
   ),
@@ -228,7 +228,7 @@ const COMPONENTS: Components = {
       {children}
     </p>
   ),
-  hr: ({ ...props }) => <hr className="border-foreground/20" {...props} />,
+  hr: ({ ...props }) => <hr className="border-neutral6/20" {...props} />,
 };
 
 export default MarkdownRenderer;

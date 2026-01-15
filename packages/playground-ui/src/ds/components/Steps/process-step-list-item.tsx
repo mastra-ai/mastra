@@ -17,15 +17,15 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
 
   return (
     <div
-      className={cn('grid gap-[1.5rem] grid-cols-[1fr_auto] py-[.75rem] px-[1rem] rounded-lg', {
+      className={cn('grid gap-6 grid-cols-[1fr_auto] py-3 px-4 rounded-lg', {
         'border border-dashed border-gray-500': isActive,
       })}
     >
-      <div className="grid grid-cols-[auto_1fr] gap-[.5rem]">
-        <span className="text-[0.875rem] text-icon5 min-w-[1.5rem] flex justify-end">{position}.</span>
+      <div className="grid grid-cols-[auto_1fr] gap-2">
+        <span className="text-ui-md text-neutral5 min-w-6 flex justify-end">{position}.</span>
         <div>
-          <h4 className="text-[0.875rem] text-icon5">{formatStepTitle(stepId)}</h4>
-          {step.description && <p className="text-[0.875rem] -mt-[0.125rem]">{step.description}</p>}
+          <h4 className="text-ui-md text-neutral5">{formatStepTitle(stepId)}</h4>
+          {step.description && <p className="text-ui-md -mt-0.5">{step.description}</p>}
         </div>
       </div>
       <div
