@@ -28,8 +28,6 @@ export type Condition =
       conj?: never;
     };
 
-const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
-
 const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
   // If not a mapping node, return original ID
   if (!stepId.startsWith('mapping_')) {
