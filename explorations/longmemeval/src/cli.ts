@@ -1202,7 +1202,11 @@ program
   .option('--inspect <question-id>', 'Inspect a question\'s data')
   .option('--search <keyword>', 'Search observations for a keyword')
   .option('--trace <keyword>', 'Trace information flow for a keyword')
-  .option('-q, --question-id <id>', 'Question ID for search/trace')
+  .option('-q, --question-id <id>', 'Question ID for search/trace/date')
+  .option('--date <date>', 'View observations around a date (e.g., "2023/05/29", "May 29")')
+  .option('--context <days>', 'Days of context around --date (default: 1)', '1')
+  .option('--session <idx>', 'View a specific session from original dataset')
+  .option('--list-sessions', 'List all sessions with dates for a question')
   .option('--check-stale', 'Check if prepared data is stale (pre-cursor-fix)')
   .option('--stale-only', 'Only list stale questions (use with --check-stale)')
   .action(async (runId, options) => {
@@ -1226,6 +1230,10 @@ program
         search: options.search,
         trace: options.trace,
         questionId: options.questionId,
+        date: options.date,
+        context: options.context ? parseInt(options.context, 10) : 1,
+        session: options.session !== undefined ? parseInt(options.session, 10) : undefined,
+        listSessions: options.listSessions,
         checkStale: options.checkStale,
         staleOnly: options.staleOnly,
       });

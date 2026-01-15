@@ -50,8 +50,12 @@ export interface InvestigateOptions {
   // Investigation utilities
   search?: string;        // Search observations for keywords
   trace?: string;         // Trace information flow for a keyword
-  questionId?: string;    // Question ID for search/trace
+  questionId?: string;    // Question ID for search/trace/date/session
   inspect?: string;       // Inspect a specific question's data
+  date?: string;          // View observations around a specific date (e.g., "2023/05/29" or "May 29")
+  context?: number;       // Number of days of context around the date (default: 1)
+  session?: number;       // View a specific session from original dataset
+  listSessions?: boolean; // List all sessions with dates for a question
   // Data freshness detection
   checkStale?: boolean;   // Check if prepared data is stale (pre-cursor-fix)
   staleOnly?: boolean;    // Only list stale questions from failures
@@ -217,6 +221,23 @@ export class InvestigateCommand {
 
     if (options.trace && options.questionId) {
       await this.traceInformation(options.questionId, options.trace);
+      return;
+    }
+
+    // Date-based observation viewer
+    if (options.date && options.questionId) {
+      await this.viewObservationsAroundDate(options.questionId, options.date, options.context ?? 1);
+      return;
+    }
+
+    // Session viewer
+    if (options.listSessions && options.questionId) {
+      await this.listSessions(options.questionId);
+      return;
+    }
+
+    if (options.session !== undefined && options.questionId) {
+      await this.viewSession(options.questionId, options.session);
       return;
     }
 
@@ -1204,6 +1225,363 @@ export class InvestigateCommand {
     } else if (!inDataset) {
       console.log(`   ⚠️  Not found in original dataset`);
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // Date-Based Observation Viewer
+  // --------------------------------------------------------------------------
+
+  /**
+   * View observations and raw messages around a specific date
+   */
+  private async viewObservationsAroundDate(
+    questionId: string,
+    dateStr: string,
+    contextDays: number = 1
+  ): Promise<void> {
+    console.log(`\n🗓️  Viewing data around "${dateStr}" for question ${questionId}\n`);
+
+    // Parse the target date
+    const targetDate = this.parseFlexibleDate(dateStr);
+    if (!targetDate) {
+      console.log(`❌ Could not parse date: "${dateStr}"`);
+      console.log(`   Try formats like: "2023/05/29", "May 29, 2023", "05-29"`);
+      return;
+    }
+
+    const startDate = new Date(targetDate);
+    startDate.setDate(startDate.getDate() - contextDays);
+    const endDate = new Date(targetDate);
+    endDate.setDate(endDate.getDate() + contextDays);
+
+    console.log(`📅 Target: ${targetDate.toDateString()}`);
+    console.log(`📅 Range: ${startDate.toDateString()} to ${endDate.toDateString()}\n`);
+
+    // Find prepared data
+    const { omPath, questionDir } = await this.findPreparedData(questionId);
+    if (!omPath) {
+      console.log(`❌ No prepared data found for question ${questionId}`);
+      return;
+    }
+
+    // Load storage
+    const storage = new PersistableInMemoryMemory({ readOnly: true });
+    await storage.hydrate(omPath);
+    const resourceId = `resource_${questionId}`;
+
+    // 1. Show raw messages in date range
+    console.log(`1️⃣  Raw Messages in Range:`);
+    console.log(`${'─'.repeat(60)}`);
+    
+    const messagesResult = await storage.listMessages({ resourceId, perPage: false });
+    const allMessages = messagesResult.messages;
+    
+    const messagesInRange = allMessages.filter((m: any) => {
+      if (!m.createdAt) return false;
+      const msgDate = new Date(m.createdAt);
+      return msgDate >= startDate && msgDate <= endDate;
+    }).sort((a: any, b: any) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    if (messagesInRange.length === 0) {
+      console.log(`   No messages found in this date range`);
+    } else {
+      console.log(`   Found ${messagesInRange.length} messages\n`);
+      for (const msg of messagesInRange) {
+        const content = typeof msg.content === 'string' 
+          ? msg.content 
+          : JSON.stringify(msg.content);
+        const date = new Date(msg.createdAt);
+        const dateStr = date.toLocaleDateString('en-US', { 
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+        const isTargetDay = date.toDateString() === targetDate.toDateString();
+        const prefix = isTargetDay ? '→ ' : '  ';
+        const highlight = isTargetDay ? '\x1b[33m' : '\x1b[90m';
+        const reset = '\x1b[0m';
+        
+        console.log(`${prefix}${highlight}[${dateStr}] ${msg.role}:${reset}`);
+        console.log(`${prefix}${highlight}${content.substring(0, 200)}${content.length > 200 ? '...' : ''}${reset}\n`);
+      }
+    }
+
+    // 2. Show observations for dates in range
+    console.log(`\n2️⃣  Observations in Range:`);
+    console.log(`${'─'.repeat(60)}`);
+    
+    const omRecords = await storage.getObservationalMemoryHistory(null, resourceId);
+    const latestRecord = omRecords[0];
+    const observations = latestRecord?.activeObservations || '';
+    
+    if (!observations) {
+      console.log(`   No observations found`);
+    } else {
+      // Parse observations by date
+      const lines = observations.split('\n');
+      let currentDateGroup = '';
+      let inRange = false;
+      let observationsInRange: { date: string; lines: string[] }[] = [];
+      let currentGroup: { date: string; lines: string[] } | null = null;
+
+      for (const line of lines) {
+        // Check for date headers like "Date: May 29, 2023" or "Date: Monday, May 29, 2023"
+        const dateMatch = line.match(/^Date:\s*(.+)$/i);
+        if (dateMatch) {
+          // Save previous group if in range
+          if (currentGroup && currentGroup.lines.length > 0) {
+            observationsInRange.push(currentGroup);
+          }
+          
+          currentDateGroup = dateMatch[1].trim();
+          const parsedDate = this.parseFlexibleDate(currentDateGroup);
+          inRange = parsedDate ? (parsedDate >= startDate && parsedDate <= endDate) : false;
+          
+          if (inRange) {
+            currentGroup = { date: currentDateGroup, lines: [] };
+          } else {
+            currentGroup = null;
+          }
+        } else if (inRange && currentGroup && line.trim()) {
+          // Skip thread tags but include observation content
+          if (!line.match(/^<\/?thread/)) {
+            currentGroup.lines.push(line);
+          }
+        }
+      }
+      
+      // Don't forget the last group
+      if (currentGroup && currentGroup.lines.length > 0) {
+        observationsInRange.push(currentGroup);
+      }
+
+      if (observationsInRange.length === 0) {
+        console.log(`   No observations found for dates in range`);
+      } else {
+        for (const group of observationsInRange) {
+          const parsedDate = this.parseFlexibleDate(group.date);
+          const isTargetDay = parsedDate && parsedDate.toDateString() === targetDate.toDateString();
+          const highlight = isTargetDay ? '\x1b[33m' : '\x1b[0m';
+          const reset = '\x1b[0m';
+          
+          console.log(`\n${highlight}📅 ${group.date}${reset}`);
+          for (const line of group.lines) {
+            console.log(`   ${highlight}${line}${reset}`);
+          }
+        }
+      }
+    }
+
+    // 3. Show original dataset sessions for this date
+    console.log(`\n\n3️⃣  Original Dataset Sessions:`);
+    console.log(`${'─'.repeat(60)}`);
+    
+    const loader = new DatasetLoader(this.datasetDir);
+    const dataset = await loader.loadDataset('longmemeval_s');
+    const question = dataset.find(q => q.question_id === questionId);
+    
+    if (question?.haystack_sessions && question?.haystack_dates) {
+      const sessionsInRange: { idx: number; date: string; turns: any[] }[] = [];
+      
+      for (let i = 0; i < question.haystack_dates.length; i++) {
+        const sessionDateStr = question.haystack_dates[i];
+        const sessionDate = this.parseFlexibleDate(sessionDateStr);
+        
+        if (sessionDate && sessionDate >= startDate && sessionDate <= endDate) {
+          sessionsInRange.push({
+            idx: i,
+            date: sessionDateStr,
+            turns: question.haystack_sessions[i] || []
+          });
+        }
+      }
+
+      if (sessionsInRange.length === 0) {
+        console.log(`   No sessions found in date range`);
+      } else {
+        console.log(`   Found ${sessionsInRange.length} sessions\n`);
+        for (const session of sessionsInRange) {
+          const sessionDate = this.parseFlexibleDate(session.date);
+          const isTargetDay = sessionDate && sessionDate.toDateString() === targetDate.toDateString();
+          const highlight = isTargetDay ? '\x1b[33m' : '\x1b[90m';
+          const reset = '\x1b[0m';
+          
+          console.log(`${highlight}━━━ Session ${session.idx}: ${session.date} ━━━${reset}`);
+          for (let t = 0; t < session.turns.length; t++) {
+            const turn = session.turns[t];
+            console.log(`${highlight}[Turn ${t}] ${turn.role}:${reset}`);
+            console.log(`${highlight}${turn.content.substring(0, 300)}${turn.content.length > 300 ? '...' : ''}${reset}\n`);
+          }
+        }
+      }
+    } else {
+      console.log(`   Question not found in dataset`);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Session Viewer
+  // --------------------------------------------------------------------------
+
+  /**
+   * List all sessions with their dates for a question
+   */
+  private async listSessions(questionId: string): Promise<void> {
+    console.log(`\n📋 Sessions for question ${questionId}\n`);
+
+    const loader = new DatasetLoader(this.datasetDir);
+    const dataset = await loader.loadDataset('longmemeval_s');
+    const question = dataset.find(q => q.question_id === questionId);
+
+    if (!question?.haystack_sessions || !question?.haystack_dates) {
+      console.log(`❌ Question not found or has no sessions`);
+      return;
+    }
+
+    console.log(`Total sessions: ${question.haystack_sessions.length}\n`);
+    console.log(`${'Idx'.padStart(4)} | ${'Date'.padEnd(25)} | Turns | Preview`);
+    console.log(`${'─'.repeat(80)}`);
+
+    for (let i = 0; i < question.haystack_sessions.length; i++) {
+      const session = question.haystack_sessions[i];
+      const date = question.haystack_dates[i] || 'unknown';
+      const turns = session.length;
+      const firstUserTurn = session.find(t => t.role === 'user');
+      const preview = firstUserTurn?.content.substring(0, 40) || '';
+      
+      console.log(`${String(i).padStart(4)} | ${date.padEnd(25)} | ${String(turns).padStart(5)} | ${preview}...`);
+    }
+
+    console.log(`\nUse --session <idx> -q ${questionId} to view a specific session`);
+  }
+
+  /**
+   * View a specific session from the original dataset
+   */
+  private async viewSession(questionId: string, sessionIdx: number): Promise<void> {
+    console.log(`\n📄 Session ${sessionIdx} for question ${questionId}\n`);
+
+    const loader = new DatasetLoader(this.datasetDir);
+    const dataset = await loader.loadDataset('longmemeval_s');
+    const question = dataset.find(q => q.question_id === questionId);
+
+    if (!question?.haystack_sessions || !question?.haystack_dates) {
+      console.log(`❌ Question not found or has no sessions`);
+      return;
+    }
+
+    if (sessionIdx < 0 || sessionIdx >= question.haystack_sessions.length) {
+      console.log(`❌ Invalid session index. Valid range: 0-${question.haystack_sessions.length - 1}`);
+      return;
+    }
+
+    const session = question.haystack_sessions[sessionIdx];
+    const date = question.haystack_dates[sessionIdx] || 'unknown';
+
+    console.log(`📅 Date: ${date}`);
+    console.log(`💬 Turns: ${session.length}`);
+    console.log(`${'─'.repeat(60)}\n`);
+
+    for (let t = 0; t < session.length; t++) {
+      const turn = session[t];
+      const roleColor = turn.role === 'user' ? '\x1b[36m' : '\x1b[90m';
+      const reset = '\x1b[0m';
+      
+      console.log(`${roleColor}[Turn ${t}] ${turn.role.toUpperCase()}:${reset}`);
+      console.log(`${turn.content}\n`);
+    }
+
+    // Also show what was observed for this date
+    const { omPath } = await this.findPreparedData(questionId);
+    if (omPath) {
+      const storage = new PersistableInMemoryMemory({ readOnly: true });
+      await storage.hydrate(omPath);
+      const resourceId = `resource_${questionId}`;
+      
+      const omRecords = await storage.getObservationalMemoryHistory(null, resourceId);
+      const latestRecord = omRecords[0];
+      const observations = latestRecord?.activeObservations || '';
+      
+      if (observations) {
+        // Find observations for this date
+        const sessionDate = this.parseFlexibleDate(date);
+        if (sessionDate) {
+          const dateStr = sessionDate.toLocaleDateString('en-US', { 
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+          });
+          
+          console.log(`\n${'─'.repeat(60)}`);
+          console.log(`\n🔍 Observations extracted for ${dateStr}:\n`);
+          
+          const lines = observations.split('\n');
+          let inTargetDate = false;
+          let foundAny = false;
+          
+          for (const line of lines) {
+            const dateMatch = line.match(/^Date:\s*(.+)$/i);
+            if (dateMatch) {
+              const lineDate = this.parseFlexibleDate(dateMatch[1].trim());
+              inTargetDate = lineDate?.toDateString() === sessionDate.toDateString();
+            } else if (inTargetDate && line.trim() && !line.match(/^<\/?thread/)) {
+              console.log(`   ${line}`);
+              foundAny = true;
+            }
+          }
+          
+          if (!foundAny) {
+            console.log(`   ⚠️  No observations found for this date`);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Parse various date formats flexibly
+   */
+  private parseFlexibleDate(dateStr: string): Date | null {
+    if (!dateStr) return null;
+    
+    // Try various formats
+    const formats = [
+      // "2023/05/29 (Mon) 15:01" - LongMemEval format
+      /^(\d{4})\/(\d{2})\/(\d{2})/,
+      // "May 29, 2023" or "Monday, May 29, 2023"
+      /(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*)?(\w+)\s+(\d{1,2}),?\s*(\d{4})/i,
+      // "05-29-2023" or "05/29/2023"
+      /^(\d{2})[-\/](\d{2})[-\/](\d{4})$/,
+      // "2023-05-29"
+      /^(\d{4})-(\d{2})-(\d{2})/,
+    ];
+
+    // Try LongMemEval format first: "2023/05/29 (Mon) 15:01"
+    const longMemMatch = dateStr.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+    if (longMemMatch) {
+      return new Date(parseInt(longMemMatch[1]), parseInt(longMemMatch[2]) - 1, parseInt(longMemMatch[3]));
+    }
+
+    // Try "May 29, 2023" format
+    const monthNameMatch = dateStr.match(/(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*)?(\w+)\s+(\d{1,2}),?\s*(\d{4})/i);
+    if (monthNameMatch) {
+      const months: Record<string, number> = {
+        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+      };
+      const monthNum = months[monthNameMatch[1].toLowerCase()];
+      if (monthNum !== undefined) {
+        return new Date(parseInt(monthNameMatch[3]), monthNum, parseInt(monthNameMatch[2]));
+      }
+    }
+
+    // Try ISO format: "2023-05-29"
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+    }
+
+    // Fallback to native Date parsing
+    const parsed = new Date(dateStr);
+    return isNaN(parsed.getTime()) ? null : parsed;
   }
 
   // --------------------------------------------------------------------------
