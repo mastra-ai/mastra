@@ -22,7 +22,7 @@ const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   return (
     <EntryCell
       name={
-        <Link className="w-full space-y-0" href={paths.agentLink(row.original.id)}>
+        <Link className="w-full" href={paths.agentLink(row.original.id)}>
           {row.original.name}
         </Link>
       }
