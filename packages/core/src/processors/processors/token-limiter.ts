@@ -36,7 +36,7 @@ export interface TokenLimiterOptions {
  * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
  * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor<'token-limiter'> {
+export class TokenLimiterProcessor implements Processor<'token-limiter', { systemTokens: number; limit: number }> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoder: Tiktoken;
@@ -105,8 +105,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     // throw TripWire - can't send LLM a request with only system messages
     if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
       throw new TripWire(
-        'TokenLimiterProcessor: System messages alone exceed token limit. Cannot send LLM a request with only system messages.',
-        { retry: false },
+        'TokenLimiterProcessor: System messages alone exceed token limit. Requests cannot be completed by removing system messages.',
+        { retry: false, metadata: { systemTokens, limit } },
       );
     }
 
