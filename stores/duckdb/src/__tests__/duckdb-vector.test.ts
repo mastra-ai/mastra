@@ -303,8 +303,8 @@ describe('DuckDBVector', () => {
   });
 });
 
-// Use the shared test suite with factory pattern
-const duckDBVectorDB = new DuckDBVector({
+// Shared vector store test suite
+const duckDBVector = new DuckDBVector({
   id: 'duckdb-shared-test',
   path: ':memory:',
   dimensions: 1536,
@@ -312,13 +312,13 @@ const duckDBVectorDB = new DuckDBVector({
 });
 
 createVectorTestSuite({
-  vector: duckDBVectorDB,
+  vector: duckDBVector,
   createIndex: async (indexName: string) => {
-    await duckDBVectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
+    await duckDBVector.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
   },
   deleteIndex: async (indexName: string) => {
     try {
-      await duckDBVectorDB.deleteIndex({ indexName });
+      await duckDBVector.deleteIndex({ indexName });
     } catch (error) {
       console.error(`Error deleting index ${indexName}:`, error);
     }

@@ -1124,7 +1124,7 @@ describe('Lance vector store tests', () => {
 // with the shared test suite's expectations. Lance-specific tests are above.
 
 /**
- * Shared Test Suite Integration
+ * Shared vector store test suite
  *
  * Lance has a unique table-based architecture that differs from most vector stores:
  * - Requires tables to be created before indexes
@@ -1134,7 +1134,7 @@ describe('Lance vector store tests', () => {
  * We integrate the shared suite with selective test domain opt-outs to handle
  * Lance's architectural differences while still testing common vector operations.
  */
-describe('Lance Shared Test Suite', () => {
+describe('LanceVectorStore Shared Tests', () => {
   let vectorDB: LanceVectorStore;
   const connectionString = process.env.DB_URL || 'lancedb-vector';
 

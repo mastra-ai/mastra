@@ -560,24 +560,21 @@ describe('ChromaVector Integration Tests', () => {
   });
 });
 
-// Metadata filtering tests for Memory system
-describe('Chroma Metadata Filtering', () => {
-  const chromaVector = new ChromaVector({ id: 'chroma-metadata-filter-test' });
+// Shared vector store test suite
+const chromaVector = new ChromaVector({ id: 'chroma-shared-test' });
 
-  createVectorTestSuite({
-    vector: chromaVector,
-    createIndex: async (indexName: string) => {
-      // Using dimension 1536 as required by the metadata filtering test vectors
-      await chromaVector.createIndex({ indexName, dimension: 1536 });
-    },
-    deleteIndex: async (indexName: string) => {
-      await chromaVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // Chroma may need a short wait for indexing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    },
-  });
+createVectorTestSuite({
+  vector: chromaVector,
+  createIndex: async (indexName: string) => {
+    await chromaVector.createIndex({ indexName, dimension: 1536 });
+  },
+  deleteIndex: async (indexName: string) => {
+    await chromaVector.deleteIndex({ indexName });
+  },
+  waitForIndexing: async () => {
+    // Chroma may need a short wait for indexing
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  },
 });
 
 // ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)

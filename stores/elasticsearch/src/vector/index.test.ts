@@ -98,24 +98,22 @@ describe('ElasticSearchVector', () => {
   });
 });
 
-// Metadata filtering and advanced operations tests
-describe('ElasticSearch Metadata Filtering', () => {
-  const elasticSearchVector = new ElasticSearchVector({
-    url: 'http://localhost:9200',
-    id: 'elasticsearch-metadata-test',
-  });
+// Shared vector store test suite
+const elasticSearchVector = new ElasticSearchVector({
+  url: 'http://localhost:9200',
+  id: 'elasticsearch-shared-test',
+});
 
-  createVectorTestSuite({
-    vector: elasticSearchVector,
-    createIndex: async (indexName: string) => {
-      await elasticSearchVector.createIndex({ indexName, dimension: 1536 });
-    },
-    deleteIndex: async (indexName: string) => {
-      await elasticSearchVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // ElasticSearch indexes immediately with refresh: true
-      await new Promise(resolve => setTimeout(resolve, 100));
-    },
-  });
+createVectorTestSuite({
+  vector: elasticSearchVector,
+  createIndex: async (indexName: string) => {
+    await elasticSearchVector.createIndex({ indexName, dimension: 1536 });
+  },
+  deleteIndex: async (indexName: string) => {
+    await elasticSearchVector.deleteIndex({ indexName });
+  },
+  waitForIndexing: async () => {
+    // ElasticSearch indexes immediately with refresh: true
+    await new Promise(resolve => setTimeout(resolve, 100));
+  },
 });

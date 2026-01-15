@@ -276,25 +276,25 @@ describe('MongoDBVector Integration Tests', () => {
   });
 });
 
-// Use the shared test suite with factory pattern
-const vectorDB = new MongoDBVector({ uri, dbName, id: 'mongodb-shared-test' });
+// Shared vector store test suite
+const mongodbVector = new MongoDBVector({ uri, dbName, id: 'mongodb-shared-test' });
 
 createVectorTestSuite({
-  vector: vectorDB,
+  vector: mongodbVector,
   connect: async () => {
-    await vectorDB.connect();
-    await waitForAtlasSearchReady(vectorDB);
+    await mongodbVector.connect();
+    await waitForAtlasSearchReady(mongodbVector);
   },
   disconnect: async () => {
-    await vectorDB.disconnect();
+    await mongodbVector.disconnect();
   },
   createIndex: async (indexName: string) => {
-    await vectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
-    await vectorDB.waitForIndexReady({ indexName });
+    await mongodbVector.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
+    await mongodbVector.waitForIndexReady({ indexName });
   },
   deleteIndex: async (indexName: string) => {
     try {
-      await vectorDB.deleteIndex({ indexName });
+      await mongodbVector.deleteIndex({ indexName });
     } catch (error) {
       console.error(`Error deleting index ${indexName}:`, error);
     }

@@ -628,21 +628,19 @@ describe('QdrantVector', () => {
   });
 });
 
-// Metadata filtering tests for Memory system
-describe('Qdrant Metadata Filtering', () => {
-  const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-metadata-test' });
+// Shared vector store test suite
+const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-shared-test' });
 
-  createVectorTestSuite({
-    vector: qdrantVector,
-    createIndex: async (indexName: string) => {
-      await qdrantVector.createIndex({ indexName, dimension: 1536 });
-    },
-    deleteIndex: async (indexName: string) => {
-      await qdrantVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // Qdrant indexes immediately
-      await new Promise(resolve => setTimeout(resolve, 100));
-    },
-  });
+createVectorTestSuite({
+  vector: qdrantVector,
+  createIndex: async (indexName: string) => {
+    await qdrantVector.createIndex({ indexName, dimension: 1536 });
+  },
+  deleteIndex: async (indexName: string) => {
+    await qdrantVector.deleteIndex({ indexName });
+  },
+  waitForIndexing: async () => {
+    // Qdrant indexes immediately
+    await new Promise(resolve => setTimeout(resolve, 100));
+  },
 });

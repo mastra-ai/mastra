@@ -22,25 +22,24 @@ describe('PgVector', () => {
     await vectorDB.disconnect();
   });
 
-  // Shared vector store suite tests
-  describe('Shared Vector Store Suite Tests', () => {
+  // Shared vector store test suite
+  describe('Shared Vector Store Test Suite', () => {
     const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-    const metadataVectorDB = new PgVector({ connectionString, id: 'pg-metadata-test' });
+    const sharedTestVectorDB = new PgVector({ connectionString, id: 'pg-shared-test' });
 
     createVectorTestSuite({
-      vector: metadataVectorDB,
+      vector: sharedTestVectorDB,
       createIndex: async (indexName: string) => {
-        // Using dimension 4 as required by the metadata filtering test vectors
-        await metadataVectorDB.createIndex({ indexName, dimension: 1536 });
+        await sharedTestVectorDB.createIndex({ indexName, dimension: 1536 });
       },
       deleteIndex: async (indexName: string) => {
-        await metadataVectorDB.deleteIndex({ indexName });
+        await sharedTestVectorDB.deleteIndex({ indexName });
       },
       waitForIndexing: async () => {
         // PG doesn't need to wait for indexing
       },
       disconnect: async () => {
-        await metadataVectorDB.disconnect();
+        await sharedTestVectorDB.disconnect();
       },
     });
   });

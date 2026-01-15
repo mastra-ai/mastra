@@ -107,21 +107,19 @@ describe('OpenSearchVector', () => {
   });
 });
 
-// Metadata filtering and advanced operations tests
-describe('OpenSearch Metadata Filtering', () => {
-  const opensearchVector = new OpenSearchVector({ node: 'http://localhost:9200', id: 'opensearch-metadata-test' });
+// Shared vector store test suite
+const opensearchVector = new OpenSearchVector({ node: 'http://localhost:9200', id: 'opensearch-shared-test' });
 
-  createVectorTestSuite({
-    vector: opensearchVector,
-    createIndex: async (indexName: string) => {
-      await opensearchVector.createIndex({ indexName, dimension: 1536 });
-    },
-    deleteIndex: async (indexName: string) => {
-      await opensearchVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // OpenSearch indexes immediately with refresh: true
-      await new Promise(resolve => setTimeout(resolve, 100));
-    },
-  });
+createVectorTestSuite({
+  vector: opensearchVector,
+  createIndex: async (indexName: string) => {
+    await opensearchVector.createIndex({ indexName, dimension: 1536 });
+  },
+  deleteIndex: async (indexName: string) => {
+    await opensearchVector.deleteIndex({ indexName });
+  },
+  waitForIndexing: async () => {
+    // OpenSearch indexes immediately with refresh: true
+    await new Promise(resolve => setTimeout(resolve, 100));
+  },
 });
