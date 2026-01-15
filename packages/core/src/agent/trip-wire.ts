@@ -3,7 +3,6 @@ import { ReadableStream } from 'node:stream/web';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import { ChunkFrom, MastraModelOutput } from '../stream';
-import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { InnerAgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list';
@@ -54,10 +53,7 @@ export interface TripwireData<TMetadata = unknown> {
   processorId?: string;
 }
 
-export const getModelOutputForTripwire = async <
-  OUTPUT extends OutputSchema | undefined = undefined,
-  TMetadata = unknown,
->({
+export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = unknown>({
   tripwire,
   runId,
   tracingContext,
