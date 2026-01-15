@@ -73,6 +73,7 @@ import type {
   AgentInstructions,
   DynamicAgentInstructions,
   AgentMethodType,
+  DynamicModel,
   StructuredOutputOptions,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
@@ -121,8 +122,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public name: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
-  #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
+  model: DynamicArgument<MastraModelConfig> | DynamicModel | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | DynamicModel | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -204,11 +205,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         throw mastraError;
       }
       this.model = config.model.map(mdl => ({
-        id: randomUUID(),
+        id: mdl.id ?? randomUUID(),
         model: mdl.model,
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
-      }));
+      })) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
@@ -1041,7 +1042,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       let llm: MastraLLM | Promise<MastraLLM>;
       if (isSupportedLanguageModel(resolvedModel)) {
         const modelsPromise =
-          Array.isArray(this.model) && !model
+          (Array.isArray(this.model) || typeof this.model === 'function') && !model
             ? this.prepareModels(requestContext)
             : this.prepareModels(requestContext, resolvedModel);
 
@@ -1123,6 +1124,24 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     | MastraLanguageModel
     | MastraLegacyLanguageModel
     | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+    if (typeof modelConfig === 'function') {
+      return resolveMaybePromise(modelConfig({ requestContext, mastra: this.#mastra }), resolved => {
+        if (Array.isArray(resolved)) {
+          if (resolved.length === 0 || !resolved[0]) {
+            throw new MastraError({
+              id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: { agentName: this.name },
+              text: `[Agent:${this.name}] - Empty model list returned from dynamic function`,
+            });
+          }
+          return this.resolveModelConfig(resolved[0].model as DynamicArgument<MastraModelConfig>, requestContext);
+        }
+        return this.resolveModelConfig(resolved, requestContext);
+      }) as Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    }
+
     if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, requestContext);
 
     if (modelConfig.length === 0 || !modelConfig[0]) {
@@ -2602,7 +2621,22 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext,
     model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
-    if (model || !Array.isArray(this.model)) {
+    if (typeof this.model === 'function' && !model) {
+      const resolved = await this.model({ requestContext, mastra: this.#mastra });
+      if (Array.isArray(resolved)) {
+        return this.prepareModels(
+          requestContext,
+          resolved.map(m => ({
+            id: m.id ?? randomUUID(),
+            model: m.model as DynamicArgument<MastraModelConfig>,
+            maxRetries: m.maxRetries ?? 0,
+            enabled: m.enabled ?? true,
+          })) as ModelFallbacks,
+        );
+      }
+    }
+
+    if ((model && !Array.isArray(model)) || (!model && !Array.isArray(this.model))) {
       const modelToUse = model ?? this.model;
       const resolvedModel = await this.resolveModelConfig(
         modelToUse as DynamicArgument<MastraModelConfig>,
@@ -2641,8 +2675,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ];
     }
 
+    const modelArray = (model as ModelFallbacks) ?? this.model;
     const models = await Promise.all(
-      this.model.map(async modelConfig => {
+      modelArray.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
         if (!isSupportedLanguageModel(model)) {
