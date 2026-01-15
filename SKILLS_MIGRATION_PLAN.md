@@ -2,7 +2,7 @@
 
 This document captures the analysis of the current Skills implementation and outlines the migration plan to integrate Skills as a directory convention within the unified Workspace.
 
-**Status**: On hold until Knowledge migration is complete.
+**Status**: In Progress (Knowledge migration complete)
 
 ---
 
@@ -120,114 +120,249 @@ const workspace = new Workspace({
 
 ---
 
-## Open Questions
+## Open Questions (Resolved)
 
-### 1. Source Type Detection
+### 1. Source Type Detection ✅
 
 **Question**: How do external and managed skills work with workspace?
 
-**Options**:
+**Decision**: Source types become less relevant for Workspace itself. Workspace's filesystem is a single abstraction. Skills are files at `skillsPaths` within the workspace filesystem.
 
-- A) External skills fetched and cached in workspace filesystem
-- B) External skills remain URL references, loaded on demand
-- C) Only local skills supported initially, external/managed as future work
+**Future Work**: Note for later - may want to support external skills (from packages, URLs) via:
 
-**Decision**: TBD
+- Copying into workspace
+- Multi-mount filesystem providers
+- URL fetching and caching
 
-### 2. CRUD Operations
+For now, focus on local workspace skills.
+
+### 2. CRUD Operations ✅
 
 **Question**: Should Skills CRUD go through workspace filesystem or have dedicated methods?
 
-**Options**:
+**Decision**: Option C - Hybrid approach with skill helper methods on Workspace.
 
-- A) All CRUD via workspace.writeFile(), workspace.readFile(), etc.
-- B) Dedicated workspace.skills.create(), workspace.skills.update(), etc.
-- C) Hybrid - skills helper methods that use workspace filesystem internally
+```typescript
+// Helper methods that use workspace filesystem internally
+workspace.createSkill(name, input); // Validates, creates directory structure
+workspace.updateSkill(name, input); // Validates, updates SKILL.md
+workspace.deleteSkill(name); // Removes skill directory
+```
 
-**Considerations**:
+Provides good UX (validation, proper directory structure) while using workspace filesystem internally.
 
-- Option A: Simpler, but loses skill-specific validation
-- Option B: More ergonomic, but adds surface area
-- Option C: Best of both, but more complex
-
-**Decision**: TBD
-
-### 3. Skill Validation
+### 3. Skill Validation ✅
 
 **Question**: Where does SKILL.md validation happen?
 
-**Options**:
+**Decision**: Option C - Separate validation utility that can be called anywhere.
 
-- A) In workspace at write time (workspace validates before saving)
-- B) In processor at read time (SkillsProcessor validates when loading)
-- C) Separate validation utility that can be called anywhere
+- Keep `validateSkillMetadata()` and Zod schemas as utilities
+- Can be called by `createSkill()` helper, processors, or users directly
+- Lives in `core/workspace/skill-schemas.ts`
 
-**Decision**: TBD
-
-### 4. SkillsProcessor Location
+### 4. SkillsProcessor Location ✅
 
 **Question**: Does SkillsProcessor stay in @mastra/skills or move to core?
 
-**Options**:
+**Decision**: Move to `@mastra/core/processors`.
 
-- A) Move to `@mastra/core/workspace/processors/skills`
-- B) Keep in `@mastra/skills` as an optional processor
-- C) Split: core skills support in workspace, advanced processor in @mastra/skills
+The processor is tightly coupled with core agent behavior:
 
-**Considerations**:
+- Tool injection (`skill_search`, `skill_read`, `skill_activate`)
+- System message injection for activated skills
 
-- If Skills is just a directory convention, processor can stay external
-- But if Skills are deeply integrated with workspace, core makes sense
+Skill tools remain skill-specific (not workspace tools).
 
-**Decision**: TBD
-
-### 5. Search Integration
+### 5. Search Integration ✅
 
 **Question**: Are skills auto-indexed for search or opt-in?
 
-**Options**:
+**Decision**: Option B - Opt-in via config.
 
-- A) Skills always indexed (part of autoIndexPaths default)
-- B) Skills opt-in to indexing via config
-- C) Skills have separate search (current behavior) vs workspace search
+```typescript
+const workspace = new Workspace({
+  skillsPaths: ['/skills'],
+  autoIndexPaths: ['/skills'], // Opt-in: add skillsPaths here to enable search
+  bm25: true,
+});
+```
 
-**Considerations**:
+If `skillsPaths` is set but not in `autoIndexPaths`, skills are readable but not searchable.
 
-- Current Skills has its own search via SearchEngine
-- Workspace already has unified search
-- Duplicating search seems wasteful
+---
 
-**Decision**: TBD
+## Additional Decisions
+
+### 6. Skills Interface
+
+**Question**: Does `MastraSkills` interface stay in `core/skills` or move?
+
+**Decision**: TBD - needs more thought.
+
+The SKILL.md spec defines a structure (references/, scripts/, assets/). Having an interface equipped to deal with that structure still makes sense, but it could:
+
+- A) Stay as `MastraSkills` interface in `core/skills`
+- B) Become skill types/helpers inside `core/workspace` (no separate `core/skills`)
+- C) Be a new `WorkspaceSkills` interface on Workspace
+
+**Consideration**: Skills have a defined spec structure. Even if skills live in workspace, the interface for interacting with them (parsing SKILL.md, getting references, etc.) may warrant its own type definitions.
+
+### 7. @mastra/skills Package Fate
+
+**Question**: What happens to the @mastra/skills package?
+
+**Decision**: Deprecate - functionality moves to core.
+
+- `Skills` class functionality → Workspace skill methods
+- `SkillsProcessor` → `@mastra/core/processors`
+- `SearchEngine`, `BM25Index` → Already in `@mastra/core/workspace`
+- `schemas.ts` → `@mastra/core/workspace/skill-schemas.ts`
+- Knowledge classes → Removed (replaced by Workspace search)
+
+### 8. Dependencies
+
+**gray-matter**: Move to core as dependency for SKILL.md parsing.
+
+**Zod schemas**: Move to `core/workspace/skill-schemas.ts`.
 
 ---
 
 ## Implementation Tasks
 
-### Phase 1: Workspace Foundation (Current Focus)
+### Phase 1: Workspace Foundation ✅ (Complete)
 
-- [ ] Migrate Knowledge storage to Workspace
-- [ ] Migrate Knowledge search (BM25, vector, hybrid) to Workspace
-- [ ] Add autoIndexPaths configuration
-- [ ] Add skillsPaths configuration
+- [x] Migrate Knowledge storage to Workspace
+- [x] Migrate Knowledge search (BM25, vector, hybrid) to Workspace
+- [x] Add autoIndexPaths configuration
+- [x] Add skillsPaths configuration
+- [x] Remove `core/knowledge` folder
+- [x] Clean up Mastra class (remove knowledge references)
 
-### Phase 2: Skills Migration (This Doc)
+### Phase 2: Skills Types & Schemas
 
-- [ ] Create skills helper methods on Workspace
-- [ ] Migrate skill discovery to use workspace filesystem
-- [ ] Migrate skill parsing (keep gray-matter)
-- [ ] Handle source type detection for workspace
-- [ ] Update SkillsProcessor to use workspace
+- [ ] Move skill type definitions to `core/workspace/skill-types.ts`
+  - `Skill`, `SkillMetadata`, `SkillSearchResult`, `SkillSearchOptions`
+  - `CreateSkillInput`, `UpdateSkillInput`
+- [ ] Move validation schemas to `core/workspace/skill-schemas.ts`
+  - `validateSkillMetadata()`, Zod schemas
+  - `parseAllowedTools()`
+- [ ] Add `gray-matter` as core dependency
+- [ ] Update exports in `core/workspace/index.ts`
 
-### Phase 3: Integration
+### Phase 3: Workspace Skill Methods
 
-- [ ] Update agent integration to use workspace.skills
+- [ ] Add skill discovery to Workspace
+  - `listSkills(): Promise<SkillMetadata[]>`
+  - `getSkill(name: string): Promise<Skill | null>`
+  - `hasSkill(name: string): Promise<boolean>`
+- [ ] Add skill search (uses workspace's SearchEngine)
+  - `searchSkills(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>`
+- [ ] Add skill CRUD helpers
+  - `createSkill(name: string, input: CreateSkillInput): Promise<Skill>`
+  - `updateSkill(name: string, input: UpdateSkillInput): Promise<Skill>`
+  - `deleteSkill(name: string): Promise<void>`
+- [ ] Add reference/script/asset accessors
+  - `getSkillReference(skillName: string, path: string): Promise<string | null>`
+  - `getSkillScript(skillName: string, path: string): Promise<string | null>`
+  - `getSkillAsset(skillName: string, path: string): Promise<Buffer | null>`
+
+### Phase 4: SkillsProcessor Migration
+
+- [ ] Move `SkillsProcessor` to `core/processors/skills-processor.ts`
+- [ ] Update processor to work with Workspace skill methods
+- [ ] Keep skill-specific tools (`skill_search`, `skill_read`, `skill_activate`)
+- [ ] Update processor tests
+
+### Phase 5: Mastra Class Cleanup
+
+- [ ] Remove `#skills` private field from Mastra
+- [ ] Remove `getSkills()` method from Mastra
+- [ ] Remove `skills?: MastraSkills` from MastraOptions
+- [ ] Update agent integration to use workspace
+
+### Phase 6: Deprecate @mastra/skills
+
+- [ ] Mark package as deprecated
+- [ ] Update package to re-export from core (for backwards compat)
+- [ ] Migration guide for existing users
+- [ ] Remove old Knowledge classes from package
+
+### Phase 7: Integration & Testing
+
+- [ ] Move skill tests to core/workspace
 - [ ] Update playground UI to use new APIs
-- [ ] Migration guide for existing Skills users
+- [ ] End-to-end testing with agents
+
+---
+
+## Migration Path for Users
+
+### Before (Current)
+
+```typescript
+import { Skills, SkillsProcessor } from '@mastra/skills';
+
+const skills = new Skills({
+  id: 'my-skills',
+  paths: ['./skills'],
+});
+
+const agent = new Agent({
+  skills,
+  // ...
+});
+```
+
+### After (Target)
+
+```typescript
+import { Workspace, LocalFilesystem } from '@mastra/core';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './data' }),
+  skillsPaths: ['/skills'],
+  bm25: true,
+});
+
+const agent = new Agent({
+  workspace,
+  // SkillsProcessor auto-created when workspace has skillsPaths
+});
+
+// Or explicit processor control:
+const agent = new Agent({
+  workspace,
+  processors: [new SkillsProcessor({ workspace })],
+});
+```
+
+---
+
+## Open Items for Discussion
+
+### Skills Interface Design
+
+The `MastraSkills` interface currently defines:
+
+- `list()`, `get()`, `has()`, `search()`
+- `create()`, `update()`, `delete()`
+- `getReference()`, `getScript()`, `getAsset()`
+- `refresh()`, `getInputProcessors()`
+
+Options for Workspace integration:
+
+1. **Flat methods on Workspace**: `workspace.listSkills()`, `workspace.getSkill()`, etc.
+2. **Nested accessor**: `workspace.skills.list()`, `workspace.skills.get()`, etc.
+3. **Separate interface**: Keep `MastraSkills` interface, Workspace implements it
+
+**Recommendation**: Option 1 (flat methods) for simplicity. Skills are a workspace feature, not a separate subsystem.
 
 ---
 
 ## Related Documents
 
 - [UNIFIED_WORKSPACE_DESIGN.md](./UNIFIED_WORKSPACE_DESIGN.md) - Core workspace design
+- [KNOWLEDGE_MIGRATION_PLAN.md](./KNOWLEDGE_MIGRATION_PLAN.md) - Knowledge migration (complete)
 - [AGENT_SKILLS_SPEC.md](./AGENT_SKILLS_SPEC.md) - Agent Skills specification
 - [WORKSPACE_PR_EXPLORATION.md](./WORKSPACE_PR_EXPLORATION.md) - PR #11567 analysis
