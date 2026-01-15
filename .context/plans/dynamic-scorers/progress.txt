@@ -1097,3 +1097,68 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 020 - Create scorers picker component with sampling config - COMPLETED
+============================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive ScorersPicker component for selecting scorers and configuring per-scorer sampling
+- Component manages Record<string, ScorerConfig> structure with sampling configuration
+- Implemented dropdown with search and multi-select checkboxes
+- Each selected scorer gets its own sampling configuration panel
+- Supports three sampling modes: none (evaluate all), ratio (percentage), count (fixed number)
+- Follows exact same UI patterns as MultiSelectPicker and AgentForm for consistency
+
+Files created:
+- packages/playground-ui/src/domains/agents/components/create-agent/scorers-picker.tsx (385 lines)
+
+Key features implemented:
+1. Dropdown selection:
+   - Multi-select checkboxes for scorers
+   - Search functionality
+   - Keyboard navigation (arrows, enter, escape, home, end, space)
+   - Shows count of selected scorers in trigger button
+
+2. Per-scorer sampling configuration:
+   - Three sampling modes via radio buttons:
+     * None - Evaluate all runs (no sampling config)
+     * Ratio - Percentage-based sampling (0-1 with 0.1 step)
+     * Count - Fixed number of samples (integer input)
+   - Each selected scorer shown with its own config panel
+   - Remove button to deselect individual scorers
+
+3. UI/UX:
+   - Consistent styling with other pickers (MultiSelectPicker, ModelPicker)
+   - Collapsible selected list with left border
+   - Background surface2 for scorer config cards
+   - Proper labels, error states, and disabled states
+   - Accessible with proper ARIA attributes
+
+4. Type safety:
+   - ScoringSamplingConfig interface exported for reuse
+   - ScorerConfig interface matching StorageScorerConfig from core
+   - Proper TypeScript types for all props and state
+
+Integration points:
+- Designed to be used in AgentForm's Advanced Settings section
+- Selected value format: Record<string, { sampling?: ScoringSamplingConfig }>
+- Compatible with StorageScorerConfig type from @mastra/core
+
+Verification:
+- pnpm typecheck: PASSED (no errors in scorers-picker.tsx)
+- All acceptance criteria met:
+  ✓ Dropdown shows all available scorers
+  ✓ Selected scorers appear as list with sampling config
+  ✓ Sampling type can be changed per scorer
+  ✓ Ratio type shows rate input (0-1)
+  ✓ Count type shows count number input
+  ✓ None disables sampling for that scorer (sets sampling to undefined)
+
+Next steps:
+- Task 021: Update agent form to include scorers picker (P1 priority, depends on task 020)
+- Task 022: Update agent dialog submission to handle scorers (P1 priority, depends on task 021)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
