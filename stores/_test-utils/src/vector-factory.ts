@@ -92,9 +92,6 @@ export interface VectorTestConfig {
   /** Whether the store supports the $size operator for array length filtering. Default: true.
    *  Set to false for stores that don't support $size. */
   supportsSize?: boolean;
-  /** Whether the store supports minimum score threshold filtering (minScore). Default: true.
-   *  Set to false for stores that don't support score-based filtering. */
-  supportsMinScore?: boolean;
 }
 
 /**
