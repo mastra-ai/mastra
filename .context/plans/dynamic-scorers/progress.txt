@@ -450,3 +450,55 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 027 - Add stored scorer methods to client SDK - COMPLETED
+================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Added comprehensive TypeScript types for stored scorers to client SDK
+- Created ScoringSamplingConfig, StoredScorerResponse, and CRUD parameter types
+- Implemented all 5 CRUD methods in MastraClient class:
+  1. listStoredScorers() - with pagination and filtering
+  2. getStoredScorer() - retrieve single scorer by ID
+  3. createStoredScorer() - create new scorer
+  4. updateStoredScorer() - partial update of scorer
+  5. deleteStoredScorer() - delete scorer
+- All methods follow the exact same patterns as stored agents for consistency
+- Methods support optional RequestContext parameter
+- All methods properly encode IDs and serialize parameters
+
+Files modified:
+- client-sdks/client-js/src/types.ts (added lines 698-811)
+- client-sdks/client-js/src/client.ts (added imports and methods lines 845-959)
+
+Types added:
+- ScoringSamplingConfig - sampling configuration for scorers
+- StoredScorerResponse - full scorer object with all fields
+- ListStoredScorersParams - pagination and filter params
+- ListStoredScorersResponse - paginated list response
+- CreateStoredScorerParams - create scorer payload
+- UpdateStoredScorerParams - partial update payload
+- DeleteStoredScorerResponse - deletion confirmation
+
+Methods implemented:
+- listStoredScorers(params?, requestContext?) - GET /api/stored/scorers
+- getStoredScorer(scorerId, requestContext?) - GET /api/stored/scorers/:scorerId
+- createStoredScorer(params, requestContext?) - POST /api/stored/scorers
+- updateStoredScorer(scorerId, params, requestContext?) - PATCH /api/stored/scorers/:scorerId
+- deleteStoredScorer(scorerId, requestContext?) - DELETE /api/stored/scorers/:scorerId
+
+Verification:
+- pnpm typecheck: PASSED (0 errors)
+- pnpm build:lib (client-js): PASSED
+- All methods properly typed with full JSDoc comments
+- API endpoints match server routes from task 007
+
+Next steps:
+- Task 028: Add scorer version methods to client SDK (P1 priority)
+- Task 013: Create scorer form validation and default template (P0 priority, UI)
+- Task 015: Create stored scorers mutations hook (depends on task 027)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED

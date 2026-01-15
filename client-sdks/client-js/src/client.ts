@@ -53,6 +53,12 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredScorersParams,
+  ListStoredScorersResponse,
+  CreateStoredScorerParams,
+  UpdateStoredScorerParams,
+  StoredScorerResponse,
+  DeleteStoredScorerResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   ListMemoryConfigsResponse,
@@ -834,6 +840,122 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Scorers
+  // ============================================================================
+
+  /**
+   * Lists all stored scorers with optional pagination
+   * @param params - Optional pagination and filter parameters
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing paginated list of stored scorers
+   */
+  public listStoredScorers(
+    params?: ListStoredScorersParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListStoredScorersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.ownerId) {
+      searchParams.set('ownerId', params.ownerId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/stored/scorers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a stored scorer by ID
+   * @param scorerId - ID of the stored scorer to retrieve
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the stored scorer
+   */
+  public getStoredScorer(
+    scorerId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<StoredScorerResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+    );
+  }
+
+  /**
+   * Creates a new stored scorer
+   * @param params - Scorer configuration including id, name, model, prompt, etc.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the created stored scorer
+   */
+  public createStoredScorer(
+    params: CreateStoredScorerParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<StoredScorerResponse> {
+    return this.request(`/api/stored/scorers${requestContextQueryString(requestContext)}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Updates a stored scorer
+   * @param scorerId - ID of the scorer to update
+   * @param params - Partial scorer configuration to update
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the updated stored scorer
+   */
+  public updateStoredScorer(
+    scorerId: string,
+    params: UpdateStoredScorerParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<StoredScorerResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PATCH',
+        body: params,
+      },
+    );
+  }
+
+  /**
+   * Deletes a stored scorer
+   * @param scorerId - ID of the scorer to delete
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing deletion confirmation
+   */
+  public deleteStoredScorer(
+    scorerId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteStoredScorerResponse> {
+    return this.request(
+      `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
   }
 
   // ============================================================================
