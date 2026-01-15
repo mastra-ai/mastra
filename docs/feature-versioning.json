@@ -66,5 +66,6 @@
   "/reference/server/routes": "1.0.0",
   "/reference/server/mastra-server": "1.0.0",
   "/reference/server/hono-adapter": "1.0.0",
-  "/docs/agents/structured-output": "1.0.0"
+  "/docs/agents/structured-output": "1.0.0",
+  "/guides/getting-started/nuxt": "1.0.0"
 }

@@ -120,23 +120,20 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
     methodType,
   });
 
-  return (
-    createWorkflow({
-      id: 'execution-workflow',
-      inputSchema: z.object({}),
-      outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
-      steps: [prepareToolsStep, prepareMemoryStep, streamStep],
-      options: {
-        tracingPolicy: {
-          internal: InternalSpans.WORKFLOW,
-        },
-        validateInputs: false,
+  return createWorkflow({
+    id: 'execution-workflow',
+    inputSchema: z.object({}),
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
+    steps: [prepareToolsStep, prepareMemoryStep, streamStep],
+    options: {
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
       },
-    })
-      .parallel([prepareToolsStep, prepareMemoryStep])
-      // @ts-ignore - TODO: fix types
-      .map(mapResultsStep)
-      .then(streamStep)
-      .commit()
-  );
+      validateInputs: false,
+    },
+  })
+    .parallel([prepareToolsStep, prepareMemoryStep])
+    .map(mapResultsStep)
+    .then(streamStep)
+    .commit();
 }

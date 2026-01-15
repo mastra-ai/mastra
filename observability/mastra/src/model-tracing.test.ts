@@ -505,4 +505,128 @@ describe('ModelSpanTracker', () => {
       });
     });
   });
+
+  describe('infrastructure chunk filtering', () => {
+    it('should NOT create spans for infrastructure chunks (response-metadata, error, abort, etc.)', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // All these infrastructure chunks should NOT create spans
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'response-metadata', payload: { signature: 'test-sig' } },
+        { type: 'source', payload: { id: 'src-1', sourceType: 'url', title: 'Test Source' } },
+        { type: 'file', payload: { data: 'base64data', mimeType: 'image/png' } },
+        { type: 'error', payload: { error: new Error('test error') } },
+        { type: 'abort', payload: {} },
+        { type: 'tripwire', payload: { reason: 'blocked' } },
+        { type: 'watch', payload: {} },
+        { type: 'tool-error', payload: { toolCallId: 'tc-1', toolName: 'test', error: 'failed' } },
+        { type: 'tool-call-approval', payload: { toolCallId: 'tc-2', toolName: 'test', args: {} } },
+        { type: 'tool-call-suspended', payload: { toolCallId: 'tc-3', toolName: 'test', args: {} } },
+        { type: 'reasoning-signature', payload: { id: 'r-1', signature: 'sig' } },
+        { type: 'redacted-reasoning', payload: { id: 'r-2', data: {} } },
+        { type: 'step-output', payload: { output: {} } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      // Get all MODEL_CHUNK spans
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+
+      // Should have NO chunk spans - all infrastructure chunks should be skipped
+      expect(chunkSpans).toHaveLength(0);
+    });
+
+    it('should NOT create spans for unknown/unrecognized chunk types', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // Unknown chunk types that might be custom or future additions
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'custom-chunk', payload: { data: 'custom data' } },
+        { type: 'future-feature', payload: { info: 'new feature' } },
+        { type: 'experimental-xyz', payload: {} },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      // Get all MODEL_CHUNK spans
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+
+      // Should have NO chunk spans - unknown types should be skipped by default
+      expect(chunkSpans).toHaveLength(0);
+    });
+
+    it('should still create spans for semantic content chunks (text, reasoning, tool-call)', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // Semantic content chunks that SHOULD create spans
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        // Text content
+        { type: 'text-start', payload: { id: 't-1' } },
+        { type: 'text-delta', payload: { id: 't-1', text: 'Hello world' } },
+        { type: 'text-end', payload: { id: 't-1' } },
+        // Reasoning content
+        { type: 'reasoning-start', payload: { id: 'r-1' } },
+        { type: 'reasoning-delta', payload: { id: 'r-1', text: 'Thinking...' } },
+        { type: 'reasoning-end', payload: { id: 'r-1' } },
+        // Tool call
+        { type: 'tool-call-input-streaming-start', payload: { toolCallId: 'tc-1', toolName: 'myTool' } },
+        { type: 'tool-call-delta', payload: { toolCallId: 'tc-1', argsTextDelta: '{"arg": "value"}' } },
+        { type: 'tool-call-input-streaming-end', payload: { toolCallId: 'tc-1' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      // Get all MODEL_CHUNK spans
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+
+      // Should have 3 chunk spans: text, reasoning, tool-call
+      expect(chunkSpans).toHaveLength(3);
+
+      const textSpan = chunkSpans.find(s => s.name === "chunk: 'text'");
+      const reasoningSpan = chunkSpans.find(s => s.name === "chunk: 'reasoning'");
+      const toolCallSpan = chunkSpans.find(s => s.name === "chunk: 'tool-call'");
+
+      expect(textSpan).toBeDefined();
+      expect(textSpan!.output).toEqual({ text: 'Hello world' });
+
+      expect(reasoningSpan).toBeDefined();
+      expect(reasoningSpan!.output).toEqual({ text: 'Thinking...' });
+
+      expect(toolCallSpan).toBeDefined();
+      expect(toolCallSpan!.output).toHaveProperty('toolName', 'myTool');
+    });
+  });
 });

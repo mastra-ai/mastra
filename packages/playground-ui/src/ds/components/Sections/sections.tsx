@@ -6,5 +6,5 @@ export type SectionsProps = {
 };
 
 export function Sections({ children, className }: SectionsProps) {
-  return <div className={cn('grid gap-[3rem]', className)}>{children}</div>;
+  return <div className={cn('grid gap-12', className)}>{children}</div>;
 }
