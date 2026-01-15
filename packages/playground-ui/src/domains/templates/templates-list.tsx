@@ -30,16 +30,16 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
 
   if (isLoading) {
     return (
-      <div className={cn('grid gap-y-[1rem]', className)}>
+      <div className={cn('grid gap-y-4', className)}>
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-[4rem] bg-surface3 animate-pulse rounded-lg" />
+          <div key={index} className="h-16 bg-surface3 animate-pulse rounded-lg" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className={cn('grid gap-y-[1rem]', className)}>
+    <div className={cn('grid gap-y-4', className)}>
       {templates.map(template => {
         const hasMetaInfo =
           template?.agents || template?.tools || template?.networks || template?.workflows || template?.mcp;
@@ -68,19 +68,16 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                 </div>
               )}
               <div
-                className={cn(
-                  'grid py-[.75rem] px-[1.5rem] w-full gap-[0.1rem]',
-                  '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3',
-                )}
+                className={cn('grid py-3 px-6 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3')}
               >
-                <h2 className="text-[1rem] text-neutral5">{template.title}</h2>
-                <p className="text-[0.875rem] text-neutral4 transition-colors duration-500">{template.description}</p>
-                <div className="hidden 2xl:flex text-neutral3 text-[0.875rem] flex-wrap items-center gap-[1rem] mt-[0.75rem]">
+                <h2 className="text-ui-lg text-neutral5">{template.title}</h2>
+                <p className="text-ui-md text-neutral4 transition-colors duration-500">{template.description}</p>
+                <div className="hidden 2xl:flex text-neutral3 text-ui-md flex-wrap items-center gap-4 mt-3">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
-                        'flex gap-[1rem] text-[0.875rem] text-neutral3 m-0 p-0 list-none',
-                        '[&>li]:flex [&>li]:items-center [&>li]:gap-[0.1rem] text-neutral4',
+                        'flex gap-4 text-ui-md text-neutral3 m-0 p-0 list-none',
+                        '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5 text-neutral4',
                       )}
                     >
                       {template?.agents && template.agents.length > 0 && (
@@ -111,7 +108,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                     </ul>
                   )}
                   {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="flex items-center text-neutral3 gap-[1rem]">
+                  <div className="flex items-center text-neutral3 gap-4">
                     {template.supportedProviders.map(provider => (
                       <span key={provider} className="">
                         {provider}
@@ -123,11 +120,11 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
             </LinkComponent>
             <a
               href={template.githubUrl}
-              className={cn('group items-center gap-[0.5rem] text-[0.875rem] ml-auto pr-[1rem] hidden', 'lg:flex')}
+              className={cn('group items-center gap-2 text-ui-md ml-auto pr-4 hidden', 'lg:flex')}
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="flex items-center gap-[0.5rem]  px-[0.5rem] py-[0.25rem] rounded bg-surface1 group-hover:bg-surface2 text-neutral3 transition-colors group-hover:text-neutral5 ">
+              <span className="flex items-center gap-2 px-2 py-1 rounded bg-surface1 group-hover:bg-surface2 text-neutral3 transition-colors group-hover:text-neutral5">
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
             </a>

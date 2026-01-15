@@ -9,9 +9,9 @@ export type EntryListHeaderProps = {
 
 export function EntryListHeader({ columns }: EntryListHeaderProps) {
   return (
-    <div className={cn('sticky top-0 bg-surface4 z-[1] rounded-t-lg px-[1.5rem]')}>
+    <div className={cn('sticky top-0 bg-surface4 z-10 rounded-t-lg px-6')}>
       <div
-        className={cn('grid gap-[1.5rem] text-left uppercase py-[.75rem] text-neutral3 text-[0.75rem]')}
+        className={cn('grid gap-6 text-left uppercase py-3 text-neutral3 text-ui-sm')}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}
       >
         {columns?.map(col => (

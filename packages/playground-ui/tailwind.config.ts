@@ -16,6 +16,7 @@ export default {
         '2xl': '1400px',
       },
     },
+    spacing: Spacings,
     extend: {
       screens: {
         '3xl': '1900px',
@@ -29,15 +30,6 @@ export default {
       },
       borderRadius: {
         ...BorderRadius,
-      },
-      padding: {
-        ...Spacings,
-      },
-      margin: {
-        ...Spacings,
-      },
-      gap: {
-        ...Spacings,
       },
       height: {
         ...Sizes,

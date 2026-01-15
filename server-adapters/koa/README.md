@@ -72,5 +72,5 @@ Access these in route handlers via `ctx.state`:
 
 ## Related Links
 
-- [Server Adapters Documentation](https://mastra.ai/docs/v1/server-db/server-adapters)
+- [Server Adapters Documentation](https://mastra.ai/docs/v1/server/server-adapters)
 - [Koa Documentation](https://koajs.com)

@@ -6,10 +6,7 @@ import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
 import type { ZodLikeSchema } from '../../types/zod-compat';
 
-export type PartialSchemaOutput<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined
-  ? undefined
-  : Partial<InferSchemaOutput<OUTPUT>>;
-
+export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ? undefined : Partial<OUTPUT>;
 export type InferSchemaOutput<OUTPUT extends OutputSchema> = OUTPUT extends undefined
   ? undefined
   : OUTPUT extends z4.ZodType<infer OBJECT, any>
@@ -69,7 +66,7 @@ export function asJsonSchema(schema: OutputSchema): JSONSchema7 | undefined {
   return asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>).jsonSchema;
 }
 
-export function getTransformedSchema<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
+export function getTransformedSchema<OUTPUT = undefined>(schema?: OutputSchema<OUTPUT>) {
   let jsonSchema: JSONSchema7 | undefined;
 
   jsonSchema = asJsonSchema(schema);

@@ -14,7 +14,7 @@ All providers support zero-config setup via environment variables. Set the appro
 | SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)       |
 | New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                         |
 | Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)         |
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional)                            |
 
 ## Supported Providers
 
@@ -236,7 +236,6 @@ LMNR_PROJECT_API_KEY=your-api-key
 
 # Optional
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
 ```
 
 ```typescript
@@ -263,14 +262,11 @@ new OtelExporter({
   provider: {
     laminar: {
       apiKey: 'your-api-key',
-      teamId: 'your-team-id', // Optional, for backwards compatibility
       endpoint: 'https://api.lmnr.ai/v1/traces', // Optional
     },
   },
 });
 ```
-
-**Note:** Laminar now only requires the `LMNR_PROJECT_API_KEY`. The `teamId` is optional.
 
 ### Zipkin
 

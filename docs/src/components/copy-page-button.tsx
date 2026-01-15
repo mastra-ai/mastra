@@ -1,4 +1,4 @@
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import { useCallback, useState } from "react";
 import { useMarkdownContent } from "../hooks/useMarkdownContent";
 import {
@@ -44,6 +44,8 @@ function openWindow(url: string) {
   window.open(url, "_blank");
 }
 
+// TODO: Do not hide this button in some viewports
+
 export const CopyPageButton = () => {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -75,12 +77,12 @@ export const CopyPageButton = () => {
   };
 
   return (
-    <div className="flex w-full items-center" data-copy-page-button>
+    <div className="flex items-center" data-copy-page-button>
       <Button
         variant="ghost"
         onClick={handleCopyPage}
         className={cn(
-          "inline-flex h-[32px] border border-r-0 border-(--border)/50 font-normal  rounded-[12px] rounded-tr-none rounded-br-none items-center w-full  gap-2 px-3 py-1.5 text-[13px]",
+          "inline-flex h-8 border border-r-0 border-(--border)/50 font-normal rounded-xl rounded-tr-none rounded-br-none items-center gap-2 px-3 py-1.5 text-[13px]",
           "hover:bg-(--mastra-surface-2)",
         )}
       >
@@ -93,7 +95,7 @@ export const CopyPageButton = () => {
           <Button
             variant="ghost"
             className={cn(
-              "inline-flex h-[32px] items-center rounded-[12px] rounded-tl-none rounded-bl-none justify-center p-1.5 px-2.5",
+              "inline-flex h-8 items-center rounded-xl rounded-tl-none rounded-bl-none justify-center p-1.5 px-2.5",
               "border border-(--border)/50 dark:border-(--border)/50 hover:bg-(--mastra-surface-2)",
             )}
           >
