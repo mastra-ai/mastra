@@ -1180,11 +1180,11 @@ export class Mastra<
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
    * ```
    */
-  public addAgent<A extends Agent<any> | ToolLoopAgentLike>(agent: A, key?: string): void {
+  public addAgent<A extends Agent | ToolLoopAgentLike>(agent: A, key?: string): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
-    let mastraAgent: Agent<any>;
+    let mastraAgent: Agent<any, any, any>;
     if (isToolLoopAgentLike(agent)) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
       mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });

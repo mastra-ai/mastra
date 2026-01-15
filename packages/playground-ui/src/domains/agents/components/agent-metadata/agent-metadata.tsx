@@ -88,7 +88,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
     <AgentMetadataWrapper>
       {agent?.description && (
         <AgentMetadataSection title="Description">
-          <p className="text-sm text-neutral3">{agent.description}</p>
+          <p className="text-sm text-neutral6">{agent.description}</p>
         </AgentMetadataSection>
       )}
       {agent.modelList ? (

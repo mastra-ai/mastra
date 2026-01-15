@@ -8,7 +8,7 @@ import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
+import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 
@@ -109,7 +109,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -142,7 +142,7 @@ export type ProcessInputStepResult = {
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -293,9 +293,10 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
  * }
  * ```
  */
-export abstract class BaseProcessor<TId extends string = string, TTripwireMetadata = unknown>
-  implements Processor<TId, TTripwireMetadata>
-{
+export abstract class BaseProcessor<TId extends string = string, TTripwireMetadata = unknown> implements Processor<
+  TId,
+  TTripwireMetadata
+> {
   abstract readonly id: TId;
   readonly name?: string;
 

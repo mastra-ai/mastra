@@ -6,14 +6,14 @@ import type { MemoryConfig } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import type { Step } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
-interface MapResultsStepOptions<OUTPUT extends OutputSchema> {
+
+interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
@@ -26,7 +26,7 @@ interface MapResultsStepOptions<OUTPUT extends OutputSchema> {
   methodType: AgentMethodType;
 }
 
-export function createMapResultsStep<OUTPUT extends OutputSchema>({
+export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,

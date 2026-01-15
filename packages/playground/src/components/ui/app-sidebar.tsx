@@ -145,7 +145,7 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-[.75rem] mb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
+      <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
         ) : (

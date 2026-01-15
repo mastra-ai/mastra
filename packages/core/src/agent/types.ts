@@ -30,7 +30,6 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../pro
 import type { RequestContext } from '../request-context';
 import type { SkillFormat } from '../workspace/skills';
 import type { OutputSchema } from '../stream';
-import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -56,13 +55,13 @@ export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type FallbackFields<OUTPUT extends OutputSchema = undefined> =
+type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: InferSchemaOutput<OUTPUT> };
+  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+export type StructuredOutputOptions<OUTPUT = {}> = {
   /** Zod schema to validate the output against */
-  schema: OUTPUT;
+  schema: NonNullable<OutputSchema<OUTPUT>>;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
@@ -97,10 +96,9 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
-  StructuredOutputOptions<OUTPUT>,
-  'model'
-> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
+  model?: ModelRouterModelId | OpenAICompatibleConfig;
+};
 
 /**
  * Provide options while creating an agent.
@@ -126,7 +124,11 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
-export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
+export interface AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+> {
   /**
    * Identifier for the agent.
    */
@@ -172,7 +174,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.

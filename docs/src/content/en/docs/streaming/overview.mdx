@@ -13,7 +13,7 @@ Mastra supports real-time, incremental responses from agents and workflows, allo
 
 Mastra's streaming API adapts based on your model version:
 
-- **`.stream()`**: For V2 models, supports **AI SDK v5** (`LanguageModelV2`).
+- **`.stream()`**: For V2 models, supports **AI SDK v5** and later (`LanguageModelV2`).
 - **`.streamLegacy()`**: For V1 models, supports **AI SDK v4** (`LanguageModelV1`).
 
 ## Streaming with agents
@@ -62,11 +62,11 @@ An agent stream provides access to various response properties:
 - **`stream.finishReason`**: The reason the agent stopped streaming.
 - **`stream.usage`**: Token usage information.
 
-### AI SDK v5 Compatibility
+### AI SDK v5+ Compatibility
 
-AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+AI SDK v5 (and later) uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
 
-For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
+For integration with AI SDK v5+, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
 ```typescript {2,9-12}
 import { toAISdkV5Stream } from "@mastra/ai-sdk";
@@ -77,13 +77,13 @@ const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
 ]);
 
-// Convert to AI SDK v5 compatible stream
+// Convert to AI SDK v5+ compatible stream
 const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
 
-// Use with AI SDK v5 methods
+// Use with AI SDK v5+ methods
 ```
 
-For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+For converting messages to AI SDK v5+ format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
 ```typescript {1,4}
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";

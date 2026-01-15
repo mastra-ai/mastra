@@ -192,9 +192,6 @@ export const agentExecutionBodySchema = z
 
     // Memory & Persistence
     memory: agentMemoryOptionSchema.optional(),
-    resourceId: z.string().optional(), // @deprecated
-    resourceid: z.string().optional(),
-    threadId: z.string().optional(), // @deprecated
     runId: z.string().optional(),
     savePerStep: z.boolean().optional(),
 
@@ -255,6 +252,16 @@ export const agentExecutionBodySchema = z
       .optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
+
+/**
+ * Legacy body schema for deprecated endpoints that still use threadId/resourceId
+ * Used by /api/agents/:agentId/generate-legacy and /api/agents/:agentId/stream-legacy
+ */
+export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
+  resourceId: z.string().optional(),
+  resourceid: z.string().optional(), // lowercase variant
+  threadId: z.string().optional(),
+});
 
 /**
  * Body schema for tool execute endpoint

@@ -1,12 +1,14 @@
 import { useDoc } from "@docusaurus/plugin-content-docs/client";
 import { ThemeClassNames } from "@docusaurus/theme-common";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import type { Props } from "@theme/DocItem/Content";
 import Heading from "@theme/Heading";
 import MDXContent from "@theme/MDXContent";
 import { type ReactNode } from "react";
 
 /**
+ * TODO: Check if we can remove this logic altogether
+ * 
  Title can be declared inside md content or declared through
  front matter and added manually. To make both cases consistent,
  the added title is added under the same div.markdown block
