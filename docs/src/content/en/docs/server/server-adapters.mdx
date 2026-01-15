@@ -23,16 +23,20 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server/mastra-server).
 
+If you want to use [Studio](/docs/v1/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/v1/cli/mastra#mastra-studio) to only launch the Studio UI.
+
 :::
 
 ## Available adapters
 
-Mastra currently provides two official server adapters:
+Mastra currently provides these official server adapters:
 
-- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter
-- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter
+- [@mastra/express](/reference/v1/server/express-adapter)
+- [@mastra/hono](/reference/v1/server/hono-adapter)
+- [@mastra/fastify](/reference/v1/server/fastify-adapter)
+- [@mastra/koa](/reference/v1/server/koa-adapter)
 
-You can build your own adapter, read [Custom Adapters](/docs/v1/server/custom-adapters) for details.
+You can build your own adapter, read [custom adapters](/docs/v1/server/custom-adapters) for details.
 
 ## Installation
 
@@ -49,6 +53,18 @@ npm install @mastra/express@beta
 
 ```bash
 npm install @mastra/hono@beta
+```
+  </TabItem>
+  <TabItem value="fastify" label="Fastify">
+
+```bash
+npm install @mastra/fastify@beta
+```
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```bash
+npm install @mastra/koa@beta
 ```
   </TabItem>
 </Tabs>
@@ -77,6 +93,12 @@ app.listen(4111, () => {
 });
 ```
 
+:::info
+
+See the [Express Adapter](/reference/v1/server/express-adapter) documentation for full configuration options.
+
+:::
+
   </TabItem>
   <TabItem value="hono" label="Hono">
 
@@ -97,14 +119,75 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
 });
 ```
 
-  </TabItem>
-</Tabs>
-
 :::info
 
-See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter) docs for full configuration options.
+See the [Hono Adapter](/reference/v1/server/hono-adapter) documentation for full configuration options.
 
 :::
+
+  </TabItem>
+  <TabItem value="fastify" label="Fastify">
+
+```typescript {6} title="src/fastify-server.ts"
+import Fastify from 'fastify';
+import { MastraServer } from '@mastra/fastify';
+import { mastra } from './mastra';
+
+const app = Fastify();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.get('/health', async request => {
+  const mastraInstance = request.mastra;
+  const agents = Object.keys(mastraInstance.listAgents());
+  return { status: 'ok', agents };
+});
+
+const port = 4111;
+
+app.listen({ port }, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
+
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```typescript {9} title="src/koa-server.ts"
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { MastraServer } from '@mastra/koa';
+import { mastra } from './mastra';
+
+const app = new Koa();
+app.use(bodyParser()); // Required for body parsing
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.use(async (ctx, next) => {
+  if (ctx.path === '/health' && ctx.method === 'GET') {
+    const mastraInstance = ctx.state.mastra;
+    const agents = Object.keys(mastraInstance.listAgents());
+    ctx.body = { status: 'ok', agents };
+    return;
+  }
+  await next();
+});
+
+const port = 4111;
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
+
+  </TabItem>
+</Tabs>
 
 ## Initialization flow
 
