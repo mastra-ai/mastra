@@ -631,6 +631,9 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
               isLoading={isLoadingToolkits}
               selectedToolkits={selectedToolkits}
               onSelectionChange={handleToolkitSelectionChange}
+              hasMore={hasNextPage}
+              onLoadMore={fetchNextPage}
+              isLoadingMore={isFetchingNextPage}
             />
           )}
 

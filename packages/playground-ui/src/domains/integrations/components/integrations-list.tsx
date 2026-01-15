@@ -33,13 +33,31 @@ export interface IntegrationsListProps {
   onEditIntegration?: (integration: IntegrationConfig) => void;
   /** Optional class name for styling */
   className?: string;
+  /** Optional external control of the add dialog open state */
+  addDialogOpen?: boolean;
+  /** Optional callback when add dialog open state changes (required if addDialogOpen is provided) */
+  onAddDialogOpenChange?: (open: boolean) => void;
+  /** Hide the internal Add Integration button (use when button is rendered externally) */
+  hideAddButton?: boolean;
 }
 
 /**
  * Component that displays a list of all configured integrations.
  */
-export function IntegrationsList({ onEditIntegration, className }: IntegrationsListProps) {
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+export function IntegrationsList({
+  onEditIntegration,
+  className,
+  addDialogOpen,
+  onAddDialogOpenChange,
+  hideAddButton = false,
+}: IntegrationsListProps) {
+  // Internal state for dialog when not controlled externally
+  const [internalDialogOpen, setInternalDialogOpen] = useState(false);
+
+  // Use external state if provided, otherwise use internal state
+  const isAddDialogOpen = addDialogOpen !== undefined ? addDialogOpen : internalDialogOpen;
+  const setIsAddDialogOpen = onAddDialogOpenChange || setInternalDialogOpen;
+
   const [editingIntegration, setEditingIntegration] = useState<IntegrationConfig | null>(null);
   const { data, isLoading, refetch } = useIntegrations();
 
@@ -90,12 +108,14 @@ export function IntegrationsList({ onEditIntegration, className }: IntegrationsL
           </div>
         </div>
 
-        <Button variant="default" size="md" onClick={() => setIsAddDialogOpen(true)}>
-          <Icon>
-            <Plus className="h-4 w-4" />
-          </Icon>
-          Add Integration
-        </Button>
+        {!hideAddButton && (
+          <Button variant="default" size="md" onClick={() => setIsAddDialogOpen(true)}>
+            <Icon>
+              <Plus className="h-4 w-4" />
+            </Icon>
+            Add Integration
+          </Button>
+        )}
       </div>
 
       {/* Content */}
@@ -121,12 +141,14 @@ export function IntegrationsList({ onEditIntegration, className }: IntegrationsL
           <Txt variant="ui-sm" className="text-icon3 text-center max-w-md mb-6">
             Connect external tool providers like MCP servers, Composio, or Arcade to import tools for your agents.
           </Txt>
-          <Button variant="default" size="md" onClick={() => setIsAddDialogOpen(true)}>
-            <Icon>
-              <Plus className="h-4 w-4" />
-            </Icon>
-            Add Your First Integration
-          </Button>
+          {!hideAddButton && (
+            <Button variant="default" size="md" onClick={() => setIsAddDialogOpen(true)}>
+              <Icon>
+                <Plus className="h-4 w-4" />
+              </Icon>
+              Add Your First Integration
+            </Button>
+          )}
         </div>
       )}
 

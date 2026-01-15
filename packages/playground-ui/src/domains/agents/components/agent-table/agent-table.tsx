@@ -119,7 +119,7 @@ const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
       actionSlot={
         <div className="flex flex-col sm:flex-row gap-2">
           {onCreateClick && (
-            <Button size="lg" onClick={onCreateClick}>
+            <Button size="lg" variant="light" onClick={onCreateClick}>
               <Icon>
                 <Plus />
               </Icon>

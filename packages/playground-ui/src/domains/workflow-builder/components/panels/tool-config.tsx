@@ -201,11 +201,9 @@ export function ToolConfig({ node }: ToolConfigProps) {
             <SelectContent>
               {toolList.map(tool => (
                 <SelectItem key={tool.id} value={tool.id}>
-                  <div>
-                    <div>{tool.name}</div>
-                    {tool.description && (
-                      <div className="text-xs text-icon3 truncate max-w-[200px]">{tool.description}</div>
-                    )}
+                  <div className="overflow-hidden">
+                    <div className="truncate">{tool.name}</div>
+                    {tool.description && <div className="text-xs text-icon3 truncate">{tool.description}</div>}
                   </div>
                 </SelectItem>
               ))}
@@ -216,8 +214,10 @@ export function ToolConfig({ node }: ToolConfigProps) {
 
       {/* Tool Info */}
       {selectedTool && (
-        <div className="p-3 bg-surface3 rounded-lg">
-          <p className="text-xs text-icon5 font-medium">{selectedTool.id}</p>
+        <div className="p-3 bg-surface3 rounded-lg overflow-hidden">
+          <p className="text-xs text-icon5 font-medium truncate" title={selectedTool.id}>
+            {selectedTool.id}
+          </p>
           {selectedTool.description && <p className="text-xs text-icon3 mt-1">{selectedTool.description}</p>}
         </div>
       )}

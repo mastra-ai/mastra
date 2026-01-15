@@ -37,7 +37,7 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Button variant="light" onClick={() => setIsCreateDialogOpen(true)}>
             <Icon>
               <Plus />
             </Icon>

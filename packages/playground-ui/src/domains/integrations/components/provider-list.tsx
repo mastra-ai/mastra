@@ -7,6 +7,14 @@ import { Loader2 } from 'lucide-react';
 
 import type { ProviderStatus } from '../types';
 
+// Provider logos
+const PROVIDER_LOGOS: Record<string, string> = {
+  arcade: 'https://avatars.githubusercontent.com/u/153409375?s=200&v=4',
+  composio: 'https://avatars.githubusercontent.com/u/128464815?s=200&v=4',
+  mcp: 'https://avatars.githubusercontent.com/u/182288589?s=200&v=4',
+  smithery: 'https://avatars.githubusercontent.com/u/190488992?s=200&v=4',
+};
+
 export interface ProviderListProps {
   providers?: ProviderStatus[];
   isLoading?: boolean;
@@ -45,7 +53,7 @@ export function ProviderList({
   }
 
   return (
-    <div className={cn('flex flex-col gap-3', className)}>
+    <div className={cn('grid grid-cols-3 gap-3', className)}>
       {providers.map((provider) => (
         <ProviderCard
           key={provider.provider}
@@ -82,7 +90,7 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
       return <Badge variant="default">Enter URL</Badge>;
     }
     if (isSmithery) {
-      return <Badge variant="default">Browse Registry</Badge>;
+      return <Badge variant="default">Browse</Badge>;
     }
     if (provider.connected) {
       return (
@@ -94,10 +102,12 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
     return <Badge variant="default">Not Connected</Badge>;
   };
 
+  const logoUrl = PROVIDER_LOGOS[provider.provider.toLowerCase()];
+
   const card = (
     <div
       className={cn(
-        'flex items-start gap-4 rounded-lg border p-4 transition-colors',
+        'flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors min-h-[140px]',
         'border-border1 bg-surface3',
         isClickable && 'cursor-pointer hover:border-border2 hover:bg-surface4',
         isSelected && 'border-accent1 bg-surface4',
@@ -117,18 +127,28 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
           : undefined
       }
     >
-      <div className="flex-1 space-y-2">
-        <div className="flex items-center gap-2">
-          <Txt variant="ui-lg" className="text-icon6">
-            {provider.name}
+      {/* Provider Logo */}
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-surface2 flex items-center justify-center">
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt={`${provider.name} logo`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <Txt variant="ui-lg" className="text-icon3">
+            {provider.name.charAt(0).toUpperCase()}
           </Txt>
-          {getBadge()}
-        </div>
-
-        <Txt variant="ui-sm" className="text-icon3">
-          {provider.description}
-        </Txt>
+        )}
       </div>
+
+      {/* Provider Name */}
+      <Txt variant="ui-md" className="text-icon6 text-center font-medium">
+        {provider.name}
+      </Txt>
+
+      {/* Badge */}
+      {getBadge()}
     </div>
   );
 

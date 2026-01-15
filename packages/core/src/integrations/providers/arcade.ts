@@ -92,42 +92,54 @@ export class ArcadeProvider implements ToolProvider {
    *
    * Note: Arcade API doesn't provide explicit toolkit groupings, so we derive them
    * from tool toolkit field. This method aggregates tools to create toolkit summaries.
+   * We fetch ALL tools to ensure we discover all available toolkits.
    */
   async listToolkits(options?: ListToolkitsOptions): Promise<ListToolkitsResponse> {
     if (!this.apiKey) {
       throw new Error('ARCADE_API_KEY is not configured');
     }
 
-    // Fetch all tools to derive toolkits
-    const params = new URLSearchParams();
-    if (options?.limit) {
-      // Fetch enough tools to ensure we get all toolkits
-      params.append('limit', Math.max(options.limit * 10, 100).toString());
-    } else {
-      params.append('limit', '100');
+    // Fetch ALL tools by paginating through the API to discover all toolkits
+    const allTools: ArcadeToolResponse[] = [];
+    const pageSize = 100;
+    let offset = 0;
+    let hasMoreTools = true;
+
+    while (hasMoreTools) {
+      const params = new URLSearchParams();
+      params.append('limit', pageSize.toString());
+      params.append('offset', offset.toString());
+
+      const url = `${this.baseUrl}/v1/tools?${params.toString()}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Arcade API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as ArcadeListToolsResponse;
+      const toolItems = Array.isArray(data.items) ? data.items : [];
+      allTools.push(...toolItems);
+
+      // Check if there are more tools to fetch
+      if (toolItems.length < pageSize) {
+        hasMoreTools = false;
+      } else if (data.total_count !== undefined && offset + pageSize >= data.total_count) {
+        hasMoreTools = false;
+      } else {
+        offset += pageSize;
+      }
     }
-
-    const url = `${this.baseUrl}/v1/tools${params.toString() ? `?${params.toString()}` : ''}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Arcade API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = (await response.json()) as ArcadeListToolsResponse;
 
     // Group tools by toolkit to create toolkit summaries
     const toolkitMap = new Map<string, { name: string; tools: ArcadeToolResponse[] }>();
 
-    // Safely handle empty or missing items array
-    const toolItems = Array.isArray(data.items) ? data.items : [];
-
-    for (const tool of toolItems) {
+    for (const tool of allTools) {
       const toolkitSlug = tool.toolkit?.name || tool.toolkit?.id || 'general';
       const existing = toolkitMap.get(toolkitSlug);
       if (existing) {

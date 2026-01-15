@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { Plus } from 'lucide-react';
+
 import {
   MainContentLayout,
   Header,
@@ -19,6 +22,7 @@ import { Link } from 'react-router';
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: tools = {}, isLoading: isLoadingTools } = useTools();
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const isEmpty = !isLoadingTools && Object.keys(tools).length === 0;
 
@@ -33,6 +37,12 @@ export default function Tools() {
         </HeaderTitle>
 
         <HeaderAction>
+          <Button variant="light" onClick={() => setIsAddDialogOpen(true)}>
+            <Icon>
+              <Plus className="h-4 w-4" />
+            </Icon>
+            Add Tools
+          </Button>
           <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
             <Icon>
               <DocsIcon />
@@ -44,7 +54,12 @@ export default function Tools() {
 
       <MainContentContent isCentered={isEmpty}>
         <div className="space-y-8">
-          <IntegrationsList className="px-6 pt-6" />
+          <IntegrationsList
+            className="px-6 pt-6"
+            addDialogOpen={isAddDialogOpen}
+            onAddDialogOpenChange={setIsAddDialogOpen}
+            hideAddButton
+          />
           <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} />
         </div>
       </MainContentContent>
