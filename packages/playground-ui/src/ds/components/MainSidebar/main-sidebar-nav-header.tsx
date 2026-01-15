@@ -12,10 +12,10 @@ export function MainSidebarNavHeader({ children, className, state = 'default' }:
   const isDefaultState = state === 'default';
 
   return (
-    <div className={cn('grid grid-cols-[auto_1fr] items-center min-h-[2.8rem] ', className)}>
+    <div className={cn('grid grid-cols-[auto_1fr] items-center min-h-11', className)}>
       <header
         className={cn('text-ui-xs uppercase text-neutral3/75 tracking-widest', {
-          'pl-[0.75rem]': isDefaultState,
+          'pl-3': isDefaultState,
         })}
       >
         {isDefaultState ? children : <VisuallyHidden>{children}</VisuallyHidden>}

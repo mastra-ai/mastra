@@ -11,7 +11,7 @@ export interface HeaderProps {
 export const Header = ({ children, border = true }: HeaderProps) => {
   return (
     <header
-      className={cn('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent px-3', {
+      className={cn('h-header-default z-50 flex w-full items-center gap-4 bg-transparent px-3', {
         'border-b border-border1': border,
       })}
     >
@@ -29,7 +29,7 @@ export const HeaderTitle = ({ children }: HeaderProps) => {
 };
 
 export const HeaderAction = ({ children }: HeaderProps) => {
-  return <div className="ml-auto flex items-center gap-2">{children}</div>;
+  return <div className="ml-auto flex items-center gap-3">{children}</div>;
 };
 
 export const HeaderGroup = ({ children }: HeaderProps) => {

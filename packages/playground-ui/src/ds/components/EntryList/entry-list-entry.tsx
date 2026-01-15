@@ -29,7 +29,7 @@ export function EntryListEntry({ entry, isSelected, onClick, children, columns }
       <button
         onClick={handleClick}
         className={cn(
-          'grid w-full px-[1.5rem] gap-[1.5rem] text-left items-center min-h-[3rem]',
+          'grid w-full px-6 gap-6 text-left items-center min-h-12',
           'focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_rgba(24,251,111,.75)]',
           {
             // hover effect only not for skeleton and selected

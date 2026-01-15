@@ -7,8 +7,8 @@ export function MainSidebarNavSeparator({ className }: MainSidebarNavSeparatorPr
   return (
     <div
       className={cn(
-        'min-h-[1.3rem] relative',
-        '[&:after]:content-[""] [&:after]:block [&:after]:absolute [&:after]:h-[0px] [&:after]:border-border1 [&:after]:border-t [&:after]:top-[48%] [&:after]:left-[0.75rem] [&:after]:right-[0.75rem]',
+        'min-h-5 relative',
+        '[&:after]:content-[""] [&:after]:block [&:after]:absolute [&:after]:h-0 [&:after]:border-border1 [&:after]:border-t [&:after]:top-1/2 [&:after]:left-3 [&:after]:right-3',
         className,
       )}
     ></div>

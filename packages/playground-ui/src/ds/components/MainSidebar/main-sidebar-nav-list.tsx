@@ -13,5 +13,5 @@ export type MainSidebarNavListProps = {
   className?: string;
 };
 export function MainSidebarNavList({ children, className }: MainSidebarNavListProps) {
-  return <ul className={cn('grid gap-[0.25rem] items-start content-center ', className)}>{children}</ul>;
+  return <ul className={cn('grid gap-1 items-start content-center', className)}>{children}</ul>;
 }

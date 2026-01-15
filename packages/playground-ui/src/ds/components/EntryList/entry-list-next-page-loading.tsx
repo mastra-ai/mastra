@@ -18,7 +18,7 @@ export function EntryListNextPageLoading({
   }
 
   return (
-    <div ref={setEndOfListElement} className="text-ui-md text-neutral3 opacity-50 flex mt-[2rem] justify-center">
+    <div ref={setEndOfListElement} className="text-ui-md text-neutral3 opacity-50 flex mt-8 justify-center">
       {isLoading && loadingText}
       {!hasMore && !isLoading && noMoreDataText}
     </div>

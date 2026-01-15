@@ -68,18 +68,16 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="space-y-6 text-neutral3 mb-[2rem] content-center">
+    <Container className="space-y-6 text-neutral3 mb-8 content-center">
       {/* Header */}
       <div className="text-center">
         <h3 className="text-lg font-semibold text-neutral5">{getPhaseMessage()}</h3>
-        {streamResult?.runId && (
-          <div className="mt-[0.5rem] text-ui-sm text-neutral3">Run ID: {streamResult.runId}</div>
-        )}
+        {streamResult?.runId && <div className="mt-2 text-ui-sm text-neutral3">Run ID: {streamResult.runId}</div>}
       </div>
 
       {/* Progress Bar */}
       {hasSteps && totalSteps > 0 && !['error'].includes(phase) && (
-        <div className="max-w-[30rem] w-full mx-auto px-[1.5rem]">
+        <div className="max-w-[30rem] w-full mx-auto px-6">
           <ProcessStepProgressBar steps={steps} />
         </div>
       )}
@@ -88,8 +86,8 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-neutral5 p-[1.5rem] flex items-center gap-[.75rem] text-ui-md bg-red-500/10',
-            '[&>svg]:w-[1.5rem] [&>svg]:h-[1.5rem] [&>svg]:opacity-70 [&>svg]:text-red-500',
+            'rounded-lg text-neutral5 p-6 flex items-center gap-3 text-ui-md bg-red-500/10',
+            '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:opacity-70 [&>svg]:text-red-500',
           )}
         >
           <OctagonXIcon />
@@ -98,11 +96,11 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       )}
 
       {/* Dynamic Steps Display */}
-      {hasSteps && <ProcessStepList steps={steps} currentStep={currentStep} className="pb-[1rem]" />}
+      {hasSteps && <ProcessStepList steps={steps} currentStep={currentStep} className="pb-4" />}
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-center text-sm text-neutral3 grid gap-[1rem] justify-items-center">
+        <div className="text-center text-sm text-neutral3 grid gap-4 justify-items-center">
           <Spinner />
           <p>This may take some time...</p>
         </div>
