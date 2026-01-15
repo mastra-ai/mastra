@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { RequestContext } from '../../request-context';
@@ -72,11 +71,13 @@ describe('Dynamic Model Selection with Fallback', () => {
       model: [
         {
           model: ({ requestContext }) => {
+            requestContext.get('tier');
             return model1;
           },
         },
         {
           model: ({ requestContext }) => {
+            requestContext.get('tier');
             return model2;
           },
         },
