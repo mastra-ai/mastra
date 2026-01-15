@@ -1167,41 +1167,29 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     | MastraLanguageModel
     | MastraLegacyLanguageModel
     | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
-    if (typeof modelConfig === 'function') {
-      return resolveMaybePromise(modelConfig({ requestContext, mastra: this.#mastra }), resolved => {
-        if (Array.isArray(resolved)) {
-          if (resolved.length === 0 || !resolved[0]) {
-            throw new MastraError({
-              id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-              details: { agentName: this.name },
-              text: `[Agent:${this.name}] - Empty model list returned from dynamic function`,
-            });
-          }
-          return this.resolveModelConfig(resolved[0].model as DynamicArgument<MastraModelConfig>, requestContext);
-        }
+    // Use resolveModelFallbacks to handle functions and normalization
+    const maybeResolved = this.resolveModelFallbacks(modelConfig, requestContext);
+
+    return resolveMaybePromise(maybeResolved, resolved => {
+      if (!Array.isArray(resolved)) {
         return this.resolveModelConfig(resolved, requestContext);
-      }) as Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
-    }
+      }
 
-    if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, requestContext);
-
-    if (modelConfig.length === 0 || !modelConfig[0]) {
-      const mastraError = new MastraError({
-        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Empty model list provided`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-    return this.resolveModelConfig(modelConfig[0].model, requestContext);
+      // Array case - return first model
+      if (resolved.length === 0 || !resolved[0]) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { agentName: this.name },
+          text: `[Agent:${this.name}] - Empty model list provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+      return this.resolveModelConfig(resolved[0].model, requestContext);
+    }) as MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   }
 
   /**
@@ -1259,9 +1247,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return;
     }
 
-    // After constructor normalization, arrays are always ModelFallbacks with required id
-    const modelArray = this.model as ModelFallbacks;
-    this.model = modelArray.sort((a, b) => {
+    // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
+    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
+    // The cast tells TypeScript to trust this runtime invariant.
+    this.model = (this.model as ModelFallbacks).sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
       return aIndex - bIndex;
@@ -1285,7 +1274,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return;
     }
 
-    // After constructor normalization, arrays are always ModelFallbacks with required id
+    // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
+    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
+    // The cast tells TypeScript to trust this runtime invariant.
     const modelArray = this.model as ModelFallbacks;
     const modelToUpdate = modelArray.find(m => m.id === id);
     if (!modelToUpdate) {
@@ -2713,7 +2704,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ];
     }
 
-    const modelArray = (model as ModelFallbacks) ?? this.model;
+    // At this point, either model param or this.model is an array (functions and single models handled above).
+    // TypeScript sees them as potentially ModelWithRetries[] | ModelFallbacks, but at runtime arrays are
+    // always normalized to ModelFallbacks. The cast asserts this runtime invariant.
+    const modelArray = (model ?? this.model) as ModelFallbacks;
     const models = await Promise.all(
       modelArray.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
