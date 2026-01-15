@@ -35,11 +35,6 @@ export const Spacings = {
   '72': '18rem', // 288px
   '80': '20rem', // 320px
   '96': '24rem', // 384px
-
-  // Legacy aliases for backwards compatibility
-  sm: '0.125rem', // 2px (was sm: '2px')
-  md: '0.25rem', // 4px (was md: '4px')
-  lg: '0.5rem', // 8px (was lg: '8px')
 } as const;
 
 export type Spacing = keyof typeof Spacings;
