@@ -263,6 +263,125 @@ describe('Span', () => {
     });
   });
 
+  describe('metadata inheritance', () => {
+    it('should inherit metadata from parent span when not explicitly provided', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        metadata: { userId: 'user-123', sessionId: 'session-456' },
+        attributes: {},
+      });
+
+      const llmSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      // MODEL_GENERATION should inherit metadata from AGENT_RUN
+      expect(llmSpan.metadata).toEqual({ userId: 'user-123', sessionId: 'session-456' });
+
+      agentSpan.end();
+    });
+
+    it('should allow child span to override inherited metadata', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        metadata: { userId: 'user-123', priority: 'low' },
+        attributes: {},
+      });
+
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool-call',
+        metadata: { priority: 'high' },
+        attributes: {},
+      });
+
+      // TOOL_CALL should have merged metadata with its own value taking precedence
+      expect(toolSpan.metadata).toEqual({ userId: 'user-123', priority: 'high' });
+
+      agentSpan.end();
+    });
+
+    it('should merge parent and child metadata', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        metadata: { userId: 'user-123' },
+        attributes: {},
+      });
+
+      const llmSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        metadata: { requestId: 'req-789' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      // Should have both parent and child metadata merged
+      expect(llmSpan.metadata).toEqual({ userId: 'user-123', requestId: 'req-789' });
+
+      agentSpan.end();
+    });
+
+    it('should propagate metadata through multiple levels', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        metadata: { userId: 'user-123' },
+        attributes: {},
+      });
+
+      const workflowSpan = agentSpan.createChildSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        metadata: { workflowVersion: 'v2' },
+        attributes: {},
+      });
+
+      const llmSpan = workflowSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      // LLM span should have metadata from both agent and workflow
+      expect(llmSpan.metadata).toEqual({ userId: 'user-123', workflowVersion: 'v2' });
+
+      agentSpan.end();
+    });
+  });
+
   describe('getExternalParentId', () => {
     it('should return undefined when no parent', () => {
       const options = {
