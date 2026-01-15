@@ -2,6 +2,11 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import type { VectorTestConfig } from '../../vector-factory';
 import { createVector, createUnitVector, VECTOR_DIMENSION } from './test-helpers';
 
+export interface ErrorHandlingOptions {
+  /** Skip concurrent operation error tests. Useful for stores that don't handle concurrent writes well. */
+  skipConcurrency?: boolean;
+}
+
 /**
  * Shared test suite for error handling in vector operations.
  * These tests ensure consistent error behavior across all vector store implementations.
@@ -15,7 +20,7 @@ import { createVector, createUnitVector, VECTOR_DIMENSION } from './test-helpers
  * Note: Some error tests overlap with other domains but focus on error message quality
  * and consistent error handling patterns.
  */
-export function createErrorHandlingTest(config: VectorTestConfig) {
+export function createErrorHandlingTest(config: VectorTestConfig, options: ErrorHandlingOptions = {}) {
   const {
     createIndex,
     deleteIndex,
@@ -446,44 +451,46 @@ export function createErrorHandlingTest(config: VectorTestConfig) {
       }, 30000); // 30s timeout for potentially slow operation
     });
 
-    describe('Concurrent Operation Errors', () => {
-      it('should handle double deletion of same index gracefully', async () => {
-        const tempIndexName = `temp_double_delete_${Date.now()}`;
+    if (!options.skipConcurrency) {
+      describe('Concurrent Operation Errors', () => {
+        it('should handle double deletion of same index gracefully', async () => {
+          const tempIndexName = `temp_double_delete_${Date.now()}`;
 
-        // Create index
-        await createIndex(tempIndexName);
-        await waitForIndexing(tempIndexName);
+          // Create index
+          await createIndex(tempIndexName);
+          await waitForIndexing(tempIndexName);
 
-        // Delete once
-        await deleteIndex(tempIndexName);
-
-        // Try to delete again - should either succeed (idempotent) or throw
-        try {
+          // Delete once
           await deleteIndex(tempIndexName);
-          // Idempotent deletion - acceptable
-        } catch (error) {
-          // Or reject second deletion - also acceptable
-          expect(error).toBeDefined();
-        }
+
+          // Try to delete again - should either succeed (idempotent) or throw
+          try {
+            await deleteIndex(tempIndexName);
+            // Idempotent deletion - acceptable
+          } catch (error) {
+            // Or reject second deletion - also acceptable
+            expect(error).toBeDefined();
+          }
+        });
+
+        it('should handle concurrent upserts to same index', async () => {
+          // Perform 5 concurrent upserts
+          const promises = Array.from({ length: 5 }, (_, i) =>
+            config.vector.upsert({
+              indexName: testIndexName,
+              vectors: [createVector(300 + i)],
+              metadata: [{ concurrent: true, batch: i }],
+            }),
+          );
+
+          // All should succeed or fail consistently
+          const results = await Promise.allSettled(promises);
+          const failures = results.filter(r => r.status === 'rejected');
+
+          // Either all succeed or all fail - no partial success
+          expect(failures.length === 0 || failures.length === results.length).toBe(true);
+        }, 30000);
       });
-
-      it('should handle concurrent upserts to same index', async () => {
-        // Perform 5 concurrent upserts
-        const promises = Array.from({ length: 5 }, (_, i) =>
-          config.vector.upsert({
-            indexName: testIndexName,
-            vectors: [createVector(300 + i)],
-            metadata: [{ concurrent: true, batch: i }],
-          }),
-        );
-
-        // All should succeed or fail consistently
-        const results = await Promise.allSettled(promises);
-        const failures = results.filter(r => r.status === 'rejected');
-
-        // Either all succeed or all fail - no partial success
-        expect(failures.length === 0 || failures.length === results.length).toBe(true);
-      }, 30000);
-    });
+    }
   });
 }

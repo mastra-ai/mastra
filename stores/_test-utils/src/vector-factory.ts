@@ -46,6 +46,8 @@ export interface TestDomains {
   edgeCases?: boolean;
   /** Large batch operations: 1000+ vector upserts, large topK queries. Subset of edgeCases, can be disabled separately. */
   largeBatch?: boolean;
+  /** Concurrent operations: parallel upserts/queries. Subset of edgeCases, can be disabled separately. */
+  concurrency?: boolean;
   /** Error handling: index not found, invalid filters, invalid data, parameter validation */
   errorHandling?: boolean;
   /** Metadata filtering: Memory system compatibility ($eq, $and, $or, thread_id, resource_id) */
@@ -147,11 +149,16 @@ export function createVectorTestSuite(config: VectorTestConfig) {
     }
 
     if (testDomains.edgeCases !== false) {
-      createEdgeCasesTest(config, { skipLargeBatch: testDomains.largeBatch === false });
+      createEdgeCasesTest(config, {
+        skipLargeBatch: testDomains.largeBatch === false,
+        skipConcurrency: testDomains.concurrency === false,
+      });
     }
 
     if (testDomains.errorHandling !== false) {
-      createErrorHandlingTest(config);
+      createErrorHandlingTest(config, {
+        skipConcurrency: testDomains.concurrency === false,
+      });
     }
 
     if (testDomains.metadataFiltering !== false) {
