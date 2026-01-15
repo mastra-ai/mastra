@@ -149,6 +149,17 @@ const stream = await agent.stream("message for agent", {
 [Studio](/docs/v1/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
 :::
 
+### Thread and resource relationship
+
+Mastra enforces a strict one-to-one mapping between thread IDs and resource IDs. Once a thread is created with a specific resource, that pairing is permanent and cannot be changed. Attempting to use the same thread ID with a different resource ID will result in an error:
+
+```
+Thread with id <thread_id> is for resource with id <resource_a>
+but resource <resource_b> was queried
+```
+
+Thread IDs must be globally unique across your application to prevent this collision.
+
 ### Thread title generation
 
 Mastra can automatically generate descriptive thread titles based on the user's first message.
