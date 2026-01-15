@@ -82,6 +82,12 @@ export async function POST(req: Request) {
       isOptional: true,
     },
     {
+      name: "params.memory",
+      type: "{ thread: string, resource: string }",
+      description: "Memory configuration for the agent. When provided, only the latest user message is sent to the agent to avoid duplication, since memory recall provides the conversation history.",
+      isOptional: true,
+    },
+    {
       name: "defaultOptions",
       type: "AgentExecutionOptions",
       description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
