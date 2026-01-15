@@ -1,6 +1,13 @@
 import { useComposerRuntime } from '@assistant-ui/react';
 
-import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogDescription, DialogBody } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogContent,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { FormEvent } from 'react';
 import { Input } from '@/ds/components/Input';
 import { Button } from '@/ds/components/Button';

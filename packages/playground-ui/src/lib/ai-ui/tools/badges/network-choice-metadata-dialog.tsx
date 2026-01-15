@@ -1,4 +1,11 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { TooltipIconButton } from '../../tooltip-icon-button';

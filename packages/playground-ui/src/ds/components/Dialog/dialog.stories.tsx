@@ -99,7 +99,8 @@ export const LongContent: Story = {
               dolore magna aliqua.
             </p>
             <p className="text-sm text-neutral5">
-              Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+              Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+              consequat.
             </p>
             <p className="text-sm text-neutral5">
               Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
