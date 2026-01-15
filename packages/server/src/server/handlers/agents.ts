@@ -71,6 +71,14 @@ export interface SerializedTool {
   inputSchema?: string;
   outputSchema?: string;
   requireApproval?: boolean;
+  /** Source of the tool - 'code' for code-defined tools, integration name for integration tools */
+  source?: string;
+  /** Provider name for integration tools (e.g., 'composio', 'arcade') */
+  provider?: string;
+  /** Toolkit slug for integration tools */
+  toolkit?: string;
+  /** Integration ID for integration tools */
+  integrationId?: string;
 }
 
 interface SerializedToolInput {
@@ -262,6 +270,17 @@ async function formatAgentList({
               perPage: false, // Get all tools
             });
 
+            // Get integration name for source display
+            let integrationName = 'integration';
+            try {
+              const integration = await integrationsStore.getIntegrationById({ id: integrationId });
+              if (integration?.name) {
+                integrationName = integration.name;
+              }
+            } catch {
+              // Use default fallback
+            }
+
             for (const cachedTool of cachedTools) {
               const toolName = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
               // Only include tools that are in the specific tool IDs list
@@ -275,6 +294,10 @@ async function formatAgentList({
                   ? JSON.stringify(cachedTool.inputSchema)
                   : JSON.stringify({ type: 'object', properties: {} }),
                 outputSchema: cachedTool.outputSchema ? JSON.stringify(cachedTool.outputSchema) : undefined,
+                source: integrationName,
+                provider: cachedTool.provider,
+                toolkit: cachedTool.toolkitSlug,
+                integrationId: cachedTool.integrationId,
               };
             }
           } catch (error) {
@@ -438,6 +461,17 @@ async function formatAgent({
               perPage: false, // Get all tools
             });
 
+            // Get integration name for source display
+            let integrationName = 'integration';
+            try {
+              const integration = await integrationsStore.getIntegrationById({ id: integrationId });
+              if (integration?.name) {
+                integrationName = integration.name;
+              }
+            } catch {
+              // Use default fallback
+            }
+
             for (const cachedTool of cachedTools) {
               const toolName = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
               // Only include tools that are in the specific tool IDs list
@@ -451,6 +485,10 @@ async function formatAgent({
                   ? JSON.stringify(cachedTool.inputSchema)
                   : JSON.stringify({ type: 'object', properties: {} }),
                 outputSchema: cachedTool.outputSchema ? JSON.stringify(cachedTool.outputSchema) : undefined,
+                source: integrationName,
+                provider: cachedTool.provider,
+                toolkit: cachedTool.toolkitSlug,
+                integrationId: cachedTool.integrationId,
               };
             }
           } catch (error) {
