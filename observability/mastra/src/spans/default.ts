@@ -17,10 +17,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     super(options, observabilityInstance);
 
-    // If spanId is provided, this is a rebuilt span - use provided IDs directly
-    if (options.spanId) {
+    // If spanId and traceId are provided, this is a rebuilt span - use provided IDs directly
+    if (options.spanId && options.traceId) {
       this.id = options.spanId;
-      this.traceId = options.traceId!;
+      this.traceId = options.traceId;
       if (options.parentSpanId) {
         this.parentSpanId = options.parentSpanId;
       }

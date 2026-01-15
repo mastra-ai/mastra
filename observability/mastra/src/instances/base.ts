@@ -20,6 +20,7 @@ import type {
   CreateSpanOptions,
   ObservabilityInstance,
   CustomSamplerOptions,
+  ExportedSpan,
   AnyExportedSpan,
   TraceState,
   TracingOptions,
@@ -196,17 +197,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * @param cached - The exported span data to rebuild from
    * @returns A span that can have lifecycle methods called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: AnyExportedSpan): Span<TType> {
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,
-      type: cached.type as TType,
+      type: cached.type,
       traceId: cached.traceId,
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
-      attributes: cached.attributes as any,
+      attributes: cached.attributes,
       metadata: cached.metadata,
       entityType: cached.entityType,
       entityId: cached.entityId,

@@ -441,8 +441,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       stepSpan,
     } = params;
 
-    // Build tracingOptions to propagate trace context to nested workflow
-    const tracingOptions = executionContext.tracingIds?.traceId
+    // Build trace context to propagate to nested workflow
+    const nestedTracingContext = executionContext.tracingIds?.traceId
       ? {
           traceId: executionContext.tracingIds.traceId,
           parentSpanId: stepSpan?.id,
@@ -479,7 +479,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
             outputOptions: { includeState: true },
             perStep,
-            tracingOptions,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;
@@ -508,7 +508,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: executionContext.runId,
             outputOptions: { includeState: true },
             perStep,
-            tracingOptions,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;
@@ -522,7 +522,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
             perStep,
-            tracingOptions,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;

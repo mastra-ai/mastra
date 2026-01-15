@@ -37,6 +37,12 @@ const fetchWeatherA = createStep({
     const city = inputData.cityA;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
+
+    if (!geocodingResponse.ok) {
+      const errorBody = await geocodingResponse.text();
+      throw new Error(`Geocoding API error (${geocodingResponse.status}): ${errorBody} - URL: ${geocodingUrl}`);
+    }
+
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[];
     };
@@ -49,6 +55,12 @@ const fetchWeatherA = createStep({
 
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
     const response = await fetch(weatherUrl);
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Weather API error (${response.status}): ${errorBody} - URL: ${weatherUrl}`);
+    }
+
     const data = (await response.json()) as {
       current: { weathercode: number };
       hourly: { precipitation_probability: number[]; temperature_2m: number[] };
@@ -73,6 +85,12 @@ const fetchWeatherB = createStep({
     const city = inputData.cityB;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
+
+    if (!geocodingResponse.ok) {
+      const errorBody = await geocodingResponse.text();
+      throw new Error(`Geocoding API error (${geocodingResponse.status}): ${errorBody} - URL: ${geocodingUrl}`);
+    }
+
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[];
     };
@@ -85,6 +103,12 @@ const fetchWeatherB = createStep({
 
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
     const response = await fetch(weatherUrl);
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Weather API error (${response.status}): ${errorBody} - URL: ${weatherUrl}`);
+    }
+
     const data = (await response.json()) as {
       current: { weathercode: number };
       hourly: { precipitation_probability: number[]; temperature_2m: number[] };
