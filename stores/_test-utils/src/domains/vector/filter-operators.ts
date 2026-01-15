@@ -509,7 +509,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     }
 
     describe('Combined Filters', () => {
-      it.only('should combine multiple comparison operators', async () => {
+      it('should combine multiple comparison operators', async () => {
         const results = await config.vector.query({
           indexName: testIndexName,
           queryVector: createUnitVector(0),
@@ -519,15 +519,6 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
             rating: { $gte: 4.0 },
           },
         });
-
-        console.log(
-          'Results:',
-          JSON.stringify(
-            results.map(r => r.metadata),
-            null,
-            2,
-          ),
-        );
 
         // Should return products with 20 <= price <= 100 AND rating >= 4.0
         expect(results.length).toBeGreaterThan(0);
