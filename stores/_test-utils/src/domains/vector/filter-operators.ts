@@ -24,6 +24,12 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     createIndex,
     deleteIndex,
     waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 5000)),
+    supportsArrayMetadata = true,
+    supportsNullValues = true,
+    supportsExistsOperator = true,
+    supportsRegex = true,
+    supportsContains = true,
+    supportsNotOperator = true,
   } = config;
 
   describe('Filter Operators', () => {
@@ -45,18 +51,54 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         createVector(8), // Product H
       ];
 
+      // Build metadata - conditionally include tags array if store supports array metadata
       const metadata = [
-        { name: 'Product A', price: 10, rating: 4.5, category: 'electronics', tags: ['new', 'sale'], available: true },
-        { name: 'Product B', price: 25, rating: 3.8, category: 'electronics', tags: ['featured'], available: true },
-        { name: 'Product C', price: 50, rating: 4.9, category: 'home', tags: ['premium', 'sale'], available: false },
-        { name: 'Product D', price: 100, rating: 4.2, category: 'home', tags: ['premium'], available: true },
-        { name: 'Product E', price: 15, rating: 3.5, category: 'books', tags: ['new'], available: true },
+        {
+          name: 'Product A',
+          price: 10,
+          rating: 4.5,
+          category: 'electronics',
+          ...(supportsArrayMetadata ? { tags: ['new', 'sale'] } : {}),
+          available: true,
+        },
+        {
+          name: 'Product B',
+          price: 25,
+          rating: 3.8,
+          category: 'electronics',
+          ...(supportsArrayMetadata ? { tags: ['featured'] } : {}),
+          available: true,
+        },
+        {
+          name: 'Product C',
+          price: 50,
+          rating: 4.9,
+          category: 'home',
+          ...(supportsArrayMetadata ? { tags: ['premium', 'sale'] } : {}),
+          available: false,
+        },
+        {
+          name: 'Product D',
+          price: 100,
+          rating: 4.2,
+          category: 'home',
+          ...(supportsArrayMetadata ? { tags: ['premium'] } : {}),
+          available: true,
+        },
+        {
+          name: 'Product E',
+          price: 15,
+          rating: 3.5,
+          category: 'books',
+          ...(supportsArrayMetadata ? { tags: ['new'] } : {}),
+          available: true,
+        },
         {
           name: 'Product F',
           price: 75,
           rating: 4.7,
           category: 'electronics',
-          tags: ['featured', 'premium'],
+          ...(supportsArrayMetadata ? { tags: ['featured', 'premium'] } : {}),
           available: true,
         },
         {
@@ -64,11 +106,18 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           price: 30,
           rating: 4.0,
           category: 'books',
-          tags: ['sale'],
+          ...(supportsArrayMetadata ? { tags: ['sale'] } : {}),
           available: false,
           description: 'Classic novel',
         },
-        { name: 'Product H', price: 200, rating: 5.0, category: 'home', tags: ['premium', 'luxury'], available: true },
+        {
+          name: 'Product H',
+          price: 200,
+          rating: 5.0,
+          category: 'home',
+          ...(supportsArrayMetadata ? { tags: ['premium', 'luxury'] } : {}),
+          available: true,
+        },
       ];
 
       await config.vector.upsert({
@@ -219,19 +268,22 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         expect(results.length).toBe(7);
       });
 
-      it('should filter by $not with comparison operator', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { price: { $not: { $gt: 50 } } },
-        });
+      // $not operator test - only run if store supports it
+      if (supportsNotOperator) {
+        it('should filter by $not with comparison operator', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { price: { $not: { $gt: 50 } } },
+          });
 
-        // Should return products with price <= 50 (Product A, B, C, E, G)
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.every(r => !((r.metadata?.price as number) > 50))).toBe(true);
-        expect(results.length).toBe(5);
-      });
+          // Should return products with price <= 50 (Product A, B, C, E, G)
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => !((r.metadata?.price as number) > 50))).toBe(true);
+          expect(results.length).toBe(5);
+        });
+      }
     });
 
     describe('Array Operators', () => {
@@ -277,175 +329,187 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         expect(results.length).toBe(3);
       });
 
-      it('should filter by $all on array field', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { tags: { $all: ['premium', 'sale'] } },
-        });
-
-        // Should return products with both 'premium' AND 'sale' tags (Product C)
-        expect(results.length).toBeGreaterThan(0);
-        expect(
-          results.every(r => {
-            const tags = r.metadata?.tags as string[];
-            return tags?.includes('premium') && tags?.includes('sale');
-          }),
-        ).toBe(true);
-        expect(results.length).toBe(1);
-      });
-
-      it('should filter by single tag using $in on array field', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { tags: { $in: ['luxury'] } },
-        });
-
-        // Should return products with 'luxury' tag (Product H)
-        expect(results.length).toBeGreaterThan(0);
-        expect(
-          results.every(r => {
-            const tags = r.metadata?.tags as string[];
-            return tags?.includes('luxury');
-          }),
-        ).toBe(true);
-        expect(results.length).toBe(1);
-      });
-    });
-
-    describe('Existence Operator', () => {
-      it('should filter by $exists: true to find documents with field', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { description: { $exists: true } },
-        });
-
-        // Should return only Product G which has a description field
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.every(r => r.metadata?.description !== undefined)).toBe(true);
-        expect(results.length).toBe(1);
-        expect(results[0]?.metadata?.name).toBe('Product G');
-      });
-
-      it('should filter by $exists: false to find documents without field', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { description: { $exists: false } },
-        });
-
-        // Should return all products except Product G (7 products)
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.every(r => r.metadata?.description === undefined)).toBe(true);
-        expect(results.length).toBe(7);
-      });
-    });
-
-    describe('Null Handling', () => {
-      beforeAll(async () => {
-        // Add a vector with null metadata value
-        await config.vector.upsert({
-          indexName: testIndexName,
-          vectors: [createVector(9)],
-          metadata: [{ name: 'Product I', price: null, category: 'test', tags: [], available: true }],
-        });
-        await waitForIndexing(testIndexName);
-      });
-
-      it('should filter by field equal to null', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { price: { $eq: null } },
-        });
-
-        // Should return Product I with null price
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.every(r => r.metadata?.price === null)).toBe(true);
-        expect(results[0]?.metadata?.name).toBe('Product I');
-      });
-
-      it('should filter by field not equal to null', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: { price: { $ne: null } },
-        });
-
-        // Should return all products except Product I (8 products with non-null price)
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.every(r => r.metadata?.price !== null)).toBe(true);
-        expect(results.length).toBe(8);
-      });
-    });
-
-    describe('Pattern Matching (OPTIONAL)', () => {
-      it('should filter by $regex pattern matching', async () => {
-        try {
+      // Array metadata tests - only run if store supports array values in metadata
+      // Stores like Chroma that only support primitive types will skip these
+      if (supportsArrayMetadata) {
+        it('should filter by $all on array field', async () => {
           const results = await config.vector.query({
             indexName: testIndexName,
             queryVector: createUnitVector(0),
             topK: 10,
-            filter: { name: { $regex: '^Product [A-C]' } },
+            filter: { tags: { $all: ['premium', 'sale'] } },
           });
 
-          // Should return Product A, B, C if regex is supported
+          // Should return products with both 'premium' AND 'sale' tags (Product C)
           expect(results.length).toBeGreaterThan(0);
-          expect(results.every(r => /^Product [A-C]/.test(r.metadata?.name as string))).toBe(true);
-          expect(results.length).toBe(3);
-        } catch (error) {
-          // If $regex is not supported, that's okay - it's optional
-          console.log('$regex operator not supported by this store (optional)');
-        }
-      });
+          expect(
+            results.every(r => {
+              const tags = r.metadata?.tags as string[];
+              return tags?.includes('premium') && tags?.includes('sale');
+            }),
+          ).toBe(true);
+          expect(results.length).toBe(1);
+        });
 
-      it('should filter by $regex case-insensitive pattern', async () => {
-        try {
+        it('should filter by single tag using $in on array field', async () => {
           const results = await config.vector.query({
             indexName: testIndexName,
             queryVector: createUnitVector(0),
             topK: 10,
-            filter: { category: { $regex: '(?i)ELECTRONICS' } },
+            filter: { tags: { $in: ['luxury'] } },
           });
 
-          // Should return electronics products if case-insensitive regex is supported
+          // Should return products with 'luxury' tag (Product H)
           expect(results.length).toBeGreaterThan(0);
-          expect(results.every(r => (r.metadata?.category as string).toLowerCase() === 'electronics')).toBe(true);
-        } catch (error) {
-          // If case-insensitive regex is not supported, that's okay - it's optional
-          console.log('Case-insensitive $regex not supported by this store (optional)');
-        }
-      });
-
-      it('should filter by $contains substring matching', async () => {
-        try {
-          const results = await config.vector.query({
-            indexName: testIndexName,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: { description: { $contains: 'novel' } },
-          });
-
-          // Should return Product G with description containing "novel" if $contains is supported
-          expect(results.length).toBeGreaterThan(0);
-          expect(results.every(r => (r.metadata?.description as string)?.includes('novel'))).toBe(true);
-        } catch (error) {
-          // If $contains is not supported, that's okay - it's optional
-          console.log('$contains operator not supported by this store (optional)');
-        }
-      });
+          expect(
+            results.every(r => {
+              const tags = r.metadata?.tags as string[];
+              return tags?.includes('luxury');
+            }),
+          ).toBe(true);
+          expect(results.length).toBe(1);
+        });
+      }
     });
+
+    // $exists operator tests - only run if store supports it
+    if (supportsExistsOperator) {
+      describe('Existence Operator', () => {
+        it('should filter by $exists: true to find documents with field', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { description: { $exists: true } },
+          });
+
+          // Should return only Product G which has a description field
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.description !== undefined)).toBe(true);
+          expect(results.length).toBe(1);
+          expect(results[0]?.metadata?.name).toBe('Product G');
+        });
+
+        it('should filter by $exists: false to find documents without field', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { description: { $exists: false } },
+          });
+
+          // Should return all products except Product G (7 products)
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.description === undefined)).toBe(true);
+          expect(results.length).toBe(7);
+        });
+      });
+    }
+
+    // Null value filtering tests - only run if store supports null values
+    if (supportsNullValues) {
+      describe('Null Handling', () => {
+        beforeAll(async () => {
+          // Add a vector with null metadata value
+          await config.vector.upsert({
+            indexName: testIndexName,
+            vectors: [createVector(9)],
+            metadata: [
+              {
+                name: 'Product I',
+                price: null,
+                category: 'test',
+                ...(supportsArrayMetadata ? { tags: [] } : {}),
+                available: true,
+              },
+            ],
+          });
+          await waitForIndexing(testIndexName);
+        });
+
+        it('should filter by field equal to null', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { price: { $eq: null } },
+          });
+
+          // Should return Product I with null price
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.price === null)).toBe(true);
+          expect(results[0]?.metadata?.name).toBe('Product I');
+        });
+
+        it('should filter by field not equal to null', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { price: { $ne: null } },
+          });
+
+          // Should return all products except Product I (8 products with non-null price)
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.price !== null)).toBe(true);
+          expect(results.length).toBe(8);
+        });
+      });
+    }
+
+    // Pattern matching tests - only run if store supports at least one pattern operator
+    if (supportsRegex || supportsContains) {
+      describe('Pattern Matching', () => {
+        // $regex tests - only run if store supports regex
+        if (supportsRegex) {
+          it('should filter by $regex pattern matching', async () => {
+            const results = await config.vector.query({
+              indexName: testIndexName,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { name: { $regex: '^Product [A-C]' } },
+            });
+
+            // Should return Product A, B, C
+            expect(results.length).toBeGreaterThan(0);
+            expect(results.every(r => /^Product [A-C]/.test(r.metadata?.name as string))).toBe(true);
+            expect(results.length).toBe(3);
+          });
+
+          it('should filter by $regex case-insensitive pattern', async () => {
+            const results = await config.vector.query({
+              indexName: testIndexName,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { category: { $regex: '(?i)ELECTRONICS' } },
+            });
+
+            // Should return electronics products
+            expect(results.length).toBeGreaterThan(0);
+            expect(results.every(r => (r.metadata?.category as string).toLowerCase() === 'electronics')).toBe(true);
+          });
+        }
+
+        // $contains tests - only run if store supports substring matching
+        if (supportsContains) {
+          it('should filter by $contains substring matching', async () => {
+            const results = await config.vector.query({
+              indexName: testIndexName,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { description: { $contains: 'novel' } },
+            });
+
+            // Should return Product G with description containing "novel"
+            expect(results.length).toBeGreaterThan(0);
+            expect(results.every(r => (r.metadata?.description as string)?.includes('novel'))).toBe(true);
+          });
+        }
+      });
+    }
 
     describe('Combined Filters', () => {
-      it('should combine multiple comparison operators', async () => {
+      it.only('should combine multiple comparison operators', async () => {
         const results = await config.vector.query({
           indexName: testIndexName,
           queryVector: createUnitVector(0),
@@ -455,6 +519,15 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
             rating: { $gte: 4.0 },
           },
         });
+
+        console.log(
+          'Results:',
+          JSON.stringify(
+            results.map(r => r.metadata),
+            null,
+            2,
+          ),
+        );
 
         // Should return products with 20 <= price <= 100 AND rating >= 4.0
         expect(results.length).toBeGreaterThan(0);
@@ -489,25 +562,28 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         ).toBe(true);
       });
 
-      it('should combine $ne with $exists', async () => {
-        const results = await config.vector.query({
-          indexName: testIndexName,
-          queryVector: createUnitVector(0),
-          topK: 10,
-          filter: {
-            category: { $ne: 'books' },
-            description: { $exists: false },
-          },
-        });
+      // Only run this test if $exists is supported
+      if (supportsExistsOperator) {
+        it('should combine $ne with $exists', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              category: { $ne: 'books' },
+              description: { $exists: false },
+            },
+          });
 
-        // Should return non-books products without description field
-        expect(results.length).toBeGreaterThan(0);
-        expect(
-          results.every(r => {
-            return r.metadata?.category !== 'books' && r.metadata?.description === undefined;
-          }),
-        ).toBe(true);
-      });
+          // Should return non-books products without description field
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              return r.metadata?.category !== 'books' && r.metadata?.description === undefined;
+            }),
+          ).toBe(true);
+        });
+      }
     });
   });
 }

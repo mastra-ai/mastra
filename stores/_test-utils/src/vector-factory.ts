@@ -63,6 +63,26 @@ export interface VectorTestConfig {
   disconnect?: () => Promise<void>;
   /** Optional: selectively enable/disable test domains. All enabled by default. */
   testDomains?: TestDomains;
+  /** Whether the store supports array values in metadata. Default: true.
+   *  Set to false for stores like Chroma that only support primitive types (string, number, boolean).
+   *  When false, filter-operators tests will skip array-specific tests ($all, $in on array fields)
+   *  but still run all other filter operator tests. */
+  supportsArrayMetadata?: boolean;
+  /** Whether the store supports null values in filters. Default: true.
+   *  Set to false for stores that don't support filtering by null (e.g., Chroma). */
+  supportsNullValues?: boolean;
+  /** Whether the store supports the $exists operator. Default: true.
+   *  Set to false for stores that don't support checking field existence. */
+  supportsExistsOperator?: boolean;
+  /** Whether the store supports the $regex operator. Default: true.
+   *  Set to false for stores that don't support regex pattern matching. */
+  supportsRegex?: boolean;
+  /** Whether the store supports the $contains operator for substring matching. Default: true.
+   *  Set to false for stores that don't support substring matching. */
+  supportsContains?: boolean;
+  /** Whether the store supports the $not operator for logical negation. Default: true.
+   *  Set to false for stores that don't support $not. */
+  supportsNotOperator?: boolean;
 }
 
 /**

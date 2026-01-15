@@ -575,11 +575,13 @@ createVectorTestSuite({
     // Chroma may need a short wait for indexing
     await new Promise(resolve => setTimeout(resolve, 2000));
   },
-  testDomains: {
-    // Skip filterOps - ChromaDB only supports primitive metadata types (string, number, boolean)
-    // and doesn't support array values like tags: ['sale'] used in filter operator tests
-    filterOps: false,
-  },
+  // ChromaDB limitations - configure which filter operators are supported
+  supportsArrayMetadata: false, // Only primitive types (string, number, boolean)
+  supportsNullValues: false, // Chroma doesn't support null in filters
+  supportsExistsOperator: false, // Chroma doesn't support $exists
+  supportsRegex: false, // Chroma doesn't support $regex
+  supportsContains: false, // Chroma uses documentFilter for text search, not metadata $contains
+  supportsNotOperator: false, // Chroma doesn't support $not
 });
 
 // ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)
