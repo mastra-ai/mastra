@@ -8,6 +8,7 @@ import { MastraError } from '@mastra/core/error';
 import type { MastraScorer } from '@mastra/core/evals';
 import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
+import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import {
@@ -18,6 +19,7 @@ import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
 import { MockLanguageModelV1 } from 'ai/test';
 import { $ } from 'execa';
 import { Inngest } from 'inngest';
@@ -14880,6 +14882,197 @@ describe('MastraInngestWorkflow', () => {
       expect(typeof callbackResult.state).toBe('object');
 
       srv.close();
+    });
+  });
+
+  describe.sequential('Workflow Tracing', () => {
+    it('should provide tracingContext.currentSpan to step execution', async ctx => {
+      // This test verifies that workflow tracing works correctly.
+      // The InngestWorkflow creates a workflow span and passes it to the execution engine,
+      // which then makes it available to step handlers via tracingContext.currentSpan.
+
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      let capturedTracingContext: any = null;
+
+      const tracingStep = createStep({
+        id: 'tracing-test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          // Capture the tracingContext for verification
+          capturedTracingContext = tracingContext;
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'tracing-test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [tracingStep],
+      });
+
+      workflow.then(tracingStep).commit();
+
+      // Create a simple test exporter to capture tracing events
+      const capturedEvents: TracingEvent[] = [];
+      const testExporter: ObservabilityExporter = {
+        name: 'test-exporter',
+        async exportTracingEvent(event: TracingEvent) {
+          capturedEvents.push(event);
+        },
+        async shutdown() {},
+      };
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        observability: new Observability({
+          configs: {
+            default: {
+              serviceName: 'tracing-test',
+              exporters: [testExporter],
+            },
+          },
+        }),
+        workflows: {
+          'tracing-test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { value: 'test' } });
+
+      srv.close();
+
+      // Verify workflow execution succeeded
+      expect(result.status).toBe('success');
+      expect(result.steps['tracing-test-step']).toMatchObject({
+        status: 'success',
+        output: { result: 'processed: test' },
+      });
+
+      // Verify tracing context was provided
+      expect(capturedTracingContext).toBeDefined();
+
+      expect(capturedTracingContext.currentSpan).toBeDefined();
+    });
+
+    it('should create workflow step child spans from the workflow span', async ctx => {
+      // This test verifies that step spans can be created as children of the workflow span.
+      // The step handler in packages/core/src/workflows/handlers/step.ts line 138 does:
+      //   const stepSpan = tracingContext.currentSpan?.createChildSpan({...})
+      // When currentSpan is undefined (as it is in Inngest), stepSpan will be undefined.
+
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      let stepSpanExists = false;
+
+      const spanTestStep = createStep({
+        id: 'span-test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          // Check if we can create a child span (which requires currentSpan to exist)
+          stepSpanExists = tracingContext?.currentSpan !== undefined;
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'span-test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [spanTestStep],
+      });
+
+      workflow.then(spanTestStep).commit();
+
+      // Create a simple test exporter
+      const testExporter2: ObservabilityExporter = {
+        name: 'test-exporter-2',
+        async exportTracingEvent() {},
+        async shutdown() {},
+      };
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        observability: new Observability({
+          configs: {
+            default: {
+              serviceName: 'span-test',
+              exporters: [testExporter2],
+            },
+          },
+        }),
+        workflows: {
+          'span-test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { value: 'test' } });
+
+      srv.close();
+
+      expect(result.status).toBe('success');
+
+      // This should be true if tracing is working correctly
+      expect(stepSpanExists).toBe(true);
     });
   });
 }, 80e3);
