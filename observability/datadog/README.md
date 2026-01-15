@@ -10,6 +10,7 @@ pnpm add @mastra/datadog
 
 ## Requirements
 
+- **Node.js >=22.13.0** (Node.js 22.x recommended; `dd-trace` native modules ship prebuilt binaries for this ABI)
 - Datadog account with LLM Observability enabled
 - Datadog API key (available in your Datadog account settings)
 
@@ -97,6 +98,38 @@ All unmapped span types (including `MODEL_CHUNK`, `GENERIC`, etc., and future sp
 - **Metadata as tags**: Span metadata is flattened into searchable Datadog tags
 - **Error tracking**: Error spans include error tags with message, ID, and category
 - **Parent/child hierarchy**: Spans are emitted parent-first to preserve trace trees in Datadog
+
+## Troubleshooting
+
+### Native module ABI errors
+
+If you see errors like `No native build was found for runtime=node abi=137`:
+
+These are non-blocking warnings. The `dd-trace` native modules (`@datadog/native-metrics`, etc.) are **optional** and provide performance monitoring features. Core tracing works without them.
+
+**Options:**
+
+1. **Use Node.js 22.x** - Prebuilt binaries for `dd-trace` native modules target Node.js 22 (ABI 127/131). Newer Node.js versions have different ABIs.
+2. **Ignore the errors** - These are warnings, not fatal errors. LLM observability tracing functions normally without native modules.
+
+### Bundler configuration
+
+When using bundlers, mark `dd-trace` and native modules as external:
+
+```typescript
+// mastra.config.ts
+export default {
+  bundler: {
+    externals: [
+      'dd-trace',
+      '@datadog/native-metrics',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/pprof',
+    ],
+  },
+};
+```
 
 ## License
 
