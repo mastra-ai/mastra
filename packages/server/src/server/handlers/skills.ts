@@ -1,4 +1,4 @@
-import type { MastraSkills } from '@mastra/core/skills';
+import type { WorkspaceSkills } from '@mastra/core/workspace';
 import { HTTPException } from '../http-exception';
 import { agentSkillPathParams } from '../schemas/agents';
 import {
@@ -16,11 +16,11 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 /**
- * Get the skills instance from Mastra.
- * Returns null if no skills instance is registered.
+ * Get the skills instance from Mastra's workspace.
+ * Returns null if no workspace or skills are configured.
  */
-function getSkills(mastra: any): MastraSkills | null {
-  return mastra.getSkills?.() ?? null;
+function getSkills(mastra: any): WorkspaceSkills | undefined {
+  return mastra.getWorkspace?.()?.skills;
 }
 
 // ============================================================================
@@ -42,7 +42,7 @@ export const LIST_SKILLS_ROUTE = createRoute({
         return { skills: [], isSkillsConfigured: false };
       }
 
-      const skillsList = skills.list();
+      const skillsList = await skills.list();
 
       return {
         skills: skillsList.map(skill => ({
@@ -78,10 +78,10 @@ export const GET_SKILL_ROUTE = createRoute({
 
       const skills = getSkills(mastra);
       if (!skills) {
-        throw new HTTPException(404, { message: 'No Skills instance registered with Mastra' });
+        throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
 
-      const skill = skills.get(skillName);
+      const skill = await skills.get(skillName);
       if (!skill) {
         throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
       }
@@ -123,14 +123,15 @@ export const LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
       const skills = getSkills(mastra);
       if (!skills) {
-        throw new HTTPException(404, { message: 'No Skills instance registered with Mastra' });
+        throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
 
-      if (!skills.has(skillName)) {
+      const hasSkill = await skills.has(skillName);
+      if (!hasSkill) {
         throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
       }
 
-      const references = skills.getReferences(skillName);
+      const references = await skills.listReferences(skillName);
 
       return {
         skillName,
@@ -159,14 +160,14 @@ export const GET_SKILL_REFERENCE_ROUTE = createRoute({
 
       const skills = getSkills(mastra);
       if (!skills) {
-        throw new HTTPException(404, { message: 'No Skills instance registered with Mastra' });
+        throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
 
       // Decode the reference path (it may be URL encoded)
       const decodedPath = decodeURIComponent(referencePath);
 
-      const content = skills.getReference(skillName, decodedPath);
-      if (content === undefined) {
+      const content = await skills.getReference(skillName, decodedPath);
+      if (content === null) {
         throw new HTTPException(404, { message: `Reference "${decodedPath}" not found in skill "${skillName}"` });
       }
 
@@ -205,7 +206,7 @@ export const SEARCH_SKILLS_ROUTE = createRoute({
       }
 
       // Parse comma-separated skill names if provided
-      const skillNamesList = skillNames ? skillNames.split(',').map(s => s.trim()) : undefined;
+      const skillNamesList = skillNames ? skillNames.split(',').map((s: string) => s.trim()) : undefined;
 
       const results = await skills.search(query, {
         topK: topK || 5,
@@ -255,13 +256,14 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Skill name is required' });
       }
 
-      // Get skills directly from agent (resolves agent-specific or inherited from Mastra)
-      const skills = agent.getSkills();
+      // Get workspace from agent (may be agent-specific or inherited from Mastra)
+      const workspace = await agent.getWorkspace();
+      const skills = workspace?.skills;
       if (!skills) {
         throw new HTTPException(404, { message: 'No skills configured for this agent' });
       }
 
-      const skill = skills.get(skillName);
+      const skill = await skills.get(skillName);
       if (!skill) {
         throw new HTTPException(404, { message: `Skill "${skillName}" not found for this agent` });
       }

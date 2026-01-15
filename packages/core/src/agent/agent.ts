@@ -36,9 +36,10 @@ import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
+import { SkillsProcessor } from '../processors/processors/skills';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-import type { MastraSkills } from '../skills';
+import type { SkillFormat } from '../workspace/skill-types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { createTool } from '../tools';
@@ -68,8 +69,6 @@ import type {
   AgentConfig,
   AgentGenerateOptions,
   AgentStreamOptions,
-  AgentSkillsConfig,
-  AgentSkillsOption,
   ToolsetsInput,
   ToolsInput,
   AgentModelManagerConfig,
@@ -98,25 +97,6 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>
   }
 
   return cb(value as T);
-}
-
-/**
- * Type guard to check if a value is a MastraSkills instance.
- * Checks for the presence of required MastraSkills interface methods.
- */
-function isMastraSkills(value: unknown): value is MastraSkills {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'id' in value &&
-    'list' in value &&
-    'get' in value &&
-    'has' in value &&
-    'getInputProcessors' in value &&
-    typeof (value as MastraSkills).list === 'function' &&
-    typeof (value as MastraSkills).get === 'function' &&
-    typeof (value as MastraSkills).getInputProcessors === 'function'
-  );
 }
 
 /**
@@ -150,7 +130,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #skills?: AgentSkillsOption;
+  #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
@@ -269,8 +249,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.#memory = config.memory;
     }
 
-    if (config.skills) {
-      this.#skills = config.skills;
+    if (config.skillsFormat) {
+      this.#skillsFormat = config.skillsFormat;
     }
 
     if (config.voice) {
@@ -310,53 +290,29 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
-   * Resolves and returns the skills instance for this agent.
-   * Returns the configured skills instance, or inherits from Mastra if `skills: true` was set.
-   *
-   * @returns The skills instance or undefined if disabled
-   */
-  public getSkills(): MastraSkills | undefined {
-    // If skills is explicitly disabled, return undefined
-    if (this.#skills === false) {
-      return undefined;
-    }
-
-    // If skills is a MastraSkills instance, return it directly
-    if (isMastraSkills(this.#skills)) {
-      return this.#skills;
-    }
-
-    // If skills is a config object, check for instance
-    if (this.#skills && typeof this.#skills === 'object') {
-      const config = this.#skills as AgentSkillsConfig;
-      if (config.instance) {
-        return config.instance;
-      }
-    }
-
-    // Default: inherit from Mastra (even if #skills is undefined)
-    return this.#mastra?.getSkills();
-  }
-
-  /**
-   * Gets the skills processors to add to input processors.
-   * Calls skills.getInputProcessors() following the Memory pattern.
+   * Gets the skills processors to add to input processors when workspace has skillsPaths.
    * @internal
    */
-  private getSkillsProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
-    const skills = this.getSkills();
-    if (!skills) {
+  private async getSkillsProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    requestContext?: RequestContext,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    // Check if workspace has skills configured
+    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+    if (!workspace?.skills) {
       return [];
     }
 
-    // Get format from config if provided
-    let format: 'xml' | 'json' | 'markdown' | undefined;
-    if (this.#skills && typeof this.#skills === 'object' && !isMastraSkills(this.#skills)) {
-      format = (this.#skills as AgentSkillsConfig).format;
+    // Check for existing SkillsProcessor in configured processors to avoid duplicates
+    const hasSkillsProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'skills-processor',
+    );
+    if (hasSkillsProcessor) {
+      return [];
     }
 
-    // Get processors from skills instance (handles deduplication internally)
-    return skills.getInputProcessors(configuredProcessors, { format });
+    // Create new SkillsProcessor using workspace
+    return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
   }
 
   /**
@@ -556,7 +512,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
     // Get skills processors if skills are configured (with deduplication)
-    const skillsProcessors = this.getSkillsProcessors(configuredProcessors);
+    const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
@@ -735,35 +691,37 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public async getWorkspace({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
-    if (!this.#workspace) {
-      return undefined;
-    }
+    // If agent has its own workspace configured, use it
+    if (this.#workspace) {
+      let resolvedWorkspace: Workspace;
 
-    let resolvedWorkspace: Workspace;
+      if (typeof this.#workspace !== 'function') {
+        resolvedWorkspace = this.#workspace;
+      } else {
+        const result = this.#workspace({ requestContext, mastra: this.#mastra });
+        resolvedWorkspace = await Promise.resolve(result);
 
-    if (typeof this.#workspace !== 'function') {
-      resolvedWorkspace = this.#workspace;
-    } else {
-      const result = this.#workspace({ requestContext, mastra: this.#mastra });
-      resolvedWorkspace = await Promise.resolve(result);
-
-      if (!resolvedWorkspace) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
+        if (!resolvedWorkspace) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
       }
+
+      return resolvedWorkspace;
     }
 
-    return resolvedWorkspace;
+    // Fall back to Mastra's global workspace
+    return this.#mastra?.getWorkspace();
   }
 
   get voice() {

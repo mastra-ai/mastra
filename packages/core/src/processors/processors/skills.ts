@@ -1,98 +1,107 @@
-import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
-import type { MastraSkills } from '@mastra/core/skills';
-import { createTool } from '@mastra/core/tools';
+/**
+ * SkillsProcessor - Processor for Agent Skills specification.
+ *
+ * Makes skills available to agents via tools and system message injection.
+ * This processor works with Workspace.skills to discover and activate skills.
+ *
+ * @example
+ * ```typescript
+ * // Auto-created by Agent when workspace has skillsPaths
+ * const agent = new Agent({
+ *   workspace: new Workspace({
+ *     filesystem: new LocalFilesystem({ basePath: './data' }),
+ *     skillsPaths: ['/skills'],
+ *   }),
+ * });
+ *
+ * // Or explicit processor control:
+ * const agent = new Agent({
+ *   workspace,
+ *   inputProcessors: [new SkillsProcessor({ workspace })],
+ * });
+ * ```
+ */
+
 import z from 'zod';
 
-import { extractLines } from '../bm25';
-import { Skills } from '../skills';
-import type { SkillFormat, Skill } from '../types';
+import { createTool } from '../../tools';
+import { extractLines } from '../../workspace/bm25';
+import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skill-types';
+import type { Workspace } from '../../workspace/workspace';
+import type { ProcessInputStepArgs, Processor } from '../index';
 
-// =========================================================================
+// =============================================================================
 // Configuration
-// =========================================================================
+// =============================================================================
 
 /**
  * Configuration options for SkillsProcessor
  */
 export interface SkillsProcessorOptions {
   /**
-   * Skills instance to use.
-   * This is provided by the Agent - users don't create SkillsProcessor directly.
+   * Workspace instance containing skills.
+   * Skills are accessed via workspace.skills.
    */
-  skills: Skills | MastraSkills;
-  /** Format for skill injection (default: 'xml') */
+  workspace: Workspace;
+
+  /**
+   * Format for skill injection (default: 'xml')
+   */
   format?: SkillFormat;
 }
 
-// =========================================================================
+// =============================================================================
 // SkillsProcessor
-// =========================================================================
+// =============================================================================
 
 /**
  * Processor for Agent Skills specification.
  * Makes skills available to agents via tools and system message injection.
- *
- * @deprecated Use `SkillsProcessor` from `@mastra/core/processors` instead with Workspace:
- * ```typescript
- * import { Workspace, LocalFilesystem } from '@mastra/core';
- * import { SkillsProcessor } from '@mastra/core/processors';
- *
- * const workspace = new Workspace({
- *   filesystem: new LocalFilesystem({ basePath: './data' }),
- *   skillsPaths: ['/skills'],
- * });
- *
- * // SkillsProcessor is auto-created by Agent when workspace has skills.
- * // Or create manually:
- * const processor = new SkillsProcessor({ workspace });
- * ```
  */
 export class SkillsProcessor implements Processor<'skills-processor'> {
   readonly id = 'skills-processor' as const;
   readonly name = 'Skills Processor';
 
-  /** Skills instance for managing skills */
-  private _skills: Skills | MastraSkills;
+  /** Workspace instance */
+  private readonly _workspace: Workspace;
 
   /** Format for skill injection */
-  private format: SkillFormat;
+  private readonly _format: SkillFormat;
 
   /** Set of activated skill names */
-  private activatedSkills: Set<string> = new Set();
+  private _activatedSkills: Set<string> = new Set();
 
   /** Map of skill name -> allowed tools (only for skills with allowedTools defined) */
-  private skillAllowedTools: Map<string, string[]> = new Map();
+  private _skillAllowedTools: Map<string, string[]> = new Map();
 
   constructor(opts: SkillsProcessorOptions) {
-    this._skills = opts.skills;
-    this.format = opts.format ?? 'xml';
+    this._workspace = opts.workspace;
+    this._format = opts.format ?? 'xml';
   }
 
   /**
-   * Get the skills instance
+   * Get the workspace skills interface
    */
-  private getSkillsInstance(): Skills | MastraSkills {
-    return this._skills;
-  }
-
-  /**
-   * Get the skills instance (public accessor for testing)
-   */
-  get skills(): Skills | MastraSkills {
-    return this._skills;
+  private get skills(): WorkspaceSkills | undefined {
+    return this._workspace.skills;
   }
 
   /**
    * List all skills available to this processor.
    * Used by the server to expose skills in the agent API response.
    */
-  listSkills(): Array<{
-    name: string;
-    description: string;
-    license?: string;
-    allowedTools?: string[];
-  }> {
-    return this._skills.list().map(skill => ({
+  async listSkills(): Promise<
+    Array<{
+      name: string;
+      description: string;
+      license?: string;
+      allowedTools?: string[];
+    }>
+  > {
+    const skillsList = await this.skills?.list();
+    if (!skillsList) return [];
+
+    return skillsList.map(skill => ({
       name: skill.name,
       description: skill.description,
       license: skill.license,
@@ -100,9 +109,9 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     }));
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Formatting Methods
-  // =========================================================================
+  // ===========================================================================
 
   /**
    * Format skill location (path to SKILL.md file)
@@ -121,24 +130,22 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   /**
    * Format available skills metadata based on configured format
    */
-  private formatAvailableSkills(): string {
-    const skills = this.getSkillsInstance();
-    const skillsList = skills.list();
-
-    if (skillsList.length === 0) {
+  private async formatAvailableSkills(): Promise<string> {
+    const skillsList = await this.skills?.list();
+    if (!skillsList || skillsList.length === 0) {
       return '';
     }
 
     // Get full skill objects to include source info
     const fullSkills: Skill[] = [];
     for (const meta of skillsList) {
-      const skill = skills.get(meta.name);
+      const skill = await this.skills?.get(meta.name);
       if (skill) {
         fullSkills.push(skill);
       }
     }
 
-    switch (this.format) {
+    switch (this._format) {
       case 'xml': {
         const skillsXml = fullSkills
           .map(
@@ -188,12 +195,11 @@ ${skillsMd}`;
   /**
    * Format activated skills based on configured format
    */
-  private formatActivatedSkills(): string {
-    const skills = this.getSkillsInstance();
+  private async formatActivatedSkills(): Promise<string> {
     const activatedSkillsList: Skill[] = [];
 
-    for (const name of this.activatedSkills) {
-      const skill = skills.get(name);
+    for (const name of this._activatedSkills) {
+      const skill = await this.skills?.get(name);
       if (skill) {
         activatedSkillsList.push(skill);
       }
@@ -203,7 +209,7 @@ ${skillsMd}`;
       return '';
     }
 
-    switch (this.format) {
+    switch (this._format) {
       case 'xml': {
         const skillInstructions = activatedSkillsList
           .map(
@@ -250,13 +256,13 @@ ${skillInstructions}`;
    * Returns the union of all allowed tools if any skill specifies them.
    */
   getAllowedTools(): string[] | undefined {
-    if (this.skillAllowedTools.size === 0) {
+    if (this._skillAllowedTools.size === 0) {
       return undefined; // No restrictions
     }
 
     // Union of all allowed tools from all activated skills
     const allAllowed = new Set<string>();
-    for (const tools of this.skillAllowedTools.values()) {
+    for (const tools of this._skillAllowedTools.values()) {
       for (const tool of tools) {
         allAllowed.add(tool);
       }
@@ -265,15 +271,17 @@ ${skillInstructions}`;
     return Array.from(allAllowed);
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Tool Creation
-  // =========================================================================
+  // ===========================================================================
 
   /**
    * Create skill-activate tool
    */
   private createSkillActivateTool() {
-    const skills = this.getSkillsInstance();
+    const skills = this.skills;
+    const activatedSkills = this._activatedSkills;
+    const skillAllowedTools = this._skillAllowedTools;
 
     return createTool({
       id: 'skill-activate',
@@ -283,9 +291,17 @@ ${skillInstructions}`;
         name: z.string().describe('The name of the skill to activate'),
       }),
       execute: async ({ name }) => {
+        if (!skills) {
+          return {
+            success: false,
+            message: 'No skills configured',
+          };
+        }
+
         // Check if skill exists
-        if (!skills.has(name)) {
-          const skillNames = skills.list().map(s => s.name);
+        if (!(await skills.has(name))) {
+          const skillsList = await skills.list();
+          const skillNames = skillsList.map(s => s.name);
           return {
             success: false,
             message: `Skill "${name}" not found. Available skills: ${skillNames.join(', ')}`,
@@ -293,7 +309,7 @@ ${skillInstructions}`;
         }
 
         // Check if already activated
-        if (this.activatedSkills.has(name)) {
+        if (activatedSkills.has(name)) {
           return {
             success: true,
             message: `Skill "${name}" is already activated`,
@@ -301,12 +317,12 @@ ${skillInstructions}`;
         }
 
         // Activate the skill
-        this.activatedSkills.add(name);
+        activatedSkills.add(name);
 
         // Track allowed tools if specified
-        const skill = skills.get(name);
+        const skill = await skills.get(name);
         if (skill?.allowedTools && skill.allowedTools.length > 0) {
-          this.skillAllowedTools.set(name, skill.allowedTools);
+          skillAllowedTools.set(name, skill.allowedTools);
         }
 
         // Build response message
@@ -328,7 +344,8 @@ ${skillInstructions}`;
    * Create skill-read-reference tool
    */
   private createSkillReadReferenceTool() {
-    const skills = this.getSkillsInstance();
+    const skills = this.skills;
+    const activatedSkills = this._activatedSkills;
 
     return createTool({
       id: 'skill-read-reference',
@@ -347,8 +364,15 @@ ${skillInstructions}`;
           .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
       }),
       execute: async ({ skillName, referencePath, startLine, endLine }) => {
+        if (!skills) {
+          return {
+            success: false,
+            message: 'No skills configured',
+          };
+        }
+
         // Check if skill is activated
-        if (!this.activatedSkills.has(skillName)) {
+        if (!activatedSkills.has(skillName)) {
           return {
             success: false,
             message: `Skill "${skillName}" is not activated. Activate it first using skill-activate.`,
@@ -356,10 +380,10 @@ ${skillInstructions}`;
         }
 
         // Get reference content
-        const fullContent = skills.getReference(skillName, referencePath);
+        const fullContent = await skills.getReference(skillName, referencePath);
 
-        if (fullContent === undefined) {
-          const availableRefs = skills.getReferences(skillName);
+        if (fullContent === null) {
+          const availableRefs = await skills.listReferences(skillName);
           return {
             success: false,
             message: `Reference file "${referencePath}" not found in skill "${skillName}". Available references: ${availableRefs.join(', ') || 'none'}`,
@@ -383,7 +407,8 @@ ${skillInstructions}`;
    * Create skill-read-script tool
    */
   private createSkillReadScriptTool() {
-    const skills = this.getSkillsInstance();
+    const skills = this.skills;
+    const activatedSkills = this._activatedSkills;
 
     return createTool({
       id: 'skill-read-script',
@@ -402,8 +427,15 @@ ${skillInstructions}`;
           .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
       }),
       execute: async ({ skillName, scriptPath, startLine, endLine }) => {
+        if (!skills) {
+          return {
+            success: false,
+            message: 'No skills configured',
+          };
+        }
+
         // Check if skill is activated
-        if (!this.activatedSkills.has(skillName)) {
+        if (!activatedSkills.has(skillName)) {
           return {
             success: false,
             message: `Skill "${skillName}" is not activated. Activate it first using skill-activate.`,
@@ -411,10 +443,10 @@ ${skillInstructions}`;
         }
 
         // Get script content
-        const fullContent = skills.getScript(skillName, scriptPath);
+        const fullContent = await skills.getScript(skillName, scriptPath);
 
-        if (fullContent === undefined) {
-          const availableScripts = skills.getScripts(skillName);
+        if (fullContent === null) {
+          const availableScripts = await skills.listScripts(skillName);
           return {
             success: false,
             message: `Script file "${scriptPath}" not found in skill "${skillName}". Available scripts: ${availableScripts.join(', ') || 'none'}`,
@@ -438,7 +470,8 @@ ${skillInstructions}`;
    * Create skill-read-asset tool
    */
   private createSkillReadAssetTool() {
-    const skills = this.getSkillsInstance();
+    const skills = this.skills;
+    const activatedSkills = this._activatedSkills;
 
     return createTool({
       id: 'skill-read-asset',
@@ -449,8 +482,15 @@ ${skillInstructions}`;
         assetPath: z.string().describe('Path to the asset file (relative to assets/ directory)'),
       }),
       execute: async ({ skillName, assetPath }) => {
+        if (!skills) {
+          return {
+            success: false,
+            message: 'No skills configured',
+          };
+        }
+
         // Check if skill is activated
-        if (!this.activatedSkills.has(skillName)) {
+        if (!activatedSkills.has(skillName)) {
           return {
             success: false,
             message: `Skill "${skillName}" is not activated. Activate it first using skill-activate.`,
@@ -458,10 +498,10 @@ ${skillInstructions}`;
         }
 
         // Get asset content
-        const content = skills.getAsset(skillName, assetPath);
+        const content = await skills.getAsset(skillName, assetPath);
 
-        if (content === undefined) {
-          const availableAssets = skills.getAssets(skillName);
+        if (content === null) {
+          const availableAssets = await skills.listAssets(skillName);
           return {
             success: false,
             message: `Asset file "${assetPath}" not found in skill "${skillName}". Available assets: ${availableAssets.join(', ') || 'none'}`,
@@ -496,7 +536,7 @@ ${skillInstructions}`;
    * Create skill-search tool for searching across skill content
    */
   private createSkillSearchTool() {
-    const skills = this.getSkillsInstance();
+    const skills = this.skills;
 
     return createTool({
       id: 'skill-search',
@@ -508,9 +548,15 @@ ${skillInstructions}`;
         topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
       }),
       execute: async ({ query, skillNames, topK }) => {
-        // Handle both sync and async search results
-        const searchResult = skills.search(query, { topK, skillNames });
-        const results = Array.isArray(searchResult) ? searchResult : await searchResult;
+        if (!skills) {
+          return {
+            success: true,
+            message: 'No skills configured',
+            results: [],
+          };
+        }
+
+        const results = await skills.search(query, { topK, skillNames });
 
         if (results.length === 0) {
           return {
@@ -522,41 +568,32 @@ ${skillInstructions}`;
 
         return {
           success: true,
-          results: results.map(
-            (r: {
-              skillName: string;
-              source: string;
-              score: number;
-              content: string;
-              lineRange?: { start: number; end: number };
-            }) => ({
-              skillName: r.skillName,
-              source: r.source,
-              score: r.score,
-              preview: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
-              lineRange: r.lineRange,
-            }),
-          ),
+          results: results.map(r => ({
+            skillName: r.skillName,
+            source: r.source,
+            score: r.score,
+            preview: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
+            lineRange: r.lineRange,
+          })),
         };
       },
     });
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Processor Interface
-  // =========================================================================
+  // ===========================================================================
 
   /**
    * Process input step - inject available skills and provide skill tools
    */
   async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
-    const skills = this.getSkillsInstance();
-    const skillsList = skills.list();
-    const hasSkills = skillsList.length > 0;
+    const skillsList = await this.skills?.list();
+    const hasSkills = skillsList && skillsList.length > 0;
 
     // 1. Inject available skills metadata (if any skills discovered)
     if (hasSkills) {
-      const availableSkillsMessage = this.formatAvailableSkills();
+      const availableSkillsMessage = await this.formatAvailableSkills();
       if (availableSkillsMessage) {
         messageList.addSystem({
           role: 'system',
@@ -573,8 +610,8 @@ ${skillInstructions}`;
     }
 
     // 2. Inject activated skills instructions (if any activated)
-    if (this.activatedSkills.size > 0) {
-      const activatedSkillsMessage = this.formatActivatedSkills();
+    if (this._activatedSkills.size > 0) {
+      const activatedSkillsMessage = await this.formatActivatedSkills();
       if (activatedSkillsMessage) {
         messageList.addSystem({
           role: 'system',
@@ -603,7 +640,7 @@ You may use these tools without asking for additional permission.
       skillTools['skill-search'] = this.createSkillSearchTool();
     }
 
-    if (this.activatedSkills.size > 0) {
+    if (this._activatedSkills.size > 0) {
       skillTools['skill-read-reference'] = this.createSkillReadReferenceTool();
       skillTools['skill-read-script'] = this.createSkillReadScriptTool();
       skillTools['skill-read-asset'] = this.createSkillReadAssetTool();

@@ -1,10 +1,11 @@
 /**
- * Types for the Skills primitive following the Agent Skills specification.
+ * Types for Skills following the Agent Skills specification.
+ * Skills are SKILL.md files discovered from workspace skillsPaths.
+ *
  * @see https://github.com/anthropics/skills
  */
 
 import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../artifacts';
-import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
 
 /**
  * Skill source types indicating where the skill comes from and its access level.
@@ -43,7 +44,7 @@ export interface SkillMetadata {
  * Full skill with parsed instructions and path info
  */
 export interface Skill extends SkillMetadata {
-  /** Absolute path to skill directory */
+  /** Path to skill directory (relative to workspace root) */
   path: string;
   /** Markdown body from SKILL.md */
   instructions: string;
@@ -103,154 +104,134 @@ export interface UpdateSkillInput {
   instructions?: string;
 }
 
-/**
- * Base interface for Skills instances that can be registered with Mastra.
- * The actual Skills class in @mastra/skills implements this interface.
- *
- * Skills manages discovery, parsing, and search of skills following the Agent Skills spec.
- *
- * CRUD operations (create, update, delete) only work for writable sources:
- * - 'local' (./src/skills) - read-write
- * - 'managed' (.mastra/skills) - read-write
- * - 'external' (node_modules) - read-only
- */
-export interface MastraSkills {
-  /** Unique identifier for this skills instance */
-  id: string;
+// =============================================================================
+// WorkspaceSkills Interface
+// =============================================================================
 
-  // ============================================================================
-  // Read Operations
-  // ============================================================================
+/**
+ * Interface for skills accessed via workspace.skills.
+ * Provides discovery, search, and CRUD operations for skills in the workspace.
+ *
+ * Skills are SKILL.md files discovered from configured skillsPaths.
+ * All operations are async because they use the workspace filesystem.
+ *
+ * @example
+ * ```typescript
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './data' }),
+ *   skillsPaths: ['/skills'],
+ * });
+ *
+ * // List all skills
+ * const skills = await workspace.skills.list();
+ *
+ * // Get a specific skill
+ * const skill = await workspace.skills.get('brand-guidelines');
+ *
+ * // Search skills
+ * const results = await workspace.skills.search('color palette');
+ * ```
+ */
+export interface WorkspaceSkills {
+  // ===========================================================================
+  // Discovery
+  // ===========================================================================
 
   /**
    * List all discovered skills (metadata only)
    */
-  list(): SkillMetadata[];
+  list(): Promise<SkillMetadata[]>;
 
   /**
    * Get a specific skill by name (full content)
    */
-  get(name: string): Skill | undefined;
+  get(name: string): Promise<Skill | null>;
 
   /**
    * Check if a skill exists
    */
-  has(name: string): boolean;
+  has(name: string): Promise<boolean>;
+
+  /**
+   * Refresh skills from filesystem (re-scan skillsPaths)
+   */
+  refresh(): Promise<void>;
+
+  // ===========================================================================
+  // Search
+  // ===========================================================================
 
   /**
    * Search across all skills content.
+   * Uses workspace's search engine (BM25, vector, or hybrid).
    */
   search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
 
-  // ============================================================================
-  // CRUD Operations (for writable sources only)
-  // ============================================================================
+  // ===========================================================================
+  // CRUD Operations
+  // ===========================================================================
 
   /**
    * Create a new skill.
    * Creates a skill directory with SKILL.md and optional reference/script/asset files.
    *
    * @param input - Skill creation input
-   * @throws Error if no writable path is available or skill already exists
+   * @throws Error if skill already exists or validation fails
    */
   create(input: CreateSkillInput): Promise<Skill>;
 
   /**
    * Update an existing skill.
-   * Only works for skills in writable paths (local or managed).
    *
    * @param name - Name of the skill to update
    * @param input - Update input (partial metadata and/or instructions)
-   * @throws Error if skill doesn't exist or is in a read-only path
+   * @throws Error if skill doesn't exist
    */
   update(name: string, input: UpdateSkillInput): Promise<Skill>;
 
   /**
    * Delete a skill.
-   * Only works for skills in writable paths (local or managed).
    *
    * @param name - Name of the skill to delete
-   * @throws Error if skill doesn't exist or is in a read-only path
+   * @throws Error if skill doesn't exist
    */
   delete(name: string): Promise<void>;
 
-  // ============================================================================
-  // Reference Operations
-  // ============================================================================
+  // ===========================================================================
+  // Single-item Accessors
+  // ===========================================================================
 
   /**
    * Get reference file content from a skill
    */
-  getReference(skillName: string, referencePath: string): string | undefined;
-
-  /**
-   * Get all reference file paths for a skill
-   */
-  getReferences(skillName: string): string[];
-
-  // ============================================================================
-  // Script Operations
-  // ============================================================================
+  getReference(skillName: string, referencePath: string): Promise<string | null>;
 
   /**
    * Get script file content from a skill
    */
-  getScript(skillName: string, scriptPath: string): string | undefined;
-
-  /**
-   * Get all script file paths for a skill
-   */
-  getScripts(skillName: string): string[];
-
-  // ============================================================================
-  // Asset Operations
-  // ============================================================================
+  getScript(skillName: string, scriptPath: string): Promise<string | null>;
 
   /**
    * Get asset file content from a skill (returns Buffer for binary files)
    */
-  getAsset(skillName: string, assetPath: string): Buffer | undefined;
+  getAsset(skillName: string, assetPath: string): Promise<Buffer | null>;
+
+  // ===========================================================================
+  // Listing Accessors
+  // ===========================================================================
+
+  /**
+   * Get all reference file paths for a skill
+   */
+  listReferences(skillName: string): Promise<string[]>;
+
+  /**
+   * Get all script file paths for a skill
+   */
+  listScripts(skillName: string): Promise<string[]>;
 
   /**
    * Get all asset file paths for a skill
    */
-  getAssets(skillName: string): string[];
-
-  // ============================================================================
-  // Refresh
-  // ============================================================================
-
-  /**
-   * Refresh skills from disk (re-scan directories)
-   */
-  refresh(): void;
-
-  // ============================================================================
-  // Input Processors
-  // ============================================================================
-
-  /**
-   * Get input processors for this skills instance.
-   * The processors provide skill tools and context injection for agents.
-   * This follows the same pattern as Memory.getInputProcessors().
-   *
-   * @param configuredProcessors - Processors already configured by the user (for deduplication)
-   * @param options - Optional processor configuration
-   * @returns Array of input processors that can be added to agent inputProcessors
-   */
-  getInputProcessors(
-    configuredProcessors?: InputProcessorOrWorkflow[],
-    options?: SkillsProcessorConfig,
-  ): InputProcessor[];
-}
-
-/**
- * Configuration options for skills processor creation.
- */
-export interface SkillsProcessorConfig {
-  /**
-   * Format for injecting skill information into the context.
-   * @default 'xml'
-   */
-  format?: SkillFormat;
+  listAssets(skillName: string): Promise<string[]>;
 }

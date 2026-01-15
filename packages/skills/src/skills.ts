@@ -50,24 +50,20 @@ export interface SkillsIndexConfig {
 /**
  * Skills - manages discovery, parsing, and search of skills following the Agent Skills spec.
  *
- * @example
+ * @deprecated Use `Workspace.skills` from `@mastra/core` instead. Configure skills via Workspace:
  * ```typescript
- * const skills = new Skills({
- *   id: 'my-skills',
- *   paths: ['./skills', 'node_modules/@company/skills'],
+ * import { Workspace, LocalFilesystem } from '@mastra/core';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './data' }),
+ *   skillsPaths: ['/skills'],
  * });
  *
- * // List all discovered skills
- * const allSkills = skills.list();
+ * const agent = new Agent({ workspace });
  *
- * // Get a specific skill
- * const skill = skills.get('brand-guidelines');
- *
- * // Search across all skills
- * const results = skills.search('brand colors');
- *
- * // Read a reference file
- * const content = skills.getReference('brand-guidelines', 'colors.md');
+ * // Access skills via workspace
+ * const allSkills = await workspace.skills.list();
+ * const skill = await workspace.skills.get('brand-guidelines');
  * ```
  */
 export class Skills implements MastraSkills {

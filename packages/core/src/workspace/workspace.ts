@@ -57,6 +57,8 @@ import {
   type SearchResult,
   type IndexDocument,
 } from './search-engine';
+import type { WorkspaceSkills } from './skill-types';
+import { WorkspaceSkillsImpl } from './workspace-skills';
 
 // =============================================================================
 // Workspace Scope
@@ -266,6 +268,7 @@ export class Workspace {
   private _state?: WorkspaceState;
   private readonly _config: WorkspaceConfig;
   private readonly _searchEngine?: SearchEngine;
+  private _skills?: WorkspaceSkills;
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -341,6 +344,45 @@ export class Workspace {
    */
   get state(): WorkspaceState | undefined {
     return this._state;
+  }
+
+  /**
+   * The configured skillsPaths (if any).
+   */
+  get skillsPaths(): string[] | undefined {
+    return this._config.skillsPaths;
+  }
+
+  /**
+   * Access skills stored in this workspace.
+   * Skills are SKILL.md files discovered from the configured skillsPaths.
+   *
+   * Returns undefined if no skillsPaths are configured or no filesystem is available.
+   *
+   * @example
+   * ```typescript
+   * const skills = await workspace.skills?.list();
+   * const skill = await workspace.skills?.get('brand-guidelines');
+   * const results = await workspace.skills?.search('brand colors');
+   * ```
+   */
+  get skills(): WorkspaceSkills | undefined {
+    // Skills require filesystem and skillsPaths
+    if (!this._fs || !this._config.skillsPaths || this._config.skillsPaths.length === 0) {
+      return undefined;
+    }
+
+    // Lazy initialization
+    if (!this._skills) {
+      this._skills = new WorkspaceSkillsImpl({
+        filesystem: this._fs,
+        skillsPaths: this._config.skillsPaths,
+        searchEngine: this._searchEngine,
+        validateOnLoad: true,
+      });
+    }
+
+    return this._skills;
   }
 
   // ---------------------------------------------------------------------------

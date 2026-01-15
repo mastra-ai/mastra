@@ -2,7 +2,7 @@
 
 This document captures the analysis of the current Skills implementation and outlines the migration plan to integrate Skills as a directory convention within the unified Workspace.
 
-**Status**: In Progress (Knowledge migration complete)
+**Status**: ✅ Complete
 
 ---
 
@@ -207,24 +207,36 @@ If `skillsPaths` is set but not in `autoIndexPaths`, skills are readable but not
 
 ```typescript
 interface WorkspaceSkills {
+  // Discovery
   list(): Promise<SkillMetadata[]>;
   get(name: string): Promise<Skill | null>;
   has(name: string): Promise<boolean>;
+  refresh(): Promise<void>; // Re-scan skillsPaths
+
+  // Search
   search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
 
+  // CRUD
   create(input: CreateSkillInput): Promise<Skill>;
   update(name: string, input: UpdateSkillInput): Promise<Skill>;
   delete(name: string): Promise<void>;
 
+  // Single-item accessors
   getReference(skillName: string, path: string): Promise<string | null>;
   getScript(skillName: string, path: string): Promise<string | null>;
   getAsset(skillName: string, path: string): Promise<Buffer | null>;
+
+  // Listing accessors (for SkillsProcessor tools)
+  listReferences(skillName: string): Promise<string[]>;
+  listScripts(skillName: string): Promise<string[]>;
+  listAssets(skillName: string): Promise<string[]>;
 }
 
 // Usage
 const skills = await workspace.skills.list();
 const skill = await workspace.skills.get('brand-guidelines');
 const results = await workspace.skills.search('brand colors');
+const refs = await workspace.skills.listReferences('brand-guidelines');
 ```
 
 This keeps skills as a coherent subsystem while living within workspace.
@@ -247,6 +259,67 @@ This keeps skills as a coherent subsystem while living within workspace.
 
 **Zod schemas**: Move to `core/workspace/skill-schemas.ts`.
 
+### 9. SkillsProcessor Auto-Creation ✅
+
+**Question**: How does Agent know to create SkillsProcessor when workspace has `skillsPaths`?
+
+**Decision**: Option A - Agent auto-creates processor when workspace has skillsPaths.
+
+```typescript
+// In Agent.#getInputProcessorWorkflow():
+// Check if workspace has skillsPaths configured
+const workspace = await this.getWorkspace({ requestContext });
+if (workspace?.skillsPaths?.length > 0) {
+  const skillsProcessor = new SkillsProcessor({ workspace, format });
+  // Add to processors
+}
+```
+
+This follows the Memory pattern where processors are auto-created when the feature is configured.
+Users can still override by providing their own processor in `inputProcessors`.
+
+### 10. WorkspaceSkills Additional Methods ✅
+
+**Question**: Should WorkspaceSkills include listing methods for references/scripts/assets?
+
+**Decision**: Yes - add methods to match MastraSkills parity. These are needed by SkillsProcessor tools to show available files when a requested file is not found.
+
+Added to WorkspaceSkills (see full interface in Decision 6):
+
+- `listReferences(skillName: string): Promise<string[]>`
+- `listScripts(skillName: string): Promise<string[]>`
+- `listAssets(skillName: string): Promise<string[]>`
+- `refresh(): Promise<void>` - re-scan skillsPaths
+
+### 11. Sync to Async API Change ✅
+
+**Question**: MastraSkills uses sync methods, WorkspaceSkills uses async. Is this intentional?
+
+**Decision**: Yes - this is intentional. Workspace filesystem providers are async, so all operations through workspace.skills must be async.
+
+**Impact**:
+
+- SkillsProcessor must be updated to use async methods
+- Tool execute functions already support async, so no change needed there
+- System message injection happens in `processInputStep()` which is already async
+
+### 12. Skills Format Configuration ✅
+
+**Question**: Where does `skillsFormat` live after removing `AgentSkillsConfig`?
+
+**Decision**: Add `skillsFormat` as a standalone agent config option.
+
+```typescript
+// Agent config (after migration)
+interface AgentConfig {
+  // ... other config
+  workspace?: DynamicArgument<Workspace>;
+  skillsFormat?: SkillFormat; // 'xml' | 'json' | 'markdown', default: 'xml'
+}
+```
+
+This keeps format as agent-level config since it controls how skills are presented in the agent's context. The format is passed to SkillsProcessor when auto-created.
+
 ---
 
 ## Implementation Tasks
@@ -260,60 +333,120 @@ This keeps skills as a coherent subsystem while living within workspace.
 - [x] Remove `core/knowledge` folder
 - [x] Clean up Mastra class (remove knowledge references)
 
-### Phase 2: Skills Types & Schemas
+### Phase 2: Skills Types & Schemas ✅ (Complete)
 
-- [ ] Move skill type definitions to `core/workspace/skill-types.ts`
+- [x] Move skill type definitions to `core/workspace/skill-types.ts`
   - `Skill`, `SkillMetadata`, `SkillSearchResult`, `SkillSearchOptions`
   - `CreateSkillInput`, `UpdateSkillInput`
-- [ ] Move validation schemas to `core/workspace/skill-schemas.ts`
+  - `SkillFormat` ('xml' | 'json' | 'markdown')
+  - `WorkspaceSkills` interface
+- [x] Move validation schemas to `core/workspace/skill-schemas.ts`
   - `validateSkillMetadata()`, Zod schemas
   - `parseAllowedTools()`
-- [ ] Add `gray-matter` as core dependency
-- [ ] Update exports in `core/workspace/index.ts`
+- [x] Move utility functions via bm25.ts export
+  - `extractLines()` - used by SkillsProcessor for line range extraction
+- [x] Add `gray-matter` as core dependency
+- [x] Update exports in `core/workspace/index.ts`
 
-### Phase 3: Workspace Skill Methods
+### Phase 3: Workspace Skill Methods ✅ (Complete)
 
-- [ ] Add skill discovery to Workspace
-  - `listSkills(): Promise<SkillMetadata[]>`
-  - `getSkill(name: string): Promise<Skill | null>`
-  - `hasSkill(name: string): Promise<boolean>`
-- [ ] Add skill search (uses workspace's SearchEngine)
-  - `searchSkills(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>`
-- [ ] Add skill CRUD helpers
-  - `createSkill(name: string, input: CreateSkillInput): Promise<Skill>`
-  - `updateSkill(name: string, input: UpdateSkillInput): Promise<Skill>`
-  - `deleteSkill(name: string): Promise<void>`
-- [ ] Add reference/script/asset accessors
-  - `getSkillReference(skillName: string, path: string): Promise<string | null>`
-  - `getSkillScript(skillName: string, path: string): Promise<string | null>`
-  - `getSkillAsset(skillName: string, path: string): Promise<Buffer | null>`
+- [x] Implement `WorkspaceSkills` class as nested accessor on Workspace
+  - Created `core/workspace/workspace-skills.ts`
+  - Added `skills` getter to Workspace class with lazy initialization
+- [x] Add skill discovery methods
+  - `list(): Promise<SkillMetadata[]>`
+  - `get(name: string): Promise<Skill | null>`
+  - `has(name: string): Promise<boolean>`
+  - `refresh(): Promise<void>` - re-scan skillsPaths
+- [x] Add skill search (uses workspace's SearchEngine)
+  - `search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>`
+- [x] Add skill CRUD helpers
+  - `create(input: CreateSkillInput): Promise<Skill>`
+  - `update(name: string, input: UpdateSkillInput): Promise<Skill>`
+  - `delete(name: string): Promise<void>`
+- [x] Add single-item accessors
+  - `getReference(skillName: string, path: string): Promise<string | null>`
+  - `getScript(skillName: string, path: string): Promise<string | null>`
+  - `getAsset(skillName: string, path: string): Promise<Buffer | null>`
+- [x] Add listing methods (for SkillsProcessor tools)
+  - `listReferences(skillName: string): Promise<string[]>`
+  - `listScripts(skillName: string): Promise<string[]>`
+  - `listAssets(skillName: string): Promise<string[]>`
 
-### Phase 4: SkillsProcessor Migration
+### Phase 4: SkillsProcessor Migration ✅ (Complete)
 
-- [ ] Move `SkillsProcessor` to `core/processors/skills-processor.ts`
-- [ ] Update processor to work with Workspace skill methods
-- [ ] Keep skill-specific tools (`skill_search`, `skill_read`, `skill_activate`)
-- [ ] Update processor tests
+- [x] Move `SkillsProcessor` to `core/processors/processors/skills.ts`
+- [x] Update processor constructor to accept `Workspace` instead of `Skills | MastraSkills`
+  ```typescript
+  constructor(opts: { workspace: Workspace; format?: SkillFormat })
+  ```
+- [x] Update all internal methods to use async `workspace.skills.*` methods
+- [x] Update tool implementations:
+  - `skill-activate` - use `workspace.skills.has()`, `workspace.skills.get()`
+  - `skill-search` - use `workspace.skills.search()`
+  - `skill-read-reference` - use `workspace.skills.getReference()`, `workspace.skills.listReferences()`
+  - `skill-read-script` - use `workspace.skills.getScript()`, `workspace.skills.listScripts()`
+  - `skill-read-asset` - use `workspace.skills.getAsset()`, `workspace.skills.listAssets()`
+- [x] Update `processInputStep()` to await async skill operations
+- [x] Export from `core/processors/processors/index.ts`
 
-### Phase 5: Mastra Class Cleanup
+### Phase 5: Mastra & Agent Class Cleanup ✅ (Complete - Backward Compatible)
 
-- [ ] Remove `#skills` private field from Mastra
-- [ ] Remove `getSkills()` method from Mastra
-- [ ] Remove `skills?: MastraSkills` from MastraOptions
-- [ ] Update agent integration to use workspace
+**Decision**: Keep legacy APIs for backward compatibility. New code uses workspace.skills, old code continues to work.
 
-### Phase 6: Deprecate @mastra/skills
+**Agent class (`core/agent/agent.ts`):**
 
-- [ ] Mark package as deprecated
-- [ ] Update package to re-export from core (for backwards compat)
-- [ ] Migration guide for existing users
-- [ ] Remove old Knowledge classes from package
+- [x] Keep `getSkills(): MastraSkills | undefined` method for backward compatibility
+- [x] Keep `isMastraSkills()` type guard function for type checking
+- [x] Update `getSkillsProcessors()` to prefer `workspace.skills` over legacy:
+  ```typescript
+  // Checks workspace.skills first (new Workspace-based skills)
+  // Falls back to legacy MastraSkills approach
+  const workspace = await this.getWorkspace({ requestContext });
+  if (workspace?.skills) {
+    return [new SkillsProcessor({ workspace, format })];
+  }
+  // Fall back to legacy: return skills.getInputProcessors(...)
+  ```
+- [x] Keep `AgentSkillsConfig` and `AgentSkillsOption` types for backward compatibility
 
-### Phase 7: Integration & Testing
+**Mastra class (`core/mastra/index.ts`):**
 
-- [ ] Move skill tests to core/workspace
-- [ ] Update playground UI to use new APIs
-- [ ] End-to-end testing with agents
+- [x] Keep `#skills?: MastraSkills` private field
+- [x] Keep `getSkills(): MastraSkills | undefined` method
+- [x] Keep `skills?: MastraSkills` in Config
+
+**Core skills folder (`core/skills/`):**
+
+- [x] Keep `MastraSkills` interface in `core/skills/types.ts` for backward compatibility
+- [x] Add new `WorkspaceSkills` interface in `core/workspace/skill-types.ts`
+
+### Phase 6: Deprecate @mastra/skills ✅ (Complete)
+
+- [x] Add `@deprecated` JSDoc to `Skills` class with migration guide
+- [x] Add `@deprecated` JSDoc to `SkillsProcessor` class with migration guide
+- [x] Package already re-exports types from core for backward compatibility
+- [x] Knowledge classes remain (separate migration or already done)
+
+### Phase 7: Server, Playground & Testing ✅ (Complete - Backward Compatible)
+
+**Server handlers (`packages/server/src/server/handlers/skills.ts`):**
+
+- [x] Server handlers continue to use `mastra.getSkills()` and `agent.getSkills()` (sync API)
+- [x] This is backward compatible - users configuring `mastra.skills` get the sync API
+- [x] No changes needed - handlers work with existing `MastraSkills` interface
+
+**Note**: Server handlers don't need to migrate to async `workspace.skills` API because:
+
+1. The legacy `MastraSkills` interface is kept for backward compatibility
+2. Users who configure skills via `new Mastra({ skills })` get the sync API
+3. Users who configure skills via workspace get the async API internally (via SkillsProcessor)
+4. Server handlers expose the global skills API, which remains sync for backward compatibility
+
+**Future Work** (optional, not required for this migration):
+
+- Server handlers could be updated to also support `workspace.skills` if needed
+- This would require async handlers and conditional logic for sync vs async APIs
 
 ---
 

@@ -246,18 +246,29 @@ class Workspace {
 
 // Skills accessed via workspace.skills
 interface WorkspaceSkills {
+  // Discovery
   list(): Promise<SkillMetadata[]>;
   get(name: string): Promise<Skill | null>;
   has(name: string): Promise<boolean>;
+  refresh(): Promise<void>; // Re-scan skillsPaths
+
+  // Search
   search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
 
+  // CRUD
   create(input: CreateSkillInput): Promise<Skill>;
   update(name: string, input: UpdateSkillInput): Promise<Skill>;
   delete(name: string): Promise<void>;
 
+  // Single-item accessors
   getReference(skillName: string, path: string): Promise<string | null>;
   getScript(skillName: string, path: string): Promise<string | null>;
   getAsset(skillName: string, path: string): Promise<Buffer | null>;
+
+  // Listing accessors (for SkillsProcessor tools)
+  listReferences(skillName: string): Promise<string[]>;
+  listScripts(skillName: string): Promise<string[]>;
+  listAssets(skillName: string): Promise<string[]>;
 }
 ```
 

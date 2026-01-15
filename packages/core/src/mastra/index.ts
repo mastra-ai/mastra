@@ -20,7 +20,6 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraSkills } from '../skills';
 import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -31,6 +30,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -216,23 +216,11 @@ export interface Config<
   memory?: TMemory;
 
   /**
-   * Skills instance for agent skill management following the Agent Skills specification.
-   * Discovers skills from filesystem paths and makes them available to agents.
-   * Processors like SkillsProcessor can inherit this instance from Mastra.
-   *
-   * @example
-   * ```typescript
-   * import { Skills } from '@mastra/skills';
-   *
-   * const mastra = new Mastra({
-   *   skills: new Skills({
-   *     id: 'my-skills',
-   *     paths: ['./skills', 'node_modules/@company/skills'],
-   *   }),
-   * });
-   * ```
+   * Global workspace for file storage, skills, and code execution.
+   * Agents inherit this workspace unless they have their own configured.
+   * Skills are accessed via workspace.skills when skillsPaths is configured.
    */
-  skills?: MastraSkills;
+  workspace?: Workspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -304,7 +292,6 @@ export class Mastra<
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
 > {
   #vectors?: TVectors;
-  #skills?: MastraSkills;
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
@@ -321,6 +308,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #memory?: TMemory;
+  #workspace?: Workspace;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -525,7 +513,6 @@ export class Mastra<
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
-    this.#skills = undefined;
     this.#mcpServers = {} as TMCPServers;
     this.#tts = {} as TTTS;
     this.#agents = {} as TAgents;
@@ -572,8 +559,8 @@ export class Mastra<
       });
     }
 
-    if (config?.skills) {
-      this.#skills = config.skills;
+    if (config?.workspace) {
+      this.#workspace = config.workspace;
     }
 
     if (config?.scorers) {
@@ -1415,37 +1402,6 @@ export class Mastra<
     return this.listVectors();
   }
 
-  // ============================================================================
-  // Skills Management
-  // ============================================================================
-
-  /**
-   * Returns the registered skills instance.
-   *
-   * @returns The skills instance or undefined if none is registered
-   *
-   * @example
-   * ```typescript
-   * import { Skills } from '@mastra/skills';
-   *
-   * const mastra = new Mastra({
-   *   skills: new Skills({
-   *     id: 'my-skills',
-   *     paths: ['./skills'],
-   *   }),
-   * });
-   *
-   * const skills = mastra.getSkills();
-   * if (skills) {
-   *   const allSkills = skills.list();
-   *   const skill = skills.get('brand-guidelines');
-   * }
-   * ```
-   */
-  public getSkills(): MastraSkills | undefined {
-    return this.#skills;
-  }
-
   /**
    * Gets the currently configured deployment provider.
    *
@@ -1469,6 +1425,23 @@ export class Mastra<
    */
   public getDeployer() {
     return this.#deployer;
+  }
+
+  /**
+   * Gets the global workspace instance.
+   * Workspace provides file storage, skills, and code execution capabilities.
+   * Agents inherit this workspace unless they have their own configured.
+   *
+   * @example
+   * ```typescript
+   * const workspace = mastra.getWorkspace();
+   * if (workspace?.skills) {
+   *   const skills = await workspace.skills.list();
+   * }
+   * ```
+   */
+  public getWorkspace(): Workspace | undefined {
+    return this.#workspace;
   }
 
   /**

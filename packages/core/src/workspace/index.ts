@@ -166,3 +166,45 @@ export {
   type TokenizeOptions,
   type LineRange,
 } from './bm25';
+
+// =============================================================================
+// Skills Types (for workspace.skills)
+// =============================================================================
+
+export type {
+  SkillSource,
+  SkillFormat,
+  SkillMetadata,
+  Skill,
+  SkillSearchResult,
+  SkillSearchOptions,
+  CreateSkillInput,
+  UpdateSkillInput,
+  WorkspaceSkills,
+} from './skill-types';
+
+// =============================================================================
+// Skills Validation Schemas
+// =============================================================================
+
+export {
+  SKILL_LIMITS,
+  SkillNameSchema,
+  SkillDescriptionSchema,
+  SkillCompatibilitySchema,
+  SkillLicenseSchema,
+  SkillMetadataFieldSchema,
+  SkillAllowedToolsSchema,
+  SkillMetadataSchema,
+  validateSkillMetadata,
+  parseAllowedTools,
+  type SkillMetadataInput,
+  type SkillMetadataOutput,
+  type SkillValidationResult,
+} from './skill-schemas';
+
+// =============================================================================
+// WorkspaceSkills Implementation
+// =============================================================================
+
+export { WorkspaceSkillsImpl, type WorkspaceSkillsImplConfig } from './workspace-skills';

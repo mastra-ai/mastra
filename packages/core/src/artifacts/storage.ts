@@ -2,13 +2,11 @@ import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 
 /**
- * Abstract base class for content storage backends (Skills & Knowledge).
+ * Abstract base class for content storage backends.
  *
  * Provides common infrastructure for storing and retrieving searchable content.
- * Both Skills and Knowledge support multiple container paths, allowing content
- * from different sources (local, managed, external packages).
- *
- * Domain-specific storage classes (KnowledgeStorage, SkillsStorage) extend this.
+ * Supports multiple container paths, allowing content from different sources
+ * (local, managed, external packages).
  *
  * This class lives in @mastra/core so that storage adapters
  * can be built in separate packages.
