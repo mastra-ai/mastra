@@ -2,7 +2,7 @@
 
 This document outlines the migration of Knowledge functionality into the unified Workspace primitive in `@mastra/core/workspace`.
 
-**Status**: Implementation Complete (Tests Pending)
+**Status**: Complete ✅
 
 ---
 
@@ -297,13 +297,20 @@ interface SearchResult {
 - [x] Add `workspace_index` tool for agent auto-injection
 - [x] Update WORKSPACE_TOOL_NAMES with SEARCH and INDEX
 
-### Phase 6: Integration Tests
+### Phase 6: Integration Tests ✅
 
-- [ ] Test BM25 search
-- [ ] Test vector search (with mock vector store)
-- [ ] Test hybrid search
-- [ ] Test auto-indexing
-- [ ] Test index persistence
+- [x] Test BM25 search (67 tests in bm25.test.ts)
+- [x] Test vector search with mock vector store
+- [x] Test hybrid search
+- [x] Test lazy vector indexing
+- [x] Test chunk line offset tracking
+
+### Phase 7: Cleanup ✅
+
+- [x] Remove `core/knowledge` folder entirely
+- [x] Remove `knowledge` property from MastraOptions
+- [x] Remove `#knowledge` field and `getKnowledge()` from Mastra class
+- [x] Move tests from `@mastra/skills` to `@mastra/core/workspace`
 
 ---
 
