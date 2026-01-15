@@ -20,7 +20,7 @@ export type { SSOLoginConfig, SSOCallbackResult, ISSOProvider } from './sso';
 export type { CredentialsResult, ICredentialsProvider } from './credentials';
 
 // RBAC
-export type { RoleDefinition, IRBACProvider, IRBACManager } from './rbac';
+export type { RoleDefinition, RoleMapping, IRBACProvider, IRBACManager } from './rbac';
 
 // ACL
 export type { ResourceIdentifier, ACLGrant, IACLProvider, IACLManager } from './acl';

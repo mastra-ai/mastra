@@ -3,7 +3,7 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
-import { mastraAuth } from './auth';
+import { mastraAuth, rbacProvider } from './auth';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -93,6 +93,7 @@ const config = {
   },
   server: {
     auth: mastraAuth,
+    rbac: rbacProvider,
     build: {
       swaggerUI: true,
     },

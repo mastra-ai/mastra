@@ -11,7 +11,6 @@
 import { MastraAuthProvider } from '@mastra/core/server';
 import {
   buildCapabilities,
-  resolvePermissionsFromMapping,
   type IUserProvider,
   type ISessionProvider,
   type ISSOProvider,
@@ -54,11 +53,11 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 }
 
 /**
- * Helper to get roleMapping from Mastra server config.
+ * Helper to get RBAC provider from Mastra server config.
  */
-function getRoleMapping(mastra: any): Record<string, string[]> | undefined {
+function getRBACProvider(mastra: any): IRBACProvider<EEUser> | undefined {
   const serverConfig = mastra.getServer?.();
-  return serverConfig?.roleMapping;
+  return serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
 }
 
 /**
@@ -85,10 +84,10 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
     try {
       const { mastra, request } = ctx as any;
       const auth = getAuthProvider(mastra);
-      const roleMapping = getRoleMapping(mastra);
+      const rbac = getRBACProvider(mastra);
 
       // Use buildCapabilities from core/ee
-      const capabilities = await buildCapabilities(auth, request, { roleMapping });
+      const capabilities = await buildCapabilities(auth, request, { rbac });
 
       return capabilities;
     } catch (error) {
@@ -113,7 +112,7 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
     try {
       const { mastra, request } = ctx as any;
       const auth = getAuthProvider(mastra);
-      const roleMapping = getRoleMapping(mastra);
+      const rbac = getRBACProvider(mastra);
 
       if (!auth || !implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
         return null;
@@ -122,21 +121,14 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
       const user = await auth.getCurrentUser(request);
       if (!user) return null;
 
-      // Get roles/permissions if RBAC is available
+      // Get roles/permissions from RBAC provider if available
       let roles: string[] | undefined;
       let permissions: string[] | undefined;
 
-      if (implementsInterface<IRBACProvider>(auth, 'getRoles')) {
+      if (rbac) {
         try {
-          roles = await auth.getRoles(user);
-
-          // If roleMapping is provided, use it to resolve permissions
-          // Otherwise, fall back to the RBAC provider's getPermissions()
-          if (roleMapping) {
-            permissions = resolvePermissionsFromMapping(roles, roleMapping);
-          } else {
-            permissions = await auth.getPermissions(user);
-          }
+          roles = await rbac.getRoles(user);
+          permissions = await rbac.getPermissions(user);
         } catch {
           // RBAC not available or failed
         }

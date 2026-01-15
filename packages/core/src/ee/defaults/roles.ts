@@ -2,7 +2,10 @@
  * Default roles and permissions for Mastra Studio.
  */
 
-import type { RoleDefinition } from '../interfaces';
+import type { RoleDefinition, RoleMapping } from '../interfaces';
+
+// Re-export RoleMapping for backward compatibility
+export type { RoleMapping };
 
 /**
  * Default role definitions for Studio.
@@ -261,14 +264,6 @@ export function matchesPermission(userPermission: string, requiredPermission: st
 export function hasPermission(userPermissions: string[], requiredPermission: string): boolean {
   return userPermissions.some(p => matchesPermission(p, requiredPermission));
 }
-
-/**
- * Role mapping type for translating provider roles to permissions.
- */
-export type RoleMapping = {
-  /** Map role name to array of permissions */
-  [role: string]: string[];
-};
 
 /**
  * Resolve permissions from user roles using a role mapping.
