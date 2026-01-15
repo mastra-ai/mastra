@@ -1,5 +1,6 @@
 # Data files
 /data
+/investigations
 
 # Temporary directories
 /.temp-longmemeval

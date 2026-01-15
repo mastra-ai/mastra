@@ -1182,4 +1182,57 @@ program
     }
   });
 
+// Investigate command
+import { InvestigateCommand } from './commands/investigate';
+
+program
+  .command('investigate [run-id]')
+  .description('Setup and manage investigation of failed questions')
+  .option('-l, --list', 'List all runs with failures')
+  .option('-c, --config <config>', 'Filter by config name (used with --list)')
+  .option('--status', 'Show investigation status')
+  .option('--next', 'Open next uninvestigated question')
+  .option('--done <question-id>', 'Mark a question as investigated')
+  .option('--sync', 'Sync fixes to longmemeval_s.json')
+  .option('-o, --output <dir>', 'Investigation output directory', './investigations')
+  .option('-r, --results <dir>', 'Results directory', './results')
+  .option('-p, --prepared-data <dir>', 'Prepared data directory', './prepared-data')
+  .option('--data <dir>', 'Dataset directory', './data')
+  .option('--editor <cmd>', 'Editor command to open files', process.env.EDITOR || 'code')
+  .option('--inspect <question-id>', 'Inspect a question\'s data')
+  .option('--search <keyword>', 'Search observations for a keyword')
+  .option('--trace <keyword>', 'Trace information flow for a keyword')
+  .option('-q, --question-id <id>', 'Question ID for search/trace')
+  .option('--check-stale', 'Check if prepared data is stale (pre-cursor-fix)')
+  .option('--stale-only', 'Only list stale questions (use with --check-stale)')
+  .action(async (runId, options) => {
+    try {
+      const command = new InvestigateCommand({
+        outputDir: options.output,
+        resultsDir: options.results,
+        preparedDataDir: options.preparedData,
+        datasetDir: options.data,
+        editor: options.editor,
+      });
+      await command.run({
+        runId,
+        list: options.list,
+        config: options.config,
+        status: options.status,
+        next: options.next,
+        done: options.done,
+        sync: options.sync,
+        inspect: options.inspect,
+        search: options.search,
+        trace: options.trace,
+        questionId: options.questionId,
+        checkStale: options.checkStale,
+        staleOnly: options.staleOnly,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
 program.parse();
