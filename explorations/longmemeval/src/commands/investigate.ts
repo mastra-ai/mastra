@@ -42,6 +42,7 @@ export interface InvestigateOptions {
   next?: boolean;
   done?: string;
   sync?: boolean;
+  fixed?: string;      // Mark a question as fix-implemented
   outputDir?: string;
   resultsDir?: string;
   preparedDataDir?: string;
@@ -202,6 +203,11 @@ export class InvestigateCommand {
 
     if (options.done) {
       await this.markDone(options.done);
+      return;
+    }
+
+    if (options.fixed) {
+      await this.markFixed(options.fixed);
       return;
     }
 
@@ -708,6 +714,57 @@ export class InvestigateCommand {
       console.log(`\n🎉 All questions investigated!`);
       console.log(`   Run: pnpm investigate --sync to sync fixes to dataset\n`);
     }
+  }
+
+  private async markFixed(questionId: string): Promise<void> {
+    const investigations = await this.listInvestigations();
+
+    if (investigations.length === 0) {
+      console.log('\n📭 No investigations found.\n');
+      return;
+    }
+
+    // Find investigation containing this question
+    let foundInv: string | null = null;
+    let progress: InvestigationProgress | null = null;
+
+    for (const inv of investigations) {
+      const p = await this.loadProgress(inv);
+      if (p && questionId in p.questions) {
+        foundInv = inv;
+        progress = p;
+        break;
+      }
+    }
+
+    if (!foundInv || !progress) {
+      console.log(`\n❌ Question ${questionId} not found in any investigation.\n`);
+      return;
+    }
+
+    const currentStatus = progress.questions[questionId]?.status;
+    if (currentStatus === 'pending') {
+      console.log(`\n⚠️  Question ${questionId} hasn't been investigated yet.`);
+      console.log(`   Run: pnpm investigate --done ${questionId} first\n`);
+      return;
+    }
+
+    // Update status to fix-implemented
+    progress.questions[questionId] = {
+      ...progress.questions[questionId],
+      status: 'fix-implemented',
+    };
+
+    // Save progress
+    const progressPath = join(this.investigationsDir, foundInv, 'progress.json');
+    await writeFile(progressPath, JSON.stringify(progress, null, 2));
+
+    const fixedCount = Object.values(progress.questions)
+      .filter(q => q.status === 'fix-implemented' || q.status === 'synced').length;
+
+    console.log(`\n✅ Marked ${questionId} as fix-implemented`);
+    console.log(`   Fixed: ${fixedCount}/${progress.totalFailed}`);
+    console.log(`\n   When ready, run: pnpm investigate --sync\n`);
   }
 
   // --------------------------------------------------------------------------

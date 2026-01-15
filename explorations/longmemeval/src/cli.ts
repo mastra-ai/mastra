@@ -1193,6 +1193,7 @@ program
   .option('--status', 'Show investigation status')
   .option('--next', 'Open next uninvestigated question')
   .option('--done <question-id>', 'Mark a question as investigated')
+  .option('--fixed <question-id>', 'Mark a question as fix-implemented')
   .option('--sync', 'Sync fixes to longmemeval_s.json')
   .option('-o, --output <dir>', 'Investigation output directory', './investigations')
   .option('-r, --results <dir>', 'Results directory', './results')
@@ -1226,6 +1227,7 @@ program
         status: options.status,
         next: options.next,
         done: options.done,
+        fixed: options.fixed,
         sync: options.sync,
         inspect: options.inspect,
         search: options.search,
