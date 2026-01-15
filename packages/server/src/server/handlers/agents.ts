@@ -490,6 +490,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
   summary: 'List all agents',
   description: 'Returns a list of all available agents in the system',
   tags: ['Agents'],
+  requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, partial }) => {
     try {
       const agents = mastra.listAgents();
@@ -525,6 +526,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   summary: 'Get agent by ID',
   description: 'Returns details for a specific agent including configuration, tools, and memory settings',
   tags: ['Agents'],
+  requiresPermission: 'agents:read',
   handler: async ({ agentId, mastra, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -555,6 +557,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
+  requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -737,6 +740,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
+  requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
