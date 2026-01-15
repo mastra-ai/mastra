@@ -5338,6 +5338,9 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.5
