@@ -443,7 +443,7 @@ export const AgentMetadataModelSwitcher = ({
                   <div
                     key={provider.id}
                     data-provider-highlighted={isHighlighted}
-                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-4 rounded ${
+                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-2 rounded-md ${
                       isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                     } ${isSelected ? 'bg-surface5' : ''}`}
                     onClick={() => handleProviderSelect(provider)}
