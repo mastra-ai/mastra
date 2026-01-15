@@ -1,5 +1,5 @@
 import { MemoryConfig } from '@mastra/core/memory';
-import { DatasetType, MemoryConfigOptions, MemoryConfigType } from './data/types';
+import { DatasetType, MemoryConfigOptions } from './data/types';
 
 // ============================================================================
 // Run Variants - Define operational parameters
@@ -191,7 +191,7 @@ export function applyCombSampling<T extends { question_id: string; question_type
  */
 export interface MemoryConfigDefinition {
   /** The config type identifier */
-  type: MemoryConfigType;
+  type: string;
 
   /** Memory options passed to Mastra Memory */
   memoryOptions: MemoryConfig;
@@ -235,7 +235,7 @@ export interface MemoryConfigDefinition {
   evalModel?: string;
 
   /** Base config to inherit prepared data from (for derived configs) */
-  baseConfig?: MemoryConfigType;
+  baseConfig?: string;
 
   /** If true, read directly from baseConfig's data at runtime (no copy/modification) */
   readOnlyConfig?: boolean;
@@ -297,6 +297,7 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'om-glm-rag': 'om-glm-rag',
   'om-glm-rag-topk100': 'om-glm-rag-topk100',
   'om-glm-rag-prefboost': 'om-glm-rag-prefboost',
+  'om-gemini-3-pro': 'om-gemini-3-pro',
 
   // Full names (for completeness)
   'semantic-recall': 'semantic-recall',
@@ -322,32 +323,15 @@ export function resolveConfigAlias(nameOrAlias: string): MemoryConfigType {
  * Get all available config aliases (short names only).
  */
 export function getConfigAliases(): string[] {
-  return [
-    'semantic',
-    'working',
-    'working-tailored',
-    'combined',
-    'combined-tailored',
-    'om',
-    'om-shortcut',
-    'om-shortcut-glm',
-    'om-patterns-observed',
-    'om-patterns-tool',
-    'om-glm',
-    'om-glm-patterns-observed',
-    'om-glm-patterns-tool',
-    'om-rag',
-    'om-glm-rag',
-    'om-glm-rag-topk100',
-    'om-glm-rag-prefboost',
-  ];
+  // Return all config keys from MEMORY_CONFIGS
+  return Object.keys(MEMORY_CONFIGS);
 }
 
 // ============================================================================
 // Config Definitions Map
 // ============================================================================
 
-const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
+const MEMORY_CONFIGS = {
   'semantic-recall': {
     type: 'semantic-recall',
     memoryOptions: {
@@ -742,7 +726,33 @@ const MEMORY_CONFIGS: Record<MemoryConfigType, MemoryConfigDefinition> = {
     usesObservationRag: true,
     ragPreferenceBoost: true, // Enable preference boost queries
   },
-};
+
+  'om-gemini-3-pro': {
+    type: 'om-gemini-3-pro',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'google/gemini-3-pro-preview',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true,
+  },
+} satisfies Record<string, MemoryConfigDefinition>;
+
+// Derive MemoryConfigType from the keys of MEMORY_CONFIGS
+export type MemoryConfigType = keyof typeof MEMORY_CONFIGS;
 
 // ============================================================================
 // Public API

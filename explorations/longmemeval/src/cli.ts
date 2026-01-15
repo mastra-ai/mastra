@@ -119,13 +119,21 @@ function showAvailableOptions() {
   }
 
   console.log(chalk.blue('\n📋 Available Memory Configs:\n'));
-  const aliases = getConfigAliases();
-  for (const alias of aliases) {
-    const fullName = CONFIG_ALIASES[alias];
+  const configNames = getConfigAliases();
+  // Build reverse map: full name -> short aliases
+  const shortAliases: Record<string, string[]> = {};
+  for (const [alias, fullName] of Object.entries(CONFIG_ALIASES)) {
     if (alias !== fullName) {
-      console.log(chalk.bold(`  ${alias.padEnd(20)}`), chalk.gray(`→ ${fullName}`));
+      if (!shortAliases[fullName]) shortAliases[fullName] = [];
+      shortAliases[fullName].push(alias);
+    }
+  }
+  for (const configName of configNames) {
+    const configAliases = shortAliases[configName];
+    if (configAliases && configAliases.length > 0) {
+      console.log(chalk.bold(`  ${configName.padEnd(35)}`), chalk.gray(`(alias: ${configAliases.join(', ')})`));
     } else {
-      console.log(chalk.bold(`  ${alias}`));
+      console.log(chalk.bold(`  ${configName}`));
     }
   }
 
@@ -224,10 +232,7 @@ program
       console.log();
 
       // Check for OpenAI API key (needed for embeddings in semantic-recall)
-      if (
-        (resolvedConfig === 'semantic-recall' || resolvedConfig === 'combined') &&
-        !process.env.OPENAI_API_KEY
-      ) {
+      if ((resolvedConfig === 'semantic-recall' || resolvedConfig === 'combined') && !process.env.OPENAI_API_KEY) {
         console.error(chalk.red('Error: OPENAI_API_KEY environment variable is required for semantic recall'));
         console.error(chalk.gray('Please set it in your environment or .env file'));
         process.exit(1);
@@ -247,7 +252,9 @@ program
       // For readOnlyConfig, no preparation is needed
       const configDef = getMemoryConfig(resolvedConfig as MemoryConfigType);
       if (configDef.readOnlyConfig && configDef.baseConfig) {
-        console.log(chalk.green(`✓ Config "${resolvedConfig}" is read-only and uses data from "${configDef.baseConfig}"`));
+        console.log(
+          chalk.green(`✓ Config "${resolvedConfig}" is read-only and uses data from "${configDef.baseConfig}"`),
+        );
         console.log(chalk.gray(`  No preparation needed. Run benchmark directly with: pnpm bench ${resolvedConfig}`));
         console.log(chalk.gray(`  Make sure "${configDef.baseConfig}" is prepared first.\n`));
         return;
@@ -328,8 +335,14 @@ program
   .option('--comb-offset <n>', 'Comb sampling: stride between questions (for sample-comb variant)', parseInt)
   .option('--start-offset <n>', 'Comb sampling: starting index (for sample-comb variant)', parseInt)
   .option('--no-fixed', 'Skip improved/fixed question evaluation')
-  .option('--from-failures [path]', 'Re-run only failed questions from a previous run (path to failures.json or "latest")')
-  .option('--older-than <duration>', 'With --from-failures: only re-run questions prepared before this duration (e.g., "1h", "30m", "2d")')
+  .option(
+    '--from-failures [path]',
+    'Re-run only failed questions from a previous run (path to failures.json or "latest")',
+  )
+  .option(
+    '--older-than <duration>',
+    'With --from-failures: only re-run questions prepared before this duration (e.g., "1h", "30m", "2d")',
+  )
   .option('--resume [run-id]', 'Resume a partial run (omit run-id to auto-detect most recent)')
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
@@ -384,7 +397,9 @@ program
       console.log(chalk.gray(`Memory Config: ${resolvedConfig}`));
       console.log(chalk.gray(`Concurrency: ${concurrency}`));
       if (combSampleSize) {
-        console.log(chalk.gray(`Comb Sample: ${combSampleSize} per type (offset=${combOffset}, start=${combStartOffset})`));
+        console.log(
+          chalk.gray(`Comb Sample: ${combSampleSize} per type (offset=${combOffset}, start=${combStartOffset})`),
+        );
       } else if (perTypeCount) {
         console.log(chalk.gray(`Stratified Sample: ${perTypeCount} per type`));
       } else if (subset) {
@@ -773,10 +788,10 @@ program
 
       // Sort all runs based on sortBy option (best/newest at bottom for terminal viewing)
       let runsToShow = [...allRuns];
-      
+
       if (options.latest) {
         // Group by config and take only the latest from each
-        const byConfig = new Map<string, typeof allRuns[0]>();
+        const byConfig = new Map<string, (typeof allRuns)[0]>();
         for (const run of allRuns) {
           const key = `${run.config.dataset}_${run.config.memoryConfig}`;
           const existing = byConfig.get(key);
@@ -804,98 +819,99 @@ program
       });
 
       for (const run of runsToShow) {
-          // Get terminal width, default to 80 if not available
-          const terminalWidth = process.stdout.columns || 80;
-          const lineWidth = Math.min(terminalWidth - 1, 80); // Cap at 80 for readability
+        // Get terminal width, default to 80 if not available
+        const terminalWidth = process.stdout.columns || 80;
+        const lineWidth = Math.min(terminalWidth - 1, 80); // Cap at 80 for readability
 
-          console.log(chalk.bold('\n' + '═'.repeat(lineWidth) + '\n'));
+        console.log(chalk.bold('\n' + '═'.repeat(lineWidth) + '\n'));
 
-          // Configuration header
-          console.log(chalk.bold('Configuration:\n'));
-          console.log(chalk.gray('Dataset:'), chalk.cyan(run.config.dataset));
-          console.log(chalk.gray('Model:'), chalk.cyan(run.config.model));
-          console.log(chalk.gray('Memory Config:'), chalk.cyan(run.config.memoryConfig));
-          if (run.config.subset) {
-            console.log(chalk.gray('Subset:'), chalk.cyan(`${run.config.subset} questions`));
-          }
-          console.log(chalk.gray('Run ID:'), chalk.dim(run.runId));
-          console.log(chalk.gray('Timestamp:'), chalk.dim(new Date(run.timestamp).toLocaleString()));
-          // Make path relative to cwd
-          const relativePath = require('path').relative(process.cwd(), require('path').resolve(run.metricsPath));
-          console.log(chalk.gray('Metrics:'), chalk.blue(relativePath));
-          console.log(chalk.gray('─'.repeat(Math.min(lineWidth, 60))));
-
-          // Display metrics using same format as regular runs
-          const metrics = run.metrics;
-
-          // Recalculate overall accuracy using the new formula (average of type averages)
-          const typeAccuracies = Object.values(metrics.accuracy_by_type).map((t: any) => t.accuracy);
-          const recalculatedOverall =
-            typeAccuracies.length > 0 ? typeAccuracies.reduce((sum, acc) => sum + acc, 0) / typeAccuracies.length : 0;
-          metrics.overall_accuracy = recalculatedOverall;
-
-          // Check if fixed accuracy data exists
-          const hasFixedAccuracy = showFixed && metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
-
-          // Question type breakdown
-          if (hasFixedAccuracy) {
-            console.log(chalk.bold('\nAccuracy by Question Type:'), chalk.gray('(vanilla → fixed)'));
-          } else {
-            console.log(chalk.bold('\nAccuracy by Question Type:'));
-          }
-
-          // Sort question types alphabetically
-          const sortedTypes = Object.entries(metrics.accuracy_by_type).sort(([a], [b]) => a.localeCompare(b));
-
-          for (const [type, typeMetrics] of sortedTypes) {
-            const { correct, total, accuracy } = typeMetrics as any;
-            const typeColor = accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red';
-
-            // Create a simple progress bar
-            const barLength = 20;
-            const filledLength = Math.round(accuracy * barLength);
-            const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
-
-            let fixedPart = '';
-            if (hasFixedAccuracy && metrics.fixed_accuracy_by_type[type]) {
-              const fixedMetrics = metrics.fixed_accuracy_by_type[type] as any;
-              const fixedColor = fixedMetrics.accuracy >= 0.8 ? 'green' : fixedMetrics.accuracy >= 0.6 ? 'yellow' : 'red';
-              fixedPart = chalk.gray(' → ') + chalk[fixedColor](`${(fixedMetrics.accuracy * 100).toFixed(1)}%`);
-            }
-
-            console.log(
-              chalk.gray(`  ${type.padEnd(25)}:`),
-              chalk[typeColor](`${(accuracy * 100).toFixed(1).padStart(5)}%`) + fixedPart,
-              chalk.gray(`[${bar}]`),
-              chalk.gray(`(${correct}/${total})`),
-            );
-          }
-
-          // Abstention is hidden - it tests LLM reasoning ability rather than memory system performance
-
-          // Overall summary at the bottom
-          console.log();
-          const accuracyColor =
-            metrics.overall_accuracy >= 0.8 ? 'green' : metrics.overall_accuracy >= 0.6 ? 'yellow' : 'red';
-          
-          if (hasFixedAccuracy && metrics.fixed_overall_accuracy != null) {
-            const fixedOverallColor =
-              metrics.fixed_overall_accuracy >= 0.8 ? 'green' : metrics.fixed_overall_accuracy >= 0.6 ? 'yellow' : 'red';
-            console.log(
-              chalk.bold('Overall Accuracy:'),
-              chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
-              chalk.gray('→'),
-              chalk[fixedOverallColor](`${(metrics.fixed_overall_accuracy * 100).toFixed(2)}%`),
-              chalk.gray('(fixed)'),
-            );
-          } else {
-            console.log(
-              chalk.bold('Overall Accuracy:'),
-              chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
-              chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
-            );
-          }
+        // Configuration header
+        console.log(chalk.bold('Configuration:\n'));
+        console.log(chalk.gray('Dataset:'), chalk.cyan(run.config.dataset));
+        console.log(chalk.gray('Model:'), chalk.cyan(run.config.model));
+        console.log(chalk.gray('Memory Config:'), chalk.cyan(run.config.memoryConfig));
+        if (run.config.subset) {
+          console.log(chalk.gray('Subset:'), chalk.cyan(`${run.config.subset} questions`));
         }
+        console.log(chalk.gray('Run ID:'), chalk.dim(run.runId));
+        console.log(chalk.gray('Timestamp:'), chalk.dim(new Date(run.timestamp).toLocaleString()));
+        // Make path relative to cwd
+        const relativePath = require('path').relative(process.cwd(), require('path').resolve(run.metricsPath));
+        console.log(chalk.gray('Metrics:'), chalk.blue(relativePath));
+        console.log(chalk.gray('─'.repeat(Math.min(lineWidth, 60))));
+
+        // Display metrics using same format as regular runs
+        const metrics = run.metrics;
+
+        // Recalculate overall accuracy using the new formula (average of type averages)
+        const typeAccuracies = Object.values(metrics.accuracy_by_type).map((t: any) => t.accuracy);
+        const recalculatedOverall =
+          typeAccuracies.length > 0 ? typeAccuracies.reduce((sum, acc) => sum + acc, 0) / typeAccuracies.length : 0;
+        metrics.overall_accuracy = recalculatedOverall;
+
+        // Check if fixed accuracy data exists
+        const hasFixedAccuracy =
+          showFixed && metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
+
+        // Question type breakdown
+        if (hasFixedAccuracy) {
+          console.log(chalk.bold('\nAccuracy by Question Type:'), chalk.gray('(vanilla → fixed)'));
+        } else {
+          console.log(chalk.bold('\nAccuracy by Question Type:'));
+        }
+
+        // Sort question types alphabetically
+        const sortedTypes = Object.entries(metrics.accuracy_by_type).sort(([a], [b]) => a.localeCompare(b));
+
+        for (const [type, typeMetrics] of sortedTypes) {
+          const { correct, total, accuracy } = typeMetrics as any;
+          const typeColor = accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red';
+
+          // Create a simple progress bar
+          const barLength = 20;
+          const filledLength = Math.round(accuracy * barLength);
+          const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+
+          let fixedPart = '';
+          if (hasFixedAccuracy && metrics.fixed_accuracy_by_type[type]) {
+            const fixedMetrics = metrics.fixed_accuracy_by_type[type] as any;
+            const fixedColor = fixedMetrics.accuracy >= 0.8 ? 'green' : fixedMetrics.accuracy >= 0.6 ? 'yellow' : 'red';
+            fixedPart = chalk.gray(' → ') + chalk[fixedColor](`${(fixedMetrics.accuracy * 100).toFixed(1)}%`);
+          }
+
+          console.log(
+            chalk.gray(`  ${type.padEnd(25)}:`),
+            chalk[typeColor](`${(accuracy * 100).toFixed(1).padStart(5)}%`) + fixedPart,
+            chalk.gray(`[${bar}]`),
+            chalk.gray(`(${correct}/${total})`),
+          );
+        }
+
+        // Abstention is hidden - it tests LLM reasoning ability rather than memory system performance
+
+        // Overall summary at the bottom
+        console.log();
+        const accuracyColor =
+          metrics.overall_accuracy >= 0.8 ? 'green' : metrics.overall_accuracy >= 0.6 ? 'yellow' : 'red';
+
+        if (hasFixedAccuracy && metrics.fixed_overall_accuracy != null) {
+          const fixedOverallColor =
+            metrics.fixed_overall_accuracy >= 0.8 ? 'green' : metrics.fixed_overall_accuracy >= 0.6 ? 'yellow' : 'red';
+          console.log(
+            chalk.bold('Overall Accuracy:'),
+            chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
+            chalk.gray('→'),
+            chalk[fixedOverallColor](`${(metrics.fixed_overall_accuracy * 100).toFixed(2)}%`),
+            chalk.gray('(fixed)'),
+          );
+        } else {
+          console.log(
+            chalk.bold('Overall Accuracy:'),
+            chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
+            chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
+          );
+        }
+      }
 
       // Get terminal width for final separator
       const terminalWidth = process.stdout.columns || 80;
