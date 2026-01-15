@@ -101,34 +101,12 @@ All unmapped span types (including `MODEL_CHUNK`, `GENERIC`, etc., and future sp
 
 ## Troubleshooting
 
-### Missing `@openfeature/core` dependency
-
-If you see warnings about missing `@openfeature/core` or `@openfeature/server-sdk`, these are optional peer dependencies from `dd-trace`. You can ignore the warnings or install them:
-
-```bash
-pnpm add @openfeature/core @openfeature/server-sdk
-```
-
 ### Native module ABI errors
 
 If you see errors like `No native build was found for runtime=node abi=137`:
 
 1. **Use Node.js 22.x** - Native modules have best compatibility with Node.js 22.x
 2. **Ignore the warnings** - Native modules are optional; core tracing still works without them
-
-### Version resolution issues
-
-If you encounter version conflicts with `@mastra/observability`, add this to your `package.json`:
-
-```json
-{
-  "pnpm": {
-    "overrides": {
-      "@mastra/observability": "1.0.0-beta.10"
-    }
-  }
-}
-```
 
 ### Bundler configuration
 
@@ -140,8 +118,6 @@ export default {
   bundler: {
     externals: [
       "dd-trace",
-      "@openfeature/core",
-      "@openfeature/server-sdk",
       "@datadog/native-metrics",
       "@datadog/native-appsec",
       "@datadog/native-iast-taint-tracking",

@@ -135,14 +135,6 @@ Other/future Mastra span types will default to 'task' when mapped unless specifi
 
 ## Troubleshooting
 
-### Missing `@openfeature/core` dependency
-
-If you see warnings about missing `@openfeature/core` or `@openfeature/server-sdk` dependencies, these are optional peer dependencies from `dd-trace`. You can safely ignore these warnings, or install them explicitly:
-
-```bash
-pnpm add @openfeature/core @openfeature/server-sdk
-```
-
 ### Native module ABI mismatch
 
 If you see errors like:
@@ -155,40 +147,9 @@ This indicates a Node.js version compatibility issue with `dd-trace`'s native mo
 
 **Solutions:**
 
-1. **Use Node.js 22.x**: The `@mastra/datadog` package requires Node.js >=22.13.0. Native modules have the best compatibility with Node.js 22.x.
+1. **Use Node.js 22.x**: Native modules have the best compatibility with Node.js 22.x.
 
 2. **Ignore native module warnings**: The native modules (`@datadog/native-metrics`, `@datadog/native-appsec`, etc.) are optional. If they fail to load, core tracing functionality still works.
-
-3. **Set environment variable**: You can suppress native module warnings:
-   ```bash
-   DD_TRACE_DISABLED_INSTRUMENTATIONS=native-metrics
-   ```
-
-### Version resolution issues
-
-If you encounter version mismatch errors with `@mastra/observability`, add this override to your `package.json`:
-
-```json title="package.json"
-{
-  "overrides": {
-    "@mastra/datadog": {
-      "@mastra/observability": "1.0.0-beta.10"
-    }
-  }
-}
-```
-
-For pnpm users:
-
-```json title="package.json"
-{
-  "pnpm": {
-    "overrides": {
-      "@mastra/observability": "1.0.0-beta.10"
-    }
-  }
-}
-```
 
 ### Bundler externals configuration
 
@@ -199,8 +160,6 @@ export default {
   bundler: {
     externals: [
       "dd-trace",
-      "@openfeature/core",
-      "@openfeature/server-sdk",
       "@datadog/native-metrics",
       "@datadog/native-appsec",
       "@datadog/native-iast-taint-tracking",
