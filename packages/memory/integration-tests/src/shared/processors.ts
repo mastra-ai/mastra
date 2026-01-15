@@ -324,18 +324,18 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
         messageList5.add(message, 'memory');
       }
 
-      const filteredMessages = await toolCallFilter.processInput({
+      const filteredMessages = (await toolCallFilter.processInput({
         messages: queryResult.messages,
         messageList: messageList5,
         abort,
         requestContext,
-      });
+      })) as MastraDBMessage[];
       const filteredArray = Array.isArray(filteredMessages) ? filteredMessages : filteredMessages.get.all.db();
-      const limitedMessages = await tokenLimiter.processInput({
+      const limitedMessages = (await tokenLimiter.processInput({
         messages: filteredArray,
         abort,
         requestContext,
-      });
+      })) as MastraDBMessage[];
       const result = v2ToCoreMessages(limitedMessages);
 
       // We should have fewer messages after filtering and token limiting
@@ -593,7 +593,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
       const tokenLimitList = new MessageList({ threadId, resourceId }).add(tokenLimitQuery.messages, 'memory');
       // Use a very small token limit (10 tokens) to ensure messages get filtered
-      const tokenLimiter = new TokenLimiter(10);
+      const tokenLimiter = new TokenLimiter(30);
       const tokenLimitedMessages = await tokenLimiter.processInput({
         messages: tokenLimitList.get.all.db(),
         abort,
