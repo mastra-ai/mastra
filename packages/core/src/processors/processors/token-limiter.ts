@@ -102,14 +102,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     const nonSystemMessages = messages;
 
     // If system messages alone exceed the limit (accounting for conversation overhead),
-    // remove all non-system messages
+    // throw TripWire - can't send LLM a request with only system messages
     if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
-      if (messageList) {
-        const idsToRemove = nonSystemMessages.map(m => m.id);
-        messageList.removeByIds(idsToRemove);
-        return messageList;
-      }
-      return [];
+      throw new TripWire(
+        'TokenLimiterProcessor: System messages alone exceed token limit. Cannot send LLM a request with only system messages.',
+        { retry: false },
+      );
     }
 
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
@@ -149,7 +147,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
 
   /**
    * Count tokens for a system message (CoreMessageV4 from args.systemMessages).
-   * This method only accepts system messages and will throw if called with other message types.
+   * This method only accepts system messages with string content and will throw otherwise.
    */
   private countCoreSystemMessageTokens(message: CoreMessageV4): number {
     if (message.role !== 'system') {
@@ -158,7 +156,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
       );
     }
 
-    // System messages in the AI SDK always have string content
+    if (typeof message.content !== 'string') {
+      throw new Error('countCoreSystemMessageTokens: System message content must be a string');
+    }
+
     const tokenString = message.role + message.content;
 
     return this.encoder.encode(tokenString).length + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
