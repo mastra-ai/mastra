@@ -381,7 +381,7 @@ export class InngestWorkflow<
 
           // Set the start time to when the workflow actually started
           if (workflowSpan && 'startTime' in workflowSpan) {
-            (workflowSpan as any).startTime = new Date(spanMeta.startTime);
+            workflowSpan.startTime = new Date(spanMeta.startTime);
           }
 
           // Materialize collected spans as real child spans of the workflow span

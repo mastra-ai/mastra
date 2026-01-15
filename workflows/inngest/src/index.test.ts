@@ -14886,7 +14886,7 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe.sequential('Workflow Tracing', () => {
-    it.only('should provide tracingContext.currentSpan to step execution', async ctx => {
+    it('should provide tracingContext.currentSpan to step execution', async ctx => {
       // This test verifies that workflow tracing works correctly.
       // The InngestWorkflow creates a workflow span and passes it to the execution engine,
       // which then makes it available to step handlers via tracingContext.currentSpan.
@@ -14982,8 +14982,6 @@ describe('MastraInngestWorkflow', () => {
       // Verify tracing context was provided
       expect(capturedTracingContext).toBeDefined();
 
-      // THIS IS THE CRITICAL TEST: currentSpan should be defined for workflow step tracing
-      // Currently this FAILS because InngestWorkflow doesn't create a workflow span
       expect(capturedTracingContext.currentSpan).toBeDefined();
     });
 
