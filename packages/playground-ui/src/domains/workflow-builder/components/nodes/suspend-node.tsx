@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Hand } from 'lucide-react';
 import { BaseNode } from './base-node';
 import { Badge } from '@/ds/components/Badge';
@@ -7,10 +7,12 @@ import type { SuspendNodeData } from '../../types';
 
 const SUSPEND_COLOR = '#ef4444'; // red-500
 
-export const SuspendNode = memo(function SuspendNode({ id, data, selected }: NodeProps) {
-  const nodeData = data as unknown as SuspendNodeData;
-
-  const resumeSchemaProperties = nodeData.resumeSchema?.properties as Record<string, unknown> | undefined;
+export const SuspendNode = memo(function SuspendNode({
+  id,
+  data,
+  selected,
+}: NodeProps<Node<SuspendNodeData, 'suspend'>>) {
+  const resumeSchemaProperties = data.resumeSchema?.properties as Record<string, unknown> | undefined;
   const fieldCount = resumeSchemaProperties ? Object.keys(resumeSchemaProperties).length : 0;
 
   return (
@@ -19,7 +21,7 @@ export const SuspendNode = memo(function SuspendNode({ id, data, selected }: Nod
       selected={selected}
       accentColor={SUSPEND_COLOR}
       quickAddExcludeTypes={['trigger']}
-      comment={nodeData.comment}
+      comment={data.comment}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
@@ -30,7 +32,7 @@ export const SuspendNode = memo(function SuspendNode({ id, data, selected }: Nod
             <Hand className="w-4 h-4" style={{ color: SUSPEND_COLOR }} />
           </div>
           <div className="flex-1">
-            <div className="font-medium text-icon6 text-sm">{nodeData.label}</div>
+            <div className="font-medium text-icon6 text-sm">{data.label}</div>
           </div>
           <Badge className="text-[10px] px-1.5 py-0.5 !bg-red-500/20 !text-red-500">HUMAN</Badge>
         </div>

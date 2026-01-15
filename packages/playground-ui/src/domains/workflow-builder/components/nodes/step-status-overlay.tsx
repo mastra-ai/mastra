@@ -216,7 +216,7 @@ export function StepProgressRing({ stepId, size = 24, strokeWidth = 2 }: Progres
         strokeDashoffset={isIndeterminate ? circumference * 0.75 : offset}
         strokeLinecap="round"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        className="transition-all duration-300"
+        className="transition-all duration-150"
       />
     </svg>
   );

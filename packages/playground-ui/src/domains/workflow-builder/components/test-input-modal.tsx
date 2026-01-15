@@ -1,5 +1,38 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Play, X, AlertCircle } from 'lucide-react';
+
+// Focus trap hook for modal accessibility
+function useFocusTrap(isOpen: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return;
+
+    const focusableElements = containerRef.current.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    firstElement?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.shiftKey && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement?.focus();
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  return containerRef;
+}
 import { cn } from '@/lib/utils';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
@@ -203,6 +236,10 @@ export function TestInputModal({ onRun, resumeSchema, isResume = false }: TestIn
   const setTestInput = useTestRunnerStore(state => state.setTestInput);
   const isRunning = useTestRunnerStore(state => state.isRunning);
 
+  const focusTrapRef = useFocusTrap(showInputModal);
+  const titleId = 'test-input-modal-title';
+  const descriptionId = 'test-input-modal-description';
+
   // Use resume schema if provided, otherwise use workflow input schema
   const schema = resumeSchema || inputSchema;
   const properties = (schema?.properties as Record<string, SchemaProperty>) || {};
@@ -264,19 +301,33 @@ export function TestInputModal({ onRun, resumeSchema, isResume = false }: TestIn
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} aria-hidden="true" />
 
       {/* Modal */}
-      <div className="relative bg-surface1 border border-border1 rounded-lg shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
+      <div
+        ref={focusTrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="relative bg-surface1 border border-border1 rounded-lg shadow-xl w-full max-w-md max-h-[80vh] flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border1">
           <div>
-            <h2 className="text-sm font-semibold text-icon6">{isResume ? 'Provide Resume Input' : 'Test Workflow'}</h2>
-            <p className="text-xs text-icon3 mt-0.5">
+            <h2 id={titleId} className="text-sm font-semibold text-icon6">
+              {isResume ? 'Provide Resume Input' : 'Test Workflow'}
+            </h2>
+            <p id={descriptionId} className="text-xs text-icon3 mt-0.5">
               {isResume ? 'Enter the required input to continue' : 'Enter test input values'}
             </p>
           </div>
-          <button type="button" onClick={handleClose} className="p-1.5 hover:bg-surface3 rounded">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="p-1.5 hover:bg-surface3 rounded"
+            aria-label="Close dialog"
+          >
             <X className="w-4 h-4 text-icon3" />
           </button>
         </div>

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Clock } from 'lucide-react';
 import { BaseNode } from './base-node';
 import { Badge } from '@/ds/components/Badge';
@@ -14,16 +14,14 @@ function formatDuration(ms: number): string {
   return `${(ms / 3600000).toFixed(1)}h`;
 }
 
-export const SleepNode = memo(function SleepNode({ id, data, selected }: NodeProps) {
-  const nodeData = data as unknown as SleepNodeData;
-
+export const SleepNode = memo(function SleepNode({ id, data, selected }: NodeProps<Node<SleepNodeData, 'sleep'>>) {
   return (
     <BaseNode
       id={id}
       selected={selected}
       accentColor={SLEEP_COLOR}
       quickAddExcludeTypes={['trigger']}
-      comment={nodeData.comment}
+      comment={data.comment}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
@@ -34,17 +32,17 @@ export const SleepNode = memo(function SleepNode({ id, data, selected }: NodePro
             <Clock className="w-4 h-4" style={{ color: SLEEP_COLOR }} />
           </div>
           <div className="flex-1">
-            <div className="font-medium text-icon6 text-sm">{nodeData.label}</div>
+            <div className="font-medium text-icon6 text-sm">{data.label}</div>
           </div>
           <Badge className="text-[10px] px-1.5 py-0.5 !bg-gray-500/20 !text-gray-400">SLEEP</Badge>
         </div>
 
         <div className="text-xs">
-          {nodeData.sleepType === 'duration' ? (
-            nodeData.duration ? (
+          {data.sleepType === 'duration' ? (
+            data.duration ? (
               <div className="flex items-center gap-2 text-icon4">
                 <span className="text-icon3">Wait:</span>
-                <span>{formatDuration(nodeData.duration)}</span>
+                <span>{formatDuration(data.duration)}</span>
               </div>
             ) : (
               <div className="text-amber-500 bg-amber-500/10 rounded px-2 py-1">No duration set</div>
@@ -53,8 +51,8 @@ export const SleepNode = memo(function SleepNode({ id, data, selected }: NodePro
             <div className="flex items-center gap-2 text-icon4">
               <span className="text-icon3">Until:</span>
               <span className="truncate">
-                {nodeData.timestamp && typeof nodeData.timestamp === 'object'
-                  ? (nodeData.timestamp as { ref?: string }).ref || 'timestamp'
+                {data.timestamp && typeof data.timestamp === 'object'
+                  ? (data.timestamp as { ref?: string }).ref || 'timestamp'
                   : 'timestamp'}
               </span>
             </div>

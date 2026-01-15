@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { X, Plus, AlertCircle, AlertTriangle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
 import { useTestRunnerStore } from '../../store/test-runner-store';
 import { QuickAddPopover } from '../quick-add-popover';
@@ -89,7 +90,7 @@ export function BaseNode({
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm relative group',
-          'transition-all duration-200 ease-out',
+          'transition-all duration-150 ease-out',
           'hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5',
           selected ? 'border-accent1 ring-2 ring-accent1/20' : 'border-border1',
           // Multi-select state - cyan highlight
@@ -101,6 +102,16 @@ export function BaseNode({
         )}
         style={accentColor ? { borderLeftColor: accentColor } : undefined}
       >
+        {/* Visually hidden text for screen readers announcing selection state */}
+        <span className="sr-only">
+          {selected ? 'Selected node.' : ''} {isInMultiSelect ? 'Part of multi-selection.' : ''}{' '}
+          {nodeValidation.hasErrors
+            ? `Has ${nodeValidation.issues.length} validation error${nodeValidation.issues.length > 1 ? 's' : ''}.`
+            : nodeValidation.hasWarnings
+              ? `Has ${nodeValidation.issues.length} validation warning${nodeValidation.issues.length > 1 ? 's' : ''}.`
+              : ''}
+        </span>
+
         {/* Multi-select indicator - top left */}
         {isInMultiSelect && !nodeValidation.hasErrors && !nodeValidation.hasWarnings && (
           <div
@@ -110,6 +121,7 @@ export function BaseNode({
               'bg-cyan-500 flex items-center justify-center',
               'animate-in fade-in zoom-in duration-150',
             )}
+            aria-hidden="true"
           >
             <Check className="w-3 h-3 text-white" />
           </div>
@@ -125,6 +137,7 @@ export function BaseNode({
               nodeValidation.hasErrors ? 'bg-red-500' : 'bg-amber-500',
             )}
             title={nodeValidation.issues.map(i => i.message).join('\n')}
+            aria-hidden="true"
           >
             {nodeValidation.hasErrors ? (
               <AlertCircle className="w-3 h-3 text-white" />
@@ -136,24 +149,33 @@ export function BaseNode({
 
         {/* Delete button - visible on hover (hidden during test run) */}
         {!isTestRunning && (
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              deleteNode(id);
-            }}
-            className={cn(
-              'absolute -top-2 -right-2 z-10',
-              'w-5 h-5 rounded-full',
-              'bg-red-500 hover:bg-red-600 hover:scale-110',
-              'flex items-center justify-center',
-              'opacity-0 group-hover:opacity-100',
-              'transition-all duration-150 ease-out',
-              'text-white',
-            )}
-            aria-label="Delete node"
-          >
-            <X className="w-3 h-3" />
-          </button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    deleteNode(id);
+                  }}
+                  className={cn(
+                    'absolute -top-2 -right-2 z-10',
+                    'w-5 h-5 rounded-full',
+                    'bg-red-500 hover:bg-red-600 hover:scale-110',
+                    'flex items-center justify-center',
+                    'opacity-0 group-hover:opacity-100',
+                    'transition-all duration-150 ease-out',
+                    'text-white',
+                  )}
+                  aria-label="Delete node"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Delete node</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Step status overlay (shown during/after test run) */}
@@ -186,30 +208,39 @@ export function BaseNode({
 
       {/* Quick-add button with popover - visible on hover, positioned below the node */}
       {hasBottomHandle && showQuickAdd && (
-        <QuickAddPopover
-          onSelect={handleQuickAdd}
-          excludeTypes={quickAddExcludeTypes}
-          open={isQuickAddOpen}
-          onOpenChange={setIsQuickAddOpen}
-        >
-          <button
-            onClick={e => {
-              e.stopPropagation();
-            }}
-            className={cn(
-              'absolute left-1/2 -translate-x-1/2 -bottom-8 z-20',
-              'w-6 h-6 rounded-full bg-accent1',
-              'hover:bg-accent1/90 hover:scale-110',
-              'flex items-center justify-center',
-              'opacity-0 group-hover:opacity-100',
-              'transition-all duration-150 ease-out',
-              'text-white shadow-lg hover:shadow-xl',
-            )}
-            aria-label="Add connected node"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </QuickAddPopover>
+        <TooltipProvider>
+          <Tooltip>
+            <QuickAddPopover
+              onSelect={handleQuickAdd}
+              excludeTypes={quickAddExcludeTypes}
+              open={isQuickAddOpen}
+              onOpenChange={setIsQuickAddOpen}
+            >
+              <TooltipTrigger asChild>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                  }}
+                  className={cn(
+                    'absolute left-1/2 -translate-x-1/2 -bottom-8 z-20',
+                    'w-6 h-6 rounded-full bg-accent1',
+                    'hover:bg-accent1/90 hover:scale-110',
+                    'flex items-center justify-center',
+                    'opacity-0 group-hover:opacity-100',
+                    'transition-all duration-150 ease-out',
+                    'text-white shadow-lg hover:shadow-xl',
+                  )}
+                  aria-label="Add connected node"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+            </QuickAddPopover>
+            <TooltipContent side="bottom">
+              <p>Add step (Tab)</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
     </>
   );

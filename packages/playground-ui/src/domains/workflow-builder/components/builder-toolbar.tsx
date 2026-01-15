@@ -8,6 +8,7 @@ import { Input } from '@/ds/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 import { serializeGraph } from '../utils/serialize';
 import { ValidationBadge, ValidationPanel } from './validation-panel';
 import { useWorkflowValidation } from '../hooks/use-workflow-validation';
@@ -97,8 +98,15 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
       });
 
       setDirty(false);
+      toast.success('Workflow saved', {
+        description: 'Your workflow has been saved successfully.',
+      });
     } catch (error) {
       console.error('Failed to save workflow:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      toast.error('Failed to save workflow', {
+        description: errorMessage,
+      });
     } finally {
       setSaving(false);
     }
@@ -140,12 +148,17 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
           className="w-64 h-8 text-sm"
         />
 
-        {isDirty && (
-          <div className="flex items-center gap-1 text-xs text-amber-500">
-            <div className="w-2 h-2 rounded-full bg-amber-500" />
-            Unsaved
-          </div>
-        )}
+        {/* Status indicator with live region for screen readers */}
+        <div aria-live="polite" aria-atomic="true" className="flex items-center">
+          {isSaving ? (
+            <span className="sr-only">Saving workflow</span>
+          ) : isDirty ? (
+            <div className="flex items-center gap-1 text-xs text-amber-500">
+              <div className="w-2 h-2 rounded-full bg-amber-500" aria-hidden="true" />
+              <span>Unsaved changes</span>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* Right section */}
@@ -163,13 +176,31 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
 
         <div className="h-6 w-px bg-border1" />
 
-        <Button variant="ghost" size="md" onClick={undo} disabled={!canUndo()} className="gap-1">
-          <Undo2 className="w-4 h-4" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="md" onClick={undo} disabled={!canUndo()} className="gap-1">
+                <Undo2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Undo (Ctrl+Z)</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-        <Button variant="ghost" size="md" onClick={redo} disabled={!canRedo()} className="gap-1">
-          <Redo2 className="w-4 h-4" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="md" onClick={redo} disabled={!canRedo()} className="gap-1">
+                <Redo2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Redo (Ctrl+Shift+Z)</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         {/* Keyboard shortcuts button */}
         {onShowShortcuts && (

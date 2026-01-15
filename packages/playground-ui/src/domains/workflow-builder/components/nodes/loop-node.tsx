@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { RefreshCw } from 'lucide-react';
 import { BaseNode } from './base-node';
 import { Badge } from '@/ds/components/Badge';
@@ -7,10 +7,8 @@ import type { LoopNodeData } from '../../types';
 
 const LOOP_COLOR = '#f97316'; // orange-500
 
-export const LoopNode = memo(function LoopNode({ id, data, selected }: NodeProps) {
-  const nodeData = data as unknown as LoopNodeData;
-
-  const loopTypeLabel = nodeData.loopType === 'dowhile' ? 'Do While' : 'Do Until';
+export const LoopNode = memo(function LoopNode({ id, data, selected }: NodeProps<Node<LoopNodeData, 'loop'>>) {
+  const loopTypeLabel = data.loopType === 'dowhile' ? 'Do While' : 'Do Until';
 
   return (
     <BaseNode
@@ -18,7 +16,7 @@ export const LoopNode = memo(function LoopNode({ id, data, selected }: NodeProps
       selected={selected}
       accentColor={LOOP_COLOR}
       quickAddExcludeTypes={['trigger']}
-      comment={nodeData.comment}
+      comment={data.comment}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
@@ -29,7 +27,7 @@ export const LoopNode = memo(function LoopNode({ id, data, selected }: NodeProps
             <RefreshCw className="w-4 h-4" style={{ color: LOOP_COLOR }} />
           </div>
           <div className="flex-1">
-            <div className="font-medium text-icon6 text-sm">{nodeData.label}</div>
+            <div className="font-medium text-icon6 text-sm">{data.label}</div>
           </div>
           <Badge className="text-[10px] px-1.5 py-0.5 !bg-orange-500/20 !text-orange-500">LOOP</Badge>
         </div>
@@ -39,18 +37,18 @@ export const LoopNode = memo(function LoopNode({ id, data, selected }: NodeProps
             <span className="text-icon3">Type:</span>
             <span>{loopTypeLabel}</span>
           </div>
-          {nodeData.condition ? (
+          {data.condition ? (
             <div className="flex items-center gap-2 text-icon4">
               <span className="text-icon3">Condition:</span>
-              <span className="truncate">{nodeData.condition.type}</span>
+              <span className="truncate">{data.condition.type}</span>
             </div>
           ) : (
             <div className="text-amber-500 bg-amber-500/10 rounded px-2 py-1">No condition set</div>
           )}
-          {nodeData.maxIterations && (
+          {data.maxIterations && (
             <div className="flex items-center gap-2 text-icon4">
               <span className="text-icon3">Max:</span>
-              <span>{nodeData.maxIterations} iterations</span>
+              <span>{data.maxIterations} iterations</span>
             </div>
           )}
         </div>

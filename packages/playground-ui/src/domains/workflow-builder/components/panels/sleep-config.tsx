@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { BuilderNode, SleepNodeData } from '../../types';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
-import { Label } from '@/ds/components/Label';
+import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { ConfigField, ConfigInfoBox } from './shared';
 
 export interface SleepConfigProps {
   node: BuilderNode;
@@ -22,6 +23,39 @@ const DURATION_PRESETS = [
   { value: 3600000, label: '1 hour' },
 ];
 
+type DurationUnit = 'ms' | 's' | 'm' | 'h';
+
+const DURATION_UNITS: Array<{ value: DurationUnit; label: string; multiplier: number }> = [
+  { value: 'ms', label: 'Milliseconds', multiplier: 1 },
+  { value: 's', label: 'Seconds', multiplier: 1000 },
+  { value: 'm', label: 'Minutes', multiplier: 60 * 1000 },
+  { value: 'h', label: 'Hours', multiplier: 60 * 60 * 1000 },
+];
+
+/**
+ * Parse a duration string like "5s", "100ms", "2m", "1h" and convert to milliseconds.
+ * Returns the parsed value or null if invalid.
+ */
+function parseDurationString(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i);
+  if (!match) return null;
+
+  const value = parseFloat(match[1]);
+  if (isNaN(value) || value < 0) return null;
+
+  const unit = (match[2]?.toLowerCase() || 'ms') as DurationUnit;
+  const unitConfig = DURATION_UNITS.find(u => u.value === unit);
+  if (!unitConfig) return null;
+
+  return Math.round(value * unitConfig.multiplier);
+}
+
+/**
+ * Convert milliseconds to a human-readable duration with the best unit.
+ */
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
@@ -29,11 +63,41 @@ function formatDuration(ms: number): string {
   return `${(ms / 3600000).toFixed(1)}h`;
 }
 
+/**
+ * Get the best unit for a given millisecond value.
+ */
+function getBestUnit(ms: number): DurationUnit {
+  if (ms >= 3600000 && ms % 3600000 === 0) return 'h';
+  if (ms >= 60000 && ms % 60000 === 0) return 'm';
+  if (ms >= 1000 && ms % 1000 === 0) return 's';
+  return 'ms';
+}
+
+/**
+ * Convert milliseconds to a value in the specified unit.
+ */
+function msToUnit(ms: number, unit: DurationUnit): number {
+  const unitConfig = DURATION_UNITS.find(u => u.value === unit);
+  if (!unitConfig) return ms;
+  return ms / unitConfig.multiplier;
+}
+
 export function SleepConfig({ node }: SleepConfigProps) {
   const data = node.data as SleepNodeData;
   const updateNodeData = useWorkflowBuilderStore(state => state.updateNodeData);
   const nodes = useWorkflowBuilderStore(state => state.nodes);
   const inputSchema = useWorkflowBuilderStore(state => state.inputSchema);
+
+  // State for custom duration input
+  const currentDuration = data.duration ?? 1000;
+  const initialUnit = getBestUnit(currentDuration);
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>(initialUnit);
+  const [customInput, setCustomInput] = useState<string>('');
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  // Check if current duration matches a preset
+  const isPreset = DURATION_PRESETS.some(p => p.value === currentDuration);
+  const [useCustom, setUseCustom] = useState(!isPreset);
 
   // Build available variable references for timestamp
   const availableRefs = useMemo(() => {
@@ -58,23 +122,50 @@ export function SleepConfig({ node }: SleepConfigProps) {
     return refs;
   }, [nodes, node.id, inputSchema]);
 
+  // Handle custom duration input with unit parsing
+  const handleCustomInputChange = (value: string) => {
+    setCustomInput(value);
+    setInputError(null);
+
+    // Try to parse the input
+    const parsed = parseDurationString(value);
+    if (parsed !== null) {
+      updateNodeData(node.id, { duration: parsed });
+    } else if (value.trim()) {
+      // Only show error if there's non-empty input
+      setInputError('Invalid format. Use: 5s, 100ms, 2m, or 1h');
+    }
+  };
+
+  // Handle value input change (numeric with unit selector)
+  const handleValueChange = (value: string) => {
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      const unitConfig = DURATION_UNITS.find(u => u.value === durationUnit);
+      const msValue = Math.round(numValue * (unitConfig?.multiplier ?? 1));
+      updateNodeData(node.id, { duration: msValue });
+    }
+  };
+
+  // Handle unit change
+  const handleUnitChange = (newUnit: DurationUnit) => {
+    setDurationUnit(newUnit);
+    // Keep the same millisecond value, just change display unit
+  };
+
   return (
     <div className="space-y-4">
       {/* Label */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-icon5">Label</Label>
-        <input
-          type="text"
+      <ConfigField label="Label">
+        <Input
           value={data.label}
           onChange={e => updateNodeData(node.id, { label: e.target.value })}
           placeholder="Sleep"
-          className="w-full h-8 px-3 text-sm rounded border border-border1 bg-surface1 text-icon6 focus:outline-none focus:border-accent1"
         />
-      </div>
+      </ConfigField>
 
       {/* Sleep Type */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-icon5">Sleep Type</Label>
+      <ConfigField label="Sleep Type">
         <Select
           value={data.sleepType}
           onValueChange={value => updateNodeData(node.id, { sleepType: value as 'duration' | 'timestamp' })}
@@ -87,53 +178,128 @@ export function SleepConfig({ node }: SleepConfigProps) {
             <SelectItem value="timestamp">Until Timestamp</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </ConfigField>
 
       {/* Duration */}
       {data.sleepType === 'duration' && (
         <>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-icon5">Duration Preset</Label>
-            <Select
-              value={DURATION_PRESETS.find(p => p.value === data.duration)?.value.toString() ?? 'custom'}
-              onValueChange={value => {
-                if (value !== 'custom') {
-                  updateNodeData(node.id, { duration: parseInt(value) });
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select duration..." />
-              </SelectTrigger>
-              <SelectContent>
-                {DURATION_PRESETS.map(preset => (
-                  <SelectItem key={preset.value} value={preset.value.toString()}>
-                    {preset.label}
-                  </SelectItem>
-                ))}
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Preset or Custom Toggle */}
+          <ConfigField label="Duration Mode">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setUseCustom(false)}
+                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${
+                  !useCustom
+                    ? 'bg-accent1/20 border-accent1 text-accent1'
+                    : 'bg-surface2 border-border1 text-icon4 hover:text-icon5 hover:border-border2'
+                }`}
+              >
+                Preset
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseCustom(true)}
+                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${
+                  useCustom
+                    ? 'bg-accent1/20 border-accent1 text-accent1'
+                    : 'bg-surface2 border-border1 text-icon4 hover:text-icon5 hover:border-border2'
+                }`}
+              >
+                Custom
+              </button>
+            </div>
+          </ConfigField>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs text-icon5">Duration (milliseconds)</Label>
-            <input
-              type="number"
-              min={0}
-              value={data.duration ?? 1000}
-              onChange={e => updateNodeData(node.id, { duration: parseInt(e.target.value) || 1000 })}
-              className="w-full h-8 px-3 text-sm rounded border border-border1 bg-surface1 text-icon6 focus:outline-none focus:border-accent1"
-            />
-            <p className="text-[10px] text-icon3">Wait for {formatDuration(data.duration ?? 1000)} before continuing</p>
+          {!useCustom ? (
+            // Preset selection
+            <ConfigField label="Duration Preset">
+              <Select
+                value={DURATION_PRESETS.find(p => p.value === currentDuration)?.value.toString() ?? '1000'}
+                onValueChange={value => {
+                  updateNodeData(node.id, { duration: parseInt(value) });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select duration..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATION_PRESETS.map(preset => (
+                    <SelectItem key={preset.value} value={preset.value.toString()}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </ConfigField>
+          ) : (
+            // Custom input
+            <>
+              {/* Duration value with unit selector */}
+              <ConfigField
+                label="Duration Value"
+                hint={`Wait for ${formatDuration(currentDuration)} before continuing`}
+              >
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={msToUnit(currentDuration, durationUnit)}
+                    onChange={e => handleValueChange(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Select value={durationUnit} onValueChange={value => handleUnitChange(value as DurationUnit)}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DURATION_UNITS.map(unit => (
+                        <SelectItem key={unit.value} value={unit.value}>
+                          {unit.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </ConfigField>
+
+              {/* Quick input with auto-parsing */}
+              <ConfigField
+                label="Quick Input"
+                hint="Type duration with unit (e.g., 5s, 100ms, 2m, 1h)"
+                error={inputError ?? undefined}
+              >
+                <Input
+                  type="text"
+                  value={customInput}
+                  onChange={e => handleCustomInputChange(e.target.value)}
+                  placeholder="e.g., 30s, 5m, 1h"
+                />
+              </ConfigField>
+            </>
+          )}
+
+          {/* Current value display */}
+          <div className="px-3 py-2 bg-surface3 rounded-lg border border-border1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-icon4">Current value:</span>
+              <span className="text-xs font-mono text-icon6">{formatDuration(currentDuration)}</span>
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px] text-icon3">Raw milliseconds:</span>
+              <span className="text-[10px] font-mono text-icon4">{currentDuration}ms</span>
+            </div>
           </div>
         </>
       )}
 
       {/* Timestamp */}
       {data.sleepType === 'timestamp' && (
-        <div className="space-y-1.5">
-          <Label className="text-xs text-icon5">Timestamp Reference</Label>
+        <ConfigField
+          label="Timestamp Reference"
+          hint="Wait until the referenced timestamp is reached (ISO 8601 or Unix ms)"
+        >
           <Select
             value={(data.timestamp as { $ref?: string })?.$ref ?? ''}
             onValueChange={value => updateNodeData(node.id, { timestamp: value ? { $ref: value } : undefined })}
@@ -149,27 +315,24 @@ export function SleepConfig({ node }: SleepConfigProps) {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-[10px] text-icon3">Wait until the referenced timestamp is reached (ISO 8601 or Unix ms)</p>
-        </div>
+        </ConfigField>
       )}
 
       {/* Info */}
-      <div className="p-2 bg-surface2 rounded text-[10px] text-icon4">
+      <ConfigInfoBox>
         Sleep steps pause workflow execution for a specified duration or until a specific time. This is useful for rate
         limiting, scheduling, or waiting for external events.
-      </div>
+      </ConfigInfoBox>
 
       {/* Description */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-icon5">Description</Label>
+      <ConfigField label="Description">
         <Textarea
           value={data.description ?? ''}
           onChange={e => updateNodeData(node.id, { description: e.target.value })}
           placeholder="Optional description..."
           rows={2}
-          className="bg-surface1 text-icon6"
         />
-      </div>
+      </ConfigField>
     </div>
   );
 }
