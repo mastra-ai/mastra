@@ -303,6 +303,13 @@ export class Workspace {
     if (!this._fs && !this._sandbox) {
       throw new WorkspaceError('Workspace requires at least a filesystem or sandbox provider', 'NO_PROVIDERS');
     }
+
+    // Auto-initialize if requested
+    if (config.autoInit) {
+      // Use void to indicate we intentionally don't await
+      // This allows construction to complete while init runs in background
+      void this.init();
+    }
   }
 
   private generateId(): string {

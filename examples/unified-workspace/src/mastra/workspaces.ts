@@ -54,6 +54,8 @@ export const globalWorkspace = new Workspace({
   autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
   // Discover skills from these paths (global skills only)
   skillsPaths: ['/skills'],
+  // Auto-initialize on construction (needed for mastra dev)
+  autoInit: true,
 });
 
 /**
@@ -76,6 +78,8 @@ export const docsAgentWorkspace = new Workspace({
   bm25: true,
   // Inherit global skills + add agent-specific skills
   skillsPaths: ['/skills', '/docs-skills'],
+  // Auto-initialize on construction
+  autoInit: true,
 });
 
 /**
@@ -93,4 +97,6 @@ export const isolatedDocsWorkspace = new Workspace({
   bm25: true,
   // Only agent-specific skills, no global skills
   skillsPaths: ['/docs-skills'],
+  // Auto-initialize on construction
+  autoInit: true,
 });
