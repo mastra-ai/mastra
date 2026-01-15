@@ -14,7 +14,7 @@ export const isObjectEmpty = (objectName: Object) => {
  * @param {string | string[]} path - The path to the value in the object. This can be a string (e.g., 'a.b.c') or an array of keys (e.g., ['a', 'b', 'c']).
  * @returns {unknown} The value at the given path in the object, or undefined if the path does not exist.
  */
-export const getPath = (object: Record<string, any>, path: string | string[]): unknown => {
+const getPath = (object: Record<string, any>, path: string | string[]): unknown => {
   if (typeof path === 'string') {
     path = path?.split('.');
   }
@@ -22,15 +22,15 @@ export const getPath = (object: Record<string, any>, path: string | string[]): u
   return path?.reduce((obj, key) => (obj && obj[key] !== undefined ? obj[key] : undefined), object);
 };
 
-export function recordHasData(record: Record<any, any>): boolean {
+function recordHasData(record: Record<any, any>): boolean {
   return Object.keys(record).length > 0;
 }
 
-export function isLiteralObject(a: unknown) {
+function isLiteralObject(a: unknown) {
   return !!a && a.constructor === Object;
 }
 
-export const constructObjFromStringPath = (path: string, value: any) => {
+const constructObjFromStringPath = (path: string, value: any) => {
   if (!path) return {};
   //key, split the key with ., and then for each item, we update object data.pipeline
   // {data: {pipeline: 'kbdkjd'}}
@@ -56,7 +56,7 @@ export const constructObjFromStringPath = (path: string, value: any) => {
  * @param {boolean} flattenArrayValue - This flag indicates that any array value should be flattened to object too.
  * @returns {Record<string, any>} Your flattened object
  */
-export const flattenObject = (object: Record<string, any>, endKeys: string[] = [], flattenArrayValue?: boolean) => {
+const flattenObject = (object: Record<string, any>, endKeys: string[] = [], flattenArrayValue?: boolean) => {
   let newObj = {} as Record<string, unknown>;
 
   function recurseDip(obj: Record<string, any>, path: string[]) {
@@ -102,7 +102,7 @@ type AnyObject = { [key: string]: any };
  * const extendedData = mergeWithDefinedOnly(worksheetData, payload);
  * // extendedData = { a: 1, b: 2, c: 4 }
  */
-export function mergeWithDefinedOnly<T extends AnyObject, U extends AnyObject>(base: T, overrides: U): T & U {
+function mergeWithDefinedOnly<T extends AnyObject, U extends AnyObject>(base: T, overrides: U): T & U {
   const result: AnyObject = { ...base };
 
   for (const key in overrides) {
