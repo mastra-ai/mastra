@@ -21,7 +21,7 @@ export const ParallelNode = memo(function ParallelNode({
       accentColor={PARALLEL_COLOR}
       bottomHandleCount={branchCount}
       quickAddExcludeTypes={['trigger']}
-      comment={data.comment}
+      showComment={false}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">

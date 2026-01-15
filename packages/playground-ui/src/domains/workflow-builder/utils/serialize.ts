@@ -35,6 +35,8 @@ export interface SerializeOptions {
 export interface SerializedGraph {
   stepGraph: DefinitionStepFlowEntry[];
   steps: Record<string, DeclarativeStepDefinition>;
+  /** Map of node IDs to their comments (for persistence in workflow metadata) */
+  nodeComments: Record<string, string>;
 }
 
 /**
@@ -45,7 +47,15 @@ export function serializeGraph(nodes: BuilderNode[], edges: BuilderEdge[]): Seri
   // Build steps object from non-trigger nodes
   const steps: Record<string, DeclarativeStepDefinition> = {};
 
+  // Collect comments from all nodes
+  const nodeComments: Record<string, string> = {};
+
   for (const node of nodes) {
+    // Collect comment if present
+    if (node.data.comment) {
+      nodeComments[node.id] = node.data.comment;
+    }
+
     // Skip types that don't have step definitions (handled in stepGraph only)
     if (node.data.type === 'trigger') continue;
     if (node.data.type === 'condition') continue;
@@ -64,7 +74,7 @@ export function serializeGraph(nodes: BuilderNode[], edges: BuilderEdge[]): Seri
   // Build stepGraph by traversing from trigger
   const stepGraph = buildStepGraph(nodes, edges);
 
-  return { stepGraph, steps };
+  return { stepGraph, steps, nodeComments };
 }
 
 /**

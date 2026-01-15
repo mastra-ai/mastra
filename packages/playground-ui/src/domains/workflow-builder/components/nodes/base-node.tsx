@@ -25,6 +25,8 @@ export interface BaseNodeProps {
   quickAddExcludeTypes?: BuilderNodeType[];
   /** Comment/annotation for this node */
   comment?: string;
+  /** Whether to show the comment button (defaults to true) */
+  showComment?: boolean;
 }
 
 export function BaseNode({
@@ -38,6 +40,7 @@ export function BaseNode({
   showQuickAdd = true,
   quickAddExcludeTypes = [],
   comment,
+  showComment = true,
 }: BaseNodeProps) {
   const deleteNode = useWorkflowBuilderStore(state => state.deleteNode);
   const addConnectedNode = useWorkflowBuilderStore(state => state.addConnectedNode);
@@ -182,7 +185,7 @@ export function BaseNode({
         {hasStepResult && <StepStatusOverlay stepId={id} position="top-right" />}
 
         {/* Node comment */}
-        <NodeComment nodeId={id} comment={comment} position="top" />
+        {showComment && <NodeComment nodeId={id} comment={comment} position="top" />}
 
         {children}
       </div>

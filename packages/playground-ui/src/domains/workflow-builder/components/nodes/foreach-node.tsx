@@ -18,7 +18,7 @@ export const ForeachNode = memo(function ForeachNode({
       selected={selected}
       accentColor={FOREACH_COLOR}
       quickAddExcludeTypes={['trigger']}
-      comment={data.comment}
+      showComment={false}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
