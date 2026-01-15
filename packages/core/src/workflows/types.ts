@@ -716,6 +716,19 @@ export type ExecutionContext = {
   };
   format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
+  /**
+   * Span cache for durable span operations (used by Inngest engine).
+   * Stores ExportedSpan data that can be used to rebuild spans for lifecycle operations.
+   */
+  spanCache?: import('../observability').SpanCache;
+  /**
+   * Trace IDs for creating child spans in durable execution.
+   * Set after workflow root span is created, used by child step spans.
+   */
+  tracingIds?: {
+    traceId: string;
+    workflowSpanId: string;
+  };
 };
 
 /**

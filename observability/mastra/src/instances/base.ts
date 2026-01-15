@@ -28,7 +28,7 @@ import { TracingEventType } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
-import { NoOpSpan } from '../spans';
+import { CachedSpan, NoOpSpan } from '../spans';
 
 // ============================================================================
 // Abstract Base Class
@@ -170,6 +170,28 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       // Emit span started event
       this.emitSpanStarted(span);
     }
+
+    return span;
+  }
+
+  /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * The rebuilt span:
+   * - Does NOT emit SPAN_STARTED (assumes original span already did)
+   * - Can have end(), update(), error() called on it
+   * - Will emit SPAN_ENDED or SPAN_UPDATED when those methods are called
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have lifecycle methods called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: AnyExportedSpan): Span<TType> {
+    const span = new CachedSpan<TType>(cached as any, this);
+
+    // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
+    this.wireSpanLifecycle(span);
 
     return span;
   }

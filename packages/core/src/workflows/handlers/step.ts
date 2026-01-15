@@ -5,7 +5,7 @@ import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
 import { EntityType, SpanType, wrapMastra } from '../../observability';
-import type { TracingContext } from '../../observability';
+import type { TracingContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -135,13 +135,19 @@ export async function executeStep(
 
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
-  const stepSpan = tracingContext.currentSpan?.createChildSpan({
-    name: `workflow step: '${step.id}'`,
-    type: SpanType.WORKFLOW_STEP,
-    entityType: EntityType.WORKFLOW_STEP,
-    entityId: step.id,
-    input: inputData,
-    tracingPolicy: engine.options?.tracingPolicy,
+  const stepSpan = await engine.createStepSpan({
+    parentSpan: tracingContext.currentSpan,
+    stepId: step.id,
+    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    options: {
+      name: `workflow step: '${step.id}'`,
+      type: SpanType.WORKFLOW_STEP,
+      entityType: EntityType.WORKFLOW_STEP,
+      entityId: step.id,
+      input: inputData,
+      tracingPolicy: engine.options?.tracingPolicy,
+    },
+    executionContext,
   });
 
   const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
@@ -186,7 +192,7 @@ export async function executeStep(
       requestContext,
       tracingContext,
       outputWriter,
-      stepSpan,
+      stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
       perStep,
     });
 
@@ -439,11 +445,16 @@ export async function executeStep(
   }
 
   if (execResults.status != 'failed') {
-    stepSpan?.end({
-      output: execResults.output,
-      attributes: {
-        status: execResults.status,
+    await engine.endStepSpan({
+      span: stepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      endOptions: {
+        output: execResults.output,
+        attributes: {
+          status: execResults.status,
+        },
       },
+      executionContext,
     });
   }
 

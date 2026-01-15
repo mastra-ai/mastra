@@ -597,6 +597,21 @@ export type AnySpan = Span<keyof SpanTypeMap>;
  */
 export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
 
+/**
+ * Cache for storing exported span data during durable workflow execution.
+ * Used by Inngest engine to track spans across multiple durable operations.
+ */
+export interface SpanCache {
+  /** Store exported span data */
+  set(traceId: string, spanId: string, data: AnyExportedSpan): void;
+  /** Retrieve exported span data */
+  get(traceId: string, spanId: string): AnyExportedSpan | undefined;
+  /** Remove span data from cache */
+  delete(traceId: string, spanId: string): void;
+  /** Clear all cached spans */
+  clear(): void;
+}
+
 // ============================================================================
 // Tracing Interfaces
 // ============================================================================
@@ -634,6 +649,16 @@ export interface ObservabilityInstance {
    * Start a new span of a specific SpanType
    */
   startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
+
+  /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have end()/update()/error() called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
 
   /**
    * Shutdown tracing and clean up resources
