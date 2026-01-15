@@ -841,7 +841,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema.extend({ thread: z.string().optional() }),
+  bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
@@ -856,24 +856,8 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
-      // Use memory option if provided, otherwise construct from individual fields
-      const memoryOption = params.memory
-        ? {
-            thread: params.memory.thread,
-            resource: params.memory.resource,
-            options: params.memory.options ?? {},
-          }
-        : params.thread
-          ? {
-              thread: params.thread,
-              resource: '',
-              options: {},
-            }
-          : undefined;
-
       const streamResult = await agent.network(messages, {
         ...params,
-        memory: memoryOption,
       });
 
       return streamResult;
