@@ -8,6 +8,8 @@ import type {
   StorageIntegrationConfig,
   StorageCachedTool,
   StorageWorkflowDefinitionType,
+  StoredScorerType,
+  StoredScorerVersionType,
 } from '../types';
 import type { AgentVersion } from './agents/base';
 import type { TraceEntry } from './observability';
@@ -33,6 +35,8 @@ export class InMemoryDB {
   readonly cachedTools = new Map<string, StorageCachedTool>();
   readonly workflowDefinitions = new Map<string, StorageWorkflowDefinitionType>();
   readonly workflowDefinitionVersions = new Map<string, WorkflowDefinitionVersion>();
+  readonly storedScorers = new Map<string, StoredScorerType>();
+  readonly scorerVersions = new Map<string, StoredScorerVersionType>();
 
   /**
    * Clears all data from all collections.
@@ -51,5 +55,7 @@ export class InMemoryDB {
     this.cachedTools.clear();
     this.workflowDefinitions.clear();
     this.workflowDefinitionVersions.clear();
+    this.storedScorers.clear();
+    this.scorerVersions.clear();
   }
 }
