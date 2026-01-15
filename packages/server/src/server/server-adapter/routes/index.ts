@@ -86,6 +86,16 @@ export type ServerRoute<
   openapi?: any; // Auto-generated OpenAPI spec for this route
   maxBodySize?: number; // Optional route-specific body size limit in bytes
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
+  /**
+   * Permission required to access this route (EE feature).
+   * If set, the user must have this permission to access the route.
+   * Uses the format: `resource:action` or `resource:action:resourceId`
+   *
+   * @example
+   * requiresPermission: 'agents:read'
+   * requiresPermission: 'workflows:execute'
+   */
+  requiresPermission?: string;
 };
 
 export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [

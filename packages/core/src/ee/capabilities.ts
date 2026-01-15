@@ -14,6 +14,7 @@ import type {
   ICredentialsProvider,
 } from './interfaces';
 import { isEELicenseValid } from './license';
+import { type RoleMapping, resolvePermissionsFromMapping } from './defaults/roles';
 
 /**
  * Public capabilities response (no authentication required).
@@ -123,6 +124,18 @@ function isMastraCloudAuth(auth: unknown): boolean {
 }
 
 /**
+ * Options for building capabilities.
+ */
+export interface BuildCapabilitiesOptions {
+  /**
+   * Role mapping to translate provider roles to Mastra permissions.
+   * If provided, permissions will be resolved from roles using this mapping
+   * instead of relying solely on the RBAC provider's getPermissions().
+   */
+  roleMapping?: RoleMapping;
+}
+
+/**
  * Build capabilities response based on auth configuration and request state.
  *
  * This function determines what capabilities are available and, if the user
@@ -130,11 +143,13 @@ function isMastraCloudAuth(auth: unknown): boolean {
  *
  * @param auth - Auth provider (or null if no auth configured)
  * @param request - Incoming HTTP request
+ * @param options - Optional configuration (roleMapping, etc.)
  * @returns Capabilities response (public or authenticated)
  */
 export async function buildCapabilities(
   auth: MastraAuthProvider | null,
   request: Request,
+  options?: BuildCapabilitiesOptions,
 ): Promise<PublicAuthCapabilities | AuthenticatedCapabilities> {
   // No auth configured - disabled
   if (!auth) {
@@ -218,10 +233,18 @@ export async function buildCapabilities(
   let access: UserAccess | null = null;
   if (capabilities.rbac && implementsInterface<IRBACProvider>(auth, 'getRoles')) {
     try {
-      access = {
-        roles: await auth.getRoles(user),
-        permissions: await auth.getPermissions(user),
-      };
+      const roles = await auth.getRoles(user);
+
+      // If roleMapping is provided, use it to resolve permissions
+      // Otherwise, fall back to the RBAC provider's getPermissions()
+      let permissions: string[];
+      if (options?.roleMapping) {
+        permissions = resolvePermissionsFromMapping(roles, options.roleMapping);
+      } else {
+        permissions = await auth.getPermissions(user);
+      }
+
+      access = { roles, permissions };
     } catch {
       // RBAC failed, continue without access info
       access = null;

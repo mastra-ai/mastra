@@ -11,6 +11,7 @@
 import { MastraAuthProvider } from '@mastra/core/server';
 import {
   buildCapabilities,
+  resolvePermissionsFromMapping,
   type IUserProvider,
   type ISessionProvider,
   type ISSOProvider,
@@ -53,6 +54,14 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 }
 
 /**
+ * Helper to get roleMapping from Mastra server config.
+ */
+function getRoleMapping(mastra: any): Record<string, string[]> | undefined {
+  const serverConfig = mastra.getServer?.();
+  return serverConfig?.roleMapping;
+}
+
+/**
  * Type guard to check if auth provider implements an interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
@@ -76,9 +85,10 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
     try {
       const { mastra, request } = ctx as any;
       const auth = getAuthProvider(mastra);
+      const roleMapping = getRoleMapping(mastra);
 
       // Use buildCapabilities from core/ee
-      const capabilities = await buildCapabilities(auth, request);
+      const capabilities = await buildCapabilities(auth, request, { roleMapping });
 
       return capabilities;
     } catch (error) {
@@ -103,6 +113,7 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
     try {
       const { mastra, request } = ctx as any;
       const auth = getAuthProvider(mastra);
+      const roleMapping = getRoleMapping(mastra);
 
       if (!auth || !implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
         return null;
@@ -118,7 +129,14 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
       if (implementsInterface<IRBACProvider>(auth, 'getRoles')) {
         try {
           roles = await auth.getRoles(user);
-          permissions = await auth.getPermissions(user);
+
+          // If roleMapping is provided, use it to resolve permissions
+          // Otherwise, fall back to the RBAC provider's getPermissions()
+          if (roleMapping) {
+            permissions = resolvePermissionsFromMapping(roles, roleMapping);
+          } else {
+            permissions = await auth.getPermissions(user);
+          }
         } catch {
           // RBAC not available or failed
         }

@@ -1,6 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import { hasPermission } from '@mastra/core/ee';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
@@ -340,6 +341,21 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           abortSignal: c.get('abortSignal'),
           request: c.req.raw, // Standard Request object with headers/cookies
         };
+
+        // Check route permission requirement (EE feature)
+        if (route.requiresPermission) {
+          const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+
+          if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
+            return c.json(
+              {
+                error: 'Forbidden',
+                message: `Missing required permission: ${route.requiresPermission}`,
+              },
+              403,
+            );
+          }
+        }
 
         try {
           const result = await route.handler(handlerParams);
