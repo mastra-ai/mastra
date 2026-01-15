@@ -10,6 +10,7 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_AUDIT = 'mastra_audit';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +20,8 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_AUDIT;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -105,6 +107,23 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const AUDIT_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  actorType: { type: 'text', nullable: false }, // 'user' | 'system' | 'apikey'
+  actorId: { type: 'text', nullable: false },
+  actorEmail: { type: 'text', nullable: true },
+  actorIp: { type: 'text', nullable: true },
+  actorUserAgent: { type: 'text', nullable: true },
+  action: { type: 'text', nullable: false }, // e.g., 'auth.login', 'agent.execute'
+  resourceType: { type: 'text', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  resourceName: { type: 'text', nullable: true },
+  outcome: { type: 'text', nullable: false }, // 'success' | 'failure' | 'denied'
+  metadata: { type: 'jsonb', nullable: true },
+  duration: { type: 'integer', nullable: true }, // Duration in milliseconds
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +186,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_AUDIT]: AUDIT_SCHEMA,
 };
