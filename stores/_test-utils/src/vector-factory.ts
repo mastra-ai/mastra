@@ -92,6 +92,9 @@ export interface VectorTestConfig {
   /** Whether the store supports the $size operator for array length filtering. Default: true.
    *  Set to false for stores that don't support $size. */
   supportsSize?: boolean;
+  /** Whether the store throws errors for malformed operator syntax. Default: true.
+   *  Set to false for stores that silently handle malformed operators (e.g., return empty results). */
+  supportsStrictOperatorValidation?: boolean;
 }
 
 /**

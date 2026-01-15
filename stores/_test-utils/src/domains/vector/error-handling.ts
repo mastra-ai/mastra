@@ -20,6 +20,7 @@ export function createErrorHandlingTest(config: VectorTestConfig) {
     createIndex,
     deleteIndex,
     waitForIndexing = (indexName: string) => new Promise(resolve => setTimeout(resolve, 100)),
+    supportsStrictOperatorValidation = true,
   } = config;
 
   describe('Error Handling', () => {
@@ -507,7 +508,7 @@ export function createErrorHandlingTest(config: VectorTestConfig) {
         ).rejects.toThrow(/unsupported|invalid|unknown.*operator/i);
       });
 
-      it('should reject query with malformed operator syntax', async () => {
+      it.skipIf(!supportsStrictOperatorValidation)('should reject query with malformed operator syntax', async () => {
         // Insert test data first
         await config.vector.upsert({
           indexName: testIndexName,
