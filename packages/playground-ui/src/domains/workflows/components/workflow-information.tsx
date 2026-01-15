@@ -92,7 +92,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   }
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l border-border1">
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
       <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
         <div className="flex items-center gap-2 pt-2">
           <Tooltip>
