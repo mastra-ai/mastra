@@ -135,14 +135,136 @@ function formatGapBetweenDates(prevDate: Date, currDate: Date): string | null {
   }
 }
 
+/**
+ * Expand inline estimated dates with relative time.
+ * Matches patterns like "(estimated May 27-28, 2023)" or "(meaning May 30, 2023)"
+ * and expands them to "(meaning May 30, 2023 - which was 3 weeks ago)"
+ */
+/**
+ * Parses a date string like "May 30, 2023", "May 27-28, 2023", "late April 2023", etc.
+ * Returns the parsed Date or null if unparseable.
+ */
+function parseDateFromContent(dateContent: string): Date | null {
+  let targetDate: Date | null = null;
+
+  // Try simple date format first: "May 30, 2023"
+  const simpleDateMatch = dateContent.match(/([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+  if (simpleDateMatch) {
+    const parsed = new Date(`${simpleDateMatch[1]} ${simpleDateMatch[2]}, ${simpleDateMatch[3]}`);
+    if (!isNaN(parsed.getTime())) {
+      targetDate = parsed;
+    }
+  }
+
+  // Try range format: "May 27-28, 2023" - use first date
+  if (!targetDate) {
+    const rangeMatch = dateContent.match(/([A-Z][a-z]+)\s+(\d{1,2})-\d{1,2},?\s+(\d{4})/);
+    if (rangeMatch) {
+      const parsed = new Date(`${rangeMatch[1]} ${rangeMatch[2]}, ${rangeMatch[3]}`);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = parsed;
+      }
+    }
+  }
+
+  // Try "late/early/mid Month Year" format
+  if (!targetDate) {
+    const vagueMatch = dateContent.match(/(late|early|mid)[- ]?(?:to[- ]?(?:late|early|mid)[- ]?)?([A-Z][a-z]+)\s+(\d{4})/i);
+    if (vagueMatch) {
+      const month = vagueMatch[2];
+      const year = vagueMatch[3];
+      const modifier = vagueMatch[1]!.toLowerCase();
+      let day = 15; // default to middle
+      if (modifier === 'early') day = 7;
+      if (modifier === 'late') day = 23;
+      const parsed = new Date(`${month} ${day}, ${year}`);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = parsed;
+      }
+    }
+  }
+
+  // Try "Month to Month Year" format (cross-month range)
+  if (!targetDate) {
+    const crossMonthMatch = dateContent.match(/([A-Z][a-z]+)\s+to\s+(?:early\s+)?([A-Z][a-z]+)\s+(\d{4})/i);
+    if (crossMonthMatch) {
+      // Use the middle of the range - approximate with second month
+      const parsed = new Date(`${crossMonthMatch[2]} 1, ${crossMonthMatch[3]}`);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = parsed;
+      }
+    }
+  }
+
+  return targetDate;
+}
+
+/**
+ * Detects if an observation line indicates future intent (will do, plans to, looking forward to, etc.)
+ */
+function isFutureIntentObservation(line: string): boolean {
+  const futureIntentPatterns = [
+    /\bwill\s+(?:be\s+)?(?:\w+ing|\w+)\b/i,
+    /\bplans?\s+to\b/i,
+    /\bplanning\s+to\b/i,
+    /\blooking\s+forward\s+to\b/i,
+    /\bgoing\s+to\b/i,
+    /\bintends?\s+to\b/i,
+    /\bwants?\s+to\b/i,
+    /\bneeds?\s+to\b/i,
+    /\babout\s+to\b/i,
+  ];
+  return futureIntentPatterns.some(pattern => pattern.test(line));
+}
+
+function expandInlineEstimatedDates(observations: string, currentDate: Date): string {
+  // Match patterns like:
+  // (estimated May 27-28, 2023)
+  // (meaning May 30, 2023)
+  // (estimated late April to early May 2023)
+  // (estimated mid-to-late May 2023)
+  // These should now be at the END of observation lines
+  const inlineDateRegex = /\((estimated|meaning)\s+([^)]+\d{4})\)/gi;
+
+  return observations.replace(inlineDateRegex, (match, prefix: string, dateContent: string) => {
+    const targetDate = parseDateFromContent(dateContent);
+
+    if (targetDate) {
+      const relative = formatRelativeTime(targetDate, currentDate);
+      
+      // Check if this is a future-intent observation that's now in the past
+      // We need to look at the text BEFORE this match to determine intent
+      const matchIndex = observations.indexOf(match);
+      const lineStart = observations.lastIndexOf('\n', matchIndex) + 1;
+      const lineBeforeDate = observations.substring(lineStart, matchIndex);
+      
+      const isPastDate = targetDate < currentDate;
+      const isFutureIntent = isFutureIntentObservation(lineBeforeDate);
+      
+      if (isPastDate && isFutureIntent) {
+        // This was a planned action that should have happened by now
+        return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
+      }
+      
+      return `(${prefix} ${dateContent} - ${relative})`;
+    }
+
+    // Couldn't parse, return original
+    return match;
+  });
+}
+
 function addRelativeTimeToObservations(observations: string, currentDate: Date): string {
+  // First, expand inline estimated dates with relative time
+  const withInlineDates = expandInlineEstimatedDates(observations, currentDate);
+
   // Match date headers like "Date: May 15, 2023" or "Date: January 1, 2024"
   const dateHeaderRegex = /^(Date:\s*)([A-Z][a-z]+ \d{1,2}, \d{4})$/gm;
 
   // First pass: collect all dates in order
   const dates: { index: number; date: Date; match: string; prefix: string; dateStr: string }[] = [];
   let regexMatch: RegExpExecArray | null;
-  while ((regexMatch = dateHeaderRegex.exec(observations)) !== null) {
+  while ((regexMatch = dateHeaderRegex.exec(withInlineDates)) !== null) {
     const dateStr = regexMatch[2]!;
     const parsed = new Date(dateStr);
     if (!isNaN(parsed.getTime())) {
@@ -156,9 +278,9 @@ function addRelativeTimeToObservations(observations: string, currentDate: Date):
     }
   }
 
-  // If no dates found, return original
+  // If no dates found, return the inline-expanded version
   if (dates.length === 0) {
-    return observations;
+    return withInlineDates;
   }
 
   // Second pass: build result with relative times and gap markers
@@ -170,7 +292,7 @@ function addRelativeTimeToObservations(observations: string, currentDate: Date):
     const prev = i > 0 ? dates[i - 1]! : null;
 
     // Add text before this date header
-    result += observations.slice(lastIndex, curr.index);
+    result += withInlineDates.slice(lastIndex, curr.index);
 
     // Add gap marker if there's a significant gap from previous date
     if (prev) {
@@ -188,7 +310,7 @@ function addRelativeTimeToObservations(observations: string, currentDate: Date):
   }
 
   // Add remaining text after last date header
-  result += observations.slice(lastIndex);
+  result += withInlineDates.slice(lastIndex);
 
   return result;
 }
@@ -1227,7 +1349,11 @@ The following observations block contains your memory of past conversations with
 ${optimized}
 </observations>
 
-IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.`;
+IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
+
+KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
+
+PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
 
     // Dynamically inject patterns from thread metadata
     if (patterns && Object.keys(patterns).length > 0) {
@@ -1429,16 +1555,20 @@ ${suggestedResponse}
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
+    // Add 1ms to lastObservedAt to make the filter exclusive (since dateRange.start is inclusive)
+    // This prevents re-loading the same messages that were already observed
+    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
+
     const result = await this.storage.listMessages({
       // In resource scope, query by resourceId directly (no need to list threads first)
       // In thread scope, query by threadId
       ...(this.scope === 'resource' && resourceId ? { resourceId } : { threadId }),
       perPage: false, // Get all messages (no pagination limit)
       orderBy: { field: 'createdAt', direction: 'ASC' },
-      filter: lastObservedAt
+      filter: startDate
         ? {
             dateRange: {
-              start: lastObservedAt,
+              start: startDate,
             },
           }
         : undefined,
@@ -1597,17 +1727,60 @@ ${formattedMessages}
   }
 
   /**
-   * Always append new thread sections to preserve temporal ordering.
-   * Each observation call creates a new <thread id="..."> block, showing
-   * when observations were made chronologically.
+   * Append or merge new thread sections.
+   * If the new section has the same thread ID and date as an existing section,
+   * merge the observations into that section to reduce token usage.
+   * Otherwise, append as a new section.
    */
   private replaceOrAppendThreadSection(
     existingObservations: string,
     _threadId: string,
     newThreadSection: string,
   ): string {
-    // Always append - preserves temporal ordering of when observations were made
-    return existingObservations ? `${existingObservations}\n\n${newThreadSection}` : newThreadSection;
+    if (!existingObservations) {
+      return newThreadSection;
+    }
+
+    // Extract thread ID and date from new section
+    const threadIdMatch = newThreadSection.match(/<thread id="([^"]+)">/);
+    const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
+
+    if (!threadIdMatch || !dateMatch) {
+      // Can't parse, just append
+      return `${existingObservations}\n\n${newThreadSection}`;
+    }
+
+    const newThreadId = threadIdMatch[1]!;
+    const newDate = dateMatch[1]!;
+
+    // Look for existing section with same thread ID and date
+    const existingPattern = new RegExp(
+      `<thread id="${newThreadId}">\\s*Date:\\s*${newDate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([\\s\\S]*?)</thread>`,
+    );
+    const existingMatch = existingObservations.match(existingPattern);
+
+    if (existingMatch) {
+      // Found existing section with same thread ID and date - merge observations
+      // Extract just the observations from the new section (after the Date: line)
+      const newObsMatch = newThreadSection.match(/<thread id="[^"]+">[\s\S]*?Date:[^\n]*\n([\s\S]*?)\n<\/thread>/);
+      if (newObsMatch && newObsMatch[1]) {
+        const newObsContent = newObsMatch[1].trim();
+        // Insert new observations at the end of the existing section (before </thread>)
+        const mergedSection = existingObservations.replace(
+          existingPattern,
+          (match) => {
+            // Remove closing </thread>, add new observations, add closing </thread>
+            const withoutClose = match.replace(/<\/thread>$/, '').trimEnd();
+            return `${withoutClose}\n${newObsContent}\n</thread>`;
+          },
+        );
+        omDebug(`[OM] Merged observations for thread ${newThreadId} on ${newDate}`);
+        return mergedSection;
+      }
+    }
+
+    // No existing section with same thread ID and date - append
+    return `${existingObservations}\n\n${newThreadSection}`;
   }
 
   /**
@@ -1905,12 +2078,18 @@ ${formattedMessages}
     for (const thread of allThreads) {
       const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
 
-      // Query messages for this specific thread after its lastObservedAt
+      // Query messages for this specific thread AFTER its lastObservedAt
+      // Add 1ms to make the filter exclusive (since dateRange.start is inclusive)
+      // This prevents re-observing the same messages
+      const startDate = threadLastObservedAt
+        ? new Date(new Date(threadLastObservedAt).getTime() + 1)
+        : undefined;
+
       const result = await this.storage.listMessages({
         threadId: thread.id,
         perPage: false,
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: threadLastObservedAt ? { dateRange: { start: new Date(threadLastObservedAt) } } : undefined,
+        filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
       if (result.messages.length > 0) {

@@ -31,17 +31,59 @@ Distinguish between QUESTIONS and STATEMENTS OF INTENT:
 - "I'm looking forward to [doing X]" → Statement of intent (extract as "User stated they will [do X] (include estimated/actual date if mentioned)")
 - "I need to [do X]" → Statement of intent (extract as "User stated they need to [do X] (again, add date if mentioned)")
 
+STATE CHANGES AND UPDATES:
+When a user indicates they are changing something, frame it as a state change that supersedes previous information:
+- "I'm going to start doing X instead of Y" → "User will start doing X (changing from Y)"
+- "I'm switching from A to B" → "User is switching from A to B"
+- "I moved my stuff to the new place" → "User moved their stuff to the new place (no longer at previous location)"
+
+If the new state contradicts or updates previous information, make that explicit:
+- BAD: "User plans to use the new method"
+- GOOD: "User will use the new method (replacing the old approach)"
+
+This helps distinguish current state from outdated information.
+
 USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
 If a user previously stated something and later asks a question about the same topic,
 the assertion is the answer - the question doesn't invalidate what they already told you.
 
 TEMPORAL ANCHORING:
-Convert relative times to estimated dates based on the message timestamp.
-Include the user's original phrasing in quotes, then add an estimated date or range.
-Ranges may span multiple months - e.g., "within the last month" on July 15th could mean anytime in June to early July.
+Convert ALL relative time references to estimated dates. Put the date AT THE END of each observation line.
 
-BAD: User was given X by their friend last month.
-GOOD: User was given X by their friend "last month" (estimated mid-June to early July 202X).
+FORMAT: [observation text]. (DATE)
+- Use "(meaning DATE)" for specific dates
+- Use "(estimated DATE)" for vague references
+
+This applies to BOTH past AND future references:
+- Past: "last week", "yesterday", "a few days ago", "last month"
+- Future: "this weekend", "tomorrow", "next week", "soon"
+- Vague: "recently", "lately", "a while ago"
+
+IMPORTANT: If an observation contains MULTIPLE events, split them into SEPARATE observation lines.
+EACH split observation MUST have its own date at the end - even if they share the same time context.
+
+Examples (assume message is from October 15, 20XX):
+
+BAD: User will visit their parents this weekend (meaning October 19-20, 20XX) and go to the dentist tomorrow.
+GOOD (split into two observations, each with its date):
+  User will visit their parents this weekend. (meaning October 19-20, 20XX)
+  User will go to the dentist tomorrow. (meaning October 16, 20XX)
+
+BAD: User needs to clean the garage this weekend and is looking forward to setting up a new workbench.
+GOOD (split, BOTH get the same date since they're related):
+  User needs to clean the garage this weekend. (meaning October 19-20, 20XX)
+  User will set up a new workbench this weekend. (meaning October 19-20, 20XX)
+
+BAD: User was given X by their friend "last month" (estimated late September 20XX).
+GOOD: User was given X by their friend last month. (estimated late September 20XX)
+
+BAD: User started a new job recently and will move to a new apartment next week.
+GOOD (split):
+  User started a new job recently. (estimated early-to-mid October 20XX)
+  User will move to a new apartment next week. (meaning October 21-27, 20XX)
+
+ALWAYS put the date at the END in parentheses - this is critical for temporal reasoning.
+When splitting related events that share the same time context, EACH observation must have the date.
 
 PRESERVE UNUSUAL PHRASING:
 When the user uses unexpected or non-standard terminology, quote their exact words.
