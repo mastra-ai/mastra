@@ -101,6 +101,28 @@ export interface SmitheryServer {
   security?: {
     scanPassed?: boolean;
   };
+  /** Connection information (available after fetching full server details) */
+  connections?: SmitheryConnectionInfo[];
+  /** Deployment URL for remote servers */
+  deploymentUrl?: string;
+}
+
+/**
+ * Connection info from Smithery API
+ */
+export interface SmitheryConnectionInfo {
+  /** Connection type */
+  type: 'stdio' | 'sse' | 'websocket';
+  /** URL for remote connections */
+  url?: string;
+  /** Configuration schema */
+  configSchema?: Record<string, unknown>;
+  /** Command for stdio connections */
+  command?: string;
+  /** Arguments for stdio connections */
+  args?: string[];
+  /** Environment variables for stdio connections */
+  env?: Record<string, string>;
 }
 
 /**
@@ -108,9 +130,9 @@ export interface SmitheryServer {
  */
 export interface SmitheryServerConnection {
   /** Transport type */
-  type: 'http' | 'stdio';
+  type: 'http' | 'stdio' | 'sse' | 'websocket';
 
-  // HTTP transport
+  // HTTP/SSE/WebSocket transport
   url?: string;
   configSchema?: Record<string, unknown>;
 

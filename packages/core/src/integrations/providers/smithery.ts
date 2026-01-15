@@ -198,8 +198,6 @@ export class SmitheryProvider implements ToolProvider {
    * command/args for local) that can be used to create an MCP connection.
    */
   async getServerConnection(qualifiedName: string): Promise<SmitheryServerConnection> {
-    // The connection endpoint is typically at /servers/{name}/connection
-    // but the exact structure may vary - adjust based on actual API
     const url = `${SMITHERY_API_BASE}/servers/${encodeURIComponent(qualifiedName)}`;
     const headers: Record<string, string> = {
       Accept: 'application/json',
@@ -217,8 +215,47 @@ export class SmitheryProvider implements ToolProvider {
 
     const server = await response.json();
 
-    // Parse connection details from server info
-    // Remote servers have a URL, local servers have command/args
+    // Check for connections array from the API response
+    if (server.connections && Array.isArray(server.connections) && server.connections.length > 0) {
+      // Prefer remote connections (sse, websocket) over stdio
+      const remoteConnection = server.connections.find(
+        (c: { type: string }) => c.type === 'sse' || c.type === 'websocket'
+      );
+
+      if (remoteConnection) {
+        return {
+          type: remoteConnection.type === 'sse' ? 'http' : remoteConnection.type,
+          url: remoteConnection.url,
+          configSchema: remoteConnection.configSchema,
+        };
+      }
+
+      // Fall back to stdio if available
+      const stdioConnection = server.connections.find((c: { type: string }) => c.type === 'stdio');
+
+      if (stdioConnection) {
+        return {
+          type: 'stdio',
+          command: stdioConnection.command,
+          args: stdioConnection.args,
+          env: stdioConnection.env,
+          configSchema: stdioConnection.configSchema,
+        };
+      }
+
+      // Use first connection if nothing else matches
+      const firstConnection = server.connections[0];
+      return {
+        type: firstConnection.type === 'sse' ? 'http' : firstConnection.type,
+        url: firstConnection.url,
+        command: firstConnection.command,
+        args: firstConnection.args,
+        env: firstConnection.env,
+        configSchema: firstConnection.configSchema,
+      };
+    }
+
+    // Legacy: check for deploymentUrl on remote servers
     if (server.remote && server.deploymentUrl) {
       return {
         type: 'http',
@@ -227,18 +264,7 @@ export class SmitheryProvider implements ToolProvider {
       };
     }
 
-    // For local/stdio servers, extract command info
-    if (server.connections?.stdio) {
-      const stdio = server.connections.stdio;
-      return {
-        type: 'stdio',
-        command: stdio.command,
-        args: stdio.args,
-        env: stdio.env,
-      };
-    }
-
-    // Default to http if we have a URL
+    // Legacy: check for direct url property
     if (server.url) {
       return {
         type: 'http',

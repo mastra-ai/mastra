@@ -315,6 +315,18 @@ export const smitheryServersQuerySchema = z.object({
 });
 
 /**
+ * Smithery connection info schema (from API)
+ */
+export const smitheryConnectionInfoSchema = z.object({
+  type: z.enum(['stdio', 'sse', 'websocket']),
+  url: z.string().optional(),
+  configSchema: z.record(z.string(), z.unknown()).optional(),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+});
+
+/**
  * Smithery server schema
  */
 export const smitheryServerSchema = z.object({
@@ -331,14 +343,16 @@ export const smitheryServerSchema = z.object({
       scanPassed: z.boolean().optional(),
     })
     .optional(),
+  connections: z.array(smitheryConnectionInfoSchema).optional(),
+  deploymentUrl: z.string().optional(),
 });
 
 /**
  * Smithery server connection schema
  */
 export const smitheryServerConnectionSchema = z.object({
-  type: z.enum(['http', 'stdio']),
-  // HTTP transport
+  type: z.enum(['http', 'stdio', 'sse', 'websocket']),
+  // HTTP/SSE/WebSocket transport
   url: z.string().optional(),
   configSchema: z.record(z.string(), z.unknown()).optional(),
   // Stdio transport
