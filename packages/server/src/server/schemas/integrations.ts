@@ -348,11 +348,12 @@ export const smitheryServerSchema = z.object({
 });
 
 /**
- * Smithery server connection schema
+ * Smithery server connection schema (normalized for MCP transport)
+ * Note: sse/websocket types from Smithery API are normalized to 'http'
  */
 export const smitheryServerConnectionSchema = z.object({
-  type: z.enum(['http', 'stdio', 'sse', 'websocket']),
-  // HTTP/SSE/WebSocket transport
+  type: z.enum(['http', 'stdio']),
+  // HTTP transport (includes SSE/WebSocket)
   url: z.string().optional(),
   configSchema: z.record(z.string(), z.unknown()).optional(),
   // Stdio transport

@@ -1244,13 +1244,16 @@ export interface SmitheryConnectionInfo {
 }
 
 /**
- * Smithery server connection details
+ * Smithery server connection details (normalized for MCP transport)
+ *
+ * Note: Smithery API returns 'sse' or 'websocket' types which are
+ * normalized to 'http' since they're all URL-based connections.
  */
 export interface SmitheryServerConnection {
-  /** Transport type */
-  type: 'http' | 'stdio' | 'sse' | 'websocket';
+  /** Transport type (normalized: sse/websocket -> http) */
+  type: 'http' | 'stdio';
 
-  // HTTP/SSE/WebSocket transport
+  // HTTP transport (includes SSE/WebSocket)
   url?: string;
   configSchema?: Record<string, unknown>;
 

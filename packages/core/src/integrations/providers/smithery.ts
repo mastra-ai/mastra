@@ -215,6 +215,15 @@ export class SmitheryProvider implements ToolProvider {
 
     const server = await response.json();
 
+    // Helper to map remote connection types to 'http' for MCP transport
+    const mapToMCPTransport = (type: string): 'http' | 'stdio' => {
+      // SSE and WebSocket are URL-based connections, map to 'http' for MCP
+      if (type === 'sse' || type === 'websocket') {
+        return 'http';
+      }
+      return type === 'stdio' ? 'stdio' : 'http';
+    };
+
     // Check for connections array from the API response
     if (server.connections && Array.isArray(server.connections) && server.connections.length > 0) {
       // Prefer remote connections (sse, websocket) over stdio
@@ -224,7 +233,7 @@ export class SmitheryProvider implements ToolProvider {
 
       if (remoteConnection) {
         return {
-          type: remoteConnection.type === 'sse' ? 'http' : remoteConnection.type,
+          type: mapToMCPTransport(remoteConnection.type),
           url: remoteConnection.url,
           configSchema: remoteConnection.configSchema,
         };
@@ -245,12 +254,13 @@ export class SmitheryProvider implements ToolProvider {
 
       // Use first connection if nothing else matches
       const firstConnection = server.connections[0];
+      const isStdio = firstConnection.type === 'stdio';
       return {
-        type: firstConnection.type === 'sse' ? 'http' : firstConnection.type,
-        url: firstConnection.url,
-        command: firstConnection.command,
-        args: firstConnection.args,
-        env: firstConnection.env,
+        type: mapToMCPTransport(firstConnection.type),
+        url: isStdio ? undefined : firstConnection.url,
+        command: isStdio ? firstConnection.command : undefined,
+        args: isStdio ? firstConnection.args : undefined,
+        env: isStdio ? firstConnection.env : undefined,
         configSchema: firstConnection.configSchema,
       };
     }
