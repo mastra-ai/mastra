@@ -49,43 +49,50 @@ export const LIST_TOOLS_ROUTE = createRoute({
       );
 
       // Fetch cached tools from integrations
-      const storage = mastra.getStorage() as any;
-      if (storage?.integrations) {
+      const storage = mastra.getStorage();
+      if (storage) {
         try {
-          const cachedToolsResult = await storage.integrations.listCachedTools({});
-          const cachedTools = cachedToolsResult.data || [];
+          const integrationsStore = await storage.getStore('integrations');
+          if (integrationsStore) {
+            const cachedToolsResult = await integrationsStore.listCachedTools({});
+            const cachedTools = cachedToolsResult.tools || [];
 
-          // Fetch integrations to get their names
-          const integrationIds = [...new Set(cachedTools.map((t: any) => t.integrationId))];
-          const integrationsMap = new Map<string, string>();
+            // Fetch integrations to get their names
+            const integrationIds = [...new Set(cachedTools.map((t: any) => t.integrationId))];
+            const integrationsMap = new Map<string, string>();
 
-          for (const integrationId of integrationIds) {
-            try {
-              const integration = await storage.integrations.getIntegrationById({ id: integrationId });
-              if (integration) {
-                integrationsMap.set(integration.id, integration.name);
+            for (const integrationId of integrationIds) {
+              try {
+                const integration = await integrationsStore.getIntegrationById({ id: integrationId });
+                if (integration) {
+                  integrationsMap.set(integration.id, integration.name);
+                }
+              } catch {
+                // Integration not found, skip
               }
-            } catch {
-              // Integration not found, skip
             }
-          }
 
-          // Add cached tools to serialized tools
-          for (const cachedTool of cachedTools) {
-            const toolId = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
-            const integrationName = integrationsMap.get(cachedTool.integrationId) || cachedTool.provider;
+            // Add cached tools to serialized tools
+            for (const cachedTool of cachedTools) {
+              const toolId = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
+              const integrationName = integrationsMap.get(cachedTool.integrationId) || cachedTool.provider;
+              // Include toolkit name in tool name for clarity (e.g., "slack: Send Message")
+              const displayName = cachedTool.toolkitSlug
+                ? `${cachedTool.toolkitSlug}: ${cachedTool.name}`
+                : cachedTool.name;
 
-            serializedTools[toolId] = {
-              id: toolId,
-              name: cachedTool.name,
-              description: cachedTool.description,
-              inputSchema: cachedTool.inputSchema ? stringify(cachedTool.inputSchema) : undefined,
-              outputSchema: cachedTool.outputSchema ? stringify(cachedTool.outputSchema) : undefined,
-              source: integrationName,
-              provider: cachedTool.provider,
-              toolkit: cachedTool.toolkitSlug,
-              integrationId: cachedTool.integrationId,
-            };
+              serializedTools[toolId] = {
+                id: toolId,
+                name: displayName,
+                description: cachedTool.description,
+                inputSchema: cachedTool.inputSchema ? stringify(cachedTool.inputSchema) : undefined,
+                outputSchema: cachedTool.outputSchema ? stringify(cachedTool.outputSchema) : undefined,
+                source: integrationName,
+                provider: cachedTool.provider,
+                toolkit: cachedTool.toolkitSlug,
+                integrationId: cachedTool.integrationId,
+              };
+            }
           }
         } catch (error) {
           // Log error but don't fail the request
@@ -118,6 +125,47 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         tool = Object.values(tools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
+      }
+
+      // If not found in code-defined tools, check cached integration tools
+      if (!tool) {
+        const storage = mastra.getStorage();
+        if (storage) {
+          const integrationsStore = await storage.getStore('integrations');
+          if (integrationsStore) {
+            // Parse toolId format: provider_toolkitSlug_toolSlug
+            const parts = toolId.split('_');
+            if (parts.length >= 3) {
+              const provider = parts[0];
+              const toolkitSlug = parts[1];
+              const toolSlug = parts.slice(2).join('_'); // Handle tool slugs with underscores
+
+              const cachedToolsResult = await integrationsStore.listCachedTools({
+                provider: provider as any,
+                toolkitSlug,
+              });
+              const cachedTool = cachedToolsResult.tools?.find((t: any) => t.toolSlug === toolSlug);
+
+              if (cachedTool) {
+                const displayName = cachedTool.toolkitSlug
+                  ? `${cachedTool.toolkitSlug}: ${cachedTool.name}`
+                  : cachedTool.name;
+
+                return {
+                  id: toolId,
+                  name: displayName,
+                  description: cachedTool.description,
+                  inputSchema: cachedTool.inputSchema ? stringify(cachedTool.inputSchema) : undefined,
+                  outputSchema: cachedTool.outputSchema ? stringify(cachedTool.outputSchema) : undefined,
+                  source: cachedTool.provider,
+                  provider: cachedTool.provider,
+                  toolkit: cachedTool.toolkitSlug,
+                  integrationId: cachedTool.integrationId,
+                };
+              }
+            }
+          }
+        }
       }
 
       if (!tool) {
@@ -161,6 +209,55 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         tool = Object.values(tools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
+      }
+
+      // If not found in code-defined tools, check cached integration tools
+      if (!tool) {
+        const storage = mastra.getStorage();
+        if (storage) {
+          const integrationsStore = await storage.getStore('integrations');
+          if (integrationsStore) {
+            // Parse toolId format: provider_toolkitSlug_toolSlug
+            const parts = toolId.split('_');
+            if (parts.length >= 3) {
+              const provider = parts[0];
+              const toolkitSlug = parts[1];
+              const toolSlug = parts.slice(2).join('_'); // Handle tool slugs with underscores
+
+              const cachedToolsResult = await integrationsStore.listCachedTools({
+                provider: provider as any,
+                toolkitSlug,
+              });
+              const cachedTool = cachedToolsResult.tools?.find((t: any) => t.toolSlug === toolSlug);
+
+              if (cachedTool) {
+                // Execute via provider API using executeTool from @mastra/core
+                const { executeTool } = await import('@mastra/core/integrations');
+                const { data } = bodyParams;
+
+                validateBody({ data });
+
+                const result = await executeTool(
+                  cachedTool.provider,
+                  cachedTool.toolSlug,
+                  (data || {}) as Record<string, unknown>,
+                );
+
+                if (!result.success) {
+                  // Include error details from provider for better debugging
+                  const errorDetails = result.error?.details
+                    ? ` Details: ${typeof result.error.details === 'string' ? result.error.details : JSON.stringify(result.error.details)}`
+                    : '';
+                  throw new HTTPException(500, {
+                    message: `${result.error?.message || 'Tool execution failed'}${errorDetails}`,
+                  });
+                }
+
+                return result.output;
+              }
+            }
+          }
+        }
       }
 
       if (!tool) {

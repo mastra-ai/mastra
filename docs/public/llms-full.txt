@@ -7139,11 +7139,11 @@ packages:
 For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
 
 
-```typescript 
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: "file:./mastra.db",
@@ -7152,7 +7152,7 @@ const mastra = new Mastra({
 ```
 On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
-## Supported Providers
+## Supported providers
 
 Each provider page includes installation instructions, configuration parameters, and usage examples:
 
@@ -7171,19 +7171,19 @@ Each provider page includes installation instructions, configuration parameters,
 libSQL is the easiest way to get started because it doesn’t require running a separate database server
 :::
 
-## Configuration Scope
+## Configuration scope
 
 You can configure storage at two different scopes:
 
 ### Instance-level storage
 
-Add storage to your Mastra instance so all agents share the same memory provider:
+Add storage to your Mastra instance so all agents, workflows, observability traces and scores share the same memory provider:
 
-```typescript 
+```typescript
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
@@ -7195,16 +7195,51 @@ const agent1 = new Agent({ id: "agent-1", memory: new Memory() });
 const agent2 = new Agent({ id: "agent-2", memory: new Memory() });
 ```
 
+This is useful when all primitives share the same storage backend and have similar performance, scaling, and operational requirements.
+
+#### Composite storage
+
+Add storage to your Mastra instance using `MastraStorage` and configure individual storage domains to use different storage providers.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { WorkflowsPG } from "@mastra/pg";
+import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+
+export const mastra = new Mastra({
+  storage: new MastraStorage({
+    id: "composite",
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      observability: new ObservabilityStorageClickhouse({
+        url: process.env.CLICKHOUSE_URL,
+        username: process.env.CLICKHOUSE_USERNAME,
+        password: process.env.CLICKHOUSE_PASSWORD,
+      }),
+    },
+  }),
+});
+```
+
+This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
+
+:::info
+See [Storage Domains](/reference/v1/storage/composite#storage-domains) for more information.
+:::
+
 ### Agent-level storage
 
-Add storage to a specific agent when you need data boundaries or compliance requirements:
+Agent-level storage overrides storage configured at the instance-level. Add storage to a specific agent when you need data boundaries or compliance requirements:
 
-```typescript 
+```typescript title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
 
-const agent = new Agent({
+export const agent = new Agent({
   id: "agent",
   memory: new Memory({
     storage: new PostgresStore({
@@ -7217,7 +7252,7 @@ const agent = new Agent({
 
 This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
 
-## Threads and Resources
+## Threads and resources
 
 Mastra organizes memory into threads using two identifiers:
 
@@ -7226,7 +7261,7 @@ Mastra organizes memory into threads using two identifiers:
 
 Both identifiers are required for agents to store and recall information:
 
-```typescript 
+```typescript
 const stream = await agent.stream("message for agent", {
   memory: {
     thread: "convo_123",
@@ -7245,7 +7280,7 @@ Mastra can automatically generate descriptive thread titles based on the user's 
 
 Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
 
-```typescript 
+```typescript
 export const testAgent = new Agent({
   id: "test-agent",
   memory: new Memory({
@@ -7280,7 +7315,7 @@ Semantic recall uses vector embeddings to retrieve relevant past messages based 
 
 The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
 
-```typescript 
+```typescript
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
@@ -7288,7 +7323,7 @@ import { PostgresStore } from "@mastra/pg";
 import { PineconeVector } from "@mastra/pinecone";
 
 // Instance-level vector configuration
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
@@ -7296,7 +7331,7 @@ const mastra = new Mastra({
 });
 
 // Agent-level vector configuration
-const agent = new Agent({
+export const agent = new Agent({
   id: "agent",
   memory: new Memory({
     vector: new PineconeVector({
@@ -34775,12 +34810,12 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo="https://models.dev/logos/azure-openai.svg"
     />    <CardGridItem
       title="Netlify"
-      description="52 models"
+      description="53 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="138 models"
+      description="139 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -34806,7 +34841,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 52 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 53 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -34892,6 +34927,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-2025-12-11` |
+| `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
 | `openai/gpt-5.2-pro-2025-12-11` |
 | `openai/o3` |
@@ -34912,7 +34948,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 138 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 139 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -35039,6 +35075,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-chat-latest` |
+| `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
 | `openai/gpt-oss-120b` |
 | `openai/gpt-oss-120b:exacto` |
@@ -35327,7 +35364,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 69+ AI providers and 1751+ models through Mastra's model router."
+description: "Access 70+ AI providers and 1828+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35340,7 +35377,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1751 models from 69 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1828 models from 70 providers through a single API.
 
 ## Features
 
@@ -35468,7 +35505,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 62 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 63 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -41786,7 +41823,7 @@ const agent = new Agent({
 
 ---
 title: "Firmware | Models | Mastra"
-description: "Use Firmware models with Mastra. 16 models available."
+description: "Use Firmware models with Mastra. 18 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -41796,7 +41833,7 @@ description: "Use Firmware models with Mastra. 16 models available."
 # <img src="https://models.dev/logos/firmware.svg" alt="Firmware logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Firmware
 [EN] Source: https://mastra.ai/en/models/providers/firmware
 
-Access 16 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
+Access 18 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
 
 Learn more in the [Firmware documentation](https://firmware.ai).
 
@@ -41811,7 +41848,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "firmware/anthropic/claude-haiku-4-5-20251001"
+  model: "firmware/claude-haiku-4-5-20251001"
 });
 
 // Generate a response
@@ -41835,7 +41872,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "firmware/anthropic/claude-haiku-4-5-20251001",
+    "model": "firmware/claude-haiku-4-5-20251001",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41847,7 +41884,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/anthropic/claude-opus-4-5",
+    "model": "firmware/claude-opus-4-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41859,7 +41896,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/anthropic/claude-sonnet-4-5-20250929",
+    "model": "firmware/claude-sonnet-4-5-20250929",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41871,7 +41908,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/deepseek/deepseek-chat",
+    "model": "firmware/deepseek-chat",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -41883,7 +41920,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/deepseek/deepseek-coder",
+    "model": "firmware/deepseek-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -41895,7 +41932,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/deepseek/deepseek-reasoner",
+    "model": "firmware/deepseek-reasoner",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -41907,7 +41944,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-2.5-flash",
+    "model": "firmware/gemini-2.5-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41919,7 +41956,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-2.5-pro",
+    "model": "firmware/gemini-2.5-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41931,7 +41968,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-3-flash-preview",
+    "model": "firmware/gemini-3-flash-preview",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41943,7 +41980,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-3-pro-preview",
+    "model": "firmware/gemini-3-pro-preview",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41955,7 +41992,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/openai/gpt-4o",
+    "model": "firmware/gpt-4o",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41967,7 +42004,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/openai/gpt-5",
+    "model": "firmware/gpt-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41979,7 +42016,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/openai/gpt-5.2",
+    "model": "firmware/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "firmware/gpt-5-nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.05,
+    "outputCost": 0.4
+  },
+  {
+    "model": "firmware/gpt-5.2",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41991,7 +42052,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/xai/grok-4-fast-non-reasoning",
+    "model": "firmware/grok-4-fast-non-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -42003,7 +42064,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/xai/grok-4-fast-reasoning",
+    "model": "firmware/grok-4-fast-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -42015,7 +42076,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/xai/grok-code-fast-1",
+    "model": "firmware/grok-code-fast-1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -42039,7 +42100,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://app.firmware.ai/api/v1",
-    id: "firmware/anthropic/claude-haiku-4-5-20251001",
+    id: "firmware/claude-haiku-4-5-20251001",
     apiKey: process.env.FIRMWARE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -42057,8 +42118,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "firmware/xai/grok-code-fast-1"
-      : "firmware/anthropic/claude-haiku-4-5-20251001";
+      ? "firmware/grok-code-fast-1"
+      : "firmware/claude-haiku-4-5-20251001";
   }
 });
 ```
@@ -45295,7 +45356,7 @@ const agent = new Agent({
 
 ---
 title: "iFlow | Models | Mastra"
-description: "Use iFlow models with Mastra. 20 models available."
+description: "Use iFlow models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45305,7 +45366,7 @@ description: "Use iFlow models with Mastra. 20 models available."
 # <img src="https://models.dev/logos/iflowcn.svg" alt="iFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />iFlow
 [EN] Source: https://mastra.ai/en/models/providers/iflowcn
 
-Access 20 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
+Access 14 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
 
 Learn more in the [iFlow documentation](https://platform.iflow.cn/en/docs).
 
@@ -45368,36 +45429,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "iflowcn/deepseek-v3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "iflowcn/deepseek-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "iflowcn/deepseek-v3.2-chat",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 64000,
     "inputCost": null,
@@ -45436,30 +45473,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "iflowcn/kimi-k2-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "iflowcn/minimax-m2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131100,
     "inputCost": null,
     "outputCost": null
   },
@@ -45512,18 +45525,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "iflowcn/qwen3-coder",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "iflowcn/qwen3-coder-plus",
     "imageInput": false,
     "audioInput": false,
@@ -45570,18 +45571,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "iflowcn/tstars2.0",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />
@@ -45614,7 +45603,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "iflowcn/tstars2.0"
+      ? "iflowcn/qwen3-vl-plus"
       : "iflowcn/deepseek-r1";
   }
 });
@@ -45754,7 +45743,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
 <CardGrid>
     <CardGridItem
       title="OpenAI"
-      description="39 models"
+      description="40 models"
       href="/models/v1/providers/openai"
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
@@ -45849,7 +45838,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/fireworks-ai.svg"
     />    <CardGridItem
       title="Firmware"
-      description="16 models"
+      description="18 models"
       href="/models/v1/providers/firmware"
       logo="https://models.dev/logos/firmware.svg"
     />    <CardGridItem
@@ -45874,7 +45863,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/huggingface.svg"
     />    <CardGridItem
       title="iFlow"
-      description="20 models"
+      description="14 models"
       href="/models/v1/providers/iflowcn"
       logo="https://models.dev/logos/iflowcn.svg"
     />    <CardGridItem
@@ -45953,6 +45942,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/nebius"
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
+      title="NovitaAI"
+      description="77 models"
+      href="/models/v1/providers/novita-ai"
+      logo="https://models.dev/logos/novita-ai.svg"
+    />    <CardGridItem
       title="Nvidia"
       description="66 models"
       href="/models/v1/providers/nvidia"
@@ -45964,7 +45958,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/ollama-cloud.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="26 models"
+      description="27 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -49261,6 +49255,1020 @@ const agent = new Agent({
 
 
 ---
+title: "NovitaAI | Models | Mastra"
+description: "Use NovitaAI models with Mastra. 77 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/novita-ai.svg" alt="NovitaAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NovitaAI
+[EN] Source: https://mastra.ai/en/models/providers/novita-ai
+
+Access 77 NovitaAI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
+
+Learn more in the [NovitaAI documentation](https://novita.ai/docs/guides/introduction).
+
+```bash
+NOVITA_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "novita-ai/baichuan/baichuan-m2-32b"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [NovitaAI documentation](https://novita.ai/docs/guides/introduction) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "novita-ai/baichuan/baichuan-m2-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.07,
+    "outputCost": 0.07
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-21B-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-21B-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-300b-a47b-paddle",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 123000,
+    "maxOutput": 12000,
+    "inputCost": 0.28,
+    "outputCost": 1.1
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-vl-28b-a3b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 30000,
+    "maxOutput": 8000,
+    "inputCost": 1.4,
+    "outputCost": 5.6
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-vl-28b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.39,
+    "outputCost": 0.39
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-vl-424b-a47b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 123000,
+    "maxOutput": 16000,
+    "inputCost": 0.42,
+    "outputCost": 1.25
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-ocr",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.03,
+    "outputCost": 0.03
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-prover-v2-671b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 160000,
+    "inputCost": 0.7,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 32768,
+    "inputCost": 0.7,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-0528-qwen3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.06,
+    "outputCost": 0.09
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-distill-llama-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 0.8
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 16000,
+    "inputCost": 0.7,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.27,
+    "outputCost": 1.12
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 16000,
+    "inputCost": 0.4,
+    "outputCost": 1.3
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.1-terminus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.269,
+    "outputCost": 0.4
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.2-exp",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
+    "model": "novita-ai/google/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 98304,
+    "maxOutput": 16384,
+    "inputCost": 0.119,
+    "outputCost": 0.2
+  },
+  {
+    "model": "novita-ai/gryphe/mythomax-l2-13b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 4096,
+    "maxOutput": 3200,
+    "inputCost": 0.09,
+    "outputCost": 0.09
+  },
+  {
+    "model": "novita-ai/kwaipilot/kat-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "novita-ai/kwaipilot/kat-coder-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8000,
+    "inputCost": 0.51,
+    "outputCost": 0.74
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.04,
+    "outputCost": 0.04
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3.1-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.02,
+    "outputCost": 0.05
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3.3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 120000,
+    "inputCost": 0.135,
+    "outputCost": 0.4
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.27,
+    "outputCost": 0.85
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-4-scout-17b-16e-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.18,
+    "outputCost": 0.59
+  },
+  {
+    "model": "novita-ai/microsoft/wizardlm-2-8x22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65535,
+    "maxOutput": 8000,
+    "inputCost": 0.62,
+    "outputCost": 0.62
+  },
+  {
+    "model": "novita-ai/minimax/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/minimax/minimax-m2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/minimaxai/minimax-m1-80k",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 40000,
+    "inputCost": 0.55,
+    "outputCost": 2.2
+  },
+  {
+    "model": "novita-ai/mistralai/mistral-nemo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 60288,
+    "maxOutput": 16000,
+    "inputCost": 0.04,
+    "outputCost": 0.17
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k2-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.57,
+    "outputCost": 2.3
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/nousresearch/hermes-2-pro-llama-3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.14,
+    "outputCost": 0.14
+  },
+  {
+    "model": "novita-ai/openai/gpt-oss-120b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.05,
+    "outputCost": 0.25
+  },
+  {
+    "model": "novita-ai/openai/gpt-oss-20b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.04,
+    "outputCost": 0.15
+  },
+  {
+    "model": "novita-ai/paddlepaddle/paddleocr-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.02,
+    "outputCost": 0.02
+  },
+  {
+    "model": "novita-ai/qwen/qwen-2.5-72b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 8192,
+    "inputCost": 0.38,
+    "outputCost": 0.4
+  },
+  {
+    "model": "novita-ai/qwen/qwen-mt-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.75
+  },
+  {
+    "model": "novita-ai/qwen/qwen2.5-7b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.07,
+    "outputCost": 0.07
+  },
+  {
+    "model": "novita-ai/qwen/qwen2.5-vl-72b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.8,
+    "outputCost": 0.8
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-235b-a22b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 20000,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.09,
+    "outputCost": 0.58
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 3
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-30b-a3b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 20000,
+    "inputCost": 0.09,
+    "outputCost": 0.45
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-32b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 20000,
+    "inputCost": 0.1,
+    "outputCost": 0.45
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-4b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 20000,
+    "inputCost": 0.03,
+    "outputCost": 0.03
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-8b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 20000,
+    "inputCost": 0.035,
+    "outputCost": 0.138
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-coder-30b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.27
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 1.3
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 2.11,
+    "outputCost": 8.45
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 1.5
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 1.5
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-omni-30b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 16384,
+    "inputCost": 0.25,
+    "outputCost": 0.97
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-omni-30b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 16384,
+    "inputCost": 0.25,
+    "outputCost": 0.97
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-235b-a22b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 1.5
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-235b-a22b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.98,
+    "outputCost": 3.95
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-30b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.2,
+    "outputCost": 0.7
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-30b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.2,
+    "outputCost": 1
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-8b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.08,
+    "outputCost": 0.5
+  },
+  {
+    "model": "novita-ai/sao10k/l3-70b-euryale-v2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 1.48,
+    "outputCost": 1.48
+  },
+  {
+    "model": "novita-ai/sao10k/l3-8b-lunaris",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "novita-ai/sao10k/L3-8B-Stheno-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 32000,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "novita-ai/sao10k/l31-70b-euryale-v2.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 1.48,
+    "outputCost": 1.48
+  },
+  {
+    "model": "novita-ai/skywork/r1v4-lite",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "novita-ai/xiaomimimo/mimo-v2-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "novita-ai/zai-org/autoglm-phone-9b-multilingual",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.035,
+    "outputCost": 0.138
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.13,
+    "outputCost": 0.85
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 1.8
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.55,
+    "outputCost": 2.2
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.novita.ai/openai",
+    id: "novita-ai/baichuan/baichuan-m2-32b",
+    apiKey: process.env.NOVITA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "novita-ai/zai-org/glm-4.7"
+      : "novita-ai/baichuan/baichuan-m2-32b";
+  }
+});
+```
+
+
+
+
+---
 title: "Nvidia | Models | Mastra"
 description: "Use Nvidia models with Mastra. 66 models available."
 ---
@@ -50401,7 +51409,7 @@ npm install ollama-ai-provider-v2
 
 ---
 title: "OpenAI | Models | Mastra"
-description: "Use OpenAI models with Mastra. 39 models available."
+description: "Use OpenAI models with Mastra. 40 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -50412,7 +51420,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 [EN] Source: https://mastra.ai/en/models/providers/openai
 
-Access 39 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 40 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -50741,6 +51749,18 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 16384,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "openai/gpt-5.2-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
     "inputCost": 1.75,
     "outputCost": 14
   },
@@ -51098,7 +52118,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 26 models available."
+description: "Use OpenCode Zen models with Mastra. 27 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -51108,7 +52128,7 @@ description: "Use OpenCode Zen models with Mastra. 26 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 26 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 27 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -51388,6 +52408,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "opencode/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "opencode/gpt-5.2-codex",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -88719,7 +89751,7 @@ For Workers deployments, `keyPrefix` is used to isolate data within a namespace;
 
 
 ---
-title: "Reference: Storage Composition | Storage"
+title: "Reference: Composite Storage | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
 packages:
   - "@mastra/clickhouse"
@@ -88728,26 +89760,26 @@ packages:
   - "@mastra/pg"
 ---
 
-# Storage Composition
+# Composite Storage
 [EN] Source: https://mastra.ai/en/reference/storage/composite
 
-MastraStorage can compose storage domains from different adapters. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
+`MastraStorage` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
 
 ## Installation
 
-MastraStorage is included in `@mastra/core`:
+`MastraStorage` is included in `@mastra/core`:
 
 ```bash
 npm install @mastra/core@beta
 ```
 
-You'll also need to install the storage adapters you want to compose:
+You'll also need to install the storage providers you want to compose:
 
 ```bash
 npm install @mastra/pg@beta @mastra/libsql@beta
 ```
 
-## Storage Domains
+## Storage domains
 
 Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
 
@@ -88765,13 +89797,13 @@ Mastra organizes storage into five specialized domains, each handling a specific
 
 Import domain classes directly from each store package and compose them:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new MastraStorage({
     id: "composite",
     domains: {
@@ -88787,7 +89819,7 @@ const mastra = new Mastra({
 
 Use `default` to specify a fallback storage, then override specific domains:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { PostgresStore } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
@@ -88798,7 +89830,7 @@ const pgStore = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
 });
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new MastraStorage({
     id: "composite",
     default: pgStore,
@@ -88875,9 +89907,9 @@ const mastra = new Mastra({
 
 ## Initialization
 
-MastraStorage initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
+`MastraStorage` initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { Mastra } from "@mastra/core";
@@ -88891,7 +89923,7 @@ const storage = new MastraStorage({
   },
 });
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage, // init() called automatically
 });
 ```
@@ -88916,7 +89948,7 @@ const memoryStore = await storage.getStore("memory");
 const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
-## Use Cases
+## Use cases
 
 ### Separate databases for different workloads
 

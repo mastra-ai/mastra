@@ -87,7 +87,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const tools = toolsData?.pages.flatMap(page => page.tools) || [];
 
   // Calculate selected tools (all tools from selected toolkits minus deselected)
-  const selectedTools = new Set(tools.filter(tool => !deselectedTools.has(tool.slug)).map(tool => tool.slug));
+  // Filter out any null/undefined slugs that may come from the API
+  const selectedTools = new Set(
+    tools
+      .filter(tool => tool.slug && !deselectedTools.has(tool.slug))
+      .map(tool => tool.slug)
+  );
 
   // Navigation handlers
   const handleNext = () => {
@@ -124,13 +129,17 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       const integrationId = crypto.randomUUID();
       const integrationName = `${selectedProvider}-${Date.now()}`;
 
+      // Filter out any null/undefined values that may have been added to the Sets
+      const toolkitsArray = Array.from(selectedToolkits).filter((slug): slug is string => Boolean(slug));
+      const toolsArray = Array.from(selectedTools).filter((slug): slug is string => Boolean(slug));
+
       await createIntegration.mutateAsync({
         id: integrationId,
         provider: selectedProvider,
         name: integrationName,
         enabled: true,
-        selectedToolkits: Array.from(selectedToolkits),
-        selectedTools: Array.from(selectedTools),
+        selectedToolkits: toolkitsArray,
+        selectedTools: toolsArray,
       });
 
       toast.success(`Successfully added ${selectedTools.size} tools from ${selectedProvider}`);

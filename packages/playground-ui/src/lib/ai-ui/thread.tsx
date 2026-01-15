@@ -99,7 +99,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
         </div>
 
         <div
-          className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
+          className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
           onClick={() => {
             textareaRef.current?.focus();
           }}
@@ -107,7 +107,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
-              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
@@ -142,7 +142,7 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-[#898989] hover:text-[#fff]" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
     </TooltipIconButton>
   );
 };
@@ -158,7 +158,7 @@ const ComposerAction = () => {
         className="rounded-full"
         onClick={() => setIsAddAttachmentDialogOpen(true)}
       >
-        <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+        <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
       </TooltipIconButton>
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
@@ -168,9 +168,9 @@ const ComposerAction = () => {
           <TooltipIconButton
             tooltip="Send"
             variant="default"
-            className="rounded-full border-sm border-[#363636] bg-[#292929]"
+            className="rounded-full border border-border1 bg-surface5"
           >
-            <ArrowUp className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+            <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
           </TooltipIconButton>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
@@ -192,12 +192,12 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">
+          <button className="bg-surface2 border border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Cancel
           </button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">
+          <button className="bg-surface2 border border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Send
           </button>
         </ComposerPrimitive.Send>

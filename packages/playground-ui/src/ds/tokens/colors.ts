@@ -20,12 +20,12 @@ export const Colors = {
   accent3Darker: '#14141a',
   accent5Darker: '#14161a',
   accent6Darker: '#1a1a14',
-  icon1: '#5C5C5C',
-  icon2: '#707070',
-  icon3: '#939393',
-  icon4: '#A9A9A9',
-  icon5: '#E6E6E6',
-  icon6: '#FFFFFF',
+  neutral1: '#5C5C5C',
+  neutral2: '#707070',
+  neutral3: '#939393',
+  neutral4: '#A9A9A9',
+  neutral5: '#E6E6E6',
+  neutral6: '#FFFFFF',
 };
 
 export const BorderColors = {

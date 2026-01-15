@@ -38,6 +38,7 @@ export interface ToolExecutionResult {
     duration?: number;
     finishedAt?: string;
     status?: string;
+    logId?: string;
   };
 }
 
@@ -102,16 +103,23 @@ interface ExecuteArcadeToolParams {
 }
 
 /**
- * Composio API response types
+ * Composio API response types (V3 format)
+ * Structure: { data: { response_data }, successful, error, log_id }
  */
 interface ComposioExecuteResponse {
+  // V3 format - data contains response_data, other fields at top level
+  data?: {
+    response_data?: unknown;
+  };
+  successful?: boolean;
+  error?: string | null;
+  log_id?: string;
+  // Legacy format support
   executionDetails?: {
     executed?: boolean;
     response?: unknown;
   };
   successfull?: boolean;
-  data?: unknown;
-  error?: string;
 }
 
 /**
@@ -172,7 +180,7 @@ export async function executeComposioTool(params: ExecuteComposioToolParams): Pr
     const url = `https://backend.composio.dev/api/v3/tools/execute/${toolSlug}`;
 
     const requestBody: Record<string, unknown> = {
-      input,
+      arguments: input,
     };
 
     // Add optional parameters
@@ -204,12 +212,40 @@ export async function executeComposioTool(params: ExecuteComposioToolParams): Pr
       };
     }
 
-    const data = (await response.json()) as ComposioExecuteResponse;
+    const responseData = (await response.json()) as ComposioExecuteResponse;
 
-    // Composio API response format may vary, handle multiple formats
-    const executed = data.executionDetails?.executed ?? data.successfull ?? false;
-    const output = data.executionDetails?.response ?? data.data;
-    const error = data.error;
+    // Handle V3 API response format: { data: { response_data }, successful, error, log_id }
+    // Note: successful, error, log_id are at the TOP level, not inside data
+    if (responseData.data?.response_data !== undefined || responseData.successful !== undefined) {
+      const response_data = responseData.data?.response_data;
+      const { successful, error, log_id } = responseData;
+
+      if (!successful || error) {
+        return {
+          success: false,
+          error: {
+            message: error || 'Tool execution failed',
+            code: 'EXECUTION_FAILED',
+            details: responseData,
+          },
+          output: response_data,
+        };
+      }
+
+      return {
+        success: true,
+        output: response_data,
+        metadata: {
+          status: 'completed',
+          logId: log_id,
+        },
+      };
+    }
+
+    // Legacy format fallback: { executionDetails: { executed, response } }
+    const executed = responseData.executionDetails?.executed ?? responseData.successfull ?? false;
+    const output = responseData.executionDetails?.response;
+    const error = responseData.error;
 
     if (!executed || error) {
       return {
@@ -217,7 +253,7 @@ export async function executeComposioTool(params: ExecuteComposioToolParams): Pr
         error: {
           message: error || 'Tool execution failed',
           code: 'EXECUTION_FAILED',
-          details: data,
+          details: responseData,
         },
         output,
       };

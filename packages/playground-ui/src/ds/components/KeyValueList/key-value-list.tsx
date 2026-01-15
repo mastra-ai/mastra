@@ -47,12 +47,14 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
         return (
           <React.Fragment key={label + index}>
             <dt
-              className={cn('text-icon3 text-[0.875rem] flex items-center gap-[2rem] justify-between min-h-[2.25rem] ')}
+              className={cn(
+                'text-neutral3 text-[0.875rem] flex items-center gap-[2rem] justify-between min-h-[2.25rem] ',
+              )}
             >
               <span
                 className={cn(
                   'flex items-center gap-[0.5rem]',
-                  '[&>svg]:w-[1.4em] [&>svg]:h-[1.4em] [&>svg]:text-icon3 [&>svg]:opacity-50',
+                  '[&>svg]:w-[1.4em] [&>svg]:h-[1.4em] [&>svg]:text-neutral3 [&>svg]:opacity-50',
                   {
                     '[&>svg]:opacity-20': isLoading,
                   },
@@ -61,17 +63,17 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                 {icon} <LabelWrapper>{label}</LabelWrapper>
               </span>
               {!labelsAreHidden && (
-                <span className={cn('text-icon3', '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3')}>
+                <span className={cn('text-neutral3', '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-neutral3')}>
                   {separator}
                 </span>
               )}
             </dt>
             <dd
               className={cn(
-                'flex flex-wrap gap-[.5rem] py-[0.25rem] min-h-[2.25rem] text-[0.875rem] items-center text-icon5 text-wrap',
-                '[&>a]:text-icon5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-[#222] [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:pt-[0.15rem] [&>a]:pb-[0.2rem] [&>a]:px-[.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem] [&>a]:min-h-[1.75rem] [&>a]:leading-0 ',
-                '[&>a:hover]:text-icon6 [&>a:hover]:bg-surface6',
-                '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-icon3 [&>a>svg]:ml-[-0.5em]',
+                'flex flex-wrap gap-[.5rem] py-[0.25rem] min-h-[2.25rem] text-[0.875rem] items-center text-neutral5 text-wrap',
+                '[&>a]:text-neutral5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-surface4 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:pt-[0.15rem] [&>a]:pb-[0.2rem] [&>a]:px-[.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem] [&>a]:min-h-[1.75rem] [&>a]:leading-0 ',
+                '[&>a:hover]:text-neutral6 [&>a:hover]:bg-surface6',
+                '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-neutral3 [&>a>svg]:ml-[-0.5em]',
               )}
             >
               {isLoading ? (
@@ -94,7 +96,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                   );
                 })
               ) : (
-                <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
+                <>{value ? value : <span className="text-neutral3 text-[0.75rem]">n/a</span>}</>
               )}
             </dd>
           </React.Fragment>
@@ -115,7 +117,7 @@ function RelationWrapper({ description, children }: RelationWrapperProps) {
       <HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[15rem] rounded-md bg-[#333] p-[.5rem] px-[1rem] text-[.75rem] text-icon5 text-center"
+          className="z-[100] w-auto max-w-[15rem] rounded-md bg-surface5 p-[.5rem] px-[1rem] text-[.75rem] text-neutral5 text-center"
           sideOffset={5}
           side="top"
         >

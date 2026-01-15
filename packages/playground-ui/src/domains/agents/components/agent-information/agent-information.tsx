@@ -139,7 +139,7 @@ export const AgentInformationTabLayout = ({ children, agentId }: AgentInformatio
   });
 
   return (
-    <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
+    <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
       <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
         {children}
       </Tabs>

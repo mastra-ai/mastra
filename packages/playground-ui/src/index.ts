@@ -8,8 +8,8 @@ export * from './domains/workflow-definitions/index';
 export * from './domains/workflow-builder/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
-export * from './ds/components/Threads';
 export * from './domains/integrations/index';
+export * from './ds/components/Threads';
 export * from './types';
 
 // DS Components - Existing
@@ -87,6 +87,7 @@ export * from './lib/framework';
 export { MemorySearch } from './lib/ai-ui/memory-search';
 export * from './domains/conversation/index';
 export * from './lib/errors';
+export { cn } from './lib/utils';
 export * from './lib/ai-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';

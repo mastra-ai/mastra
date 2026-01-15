@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -72,8 +72,8 @@ export function ToolkitBrowser({
   // Get unique categories for filter dropdown
   const categories = Array.from(new Set(toolkits.map((t) => t.category).filter(Boolean))).sort();
 
-  const handleToggleToolkit = (toolkitSlug: string) => {
-    if (!onSelectionChange) return;
+  const handleToggleToolkit = (toolkitSlug: string | null | undefined) => {
+    if (!onSelectionChange || !toolkitSlug) return;
 
     const newSelection = new Set(selectedToolkits);
     if (newSelection.has(toolkitSlug)) {
@@ -86,7 +86,8 @@ export function ToolkitBrowser({
 
   const handleSelectAll = () => {
     if (!onSelectionChange) return;
-    onSelectionChange(new Set(filteredToolkits.map((t) => t.slug)));
+    // Filter out any null/undefined slugs
+    onSelectionChange(new Set(filteredToolkits.map((t) => t.slug).filter((slug): slug is string => Boolean(slug))));
   };
 
   const handleClearSelection = () => {
@@ -211,6 +212,19 @@ interface ToolkitCardProps {
 }
 
 function ToolkitCard({ toolkit, isSelected, onToggle }: ToolkitCardProps) {
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Only toggle if clicking on the card itself, not on the checkbox
+    const target = e.target as HTMLElement;
+    if (target.closest('button[role="checkbox"]')) {
+      return;
+    }
+    onToggle?.();
+  };
+
+  const handleCheckboxChange = () => {
+    onToggle?.();
+  };
+
   return (
     <div
       className={cn(
@@ -218,7 +232,7 @@ function ToolkitCard({ toolkit, isSelected, onToggle }: ToolkitCardProps) {
         onToggle && 'cursor-pointer hover:border-border2 hover:bg-surface4',
         isSelected && 'border-accent1 bg-surface4',
       )}
-      onClick={onToggle}
+      onClick={handleCardClick}
       role={onToggle ? 'button' : undefined}
       tabIndex={onToggle ? 0 : undefined}
       onKeyDown={
@@ -237,7 +251,7 @@ function ToolkitCard({ toolkit, isSelected, onToggle }: ToolkitCardProps) {
         {onToggle && (
           <Checkbox
             checked={isSelected}
-            onCheckedChange={onToggle}
+            onCheckedChange={handleCheckboxChange}
             onClick={(e) => e.stopPropagation()}
             className="mt-0.5"
           />

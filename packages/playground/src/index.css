@@ -66,7 +66,7 @@
     @apply border-border1;
   }
   body {
-    @apply bg-surface1 text-icon6;
+    @apply bg-surface1 text-neutral6;
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);
@@ -84,7 +84,7 @@
 }
 
 .react-flow__controls-button {
-  @apply !text-icon5 !bg-surface2 !border-none;
+  @apply !text-neutral5 !bg-surface2 !border-none;
 }
 
 .scorerListItem:has(+ .expanded) {

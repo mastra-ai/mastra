@@ -29,21 +29,26 @@ const COMPOSIO_BASE_URL = 'https://backend.composio.dev';
  */
 interface ComposioToolkitResponse {
   name: string;
-  key: string;
-  description: string;
-  logo: string;
-  categories?: string[];
-  actions?: number;
+  slug: string;
+  meta?: {
+    description?: string;
+    logo?: string;
+    tools_count?: number;
+    categories?: Array<{ id: string; name: string }>;
+  };
 }
 
 interface ComposioToolResponse {
   name: string;
-  key: string;
+  slug: string;
   description: string;
-  parameters?: Record<string, unknown>;
-  response?: Record<string, unknown>;
-  appKey?: string;
-  appName?: string;
+  input_parameters?: Record<string, unknown>;
+  output_parameters?: Record<string, unknown>;
+  toolkit?: {
+    slug: string;
+    name: string;
+    logo?: string;
+  };
 }
 
 interface ComposioListResponse<T> {
@@ -205,15 +210,18 @@ export class ComposioProvider implements ToolProvider {
    * Map Composio toolkit response to ProviderToolkit
    */
   private mapToolkit(toolkit: ComposioToolkitResponse): ProviderToolkit {
+    // Use slug from API, falling back to generating a slug from the name
+    const slug = toolkit.slug || toolkit.name?.toLowerCase().replace(/\s+/g, '_') || '';
+    const categories = toolkit.meta?.categories?.map(c => c.name);
     return {
-      slug: toolkit.key,
+      slug,
       name: toolkit.name,
-      description: toolkit.description,
-      icon: toolkit.logo,
-      category: toolkit.categories?.[0] ?? undefined,
-      toolCount: toolkit.actions,
+      description: toolkit.meta?.description || `Tools for ${toolkit.name}`,
+      icon: toolkit.meta?.logo,
+      category: categories?.[0] ?? undefined,
+      toolCount: toolkit.meta?.tools_count,
       metadata: {
-        categories: toolkit.categories,
+        categories,
       },
     };
   }
@@ -222,15 +230,18 @@ export class ComposioProvider implements ToolProvider {
    * Map Composio tool response to ProviderTool
    */
   private mapTool(tool: ComposioToolResponse): ProviderTool {
+    // Use slug from API, falling back to generating a slug from the name
+    const slug = tool.slug || tool.name?.toLowerCase().replace(/\s+/g, '_') || '';
     return {
-      slug: tool.key,
+      slug,
       name: tool.name,
       description: tool.description,
-      inputSchema: tool.parameters || {},
-      outputSchema: tool.response,
-      toolkit: tool.appKey,
+      inputSchema: tool.input_parameters || {},
+      outputSchema: tool.output_parameters,
+      toolkit: tool.toolkit?.slug,
       metadata: {
-        appName: tool.appName,
+        toolkitName: tool.toolkit?.name,
+        toolkitLogo: tool.toolkit?.logo,
       },
     };
   }

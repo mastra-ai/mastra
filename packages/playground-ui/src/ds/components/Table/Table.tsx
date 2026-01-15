@@ -1,5 +1,5 @@
-import clsx from 'clsx';
 import React, { forwardRef } from 'react';
+import { cn } from '@/lib/utils';
 
 export interface TableProps {
   className?: string;
@@ -15,7 +15,7 @@ const rowSize = {
 
 export const Table = ({ className, children, size = 'default', style }: TableProps) => {
   return (
-    <table className={clsx('w-full', rowSize[size], className)} style={style}>
+    <table className={cn('w-full', rowSize[size], className)} style={style}>
       {children}
     </table>
   );
@@ -29,7 +29,7 @@ export interface TheadProps {
 export const Thead = ({ className, children }: TheadProps) => {
   return (
     <thead>
-      <tr className={clsx('h-table-header border-b-sm border-border1 bg-surface2', className)}>{children}</tr>
+      <tr className={cn('h-table-header border-b border-border1 bg-surface2', className)}>{children}</tr>
     </thead>
   );
 };
@@ -42,8 +42,8 @@ export interface ThProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
 export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
-      className={clsx(
-        'text-icon3 text-ui-sm h-full whitespace-nowrap text-left font-normal uppercase first:pl-5 last:pr-5',
+      className={cn(
+        'text-neutral3 text-ui-sm h-full whitespace-nowrap text-left font-normal uppercase first:pl-5 last:pr-5',
         className,
       )}
       {...props}
@@ -59,7 +59,7 @@ export interface TbodyProps {
 }
 
 export const Tbody = ({ className, children }: TbodyProps) => {
-  return <tbody className={clsx('', className)}>{children}</tbody>;
+  return <tbody className={cn('', className)}>{children}</tbody>;
 };
 
 export interface RowProps {
@@ -81,8 +81,8 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
 
     return (
       <tr
-        className={clsx(
-          'border-b-sm border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2',
+        className={cn(
+          'border-b border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,

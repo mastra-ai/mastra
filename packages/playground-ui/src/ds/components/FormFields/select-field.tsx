@@ -40,16 +40,16 @@ export function SelectField({
       )}
     >
       {label && (
-        <label className={cn('text-[0.8125rem] text-icon3 flex justify-between items-center shrink-0')}>
+        <label className={cn('text-[0.8125rem] text-neutral3 flex justify-between items-center shrink-0')}>
           {label}
-          {required && <i className="text-icon2">(required)</i>}
+          {required && <i className="text-neutral2">(required)</i>}
         </label>
       )}
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger
           id="select-dataset"
           className={cn(
-            'w-full border border-[rgba(255,255,255,0.15)] rounded-lg min-h-[2.5rem] min-w-[5rem] gap-[0.5rem]',
+            'w-full border border-border1 rounded-lg min-h-[2.5rem] min-w-[5rem] gap-[0.5rem]',
             'focus:outline-none focus:shadow-[inset_0_0_0_1px_rgba(24,251,111,0.75)]',
           )}
         >
@@ -63,7 +63,7 @@ export function SelectField({
           ))}
         </SelectContent>
       </Select>
-      {helpMsg && <p className="text-icon3 text-[0.75rem]">{helpMsg}</p>}
+      {helpMsg && <p className="text-neutral3 text-[0.75rem]">{helpMsg}</p>}
     </div>
   );
 }

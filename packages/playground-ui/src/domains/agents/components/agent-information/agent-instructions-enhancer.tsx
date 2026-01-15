@@ -42,7 +42,7 @@ export const PromptEnhancer = ({ agentId }: { agentId: string }) => {
       )}
 
       <div className="space-y-2">
-        <div className="rounded-md bg-[#1a1a1a] p-1 font-mono">
+        <div className="rounded-md bg-surface4 p-1 font-mono">
           <CodeMirror
             value={prompt}
             editable={true}

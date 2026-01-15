@@ -42,7 +42,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
         </Header>
         <MainContentContent isCentered={true}>
           <div className="flex flex-col items-center justify-center h-full">
-            <Txt variant="ui-md" className="text-icon6 text-center">
+            <Txt variant="ui-md" className="text-neutral6 text-center">
               No workflow ID provided
             </Txt>
           </div>

@@ -21,7 +21,7 @@ export function SideDialogNav({ onNext, onPrevious, className }: SideDialogNavPr
     <div
       className={cn(
         'flex items-center gap-[1rem]',
-        '[&_svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon3',
+        '[&_svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-neutral3',
         className,
       )}
     >

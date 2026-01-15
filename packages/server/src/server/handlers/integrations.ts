@@ -22,7 +22,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
 
-import type { StorageCachedToolInput } from '@mastra/core/storage';
+import type { IntegrationProvider } from '@mastra/core/storage';
 
 import { getProvider, listProviders } from '@mastra/core/integrations';
 
@@ -160,31 +160,51 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
 
       // Fetch and cache tools from the provider
       try {
-        // Fetch all tools for the selected toolkits
-        const toolsResponse = await toolProvider.listTools({
-          toolkitSlugs: selectedToolkits,
-          limit: 1000, // Fetch a large number to get all tools
-        });
+        // Fetch tools for each selected toolkit separately to ensure we know which toolkit each tool belongs to
+        const allToolsToCache: Array<{
+          id: string;
+          integrationId: string;
+          provider: IntegrationProvider;
+          toolkitSlug: string;
+          toolSlug: string;
+          name: string;
+          description: string;
+          inputSchema: Record<string, unknown>;
+          outputSchema: Record<string, unknown> | undefined;
+          rawDefinition: Record<string, unknown>;
+          createdAt: Date;
+        }> = [];
 
-        // Filter out deselected tools if selectedTools is provided
-        const toolsToCache = selectedTools
-          ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
-          : toolsResponse.tools;
+        for (const toolkit of selectedToolkits) {
+          const toolsResponse = await toolProvider.listTools({
+            toolkitSlug: toolkit,
+            limit: 1000,
+          });
 
-        // Convert to cached tool format
-        const cachedTools = toolsToCache.map(tool => ({
-          id: crypto.randomUUID(),
-          integrationId: integration.id,
-          provider,
-          toolkitSlug: tool.toolkit || '',
-          toolSlug: tool.slug,
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema || {},
-          outputSchema: tool.outputSchema,
-          rawDefinition: tool.metadata || {},
-          createdAt: new Date(),
-        }));
+          // Filter out deselected tools if selectedTools is provided
+          const toolsToCache = selectedTools
+            ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
+            : toolsResponse.tools;
+
+          // Convert to cached tool format - use the toolkit we fetched from as the toolkitSlug
+          const cachedTools = toolsToCache.map(tool => ({
+            id: crypto.randomUUID(),
+            integrationId: integration.id,
+            provider,
+            toolkitSlug: tool.toolkit || toolkit, // Use the toolkit we queried as fallback
+            toolSlug: tool.slug,
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema || {},
+            outputSchema: tool.outputSchema,
+            rawDefinition: tool.metadata || {},
+            createdAt: new Date(),
+          }));
+
+          allToolsToCache.push(...cachedTools);
+        }
+
+        const cachedTools = allToolsToCache;
 
         // Batch insert cached tools
         if (cachedTools.length > 0) {
@@ -262,34 +282,52 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
           // Delete old cached tools
           await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
 
-          // Fetch and cache new tools
+          // Fetch and cache new tools - fetch each toolkit separately to preserve toolkit info
           const finalToolkits = selectedToolkits || existing.selectedToolkits;
-          const toolsResponse = await toolProvider.listTools({
-            toolkitSlugs: finalToolkits,
-            limit: 1000,
-          });
+          const allToolsToCache: Array<{
+            id: string;
+            integrationId: string;
+            provider: IntegrationProvider;
+            toolkitSlug: string;
+            toolSlug: string;
+            name: string;
+            description: string;
+            inputSchema: Record<string, unknown>;
+            outputSchema: Record<string, unknown> | undefined;
+            rawDefinition: Record<string, unknown>;
+            createdAt: Date;
+          }> = [];
 
-          // Filter by selectedTools if provided, otherwise cache all tools from selected toolkits
-          const toolsToCache = selectedTools
-            ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
-            : toolsResponse.tools;
+          for (const toolkit of finalToolkits) {
+            const toolsResponse = await toolProvider.listTools({
+              toolkitSlug: toolkit,
+              limit: 1000,
+            });
 
-          const cachedTools = toolsToCache.map(tool => ({
-            id: crypto.randomUUID(),
-            integrationId: updatedIntegration.id,
-            provider: updatedIntegration.provider,
-            toolkitSlug: tool.toolkit || '',
-            toolSlug: tool.slug,
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema || {},
-            outputSchema: tool.outputSchema,
-            rawDefinition: tool.metadata || {},
-            createdAt: new Date(),
-          }));
+            // Filter by selectedTools if provided, otherwise cache all tools from selected toolkits
+            const toolsToCache = selectedTools
+              ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
+              : toolsResponse.tools;
 
-          if (cachedTools.length > 0) {
-            await integrationsStore.cacheTools({ tools: cachedTools });
+            const cachedTools = toolsToCache.map(tool => ({
+              id: crypto.randomUUID(),
+              integrationId: updatedIntegration.id,
+              provider: updatedIntegration.provider,
+              toolkitSlug: tool.toolkit || toolkit, // Use the toolkit we queried as fallback
+              toolSlug: tool.slug,
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema || {},
+              outputSchema: tool.outputSchema,
+              rawDefinition: tool.metadata || {},
+              createdAt: new Date(),
+            }));
+
+            allToolsToCache.push(...cachedTools);
+          }
+
+          if (allToolsToCache.length > 0) {
+            await integrationsStore.cacheTools({ tools: allToolsToCache });
           }
         } catch (toolError) {
           console.error(`Error refreshing tools for integration ${integrationId}:`, toolError);
@@ -515,35 +553,55 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
       // Delete old cached tools
       await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
 
-      // Fetch and cache new tools
-      const toolsResponse = await toolProvider.listTools({
-        toolkitSlugs: integration.selectedToolkits,
-        limit: 1000,
-      });
+      // Fetch and cache new tools - fetch each toolkit separately to preserve toolkit info
+      const allToolsToCache: Array<{
+        id: string;
+        integrationId: string;
+        provider: IntegrationProvider;
+        toolkitSlug: string;
+        toolSlug: string;
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+        outputSchema: Record<string, unknown> | undefined;
+        rawDefinition: Record<string, unknown>;
+        createdAt: Date;
+      }> = [];
 
-      // Only cache tools that were previously cached (respects original selectedTools filtering)
-      const toolsToCache =
-        existingToolSlugs.size > 0
-          ? toolsResponse.tools.filter(tool => existingToolSlugs.has(tool.slug))
-          : toolsResponse.tools;
+      for (const toolkit of integration.selectedToolkits) {
+        const toolsResponse = await toolProvider.listTools({
+          toolkitSlug: toolkit,
+          limit: 1000,
+        });
 
-      const cachedTools = toolsToCache.map(tool => ({
-        id: crypto.randomUUID(),
-        integrationId: integration.id,
-        provider: integration.provider,
-        toolkitSlug: tool.toolkit || '',
-        toolSlug: tool.slug,
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema || {},
-        outputSchema: tool.outputSchema,
-        rawDefinition: tool.metadata || {},
-        createdAt: new Date(),
-      }));
+        // Only cache tools that were previously cached (respects original selectedTools filtering)
+        const toolsToCache =
+          existingToolSlugs.size > 0
+            ? toolsResponse.tools.filter(tool => existingToolSlugs.has(tool.slug))
+            : toolsResponse.tools;
 
-      if (cachedTools.length > 0) {
-        await integrationsStore.cacheTools({ tools: cachedTools });
+        const cachedTools = toolsToCache.map(tool => ({
+          id: crypto.randomUUID(),
+          integrationId: integration.id,
+          provider: integration.provider,
+          toolkitSlug: tool.toolkit || toolkit, // Use the toolkit we queried as fallback
+          toolSlug: tool.slug,
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema || {},
+          outputSchema: tool.outputSchema,
+          rawDefinition: tool.metadata || {},
+          createdAt: new Date(),
+        }));
+
+        allToolsToCache.push(...cachedTools);
       }
+
+      if (allToolsToCache.length > 0) {
+        await integrationsStore.cacheTools({ tools: allToolsToCache });
+      }
+
+      const cachedTools = allToolsToCache;
 
       return {
         success: true,
