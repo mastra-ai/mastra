@@ -175,11 +175,8 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  */
 export function buildObserverSystemPrompt(recognizePatterns: boolean = true, multiThread: boolean = false): string {
-  
   // Conditionally include patterns section based on config
-  const outputFormat = recognizePatterns 
-    ? OBSERVER_OUTPUT_FORMAT 
-    : OBSERVER_OUTPUT_FORMAT_BASE;
+  const outputFormat = recognizePatterns ? OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
