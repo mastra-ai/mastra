@@ -13588,12 +13588,9 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      // Get current time and schedule cron for 1 minute from now
+      // Use every-minute cron schedule
+      const cronSchedule = '* * * * *';
       const now = new Date();
-      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
-
-      // Convert to cron format: minute hour day month dayOfWeek
-      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
 
       const workflow = createWorkflow({
         id: 'cron-test',
@@ -13639,15 +13636,23 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      // Calculate wait time (1 minute + 10 seconds buffer)
-      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
-      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+      // Poll for workflow runs until we find at least one, or timeout
+      const maxWaitTime = 75 * 1000; // 75 seconds max
+      const pollInterval = 20 * 1000; // Poll every 20 seconds
+      const startTime = Date.now();
+      let runs: Awaited<ReturnType<typeof workflow.listWorkflowRuns>>['runs'] = [];
+      let total = 0;
 
-      // Wait for cron to trigger
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log('Waiting for cron to trigger (polling every 20s, max 75s)...');
 
-      // Check storage for workflow runs
-      const { runs, total } = await workflow.listWorkflowRuns();
+      while (runs.length === 0 && Date.now() - startTime < maxWaitTime) {
+        const result = await workflow.listWorkflowRuns();
+        runs = result.runs;
+        total = result.total;
+        if (runs.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
 
       expect(total).toBeGreaterThanOrEqual(1);
       expect(runs.length).toBeGreaterThanOrEqual(1);
@@ -13663,7 +13668,7 @@ describe('MastraInngestWorkflow', () => {
       expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
 
       srv.close();
-    }, 120000); // 2 minute timeout
+    }, 90000); // 90 second timeout
 
     it('should execute workflow via cron schedule with initialState', async ctx => {
       const inngest = new Inngest({
@@ -13683,12 +13688,9 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      // Get current time and schedule cron for 1 minute from now
+      // Use every-minute cron schedule
+      const cronSchedule = '* * * * *';
       const now = new Date();
-      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
-
-      // Convert to cron format: minute hour day month dayOfWeek
-      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
 
       const workflow = createWorkflow({
         id: 'cron-initial-state-test',
@@ -13736,15 +13738,23 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      // Calculate wait time (1 minute + 10 seconds buffer)
-      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
-      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+      // Poll for workflow runs until we find at least one, or timeout
+      const maxWaitTime = 75 * 1000; // 75 seconds max
+      const pollInterval = 20 * 1000; // Poll every 20 seconds
+      const startTime = Date.now();
+      let runs: Awaited<ReturnType<typeof workflow.listWorkflowRuns>>['runs'] = [];
+      let total = 0;
 
-      // Wait for cron to trigger
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log('Waiting for cron to trigger (polling every 20s, max 75s)...');
 
-      // Check storage for workflow runs
-      const { runs, total } = await workflow.listWorkflowRuns();
+      while (runs.length === 0 && Date.now() - startTime < maxWaitTime) {
+        const result = await workflow.listWorkflowRuns();
+        runs = result.runs;
+        total = result.total;
+        if (runs.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
 
       expect(total).toBeGreaterThanOrEqual(1);
       expect(runs.length).toBeGreaterThanOrEqual(1);
@@ -13760,7 +13770,7 @@ describe('MastraInngestWorkflow', () => {
       expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
 
       srv.close();
-    }, 120000); // 2 minute timeout
+    }, 90000); // 90 second timeout
   });
 
   describe('serve function with user-supplied functions', () => {
