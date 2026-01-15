@@ -16,8 +16,11 @@ describe('LibSQLVector Setup', () => {
   beforeAll(async () => {
     // Create and immediately delete a test table to prime the connection
     const warmupIndex = '_libsql_warmup_test';
+    console.log('[LIBSQL DEBUG] Warmup: Creating warmup index...');
     await libSQLVectorDB.createIndex({ indexName: warmupIndex, dimension: 3, metric: 'cosine' });
+    console.log('[LIBSQL DEBUG] Warmup: Deleting warmup index...');
     await libSQLVectorDB.deleteIndex({ indexName: warmupIndex });
+    console.log('[LIBSQL DEBUG] Warmup: Complete');
   });
 
   it('should initialize the database connection', () => {
@@ -29,13 +32,17 @@ describe('LibSQLVector Setup', () => {
 createVectorTestSuite({
   vector: libSQLVectorDB,
   createIndex: async (indexName: string) => {
+    console.log(`[LIBSQL DEBUG] createIndex called for: ${indexName}`);
     await libSQLVectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
+    console.log(`[LIBSQL DEBUG] createIndex completed for: ${indexName}`);
   },
   deleteIndex: async (indexName: string) => {
+    console.log(`[LIBSQL DEBUG] deleteIndex called for: ${indexName}`);
     try {
       await libSQLVectorDB.deleteIndex({ indexName });
+      console.log(`[LIBSQL DEBUG] deleteIndex completed for: ${indexName}`);
     } catch (error) {
-      console.error(`Error deleting index ${indexName}:`, error);
+      console.error(`[LIBSQL DEBUG] Error deleting index ${indexName}:`, error);
     }
   },
   disconnect: async () => {
@@ -43,8 +50,14 @@ createVectorTestSuite({
   },
   waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 100)),
   testDomains: {
-    // Skip large batch tests - libsql does individual INSERTs in a loop
-    // which is too slow for 1000+ vectors
+    // DEBUGGING: Only enable filterOps to isolate CI failure
+    // Skip all other domains to see if issue is test interference or filterOps-specific
+    filterOps: true,
+    basicOps: false,
+    advancedOps: false,
+    edgeCases: false,
+    errorHandling: false,
+    metadataFiltering: false,
     largeBatch: false,
   },
 });
