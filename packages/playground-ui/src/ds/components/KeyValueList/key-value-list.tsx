@@ -40,20 +40,16 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
   }
 
   return (
-    <dl className={cn('grid grid-cols-[auto_1fr] gap-x-[1rem] items-start content-start', className)}>
+    <dl className={cn('grid grid-cols-[auto_1fr] gap-x-4 items-start content-start', className)}>
       {data.map(({ label, value, icon, separator }, index) => {
         const isValueItemArray = Array.isArray(value);
 
         return (
           <React.Fragment key={label + index}>
-            <dt
-              className={cn(
-                'text-neutral3 text-[0.875rem] flex items-center gap-[2rem] justify-between min-h-[2.25rem] ',
-              )}
-            >
+            <dt className={cn('text-neutral3 text-ui-md flex items-center gap-8 justify-between min-h-9')}>
               <span
                 className={cn(
-                  'flex items-center gap-[0.5rem]',
+                  'flex items-center gap-2',
                   '[&>svg]:w-[1.4em] [&>svg]:h-[1.4em] [&>svg]:text-neutral3 [&>svg]:opacity-50',
                   {
                     '[&>svg]:opacity-20': isLoading,
@@ -70,8 +66,8 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
             </dt>
             <dd
               className={cn(
-                'flex flex-wrap gap-[.5rem] py-[0.25rem] min-h-[2.25rem] text-[0.875rem] items-center text-neutral5 text-wrap',
-                '[&>a]:text-neutral5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-[#222] [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:pt-[0.15rem] [&>a]:pb-[0.2rem] [&>a]:px-[.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem] [&>a]:min-h-[1.75rem] [&>a]:leading-0 ',
+                'flex flex-wrap gap-2 py-1 min-h-9 text-ui-md items-center text-neutral5 text-wrap',
+                '[&>a]:text-neutral5 [&>a]:max-w-full [&>a]:w-auto truncate [&>a]:bg-surface4 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-2 [&>a]:pt-0.5 [&>a]:pb-0.5 [&>a]:px-2 [&>a]:rounded-md [&>a]:text-ui-md [&>a]:min-h-7 [&>a]:leading-none',
                 '[&>a:hover]:text-neutral6 [&>a:hover]:bg-surface6',
                 '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-neutral3 [&>a>svg]:ml-[-0.5em]',
               )}
@@ -96,7 +92,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                   );
                 })
               ) : (
-                <>{value ? value : <span className="text-neutral3 text-[0.75rem]">n/a</span>}</>
+                <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>
               )}
             </dd>
           </React.Fragment>
@@ -117,7 +113,7 @@ function RelationWrapper({ description, children }: RelationWrapperProps) {
       <HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[15rem] rounded-md bg-[#333] p-[.5rem] px-[1rem] text-[.75rem] text-neutral5 text-center"
+          className="z-50 w-auto max-w-60 rounded-md bg-surface5 p-2 px-4 text-ui-sm text-neutral5 text-center"
           sideOffset={5}
           side="top"
         >

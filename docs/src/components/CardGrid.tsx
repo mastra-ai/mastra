@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "@docusaurus/Link";
 import styles from "./CardGrid.module.css";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 
 export interface CardGridItemProps {
   title: string;

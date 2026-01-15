@@ -1,6 +1,13 @@
 import { useComposerRuntime } from '@assistant-ui/react';
 
-import { Dialog, DialogHeader, DialogTitle, DialogContent } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogContent,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { FormEvent } from 'react';
 import { Input } from '@/ds/components/Input';
 import { Button } from '@/ds/components/Button';
@@ -46,46 +53,49 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="bg-surface3">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add attachment</DialogTitle>
+          <DialogDescription>Add a file attachment via URL or from your computer</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-row items-end gap-4">
-          <div className="w-full space-y-1">
-            <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
-              Public URL
-            </Label>
-            <Input
-              type="text"
-              name="url-attachment"
-              id="url-attachment"
-              className="w-full"
-              placeholder="https://placehold.co/600x400/png"
-            />
+        <DialogBody>
+          <form onSubmit={handleSubmit} className="flex flex-row items-end gap-4">
+            <div className="w-full space-y-1">
+              <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
+                Public URL
+              </Label>
+              <Input
+                type="text"
+                name="url-attachment"
+                id="url-attachment"
+                className="w-full"
+                placeholder="https://placehold.co/600x400/png"
+              />
+            </div>
+            <Button type="submit" className="!h-8" variant="light">
+              <Icon>
+                <Link />
+              </Icon>
+              Add
+            </Button>
+          </form>
+
+          <hr className="my-2 border border-border1" />
+
+          <div className="space-y-2">
+            <Txt variant="ui-md" className="text-neutral3">
+              Or from your computer
+            </Txt>
+            <button
+              onClick={addFilInputAttachment}
+              className="w-full h-40 border border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
+            >
+              <CloudUpload className="size-12" />
+              <Txt variant="header-md">Add a local file</Txt>
+            </button>
           </div>
-          <Button type="submit" className="!h-8" variant="light">
-            <Icon>
-              <Link />
-            </Icon>
-            Add
-          </Button>
-        </form>
-
-        <hr className="my-2 border-sm border-border1" />
-
-        <div className="space-y-2">
-          <Txt variant="ui-md" className="text-neutral3">
-            Or from your computer
-          </Txt>
-          <button
-            onClick={addFilInputAttachment}
-            className="w-full h-40 border-sm border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
-          >
-            <CloudUpload className="size-12" />
-            <Txt variant="header-md">Add a local file</Txt>
-          </button>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

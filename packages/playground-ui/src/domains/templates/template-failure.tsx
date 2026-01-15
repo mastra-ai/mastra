@@ -37,18 +37,13 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="space-y-4 text-neutral3 mb-[2rem] content-center">
+    <Container className="space-y-4 text-neutral3 mb-8 content-center">
       {/* Main Error Display */}
-      <div
-        className={cn(
-          'grid items-center justify-items-center gap-[1rem] content-center',
-          '[&>svg]:w-[2rem] [&>svg]:h-[2rem]',
-        )}
-      >
+      <div className={cn('grid items-center justify-items-center gap-4 content-center', '[&>svg]:w-8 [&>svg]:h-8')}>
         {icon}
         <div className="text-center space-y-2">
-          <p className="text-[0.875rem] font-medium text-neutral5">{title}</p>
-          <p className="text-[0.875rem] text-neutral3">{getUserFriendlyMessage()}</p>
+          <p className="text-ui-md font-medium text-neutral5">{title}</p>
+          <p className="text-ui-md text-neutral3">{getUserFriendlyMessage()}</p>
         </div>
       </div>
 

@@ -186,6 +186,28 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
           processedAttributes[OUTPUT_VALUE] = outputMessages;
         }
 
+        // Map generic Mastra span input/output to OpenInference input/output
+        // These are set by Mastra's gen-ai-semantics.ts for non-LLM/tool spans
+        // (e.g., mastra.processor_run.input, mastra.workflow_run.input, etc.)
+        if (!processedAttributes[INPUT_VALUE]) {
+          for (const key of Object.keys(mastraOther)) {
+            if (key.endsWith('.input')) {
+              processedAttributes[INPUT_MIME_TYPE] = 'application/json';
+              processedAttributes[INPUT_VALUE] = mastraOther[key];
+              break;
+            }
+          }
+        }
+        if (!processedAttributes[OUTPUT_VALUE]) {
+          for (const key of Object.keys(mastraOther)) {
+            if (key.endsWith('.output')) {
+              processedAttributes[OUTPUT_MIME_TYPE] = 'application/json';
+              processedAttributes[OUTPUT_VALUE] = mastraOther[key];
+              break;
+            }
+          }
+        }
+
         // Convert GenAI usage metrics to OpenInference token count attributes
         const usageMetrics = convertUsageMetricsToOpenInference(attributes);
         Object.assign(processedAttributes, usageMetrics);

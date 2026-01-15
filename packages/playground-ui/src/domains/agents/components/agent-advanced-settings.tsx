@@ -73,10 +73,10 @@ export const AgentAdvancedSettings = () => {
     }
   };
 
-  const collapsibleClassName = 'rounded-lg border-sm border-border1 bg-surface3 overflow-clip';
+  const collapsibleClassName = 'rounded-lg border border-border1 bg-surface3 overflow-clip';
   const collapsibleTriggerClassName =
-    'text-neutral3 text-ui-lg font-medium flex items-center gap-2 w-full p-[10px] justify-between';
-  const collapsibleContentClassName = 'bg-surface2 p-[10px] @container/collapsible';
+    'text-neutral3 text-ui-lg font-medium flex items-center gap-2 w-full p-2.5 justify-between';
+  const collapsibleContentClassName = 'bg-surface2 p-2.5 @container/collapsible';
   const buttonClass = 'text-neutral3 hover:text-neutral6';
 
   return (
