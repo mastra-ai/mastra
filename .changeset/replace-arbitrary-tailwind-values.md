@@ -1,6 +1,5 @@
 ---
 '@mastra/playground-ui': patch
-'@internal/playground': patch
 ---
 
 Replaced arbitrary Tailwind CSS values with standard utility classes for better consistency and maintainability.
