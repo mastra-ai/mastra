@@ -343,9 +343,12 @@ If you think your configuration is valid, please open an issue.`);
     });
 
     // Detect pino transports in the bundled output
-    for (const transport of detectPinoTransports(analyzeResult.output.code)) {
-      detectedPinoTransports.add(transport);
-    }
+    babel.transformSync(analyzeResult.output.code, {
+      filename: 'pino-detection.js',
+      plugins: [detectPinoTransports(detectedPinoTransports)],
+      configFile: false,
+      babelrc: false,
+    });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
     await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);

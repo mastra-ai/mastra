@@ -1,6 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { detectPinoTransports, detectPinoTransportsPlugin } from './detect-pino-transports';
+import { detectPinoTransports } from './detect-pino-transports';
 import { transformSync } from '@babel/core';
+
+/**
+ * Helper to run the plugin and return detected transports
+ */
+function runDetection(code: string): Set<string> {
+  const transports = new Set<string>();
+  try {
+    transformSync(code, {
+      filename: 'test.tsx',
+      presets: [require.resolve('@babel/preset-typescript')],
+      plugins: [[require.resolve('@babel/plugin-syntax-jsx')], detectPinoTransports(transports)],
+      configFile: false,
+      babelrc: false,
+    });
+  } catch {
+    // Return empty set on parse errors
+  }
+  return transports;
+}
 
 describe('detectPinoTransports', () => {
   it('should detect single transport target with double quotes', () => {
@@ -13,7 +32,7 @@ describe('detectPinoTransports', () => {
       export const logger = pino(transport);
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('pino-opentelemetry-transport')).toBe(true);
     expect(transports.size).toBe(1);
   });
@@ -24,7 +43,7 @@ describe('detectPinoTransports', () => {
       pino.transport({ target: 'my-transport' })
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('my-transport')).toBe(true);
   });
 
@@ -34,7 +53,7 @@ describe('detectPinoTransports', () => {
       pino.transport({ target: \`my-transport\` })
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('my-transport')).toBe(true);
   });
 
@@ -50,7 +69,7 @@ describe('detectPinoTransports', () => {
       export const logger = pino(transport);
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('pino-pretty')).toBe(true);
     expect(transports.has('pino-opentelemetry-transport')).toBe(true);
     expect(transports.size).toBe(2);
@@ -63,7 +82,7 @@ describe('detectPinoTransports', () => {
       const transport2 = pino.transport({ target: "transport-b" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('transport-a')).toBe(true);
     expect(transports.has('transport-b')).toBe(true);
     expect(transports.size).toBe(2);
@@ -75,7 +94,7 @@ describe('detectPinoTransports', () => {
       export const logger = pino();
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -85,7 +104,7 @@ describe('detectPinoTransports', () => {
       const x = somethingElse.transport({ target: "also-not" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -107,7 +126,7 @@ describe('detectPinoTransports', () => {
       })
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('first-transport')).toBe(true);
     expect(transports.has('second-transport')).toBe(true);
   });
@@ -119,7 +138,7 @@ describe('detectPinoTransports', () => {
       const transport = logger.transport({ target: "my-transport" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('my-transport')).toBe(true);
   });
 
@@ -129,7 +148,7 @@ describe('detectPinoTransports', () => {
       const transport = p.transport({ target: "my-transport" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('my-transport')).toBe(true);
   });
 
@@ -139,7 +158,7 @@ describe('detectPinoTransports', () => {
       const transport = pino.transport({ target: "my-transport" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('my-transport')).toBe(true);
   });
 
@@ -149,7 +168,7 @@ describe('detectPinoTransports', () => {
       const transport = logger.transport({ target: "my-transport" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('my-transport')).toBe(true);
   });
 
@@ -159,7 +178,7 @@ describe('detectPinoTransports', () => {
       const transport = somethingElse.transport({ target: "should-not-match" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -174,7 +193,7 @@ describe('detectPinoTransports', () => {
       export const logger: Logger = pino(transport);
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('pino-pretty')).toBe(true);
   });
 
@@ -194,7 +213,7 @@ describe('detectPinoTransports', () => {
       });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('single-transport')).toBe(true);
     expect(transports.has('multi-a')).toBe(true);
     expect(transports.has('multi-b')).toBe(true);
@@ -209,7 +228,7 @@ describe('detectPinoTransports', () => {
       });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('@scope/my-transport')).toBe(true);
   });
 
@@ -221,14 +240,14 @@ describe('detectPinoTransports', () => {
       });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('./my-local-transport')).toBe(true);
   });
 
   it('should return empty set for invalid JavaScript', () => {
     const code = `this is not valid { javascript ( syntax`;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -238,7 +257,7 @@ describe('detectPinoTransports', () => {
       pino.transport({ "target": "string-key-transport" })
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('string-key-transport')).toBe(true);
   });
 
@@ -252,11 +271,11 @@ describe('detectPinoTransports', () => {
       })
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('string-key-in-array')).toBe(true);
   });
 
-  // Scope-aware tests (new)
+  // Scope-aware tests
 
   it('should NOT detect shadowed pino parameter (scope-safe)', () => {
     const code = `
@@ -268,7 +287,7 @@ describe('detectPinoTransports', () => {
       }
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -282,7 +301,7 @@ describe('detectPinoTransports', () => {
       }
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -299,7 +318,7 @@ describe('detectPinoTransports', () => {
       }
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('should-match')).toBe(true);
     expect(transports.has('should-not-match')).toBe(false);
     expect(transports.size).toBe(1);
@@ -313,7 +332,7 @@ describe('detectPinoTransports', () => {
       p.default.transport({ target: "default-interop-transport" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('default-interop-transport')).toBe(true);
   });
 
@@ -331,7 +350,7 @@ describe('detectPinoTransports', () => {
       }
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('tsx-transport')).toBe(true);
   });
 
@@ -343,7 +362,7 @@ describe('detectPinoTransports', () => {
       logger.transport({ target: "default-as-transport" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.has('default-as-transport')).toBe(true);
   });
 
@@ -353,7 +372,7 @@ describe('detectPinoTransports', () => {
       x.transport({ target: "should-not-match" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -363,7 +382,7 @@ describe('detectPinoTransports', () => {
       transport({ target: "named-import-not-supported" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -377,7 +396,7 @@ describe('detectPinoTransports', () => {
       transport({ target: "destructured-not-supported" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -389,7 +408,7 @@ describe('detectPinoTransports', () => {
       transport({ target: "reassigned-not-supported" });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -400,7 +419,7 @@ describe('detectPinoTransports', () => {
       pino.transport({ target: getTarget() });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -411,7 +430,7 @@ describe('detectPinoTransports', () => {
       pino.transport({ ...cfg });
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
   });
 
@@ -422,32 +441,8 @@ describe('detectPinoTransports', () => {
       pino.transport(cfg);
     `;
 
-    const transports = detectPinoTransports(code);
+    const transports = runDetection(code);
     expect(transports.size).toBe(0);
-  });
-});
-
-describe('detectPinoTransportsPlugin', () => {
-  function runPlugin(code: string): Set<string> {
-    const transports = new Set<string>();
-    transformSync(code, {
-      filename: 'testfile.ts',
-      presets: [require.resolve('@babel/preset-typescript')],
-      plugins: [detectPinoTransportsPlugin(transports)],
-      configFile: false,
-      babelrc: false,
-    });
-    return transports;
-  }
-
-  it('should work when used as a direct plugin', () => {
-    const code = `
-      import pino from 'pino';
-      pino.transport({ target: "direct-plugin-test" });
-    `;
-
-    const transports = runPlugin(code);
-    expect(transports.has('direct-plugin-test')).toBe(true);
   });
 
   it('should correctly track multiple imports in same file', () => {
@@ -459,7 +454,7 @@ describe('detectPinoTransportsPlugin', () => {
       logger.transport({ target: "from-logger" });
     `;
 
-    const transports = runPlugin(code);
+    const transports = runDetection(code);
     expect(transports.has('from-pino')).toBe(true);
     expect(transports.has('from-logger')).toBe(true);
   });
