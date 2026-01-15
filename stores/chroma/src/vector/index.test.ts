@@ -584,6 +584,7 @@ createVectorTestSuite({
   supportsNotOperator: false, // Chroma doesn't support $not
   supportsNorOperator: false, // Chroma doesn't support $nor
   supportsEmptyLogicalOperators: false, // Chroma throws validation errors on empty $and/$or
+  supportsAdvancedNotSyntax: false, // Chroma doesn't support mixed $and with field conditions at root
 });
 
 // ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)

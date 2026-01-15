@@ -34,6 +34,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     supportsElemMatch = true,
     supportsSize = true,
     supportsAdvancedNotSyntax = true,
+    supportsEmptyLogicalOperators = true,
   } = config;
 
   describe('Filter Operators', () => {
@@ -684,19 +685,22 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           ).toBe(true);
         });
 
-        it('should handle empty $nor conditions', async () => {
-          const results = await config.vector.query({
-            indexName: testIndexName,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: { $nor: [] },
-          });
+        // Only run empty $nor test if store supports empty logical operators
+        if (supportsEmptyLogicalOperators) {
+          it('should handle empty $nor conditions', async () => {
+            const results = await config.vector.query({
+              indexName: testIndexName,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { $nor: [] },
+            });
 
-          // Empty $nor should match all documents
-          // Base: 8 products. If null values supported, +1 for 'test' category product
-          const expectedCount = supportsNullValues ? 9 : 8;
-          expect(results.length).toBe(expectedCount);
-        });
+            // Empty $nor should match all documents
+            // Base: 8 products. If null values supported, +1 for 'test' category product
+            const expectedCount = supportsNullValues ? 9 : 8;
+            expect(results.length).toBe(expectedCount);
+          });
+        }
       });
     }
 

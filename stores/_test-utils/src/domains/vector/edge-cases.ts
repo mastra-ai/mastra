@@ -465,7 +465,7 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
         });
       }
 
-      if (supportsNorOperator) {
+      if (supportsNorOperator && supportsEmptyLogicalOperators) {
         it('should handle empty $nor conditions', async () => {
           // Empty $nor should match all documents (nothing to exclude)
           const results = await config.vector.query({
