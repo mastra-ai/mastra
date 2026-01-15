@@ -298,6 +298,7 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'om-glm-rag-topk100': 'om-glm-rag-topk100',
   'om-glm-rag-prefboost': 'om-glm-rag-prefboost',
   'om-gemini-3-pro': 'om-gemini-3-pro',
+  'om-gemini-3-flash': 'om-gemini-3-flash',
 
   // Full names (for completeness)
   'semantic-recall': 'semantic-recall',
@@ -745,6 +746,29 @@ const MEMORY_CONFIGS = {
     omMaxInputTokens: null,
     requiresSequential: true,
     agentModel: 'google/gemini-3-pro-preview',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'observational-memory',
+    readOnlyConfig: true,
+  },
+
+  'om-gemini-3-flash': {
+    type: 'om-gemini-3-flash',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'google/gemini-3-flash-preview',
     evalModel: 'openai/gpt-4o',
     baseConfig: 'observational-memory',
     readOnlyConfig: true,
