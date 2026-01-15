@@ -1,5 +1,6 @@
-import clsx from 'clsx';
 import React from 'react';
+import { cn } from '@/lib/utils';
+import { formElementSizes, formElementFocus, type FormElementSize } from '@/ds/primitives/form-element';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   as?: React.ElementType;
@@ -8,15 +9,16 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   to?: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
-  size?: 'md' | 'lg';
+  size?: FormElementSize;
   variant?: 'default' | 'light' | 'outline' | 'ghost';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
 }
 
 const sizeClasses = {
-  md: 'h-button-md gap-md',
-  lg: 'h-button-lg gap-lg',
+  sm: `${formElementSizes.sm} gap-0.5`,
+  md: `${formElementSizes.md} gap-1`,
+  lg: `${formElementSizes.lg} gap-2`,
 };
 
 const variantClasses = {
@@ -30,8 +32,9 @@ export function buttonVariants(options?: { variant?: ButtonProps['variant']; siz
   const variant = options?.variant || 'default';
   const size = options?.size || 'md';
 
-  return clsx(
-    'bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
+  return cn(
+    'bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border',
+    formElementFocus,
     variantClasses[variant],
     sizeClasses[size],
   );
@@ -44,8 +47,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Component
         ref={ref}
-        className={clsx(
-          'bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
+        className={cn(
+          'bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border',
+          formElementFocus,
           variantClasses[variant],
           sizeClasses[size],
           className,

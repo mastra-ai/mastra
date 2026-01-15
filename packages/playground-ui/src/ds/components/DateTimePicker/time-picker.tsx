@@ -52,7 +52,7 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
   };
 
   return (
-    <div className={cn('flex gap-[0.5rem] items-center', className)}>
+    <div className={cn('flex gap-2 items-center', className)}>
       <ElementSelect
         name="hour"
         value={hourOptions.indexOf(hour).toString()}
