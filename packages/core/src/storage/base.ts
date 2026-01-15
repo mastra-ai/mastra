@@ -8,6 +8,7 @@ import type {
   MemoryStorage,
   ObservabilityStorage,
   WorkflowDefinitionsStorage,
+  StoredScorersStorage,
 } from './domains';
 
 export type StorageDomains = {
@@ -18,6 +19,7 @@ export type StorageDomains = {
   agents?: AgentsStorage;
   integrations?: IntegrationsStorage;
   workflowDefinitions?: WorkflowDefinitionsStorage;
+  storedScorers?: StoredScorersStorage;
 };
 
 /**
@@ -207,6 +209,7 @@ export class MastraStorage extends MastraBase {
         agents: domainOverrides.agents ?? defaultStores?.agents,
         integrations: domainOverrides.integrations ?? defaultStores?.integrations,
         workflowDefinitions: domainOverrides.workflowDefinitions ?? defaultStores?.workflowDefinitions,
+        storedScorers: domainOverrides.storedScorers ?? defaultStores?.storedScorers,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -215,7 +218,7 @@ export class MastraStorage extends MastraBase {
   /**
    * Get a domain-specific storage interface.
    *
-   * @param storeName - The name of the domain to access ('memory', 'workflows', 'scores', 'observability', 'agents')
+   * @param storeName - The name of the domain to access ('memory', 'workflows', 'scores', 'observability', 'agents', 'integrations', 'workflowDefinitions', 'storedScorers')
    * @returns The domain storage interface, or undefined if not available
    *
    * @example
@@ -223,6 +226,11 @@ export class MastraStorage extends MastraBase {
    * const memory = await storage.getStore('memory');
    * if (memory) {
    *   await memory.saveThread({ thread });
+   * }
+   *
+   * const storedScorers = await storage.getStore('storedScorers');
+   * if (storedScorers) {
+   *   const scorer = await storedScorers.getScorerById({ id: 'my-scorer' });
    * }
    * ```
    */
@@ -269,6 +277,10 @@ export class MastraStorage extends MastraBase {
 
     if (this.stores?.workflowDefinitions) {
       initTasks.push(this.stores.workflowDefinitions.init());
+    }
+
+    if (this.stores?.storedScorers) {
+      initTasks.push(this.stores.storedScorers.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

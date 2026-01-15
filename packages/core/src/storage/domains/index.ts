@@ -9,3 +9,4 @@ export * from './workflow-definitions';
 export * from './memory';
 export * from './inmemory-db';
 export * from './shared';
+export * from './stored-scorers';
