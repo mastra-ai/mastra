@@ -155,8 +155,8 @@ This indicates a Node.js version compatibility issue with `dd-trace`'s native mo
 
 When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
 
-```typescript title="mastra.config.ts"
-export default {
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
   bundler: {
     externals: [
       "dd-trace",
@@ -166,7 +166,7 @@ export default {
       "@datadog/pprof",
     ],
   },
-};
+});
 ```
 
 ## Related
