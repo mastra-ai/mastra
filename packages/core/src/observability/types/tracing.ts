@@ -841,6 +841,14 @@ export interface TraceState {
    * with the per-request requestContextKeys.
    */
   requestContextKeys: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   */
+  hideOutput?: boolean;
 }
 
 /**
@@ -871,6 +879,16 @@ export interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 
 export interface SpanIds {

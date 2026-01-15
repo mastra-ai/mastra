@@ -316,12 +316,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Merge: configured + additional
     const allKeys = [...configuredKeys, ...additionalKeys];
 
-    if (allKeys.length === 0) {
-      return undefined; // No metadata extraction needed
+    const hideInput = tracingOptions?.hideInput;
+    const hideOutput = tracingOptions?.hideOutput;
+
+    // Return undefined if no TraceState properties are needed
+    if (allKeys.length === 0 && !hideInput && !hideOutput) {
+      return undefined;
     }
 
     return {
       requestContextKeys: allKeys,
+      ...(hideInput !== undefined && { hideInput }),
+      ...(hideOutput !== undefined && { hideOutput }),
     };
   }
 
