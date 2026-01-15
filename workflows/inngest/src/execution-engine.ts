@@ -248,19 +248,23 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     executionContext: ExecutionContext;
   }): Promise<any> {
-    const { executionContext, operationId, options } = params;
+    const { executionContext, operationId, options, parentSpan } = params;
+
+    // Use the actual parent span's ID if provided (e.g., for steps inside control-flow),
+    // otherwise fall back to workflow span
+    const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
 
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
       const observability = this.mastra?.observability?.getSelectedInstance({});
       if (!observability) return undefined;
 
-      // Create span using tracingIds from execution context if available
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
       const span = observability.startSpan({
         ...options,
         entityType: options.entityType as EntityType | undefined,
         traceId: executionContext.tracingIds?.traceId,
-        parentSpanId: executionContext.tracingIds?.workflowSpanId,
+        parentSpanId,
       });
 
       // Return serializable form
@@ -450,6 +454,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     pubsub: PubSub;
     startedAt: number;
     perStep?: boolean;
+    stepSpan?: any;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
@@ -467,7 +472,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       pubsub,
       startedAt,
       perStep,
+      stepSpan,
     } = params;
+
+    // Build tracingOptions to propagate trace context to nested workflow
+    const tracingOptions = executionContext.tracingIds?.traceId
+      ? {
+          traceId: executionContext.tracingIds.traceId,
+          parentSpanId: stepSpan?.id,
+        }
+      : undefined;
 
     const isResume = !!resume?.steps?.length;
     let result: WorkflowResult<any, any, any, any>;
@@ -499,6 +513,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions,
           },
         })) as any;
         result = invokeResp.result;
@@ -527,6 +542,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: executionContext.runId,
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions,
           },
         })) as any;
         result = invokeResp.result;
@@ -540,6 +556,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions,
           },
         })) as any;
         result = invokeResp.result;

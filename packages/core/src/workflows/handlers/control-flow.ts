@@ -158,6 +158,8 @@ export async function executeParallel(
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
+          tracingIds: executionContext.tracingIds,
+          spanCache: executionContext.spanCache,
         },
         tracingContext: {
           currentSpan: parallelSpan,
@@ -457,6 +459,8 @@ export async function executeConditional(
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
+          tracingIds: executionContext.tracingIds,
+          spanCache: executionContext.spanCache,
         },
         tracingContext: {
           currentSpan: conditionalSpan,
