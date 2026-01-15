@@ -8,7 +8,5 @@ Added `@openfeature/core` and `@openfeature/server-sdk` as optional peer depende
 
 **Troubleshooting documentation added:**
 
-- Missing `@openfeature/core` dependency warnings
-- Native module ABI mismatch errors (Node.js version compatibility)
-- Version resolution issues with `@mastra/observability`
+- Native module ABI mismatch errors (Node.js version compatibility with `dd-trace`)
 - Bundler externals configuration for `dd-trace` and native modules
