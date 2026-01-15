@@ -40,7 +40,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Mastra Docs Server | Getting Started](https://mastra.ai/en/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Project Structure | Getting Started](https://mastra.ai/en/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 - [Start with Mastra | Getting Started](https://mastra.ai/en/docs/getting-started/start): Choose how to get started with Mastra - quickstart, framework integration, or agentic UI.
-- [Studio | Getting Started](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+- [Studio | Getting Started](https://mastra.ai/en/docs/getting-started/studio): Learn how to use Mastra Studio, the interactive development environment for building and testing your agents locally.
 - [About Mastra](https://mastra.ai/en/docs): Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack.
 - [Deployment | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/deployment): Deploy your Mastra application to production
 - [Observability | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/observability): Monitoring and debugging tools for Mastra Cloud deployments
@@ -362,7 +362,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Memory.getThreadById() | Memory](https://mastra.ai/en/reference/memory/getThreadById): Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID.
 - [Reference: Memory.listThreadsByResourceId() | Memory](https://mastra.ai/en/reference/memory/listThreadsByResourceId): Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.
 - [Reference: Memory Class | Memory](https://mastra.ai/en/reference/memory/memory-class): Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage.
-- [Reference: Memory.query() | Memory](https://mastra.ai/en/reference/memory/query): Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
 - [Reference: Memory.recall() | Memory](https://mastra.ai/en/reference/memory/recall): Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
 - [Reference: OtelBridge | Observability](https://mastra.ai/en/reference/observability/tracing/bridges/otel): OpenTelemetry bridge for Tracing
 - [Reference: Configuration | Observability](https://mastra.ai/en/reference/observability/tracing/configuration): Tracing configuration types and registry functions
@@ -405,7 +404,9 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: rerankWithScorer() | RAG](https://mastra.ai/en/reference/rag/rerankWithScorer): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 - [Reference: createRoute() | Server](https://mastra.ai/en/reference/server/create-route): API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation.
 - [Reference: Express Adapter | Server](https://mastra.ai/en/reference/server/express-adapter): API reference for the @mastra/express server adapter.
+- [Reference: Fastify Adapter | Server](https://mastra.ai/en/reference/server/fastify-adapter): API reference for the @mastra/fastify server adapter.
 - [Reference: Hono Adapter | Server](https://mastra.ai/en/reference/server/hono-adapter): API reference for the @mastra/hono server adapter.
+- [Reference: Koa Adapter | Server](https://mastra.ai/en/reference/server/koa-adapter): API reference for the @mastra/koa server adapter.
 - [Reference: MastraServer | Server](https://mastra.ai/en/reference/server/mastra-server): API reference for the MastraServer abstract class used to create server adapters.
 - [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.

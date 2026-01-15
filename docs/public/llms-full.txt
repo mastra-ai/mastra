@@ -2810,7 +2810,7 @@ console.log(response.object);
 
 :::info
 
-Visit [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+Visit [.generate()](/reference/v1/agents/generate) for a full list of configuration options.
 
 :::
 
@@ -5491,7 +5491,7 @@ Have a use case in mind? Start with a pre-built [template](https://mastra.ai/tem
 
 ---
 title: "Studio | Getting Started"
-description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+description: Learn how to use Mastra Studio, the interactive development environment for building and testing your agents locally.
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
@@ -5752,7 +5752,7 @@ Workflow traces capture each step in the run, including transitions, branching, 
 
 ## Logs
 
-The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#project-dashboard) displays detailed information for debugging and monitoring your application's behavior.
+The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#dashboard) displays detailed information for debugging and monitoring your application's behavior.
 
 ![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
 
@@ -6832,7 +6832,7 @@ const memoryStore = await storage.getStore('memory');
 
 const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
 
-// Convert to AI SDK v5 UIMessage format for UI rendering
+// Convert to AI SDK v5+ UIMessage format for UI rendering
 const uiMessages = toAISdkV5Messages(result?.messages ?? []);
 ```
 
@@ -7169,8 +7169,6 @@ You might want to disable semantic recall in scenarios like:
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent's trace output, alongside recent message history (if configured).
 
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).
-
 
 ---
 title: "Storage | Memory"
@@ -7499,13 +7497,15 @@ const memory = new Memory({
 
 ### Usage with Agents
 
-When using resource-scoped memory, make sure to pass the `resourceId` parameter:
+When using resource-scoped memory, make sure to pass the `resource` parameter in the memory options:
 
 ```typescript
-// Resource-scoped memory requires resourceId
+// Resource-scoped memory requires resource
 const response = await agent.generate("Hello!", {
-  threadId: "conversation-123",
-  resourceId: "user-alice-456", // Same user across different threads
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456", // Same user across different threads
+  },
 });
 ```
 
@@ -7758,8 +7758,10 @@ const thread = await memory.createThread({
 
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
-  threadId: thread.id,
-  resourceId: "user-456",
+  memory: {
+    thread: thread.id,
+    resource: "user-456",
+  },
 });
 // Response: "Your blood type is O+."
 ```
@@ -8885,6 +8887,42 @@ Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
+## Troubleshooting
+
+### Native module ABI mismatch
+
+If you see errors like:
+
+```
+Error: No native build was found for runtime=node abi=137 platform=linuxglibc arch=x64
+```
+
+This indicates a Node.js version compatibility issue with `dd-trace`'s native modules. These native modules are **optional** and provide performance monitoring features.
+
+**Solutions:**
+
+1. **Use Node.js 22.x**: Native modules have the best compatibility with Node.js 22.x.
+
+2. **Ignore native module warnings**: The native modules (`@datadog/native-metrics`, `@datadog/native-appsec`, etc.) are optional. If they fail to load, core tracing functionality still works.
+
+### Bundler externals configuration
+
+When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    externals: [
+      "dd-trace",
+      "@datadog/native-metrics",
+      "@datadog/native-appsec",
+      "@datadog/native-iast-taint-tracking",
+      "@datadog/pprof",
+    ],
+  },
+});
+```
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -9090,7 +9128,7 @@ packages:
 # Laminar Exporter
 [EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/laminar
 
-[Laminar](https://www.lmnr.ai/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
+[Laminar](https://laminar.sh/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
 
 ## Installation
 
@@ -9113,7 +9151,6 @@ LMNR_PROJECT_API_KEY=lmnr_...
 # Optional
 LMNR_BASE_URL=https://api.lmnr.ai
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=...
 ```
 
 ### Zero-Config Setup
@@ -9181,8 +9218,7 @@ const result = await agent.generate({
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [Laminar Documentation](https://docs.lmnr.ai)
-
+- [Laminar Documentation](https://docs.laminar.sh)
 
 
 ---
@@ -9586,7 +9622,7 @@ All providers support zero-config setup via environment variables. Set the appro
 | SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
 | New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
 | Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)        |
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional)                           |
 
 ## Provider Configurations
 
@@ -9780,7 +9816,7 @@ new OtelExporter({
 
 ### Laminar
 
-[Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
+[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
 
 #### Zero-Config Setup
 
@@ -9790,7 +9826,6 @@ LMNR_PROJECT_API_KEY=your-api-key
 
 # Optional
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
 ```
 
 ```typescript title="src/mastra/index.ts"
@@ -9804,7 +9839,6 @@ new OtelExporter({
   provider: {
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
-      // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
     },
   },
 });
@@ -11045,7 +11079,7 @@ Mastra automatically creates spans for:
 - [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
-- [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
+- [MLflow](/docs/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Bridges
@@ -14343,6 +14377,8 @@ packages:
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/server"
+  - "@mastra/fastify"
+  - "@mastra/koa"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -14356,9 +14392,12 @@ A custom adapter translates between Mastra's route definitions and your framewor
 
 :::info
 
-For Hono or Express, use the provided adapters instead:
+Use any of these prebuilt server adapters:
+
 - [@mastra/hono](/reference/v1/server/hono-adapter)
 - [@mastra/express](/reference/v1/server/express-adapter)
+- [@mastra/fastify](/reference/v1/server/fastify-adapter)
+- [@mastra/koa](/reference/v1/server/koa-adapter)
 
 :::
 
@@ -14639,7 +14678,7 @@ constructor(options: {
 }
 ```
 
-See [Server Adapters](/docs/v1/server/server-adapters#constructor-options) for full documentation on each option.
+See [Server Adapters](/docs/v1/server/server-adapters) for full documentation on each option.
 
 ## Full example
 
@@ -14915,7 +14954,7 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+Visit [.generate()](/reference/v1/client-js/agents#generate) for more information.
 
 :::
 
@@ -14952,7 +14991,7 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+Visit [.stream()](/reference/v1/client-js/agents#stream) for more information.
 
 :::
 
@@ -15598,7 +15637,6 @@ for (const [key, value] of ctx.entries()) {
 
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
-- [Tool Request Context](../mcp/overview#using-requestcontext)
 - [Server Middleware](/docs/v1/server/middleware)
 
 
@@ -15628,16 +15666,20 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server/mastra-server).
 
+If you want to use [Studio](/docs/v1/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/v1/cli/mastra#mastra-studio) to only launch the Studio UI.
+
 :::
 
 ## Available adapters
 
-Mastra currently provides two official server adapters:
+Mastra currently provides these official server adapters:
 
-- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter
-- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter
+- [@mastra/express](/reference/v1/server/express-adapter)
+- [@mastra/hono](/reference/v1/server/hono-adapter)
+- [@mastra/fastify](/reference/v1/server/fastify-adapter)
+- [@mastra/koa](/reference/v1/server/koa-adapter)
 
-You can build your own adapter, read [Custom Adapters](/docs/v1/server/custom-adapters) for details.
+You can build your own adapter, read [custom adapters](/docs/v1/server/custom-adapters) for details.
 
 ## Installation
 
@@ -15654,6 +15696,18 @@ npm install @mastra/express@beta
 
 ```bash
 npm install @mastra/hono@beta
+```
+  </TabItem>
+  <TabItem value="fastify" label="Fastify">
+
+```bash
+npm install @mastra/fastify@beta
+```
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```bash
+npm install @mastra/koa@beta
 ```
   </TabItem>
 </Tabs>
@@ -15682,6 +15736,12 @@ app.listen(4111, () => {
 });
 ```
 
+:::info
+
+See the [Express Adapter](/reference/v1/server/express-adapter) documentation for full configuration options.
+
+:::
+
   </TabItem>
   <TabItem value="hono" label="Hono">
 
@@ -15702,14 +15762,87 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
 });
 ```
 
+:::info
+
+See the [Hono Adapter](/reference/v1/server/hono-adapter) documentation for full configuration options.
+
+:::
+
   </TabItem>
-</Tabs>
+  <TabItem value="fastify" label="Fastify">
+
+```typescript {6} title="src/fastify-server.ts"
+import Fastify from 'fastify';
+import { MastraServer } from '@mastra/fastify';
+import { mastra } from './mastra';
+
+const app = Fastify();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.get('/health', async request => {
+  const mastraInstance = request.mastra;
+  const agents = Object.keys(mastraInstance.listAgents());
+  return { status: 'ok', agents };
+});
+
+const port = 4111;
+
+app.listen({ port }, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
 
 :::info
 
-See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter) docs for full configuration options.
+See the [Fastify Adapter](/reference/v1/server/fastify-adapter) documentation for full configuration options.
 
 :::
+
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```typescript {9} title="src/koa-server.ts"
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { MastraServer } from '@mastra/koa';
+import { mastra } from './mastra';
+
+const app = new Koa();
+app.use(bodyParser()); // Required for body parsing
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.use(async (ctx, next) => {
+  if (ctx.path === '/health' && ctx.method === 'GET') {
+    const mastraInstance = ctx.state.mastra;
+    const agents = Object.keys(mastraInstance.listAgents());
+    ctx.body = { status: 'ok', agents };
+    return;
+  }
+  await next();
+});
+
+const port = 4111;
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
+
+:::info
+
+See the [Koa Adapter](/reference/v1/server/koa-adapter) documentation for full configuration options.
+
+:::
+
+  </TabItem>
+</Tabs>
 
 ## Initialization flow
 
@@ -16179,7 +16312,7 @@ Mastra supports real-time, incremental responses from agents and workflows, allo
 
 Mastra's streaming API adapts based on your model version:
 
-- **`.stream()`**: For V2 models, supports **AI SDK v5** (`LanguageModelV2`).
+- **`.stream()`**: For V2 models, supports **AI SDK v5** and later (`LanguageModelV2`).
 - **`.streamLegacy()`**: For V1 models, supports **AI SDK v4** (`LanguageModelV1`).
 
 ## Streaming with agents
@@ -16228,11 +16361,11 @@ An agent stream provides access to various response properties:
 - **`stream.finishReason`**: The reason the agent stopped streaming.
 - **`stream.usage`**: Token usage information.
 
-### AI SDK v5 Compatibility
+### AI SDK v5+ Compatibility
 
-AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+AI SDK v5 (and later) uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
 
-For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
+For integration with AI SDK v5+, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
 ```typescript {2,9-12}
 import { toAISdkV5Stream } from "@mastra/ai-sdk";
@@ -16243,13 +16376,13 @@ const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
 ]);
 
-// Convert to AI SDK v5 compatible stream
+// Convert to AI SDK v5+ compatible stream
 const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
 
-// Use with AI SDK v5 methods
+// Use with AI SDK v5+ methods
 ```
 
-For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+For converting messages to AI SDK v5+ format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
 ```typescript {1,4}
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
@@ -22007,7 +22140,7 @@ You can also use dynamic workflow routing, see the [`workflowRoute()` reference 
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -26570,8 +26703,11 @@ In this guide, you'll build a tool-calling AI agent using Mastra, then connect i
 You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
 <figure>
+
 ![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
+
 <figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
+
 </figure>
 
 ## Before you begin
@@ -27528,7 +27664,7 @@ This creates a new directory for your project with a `src/mastra` folder contain
 
 :::tip
 
-You can use [flags](/reference/v1/cli/create-mastra#cli-flags)  with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates)
+You can use [flags](/reference/v1/cli/create-mastra#cli-flags) with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates).
 
 :::
 
@@ -30591,7 +30727,6 @@ The bot maintains conversation context through memory and delivers responses tha
 ---
 title: "Overview"
 description: "Guides on building with Mastra"
-showCopyButton: false
 ---
 
 import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
@@ -31042,7 +31177,7 @@ npx @mastra/codemod@beta v1/agent-processor-methods .
 
 ### Default options method renames for AI SDK versions
 
-Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5+) APIs. This change helps developers understand which AI SDK version they're targeting.
 
 To migrate, update method names based on which AI SDK version you're using.
 
@@ -31053,7 +31188,7 @@ To migrate, update method names based on which AI SDK version you're using.
 + const options = await agent.getDefaultGenerateOptionsLegacy();
 + const streamOptions = await agent.getDefaultStreamOptionsLegacy();
 
-  // For new AI SDK v5 (default)
+  // For new AI SDK v5+ (default)
   const streamOptions = await agent.getDefaultStreamOptions();
 ```
 
@@ -31141,7 +31276,7 @@ This behavior is enabled by default. If you need access to the full request data
 
 ### `generateVNext` and `streamVNext` methods
 
-The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5+ compatibility but are now the standard implementation.
 
 To migrate, use the standard `generate()` and `stream()` methods.
 
@@ -31260,23 +31395,55 @@ The step results now also include tripwire information:
 
 ### `prepareStep` messages format
 
-The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5+ model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
 
-If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
 
 ```diff
   agent.generate({
     prompt: 'Hello',
     prepareStep: async ({ messages, messageList }) => {
--     // messages was AI SDK v5 ModelMessage format
+-     // messages was AI SDK v5+ ModelMessage format
 -     console.log(messages[0].content);
 +     // messages is now MastraDBMessage format
-+     // Use messageList to get AI SDK v5 format if needed:
++     // Use messageList to get AI SDK v5+ format if needed:
 +     const aiSdkMessages = messageList.get.all.aiV5.model();
 
       return { toolChoice: 'auto' };
     },
   });
+```
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from `agent.stream()` and `agent.generate()`. Use the `memory` option instead, which provides a cleaner API for memory configuration.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+```diff
+  await agent.stream('Hello', {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.stream('Hello', {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
 ```
 
 
@@ -31342,6 +31509,69 @@ description: "Learn how to migrate client SDK changes when upgrading to v1."
 Client SDK changes align with server-side API updates including renamed utilities, updated pagination, and type naming conventions.
 
 ## Changed
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from agent method calls. Use the `memory` option instead, which provides a cleaner API for memory configuration. This applies to both `@mastra/client-js` and `@mastra/react` packages.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+**Using `@mastra/client-js`:**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+  await agent.generate({
+    messages: [...],
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+
+  await agent.stream({
+    messages: [...],
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+**Using `@mastra/react` `useChat` hook:**
+
+The `useChat` hook internally passes the memory option when you provide a `threadId`. No changes are needed in your component code if you're using the hook's built-in memory handling. However, if you were manually passing options to `sendMessage`, update them accordingly:
+
+```diff
+  const { sendMessage } = useChat({ agentId: 'my-agent' });
+
+  await sendMessage({
+    message: 'Hello',
+    mode: 'stream',
+-   threadId: 'thread-123',
++   threadId: 'thread-123', // Still works - internally converted to memory option
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.generate({
+  messages: [...],
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```
 
 ### Client SDK types from `Get*` to `List*`
 
@@ -62102,13 +62332,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
         "Callback fired after each generation step.",
     },
     {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.resource instead. Identifier for the resource/user.",
-    },
-    {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
@@ -62158,13 +62381,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.thread instead. Thread identifier for conversation continuity.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -62974,7 +63190,7 @@ await agent.generateLegacy("message for agent");
 
 :::info
 
-The new `.generate()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved streaming support. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.generate()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved streaming support. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 
@@ -64442,13 +64658,13 @@ await agent.network(`
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT> | undefined>",
+      type: "Promise<OUTPUT | undefined>",
       description:
         "A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
     },
@@ -64855,7 +65071,7 @@ Use [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route) if you want to crea
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -65499,7 +65715,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # toAISdkV5Messages()
 [EN] Source: https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-v5-messages
 
-Converts messages from various input formats to AI SDK V5 UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5 `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
+Converts messages from various input formats to AI SDK V5 (and later) UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5+ `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
 
 ## Usage example
 
@@ -65547,7 +65763,7 @@ export default function Chat() {
 
 ## Returns
 
-Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
+Returns an array of AI SDK V5+ `UIMessage` objects with the following structure:
 
 <PropertiesTable
   content={[
@@ -65744,7 +65960,7 @@ Use [`handleWorkflowStream()`](/reference/v1/ai-sdk/handle-workflow-stream) if y
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -66659,7 +66875,7 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/v1/getting-started/studio#local-https).
+Enable local HTTPS support. [Learn more](/reference/v1/configuration#serverhttps).
 
 #### `--inspect`
 
@@ -66999,12 +67215,14 @@ const response = await agent.generate(
 );
 ```
 
-You can also use the simplified string format:
+You can also use the simplified string format with memory options:
 
 ```typescript
 const response = await agent.generate("Hello, how are you?", {
-  threadId: "thread-1",
-  resourceId: "resource-1",
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
 });
 ```
 
@@ -67023,11 +67241,14 @@ response.processDataStream({
 });
 ```
 
-You can also use the simplified string format:
+You can also use the simplified string format with memory options:
 
 ```typescript
 const response = await agent.stream("Tell me a story", {
-  threadId: "thread-1",
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
   clientTools: { colorChangeTool },
 });
 
@@ -77884,7 +78105,6 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Overview"
 description: "Reference documentation on Mastra's APIs and tools"
-showCopyButton: false
 packages:
   - "@mastra/core"
 ---
@@ -78759,7 +78979,7 @@ console.log(response.text);
 - [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads concept)
 - [getThreadById](/reference/v1/memory/getThreadById)
 - [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
-- [query](/reference/v1/memory/query)
+- [recall](/reference/v1/memory/recall)
 
 
 ---
@@ -79220,200 +79440,6 @@ export const agent = new Agent({
 - [deleteMessages](/reference/v1/memory/deleteMessages)
 - [cloneThread](/reference/v1/memory/cloneThread)
 - [Clone Utility Methods](/reference/v1/memory/clone-utilities)
-
-
----
-title: "Reference: Memory.query() | Memory"
-description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
-packages:
-  - "@mastra/ai-sdk"
----
-
-# Memory.query()
-[EN] Source: https://mastra.ai/en/reference/memory/query
-
-:::warning[Deprecated]
-The `Memory.query()` method has been renamed to [`Memory.recall()`](/reference/v1/memory/recall). This page is kept for reference, but please use `recall()` in new code.
-:::
-
-the `.query()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
-
-## Usage Example
-
-```typescript
-await memory?.query({ threadId: "user-123" });
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "threadId",
-      type: "string",
-      description:
-        "The unique identifier of the thread to retrieve messages from",
-      isOptional: false,
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      description:
-        "Optional ID of the resource that owns the thread. If provided, validates thread ownership",
-      isOptional: true,
-    },
-    {
-      name: "vectorSearchString",
-      type: "string",
-      description:
-        "Search string for finding semantically similar messages. Requires semantic recall to be enabled in threadConfig.",
-      isOptional: true,
-    },
-    {
-      name: "perPage",
-      type: "number | false",
-      description:
-        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination.",
-      isOptional: true,
-    },
-    {
-      name: "page",
-      type: "number",
-      description:
-        "Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
-      isOptional: true,
-    },
-    {
-      name: "include",
-      type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
-      description:
-        "Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise).",
-      isOptional: true,
-    },
-    {
-      name: "filter",
-      type: "{ dateRange?: { start?: Date; end?: Date } }",
-      description:
-        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
-      isOptional: true,
-    },
-    {
-      name: "orderBy",
-      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
-      description:
-        "Sort order for retrieved messages. Defaults to descending by creation date.",
-      isOptional: true,
-    },
-    {
-      name: "threadConfig",
-      type: "MemoryConfig",
-      description:
-        "Configuration options for message retrieval and semantic search",
-      isOptional: true,
-    },
-
-  ]}
-/>
-
-### threadConfig parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-      description:
-        "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "workingMemory",
-      type: "WorkingMemory",
-      description:
-        "Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
-    },
-    {
-      name: "threads",
-      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-      description:
-        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
-      isOptional: true,
-      defaultValue: "{ generateTitle: false }",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "messages",
-      type: "MastraDBMessage[]",
-      description: "Array of retrieved messages in the database format",
-    },
-  ]}
-/>
-
-## Extended usage example
-
-```typescript title="src/test-memory.ts"
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("agent");
-const memory = await agent.getMemory();
-
-// Retrieve messages with pagination
-const { messages } = await memory!.query({
-  threadId: "thread-123",
-  perPage: 50,
-  vectorSearchString: "What messages are there?",
-  include: [
-    {
-      id: "msg-123",
-    },
-    {
-      id: "msg-456",
-      withPreviousMessages: 3,
-      withNextMessages: 1,
-    },
-  ],
-  threadConfig: {
-    semanticRecall: true,
-  },
-});
-
-console.log(messages); // MastraDBMessage[]
-
-// Fetch all messages without pagination
-const allMessages = await memory!.query({
-  threadId: "thread-123",
-  perPage: false, // Fetch all
-});
-
-// Convert to AI SDK format if needed
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-const uiMessages = toAISdkV5Messages(messages);
-```
-
-### Related
-
-- [Memory Class Reference](/reference/v1/memory/memory-class)
-- [Getting Started with Memory](/docs/v1/memory/overview)
-- [Semantic Recall](/docs/v1/memory/semantic-recall)
-- [createThread](/reference/v1/memory/createThread)
 
 
 ---
@@ -81207,7 +81233,6 @@ interface LaminarExporterConfig extends BaseExporterConfig {
   apiKey?: string;
   baseUrl?: string;
   endpoint?: string;
-  teamId?: string;
   headers?: Record<string, string>;
   realtime?: boolean;
   disableBatch?: boolean;
@@ -81241,15 +81266,9 @@ Extends `BaseExporterConfig`, which includes:
       required: false,
     },
     {
-      name: "teamId",
-      type: "string",
-      description: "Optional backwards-compat header. Falls back to LAMINAR_TEAM_ID env var.",
-      required: false,
-    },
-    {
       name: "headers",
       type: "Record<string, string>",
-      description: "Additional headers to include in OTLP requests (merged with Authorization/team header).",
+      description: "Additional headers to include in OTLP requests (merged with Authorization).",
       required: false,
     },
     {
@@ -81304,7 +81323,7 @@ Flushes pending data and shuts down the exporter.
 ```typescript
 import { LaminarExporter } from "@mastra/laminar";
 
-// Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT, LAMINAR_TEAM_ID
+// Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT
 const exporter = new LaminarExporter();
 ```
 
@@ -81319,7 +81338,6 @@ const exporter = new LaminarExporter({
   realtime: true,
 });
 ```
-
 
 
 ---
@@ -81839,7 +81857,6 @@ interface TraceloopConfig {
 ```typescript
 interface LaminarConfig {
   apiKey?: string;
-  teamId?: string;
   endpoint?: string;
 }
 ```
@@ -81850,12 +81867,6 @@ interface LaminarConfig {
       name: "apiKey",
       type: "string",
       description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "teamId",
-      type: "string",
-      description: "Team identifier. Falls back to LAMINAR_TEAM_ID env var.",
       required: false,
     },
     {
@@ -85906,6 +85917,25 @@ const processor = new TokenLimiterProcessor({
   ]}
 />
 
+## Error behavior
+
+When used as an input processor, `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
+
+- **Empty messages**: If there are no messages to process, a TripWire is thrown because you cannot send an LLM request with no messages.
+- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you cannot send an LLM request with only system messages and no user/assistant messages.
+
+```typescript
+import { TripWire } from "@mastra/core/agent";
+
+try {
+  await agent.generate("Hello");
+} catch (error) {
+  if (error instanceof TripWire) {
+    console.log("Token limit error:", error.message);
+  }
+}
+```
+
 ## Extended usage example
 
 ### As an input processor (limit context window)
@@ -89174,21 +89204,13 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 ## Installation
 
-<Steps>
-
-<StepItem>
-
 Install the Express adapter and Express framework:
 
 ```bash
 npm install @mastra/express@beta express
 ```
 
-</StepItem>
-
-<StepItem>
-
-Create your server file:
+## Usage example
 
 ```typescript title="server.ts"
 import express from 'express';
@@ -89206,42 +89228,11 @@ app.listen(4111, () => {
 });
 ```
 
-</StepItem>
-
-</Steps>
-
 :::note
 
 Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
 
 :::
-
-## Full example
-
-```typescript title="server.ts"
-import express from 'express';
-import { MastraServer } from '@mastra/express';
-import { mastra } from './mastra';
-
-const app = express();
-app.use(express.json());
-
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
-  openapiPath: '/openapi.json',
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
-  },
-  streamOptions: { redact: true },
-});
-
-await server.init();
-
-app.listen(4111);
-```
 
 ## Constructor parameters
 
@@ -89400,7 +89391,7 @@ app.use((req, res, next) => {
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -89409,7 +89400,139 @@ For custom middleware ordering, call each method separately instead of `init()`.
 ## Related
 
 - [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
-- [Hono Adapter](/reference/v1/server/hono-adapter) - Alternative adapter
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+
+
+---
+title: "Reference: Fastify Adapter | Server"
+description: "API reference for the @mastra/fastify server adapter."
+packages:
+  - "@mastra/fastify"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Fastify Adapter
+[EN] Source: https://mastra.ai/en/reference/server/fastify-adapter
+
+The `@mastra/fastify` package provides a server adapter for running Mastra with [Fastify](https://fastify.dev).
+
+:::info
+
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+
+:::
+
+## Installation
+
+Install the Fastify adapter and Fastify framework:
+
+```bash
+npm install @mastra/fastify@beta fastify
+```
+
+## Usage example
+
+```typescript title="server.ts"
+import Fastify from 'fastify';
+import { MastraServer } from '@mastra/fastify';
+import { mastra } from './mastra';
+
+const app = Fastify({ logger: true });
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.listen({ port: 3000 }, (err, address) => {
+  if (err) {
+    console.error(err);
+    process.exit(1);
+  }
+  console.log(`Server running on ${address}`);
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "FastifyInstance",
+      description: "Fastify app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "BodyLimitOptions",
+      typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "StreamOptions",
+      typeDescription: "{ redact?: boolean }",
+      description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolsInput",
+      typeDescription: "Record<string, ToolAction | VercelTool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+
+## Examples
+
+- [Fastify Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-fastify-adapter) - Basic Fastify server setup
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
 
@@ -89438,21 +89561,13 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 ## Installation
 
-<Steps>
-
-<StepItem>
-
 Install the Hono adapter and Hono framework:
 
 ```bash
 npm install @mastra/hono@beta hono
 ```
 
-</StepItem>
-
-<StepItem>
-
-Create your server file:
+## Usage example
 
 ```typescript title="server.ts"
 import { Hono } from 'hono';
@@ -89461,36 +89576,6 @@ import { mastra } from './mastra';
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 const server = new MastraServer({ app, mastra });
-
-await server.init();
-
-export default app;
-```
-
-</StepItem>
-
-</Steps>
-
-## Full example
-
-```typescript title="server.ts"
-import { Hono } from 'hono';
-import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
-import { mastra } from './mastra';
-
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
-  openapiPath: '/openapi.json',
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
-  },
-  streamOptions: { redact: true },
-});
 
 await server.init();
 
@@ -89646,7 +89731,7 @@ app.use('*', async (c, next) => {
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -89655,7 +89740,138 @@ For custom middleware ordering, call each method separately instead of `init()`.
 ## Related
 
 - [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
-- [Express Adapter](/reference/v1/server/express-adapter) - Alternative adapter
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+
+
+---
+title: "Reference: Koa Adapter | Server"
+description: "API reference for the @mastra/koa server adapter."
+packages:
+  - "@mastra/koa"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Koa Adapter
+[EN] Source: https://mastra.ai/en/reference/server/koa-adapter
+
+The `@mastra/koa` package provides a server adapter for running Mastra with [Koa](https://koajs.com).
+
+:::info
+
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+
+:::
+
+## Installation
+
+Install the Koa adapter and Koa framework:
+
+```bash
+npm install @mastra/koa@beta koa koa-bodyparser
+```
+
+## Usage example
+
+```typescript title="server.ts"
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { MastraServer } from '@mastra/koa';
+import { mastra } from './mastra';
+
+const app = new Koa();
+app.use(bodyParser());
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.listen(3000, () => {
+  console.log('Server running on http://localhost:3000');
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Koa",
+      description: "Koa app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "BodyLimitOptions",
+      typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "StreamOptions",
+      typeDescription: "{ redact?: boolean }",
+      description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolsInput",
+      typeDescription: "Record<string, ToolAction | VercelTool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+
+## Examples
+
+- [Koa Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-koa-adapter) - Basic Koa server setup
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
 
@@ -94253,7 +94469,7 @@ Emitted when using output generation with defined schemas. Contains partial or c
     },
     {
       name: "object",
-      type: "PartialSchemaOutput<OUTPUT>",
+      type: "Partial<OUTPUT>",
       description:
         "Partial or complete structured data matching the defined schema. The type is determined by the OUTPUT schema parameter.",
     },
@@ -94559,7 +94775,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "Stream of progressive structured object updates when using output schemas. Emits partial objects as they're built up, allowing real-time visualization of structured data generation.",
       properties: [
@@ -94568,7 +94784,7 @@ These properties provide real-time access to model outputs as they're generated:
           parameters: [
             {
               name: "PartialSchemaOutput",
-              type: "PartialSchemaOutput<OUTPUT>",
+              type: "Partial<OUTPUT>",
               description:
                 "Partially completed object matching the defined schema",
             },
@@ -94578,7 +94794,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "elementStream",
-      type: "ReadableStream<InferSchemaOutput<OUTPUT> extends (infer T)[] ? T : never>",
+      type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
       description:
         "Stream of individual array elements when the output schema defines an array type. Each element is emitted as it's completed rather than waiting for the entire array.",
     },
@@ -94599,7 +94815,7 @@ These properties resolve to final values after the stream completes:
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT>>",
+      type: "Promise<OUTPUT>",
       description:
         "The complete structured object response when using output schemas. Validated against the schema before resolving. Rejects if validation fails.",
       properties: [
@@ -94608,7 +94824,7 @@ These properties resolve to final values after the stream completes:
           parameters: [
             {
               name: "InferSchemaOutput",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               description:
                 "Fully typed object matching the exact schema definition",
             },
@@ -94854,7 +95070,7 @@ These properties resolve to final values after the stream completes:
             },
             {
               name: "object",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               isOptional: true,
               description: "Structured output if schema was provided",
             },
@@ -95058,7 +95274,7 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 # Agent.stream()
 [EN] Source: https://mastra.ai/en/reference/streaming/agents/stream
 
-The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5 compatibility.
+The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5+ compatibility.
 
 ## Usage example
 
@@ -95394,13 +95610,6 @@ const stream = await agent.stream("message for agent");
         "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
     },
     {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-    },
-    {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
@@ -95454,13 +95663,6 @@ const stream = await agent.stream("message for agent");
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -95750,9 +95952,9 @@ for await (const chunk of stream.fullStream) {
 const fullText = await stream.text;
 ```
 
-### AI SDK v5 Format
+### AI SDK v5+ Format
 
-To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
+To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
 
 ```ts title="index.ts"
 import { stepCountIs, createUIMessageStreamResponse } from "ai";
@@ -96395,7 +96597,7 @@ await agent.streamLegacy("message for agent", {
 
 :::info
 
-The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.stream()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 
@@ -115660,10 +115862,6 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Related
-
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)
-
 
 ---
 title: "Reference: Workflow.sleepUntil() | Workflows"
@@ -115726,10 +115924,6 @@ export const testWorkflow = createWorkflow({...})
   .then(step2)
   .commit();
 ```
-
-## Related
-
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)
 
 
 ---

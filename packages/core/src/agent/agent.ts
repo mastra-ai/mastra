@@ -2733,12 +2733,13 @@ export class Agent<
     const threadFromArgs = threadIdFromContext
       ? { id: threadIdFromContext }
       : resolveThreadIdFromArgs({
-          threadId: options.threadId || snapshotMemoryInfo?.threadId,
-          memory: options.memory,
+          memory: {
+            ...options.memory,
+            thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
+          },
         });
 
-    const resourceId =
-      resourceIdFromContext || options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
+    const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
 
     if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
