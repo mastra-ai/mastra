@@ -138,6 +138,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #integrations?: DynamicArgument<string[]>;
+  #integrationTools?: DynamicArgument<string[]>;
   #voice: CompositeVoice;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
@@ -246,6 +247,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     this.#agents = config.agents || ({} as Record<string, Agent>);
 
     this.#integrations = config.integrations;
+    this.#integrationTools = config.integrationTools;
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -671,6 +673,24 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     return this.#integrations;
+  }
+
+  /**
+   * Returns the specific integration tool IDs selected for this agent.
+   * These are the tool IDs in format: "provider_toolkitSlug_toolSlug"
+   */
+  public async listIntegrationToolIds({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<string[]> {
+    if (!this.#integrationTools) {
+      return [];
+    }
+
+    if (typeof this.#integrationTools === 'function') {
+      return await Promise.resolve(this.#integrationTools({ requestContext, mastra: this.#mastra }));
+    }
+
+    return this.#integrationTools;
   }
 
   async listScorers({
@@ -2332,6 +2352,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   private async listIntegrationTools({
     integrationIds,
+    integrationToolIds,
     runId,
     threadId,
     resourceId,
@@ -2341,6 +2362,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     autoResumeSuspendedTools,
   }: {
     integrationIds?: string[];
+    integrationToolIds?: string[];
     runId?: string;
     threadId?: string;
     resourceId?: string;
@@ -2351,7 +2373,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }): Promise<Record<string, CoreTool>> {
     const convertedIntegrationTools: Record<string, CoreTool> = {};
 
-    if (!integrationIds || integrationIds.length === 0) {
+    // If specific tool IDs are provided, use those; otherwise fall back to integration IDs (backward compat)
+    const hasSpecificTools = integrationToolIds && integrationToolIds.length > 0;
+    const hasIntegrations = integrationIds && integrationIds.length > 0;
+
+    if (!hasSpecificTools && !hasIntegrations) {
       return convertedIntegrationTools;
     }
 
@@ -2368,15 +2394,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return convertedIntegrationTools;
     }
 
-    this.logger.debug(
-      `[Agent:${this.name}] - Loading tools from ${integrationIds.length} integration(s): ${integrationIds.join(', ')}`,
-      { runId, threadId, resourceId },
-    );
+    if (hasSpecificTools) {
+      // Use specific tool IDs - more efficient, only load the tools we need
+      this.logger.debug(
+        `[Agent:${this.name}] - Loading ${integrationToolIds!.length} specific integration tool(s): ${integrationToolIds!.slice(0, 5).join(', ')}${integrationToolIds!.length > 5 ? '...' : ''}`,
+        { runId, threadId, resourceId },
+      );
+    } else {
+      this.logger.debug(
+        `[Agent:${this.name}] - Loading tools from ${integrationIds!.length} integration(s): ${integrationIds!.join(', ')}`,
+        { runId, threadId, resourceId },
+      );
+    }
 
     const memory = await this.getMemory({ requestContext });
 
     // Fetch cached tools for all integrations
-    for (const integrationId of integrationIds) {
+    for (const integrationId of integrationIds || []) {
       try {
         // List all cached tools for this integration
         const { tools: cachedTools } = await integrationsStore.listCachedTools({
@@ -2395,6 +2429,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // Build a unique tool name: provider_toolkit_toolSlug
           const toolName = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
 
+          // If specific tool IDs are provided, only include those tools
+          if (hasSpecificTools && !integrationToolIds!.includes(toolName)) {
+            continue;
+          }
+
           // Create a tool using the cached definition
           // The schemas are stored as JSON and will be converted internally by createTool
           const toolObj = createTool({
@@ -2402,7 +2441,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             description: cachedTool.description || `${cachedTool.name} from ${cachedTool.provider}`,
             // Use the raw definition which contains the complete tool spec including schemas
             // For now, use a simple schema until Task 015 implements proper conversion
-            inputSchema: z.record(z.unknown()).describe('Tool input parameters'),
+            // Note: z.object({}).passthrough() is used instead of z.record(z.unknown()) because
+            // OpenAI requires a "properties" field in object schemas. passthrough() accepts any
+            // additional properties while still having the required "properties": {} in JSON Schema.
+            inputSchema: z.object({}).passthrough().describe('Tool input parameters'),
             outputSchema: z.unknown().describe('Tool output result'),
             mastra: this.#mastra,
             execute: async (inputData: Record<string, unknown>, context) => {
@@ -2598,8 +2640,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     });
 
     const integrationIds = await this.listIntegrations({ requestContext });
+    const integrationToolIds = await this.listIntegrationToolIds({ requestContext });
     const integrationTools = await this.listIntegrationTools({
       integrationIds,
+      integrationToolIds,
       runId,
       resourceId,
       threadId,

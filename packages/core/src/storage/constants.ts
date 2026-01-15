@@ -106,6 +106,8 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
   workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
   agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
+  integrations: { type: 'jsonb', nullable: true }, // Integration IDs (backward compatibility)
+  integrationTools: { type: 'jsonb', nullable: true }, // Specific integration tool IDs (provider_toolkit_tool format)
   inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
   outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
   memory: { type: 'jsonb', nullable: true }, // Memory configuration

@@ -21,8 +21,14 @@ import { validateBody } from './utils';
  * Helper to get an agent by ID, checking both code-defined and stored agents
  */
 async function getAgentByIdOrStored(mastra: Mastra, agentId: string): Promise<Agent | undefined> {
+  let agent: Agent | undefined | null;
+
   // First try code-defined agents
-  let agent: Agent | undefined | null = mastra.getAgentById(agentId);
+  try {
+    agent = mastra.getAgentById(agentId);
+  } catch {
+    // Agent not found in code-defined agents, will try stored agents
+  }
 
   // If not found, try stored agents
   if (!agent) {

@@ -121,6 +121,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrations,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
@@ -148,6 +150,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationsFromBody = Array.isArray(integrations) ? integrations : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       const agent = await agentsStore.createAgent({
         agent: {
@@ -160,6 +164,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           defaultOptions,
           workflows,
           agents,
+          integrations: integrationsFromBody,
+          integrationTools: integrationToolsFromBody,
           inputProcessors,
           outputProcessors,
           memory,
@@ -200,6 +206,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrations,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
@@ -225,8 +233,10 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools if it's actually an array from the body (not {} from adapter)
+      // Only include tools/integrations if they're actually arrays from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationsFromBody = Array.isArray(integrations) ? integrations : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
@@ -238,6 +248,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         defaultOptions,
         workflows,
         agents,
+        integrations: integrationsFromBody,
+        integrationTools: integrationToolsFromBody,
         inputProcessors,
         outputProcessors,
         memory,

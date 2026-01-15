@@ -265,8 +265,13 @@ export interface StorageAgentType {
   workflows?: string[];
   /** Array of agent keys to resolve from Mastra's agent registry */
   agents?: string[];
-  /** Array of integration IDs to load tools from stored integrations */
+  /** Array of integration IDs (for backward compatibility, not used for tool selection) */
   integrations?: string[];
+  /**
+   * Array of specific integration tool IDs selected for this agent.
+   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   */
+  integrationTools?: string[];
   /** Input processor configurations */
   inputProcessors?: Record<string, unknown>[];
   /** Output processor configurations */
@@ -322,6 +327,10 @@ export type StorageUpdateAgentInput = {
   workflows?: string[];
   /** Array of agent keys to resolve from Mastra's agent registry */
   agents?: string[];
+  /** Array of integration IDs (for backward compatibility) */
+  integrations?: string[];
+  /** Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug) */
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   /** Memory configuration to resolve from Mastra's memory registry */

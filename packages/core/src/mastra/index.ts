@@ -1027,6 +1027,9 @@ export class Mastra<
     // Integration IDs are used directly - tools will be loaded from storage at runtime
     const integrations = storedAgent.integrations;
 
+    // Specific integration tool IDs - used to filter which tools from integrations are available
+    const integrationTools = storedAgent.integrationTools;
+
     // Resolve memory from the stored memory reference
     const memory = this.#resolveStoredMemory(storedAgent.memory);
 
@@ -1044,6 +1047,7 @@ export class Mastra<
       workflows,
       agents,
       integrations,
+      integrationTools,
       memory,
       scorers,
       defaultOptions: storedAgent.defaultOptions,
@@ -1075,13 +1079,13 @@ export class Mastra<
     }
 
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
-    const registeredTools = this.#tools;
 
     for (const toolKey of storedTools) {
-      // Try to find the tool in registered tools
-      if (registeredTools && registeredTools[toolKey]) {
-        resolvedTools[toolKey] = registeredTools[toolKey];
-      } else {
+      // Try to find the tool by ID (which also falls back to registration key)
+      try {
+        const tool = this.getToolById(toolKey as any);
+        resolvedTools[toolKey] = tool;
+      } catch {
         // Tool reference exists but tool is not registered - log warning
         this.#logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }

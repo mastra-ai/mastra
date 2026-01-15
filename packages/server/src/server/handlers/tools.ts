@@ -14,6 +14,7 @@ import {
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { validateBody } from './utils';
 import { executeMCPTool } from './mcp-tool-provider';
@@ -357,10 +358,11 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   tags: ['Agents', 'Tools'],
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
       }
+
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const agentTools = await agent.listTools({ requestContext });
 
@@ -395,10 +397,11 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   tags: ['Agents', 'Tools'],
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
       }
+
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const agentTools = await agent.listTools({ requestContext });
 

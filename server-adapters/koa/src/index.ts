@@ -395,13 +395,19 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
       }
 
+      // Handle property precedence between body and context:
+      // - Body `tools` (for stored-agents API) should override context `tools`
+      // - Other context properties (requestContext, mastra, etc.) must NEVER be overwritten
+      // Solution: Spread body first, then explicitly set protected context properties.
+      // `tools` is set from context first, then body spread can override it.
       const handlerParams = {
         ...params.urlParams,
         ...params.queryParams,
+        tools: ctx.state.tools, // Context tools (can be overridden by body)
         ...(typeof params.body === 'object' ? params.body : {}),
+        // Protected context properties - MUST come after body spread
         requestContext: ctx.state.requestContext,
         mastra: this.mastra,
-        tools: ctx.state.tools,
         taskStore: ctx.state.taskStore,
         abortSignal: ctx.state.abortSignal,
       };

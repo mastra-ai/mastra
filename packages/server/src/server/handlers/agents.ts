@@ -112,6 +112,8 @@ export interface SerializedAgent {
   defaultStreamOptionsLegacy?: Record<string, unknown>;
   source?: 'code' | 'stored';
   activeVersionId?: string;
+  /** Integration IDs that this agent uses for dynamic tools */
+  integrations?: string[];
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -242,6 +244,47 @@ async function formatAgentList({
   const defaultOptions = await agent.getDefaultOptions({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools, partial);
 
+  // Get specific integration tool IDs selected for this agent
+  const integrationToolIds = await agent.listIntegrationToolIds({ requestContext });
+  const integrations = await agent.listIntegrations({ requestContext });
+  let integrationTools: Record<string, SerializedTool> = {};
+
+  // Only include integration tools if specific tool IDs are defined
+  if (integrationToolIds && integrationToolIds.length > 0 && integrations && integrations.length > 0) {
+    const storage = mastra.getStorage();
+    if (storage) {
+      const integrationsStore = await storage.getStore('integrations');
+      if (integrationsStore) {
+        for (const integrationId of integrations) {
+          try {
+            const { tools: cachedTools } = await integrationsStore.listCachedTools({
+              integrationId,
+              perPage: false, // Get all tools
+            });
+
+            for (const cachedTool of cachedTools) {
+              const toolName = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
+              // Only include tools that are in the specific tool IDs list
+              if (!integrationToolIds.includes(toolName)) {
+                continue;
+              }
+              integrationTools[toolName] = {
+                id: toolName,
+                description: cachedTool.description || `${cachedTool.name} from ${cachedTool.provider}`,
+                inputSchema: cachedTool.inputSchema
+                  ? JSON.stringify(cachedTool.inputSchema)
+                  : JSON.stringify({ type: 'object', properties: {} }),
+                outputSchema: cachedTool.outputSchema ? JSON.stringify(cachedTool.outputSchema) : undefined,
+              };
+            }
+          } catch (error) {
+            mastra.getLogger().debug(`Error fetching cached tools for integration ${integrationId}`, { error });
+          }
+        }
+      }
+    }
+  }
+
   let serializedAgentWorkflows: Record<
     string,
     { name: string; steps?: Record<string, { id: string; description?: string }> }
@@ -291,7 +334,8 @@ async function formatAgentList({
     description,
     instructions,
     agents: serializedAgentAgents,
-    tools: serializedAgentTools,
+    // Merge code-defined tools with integration tools
+    tools: { ...serializedAgentTools, ...integrationTools },
     workflows: serializedAgentWorkflows,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
@@ -303,6 +347,7 @@ async function formatAgentList({
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     source: agent.source ?? 'code',
+    integrations: integrations.length > 0 ? integrations : undefined,
   };
 }
 
@@ -374,6 +419,47 @@ async function formatAgent({
   const tools = await agent.listTools({ requestContext });
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
+
+  // Get specific integration tool IDs selected for this agent
+  const integrationToolIds = await agent.listIntegrationToolIds({ requestContext });
+  const integrations = await agent.listIntegrations({ requestContext });
+  let integrationTools: Record<string, SerializedTool> = {};
+
+  // Only include integration tools if specific tool IDs are defined
+  if (integrationToolIds && integrationToolIds.length > 0 && integrations && integrations.length > 0) {
+    const storage = mastra.getStorage();
+    if (storage) {
+      const integrationsStore = await storage.getStore('integrations');
+      if (integrationsStore) {
+        for (const integrationId of integrations) {
+          try {
+            const { tools: cachedTools } = await integrationsStore.listCachedTools({
+              integrationId,
+              perPage: false, // Get all tools
+            });
+
+            for (const cachedTool of cachedTools) {
+              const toolName = `${cachedTool.provider}_${cachedTool.toolkitSlug}_${cachedTool.toolSlug}`;
+              // Only include tools that are in the specific tool IDs list
+              if (!integrationToolIds.includes(toolName)) {
+                continue;
+              }
+              integrationTools[toolName] = {
+                id: toolName,
+                description: cachedTool.description || `${cachedTool.name} from ${cachedTool.provider}`,
+                inputSchema: cachedTool.inputSchema
+                  ? JSON.stringify(cachedTool.inputSchema)
+                  : JSON.stringify({ type: 'object', properties: {} }),
+                outputSchema: cachedTool.outputSchema ? JSON.stringify(cachedTool.outputSchema) : undefined,
+              };
+            }
+          } catch (error) {
+            mastra.getLogger().debug(`Error fetching cached tools for integration ${integrationId}`, { error });
+          }
+        }
+      }
+    }
+  }
 
   let serializedAgentWorkflows: Record<
     string,
@@ -458,7 +544,8 @@ async function formatAgent({
     name: agent.name,
     description,
     instructions,
-    tools: serializedAgentTools,
+    // Merge code-defined tools with integration tools
+    tools: { ...serializedAgentTools, ...integrationTools },
     agents: serializedAgentAgents,
     workflows: serializedAgentWorkflows,
     inputProcessors: serializedInputProcessors,
@@ -472,6 +559,7 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     source: agent.source ?? 'code',
     activeVersionId: agent.activeVersionId,
+    integrations: integrations.length > 0 ? integrations : undefined,
   };
 }
 

@@ -3,7 +3,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { Wrench } from 'lucide-react';
 import { BaseNode } from './base-node';
 import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import type { ToolNodeData } from '../../types';
 
 const TOOL_COLOR = '#a855f7'; // purple-500

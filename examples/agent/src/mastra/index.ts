@@ -6,6 +6,7 @@ import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } fr
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { cookingTool } from './tools';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -62,6 +63,9 @@ const config = {
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
+  },
+  tools: {
+    cookingTool,
   },
   processors: {
     moderationProcessor,

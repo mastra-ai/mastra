@@ -40,7 +40,7 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['ownerId', 'activeVersionId'],
+      ifNotExists: ['ownerId', 'activeVersionId', 'integrations', 'integrationTools'],
     });
 
     // Create agent versions table
@@ -90,6 +90,8 @@ export class AgentsLibSQL extends AgentsStorage {
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
       workflows: this.parseJson(row.workflows, 'workflows'),
       agents: this.parseJson(row.agents, 'agents'),
+      integrations: this.parseJson(row.integrations, 'integrations'),
+      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory') as StorageMemoryConfig | undefined,
@@ -139,6 +141,8 @@ export class AgentsLibSQL extends AgentsStorage {
           defaultOptions: agent.defaultOptions ?? null,
           workflows: agent.workflows ?? null,
           agents: agent.agents ?? null,
+          integrations: agent.integrations ?? null,
+          integrationTools: agent.integrationTools ?? null,
           inputProcessors: agent.inputProcessors ?? null,
           outputProcessors: agent.outputProcessors ?? null,
           memory: agent.memory ?? null,
@@ -196,6 +200,8 @@ export class AgentsLibSQL extends AgentsStorage {
       if (updates.defaultOptions !== undefined) data.defaultOptions = updates.defaultOptions;
       if (updates.workflows !== undefined) data.workflows = updates.workflows;
       if (updates.agents !== undefined) data.agents = updates.agents;
+      if (updates.integrations !== undefined) data.integrations = updates.integrations;
+      if (updates.integrationTools !== undefined) data.integrationTools = updates.integrationTools;
       if (updates.inputProcessors !== undefined) data.inputProcessors = updates.inputProcessors;
       if (updates.outputProcessors !== undefined) data.outputProcessors = updates.outputProcessors;
       if (updates.memory !== undefined) data.memory = updates.memory;

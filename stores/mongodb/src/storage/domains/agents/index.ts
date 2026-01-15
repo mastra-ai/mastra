@@ -198,6 +198,8 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       if (updates.defaultOptions !== undefined) updateDoc.defaultOptions = updates.defaultOptions;
       if (updates.workflows !== undefined) updateDoc.workflows = updates.workflows;
       if (updates.agents !== undefined) updateDoc.agents = updates.agents;
+      if (updates.integrations !== undefined) updateDoc.integrations = updates.integrations;
+      if (updates.integrationTools !== undefined) updateDoc.integrationTools = updates.integrationTools;
       if (updates.inputProcessors !== undefined) updateDoc.inputProcessors = updates.inputProcessors;
       if (updates.outputProcessors !== undefined) updateDoc.outputProcessors = updates.outputProcessors;
       if (updates.memory !== undefined) updateDoc.memory = updates.memory;

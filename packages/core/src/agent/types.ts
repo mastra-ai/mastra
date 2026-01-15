@@ -216,10 +216,15 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   agents?: DynamicArgument<Record<string, Agent>>;
   /**
-   * Integration IDs to load tools from stored integrations.
-   * Tools from these integrations will be automatically available to the agent.
+   * Integration IDs (for backward compatibility, used to identify which integrations are enabled).
    */
   integrations?: DynamicArgument<string[]>;
+  /**
+   * Specific integration tool IDs selected for this agent.
+   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   * Only these tools will be available to the agent, not all tools from the integrations.
+   */
+  integrationTools?: DynamicArgument<string[]>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
