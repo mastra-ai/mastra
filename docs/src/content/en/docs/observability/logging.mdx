@@ -1,6 +1,9 @@
 ---
 title: "Logging | Observability"
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
+packages:
+  - "@mastra/core"
+  - "@mastra/loggers"
 ---
 
 # Logging
@@ -68,8 +71,8 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 export const testTool = createTool({
-  execute: async ({ mastra }) => {
-    const logger = mastra?.getLogger();
+  execute: async (inputData, context) => {
+    const logger = context?.mastra.getLogger();
     logger?.info("tool info log");
 
     return {
@@ -85,16 +88,15 @@ Logger methods accept an optional second argument for additional data. This can 
 
 In this example, the log message includes an object with a key of `agent` and a value of the `testAgent` instance.
 
-```typescript {10} title="src/mastra/workflows/test-workflow.ts"
+```typescript {9} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({
   execute: async ({ mastra }) => {
-
     const testAgent = mastra.getAgent("testAgent");
-
     const logger = mastra.getLogger();
+    
     logger.info("workflow info log", { agent: testAgent });
 
     return {

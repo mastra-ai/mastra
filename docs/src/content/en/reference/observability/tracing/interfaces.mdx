@@ -1,6 +1,8 @@
 ---
 title: "Reference: Interfaces | Observability"
 description: Tracing type definitions and interfaces
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -578,6 +580,18 @@ interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 ```
 

@@ -1,6 +1,10 @@
 ---
 title: "OpenTelemetry Exporter | Tracing | Observability"
 description: "Send traces to any OpenTelemetry-compatible observability platform"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/otel-exporter"
 ---
 
 # OpenTelemetry Exporter
@@ -35,6 +39,18 @@ npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-grpc @
 npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-http
 ```
 
+## Environment Variables
+
+All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
+
+| Provider  | Environment Variables                                                                      |
+| --------- | ------------------------------------------------------------------------------------------ |
+| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)        |
+| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional)                           |
+
 ## Provider Configurations
 
 
@@ -59,6 +75,38 @@ new OtelExporter({
 ### Dash0
 
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
+
+#### Zero-Config Setup
+
+Set environment variables and use the exporter with an empty config:
+
+```bash title=".env"
+# Required
+DASH0_API_KEY=your-api-key
+DASH0_ENDPOINT=ingress.us-west-2.aws.dash0.com:4317
+
+# Optional
+DASH0_DATASET=production
+```
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelExporter } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      otel: {
+        serviceName: "my-service",
+        exporters: [new OtelExporter({ provider: { dash0: {} } })],
+      },
+    },
+  }),
+});
+```
+
+#### Explicit Configuration
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -101,6 +149,23 @@ Get your Dash0 endpoint from your dashboard. It should be in the format `ingress
 
 [SigNoz](https://signoz.io/) is an open-source APM alternative with built-in Tracing support.
 
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+SIGNOZ_API_KEY=your-api-key
+
+# Optional
+SIGNOZ_REGION=us  # 'us' | 'eu' | 'in'
+SIGNOZ_ENDPOINT=https://my-signoz.example.com  # For self-hosted
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { signoz: {} } })
+```
+
+#### Explicit Configuration
+
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
@@ -117,6 +182,22 @@ new OtelExporter({
 
 [New Relic](https://newrelic.com/) provides comprehensive observability with AI monitoring capabilities.
 
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+NEW_RELIC_LICENSE_KEY=your-license-key
+
+# Optional
+NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # For EU region
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { newrelic: {} } })
+```
+
+#### Explicit Configuration
+
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
@@ -132,6 +213,23 @@ new OtelExporter({
 
 [Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
 
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+TRACELOOP_API_KEY=your-api-key
+
+# Optional
+TRACELOOP_DESTINATION_ID=my-destination
+TRACELOOP_ENDPOINT=https://custom.traceloop.com
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { traceloop: {} } })
+```
+
+#### Explicit Configuration
+
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
@@ -145,24 +243,45 @@ new OtelExporter({
 
 ### Laminar
 
-[Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
+[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
+
+#### Zero-Config Setup
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=your-api-key
+
+# Optional
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { laminar: {} } })
+```
+
+#### Explicit Configuration
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
   provider: {
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
-      // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
     },
   },
 });
 ```
 
+:::tip Laminar-Native Exporter
+
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/v1/observability/tracing/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+
+:::
+
 ### Datadog
 
 [Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
 
-Datadog uses gRPC for OTLP ingestion, which requires explicit imports and bundler configuration to work correctly:
+Datadog uses gRPC for OTLP ingestion, which requires explicit imports and [bundler configuration](/reference/v1/configuration#bundlerexternals) to work correctly:
 
 ```typescript title="src/mastra/index.ts"
 // Explicitly import gRPC dependencies for the bundler
@@ -177,7 +296,6 @@ export const mastra = new Mastra({
   bundler: {
     externals: ["@grpc/grpc-js"],
   },
-
   observability: new Observability({
     configs: {
       default: {
@@ -220,7 +338,13 @@ The default OTLP endpoint is `http://localhost:4317` when running the Datadog Ag
 
 :::warning
 
-The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the `bundler.externals` configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the [`bundler.externals`](/reference/v1/configuration#bundlerexternals) configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+
+:::
+
+:::tip Datadog-Native Exporter
+
+For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/v1/observability/tracing/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
 
 :::
 

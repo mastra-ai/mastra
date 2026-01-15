@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraServer | Server"
 description: "API reference for the MastraServer abstract class used to create server adapters."
+packages:
+  - "@mastra/core"
+  - "@mastra/server"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -93,20 +96,6 @@ constructor(options: MastraServerOptions<TApp>)
       type: "InMemoryTaskStore",
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
-    },
-    {
-      name: "playground",
-      type: "boolean",
-      description: "Can be read to set context values in adapters implementing the MastraServer",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "isDev",
-      type: "boolean",
-      description: "Development mode flag",
-      isOptional: true,
-      defaultValue: "false",
     },
   ]}
 />

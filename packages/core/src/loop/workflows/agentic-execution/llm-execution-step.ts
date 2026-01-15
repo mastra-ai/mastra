@@ -16,7 +16,6 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
-import type { OutputSchema } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
@@ -30,7 +29,7 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -47,7 +46,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   logger?: IMastraLogger;
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
+async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
   messageList,
@@ -112,6 +111,9 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       });
     }
 
+    // Only reset reasoning state for truly unexpected chunk types.
+    // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
+    // so we must allow text-start to pass through without clearing reasoningDeltas.
     if (
       chunk.type !== 'reasoning-start' &&
       chunk.type !== 'reasoning-delta' &&
@@ -119,6 +121,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       chunk.type !== 'redacted-reasoning' &&
       chunk.type !== 'reasoning-signature' &&
       chunk.type !== 'response-metadata' &&
+      chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
       runState.setState({
@@ -139,12 +142,41 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         });
         break;
 
+      case 'text-start': {
+        // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
+        // This is needed because, for example, OpenAI reasoning models send separate itemIds for
+        // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
+        // preserved so that when memory is replayed, OpenAI sees the required
+        // following item for the reasoning part.
+        if (chunk.payload.providerMetadata) {
+          runState.setState({
+            providerOptions: chunk.payload.providerMetadata,
+          });
+        }
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
       case 'text-delta': {
         const textDeltasFromState = runState.state.textDeltas;
         textDeltasFromState.push(chunk.payload.text);
         runState.setState({
           textDeltas: textDeltasFromState,
           isStreaming: true,
+        });
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
+      case 'text-end': {
+        // Clear providerOptions to prevent text's providerMetadata from leaking
+        // into subsequent parts (similar to reasoning-end clearing)
+        runState.setState({
+          providerOptions: undefined,
         });
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
@@ -460,7 +492,7 @@ function executeStreamWithFallbackModels<T>(
   };
 }
 
-export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
   messageId,
@@ -492,7 +524,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   const initialSystemMessages = messageList.getAllSystemMessages();
 
   return createStep({
-    id: 'llm-execution',
+    id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
@@ -505,7 +537,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       let rawResponse: any;
 
       const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
-        outputStream: MastraModelOutput<OUTPUT | undefined>;
+        outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
@@ -535,7 +567,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
-          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           model,
           tools,
@@ -559,10 +591,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           });
 
           try {
+            // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+            const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              tracingContext,
+              tracingContext: stepTracingContext,
               requestContext,
               model,
               steps: inputData.output?.steps || [],
@@ -640,16 +674,42 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         if (autoResumeSuspendedTools) {
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-          const suspendedToolsMessage = assistantMessages.find(
-            message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
-          );
+          const suspendedToolsMessage = assistantMessages.find(message => {
+            const pendingOrSuspendedTools =
+              message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals;
+            if (pendingOrSuspendedTools) {
+              return true;
+            }
+            const dataToolSuspendedParts = message.content.parts?.filter(
+              part =>
+                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                !(part.data as any).resumed,
+            );
+            if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+              return true;
+            }
+            return false;
+          });
 
           if (suspendedToolsMessage) {
             const metadata = suspendedToolsMessage.content.metadata;
-            const suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
-              string,
-              any
-            >;
+            let suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<string, any>;
+            if (!suspendedToolObj) {
+              suspendedToolObj = suspendedToolsMessage.content.parts
+                ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
+                ?.reduce(
+                  (acc, part) => {
+                    if (
+                      (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                      !(part.data as any).resumed
+                    ) {
+                      acc[(part.data as any).toolName] = part.data;
+                    }
+                    return acc;
+                  },
+                  {} as Record<string, any>,
+                );
+            }
             const suspendedTools = Object.values(suspendedToolObj);
             if (suspendedTools.length > 0) {
               inputMessages = inputMessages.map((message, index) => {
@@ -729,13 +789,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           );
         }
 
-        const outputStream = new MastraModelOutput({
+        const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
             modelId: currentStep.model.modelId,
             provider: currentStep.model.provider,
             version: currentStep.model.specificationVersion,
           },
-          stream: modelResult as ReadableStream<ChunkType>,
+          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
           messageList,
           messageId,
           options: {
@@ -835,7 +895,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           output: {
             text,
             toolCalls: [],
-            usage: usage ?? inputData.output?.usage,
+            usage: usage ?? inputData.output.usage,
             steps: [],
           },
           messages: {
@@ -914,6 +974,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           // Get current processor retry count from iteration data
           const currentRetryCount = inputData.processorRetryCount || 0;
 
+          // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+          const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -922,7 +984,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
-            tracingContext,
+            tracingContext: outputStepTracingContext,
             requestContext,
             retryCount: currentRetryCount,
           });
@@ -1056,7 +1118,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         output: {
           text,
           toolCalls: shouldRetry ? [] : toolCalls, // Clear tool calls on retry
-          tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),

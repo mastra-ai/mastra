@@ -5,7 +5,6 @@ import type {
   ListWorkflowRunsResponse,
   ListWorkflowRunsParams,
   GetWorkflowRunByIdResponse,
-  GetWorkflowRunExecutionResultResponse,
 } from '../types';
 
 import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
@@ -87,41 +86,20 @@ export class Workflow extends BaseResource {
   /**
    * Retrieves a specific workflow run by its ID
    * @param runId - The ID of the workflow run to retrieve
-   * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing the workflow run details
-   */
-  runById(runId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetWorkflowRunByIdResponse> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}${requestContextQueryString(requestContext)}`);
-  }
-
-  /**
-   * Deletes a specific workflow run by its ID
-   * @param runId - The ID of the workflow run to delete
-   * @returns Promise containing a success message
-   */
-  deleteRunById(runId: string): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  /**
-   * Retrieves the execution result for a specific workflow run by its ID
-   * @param runId - The ID of the workflow run to retrieve the execution result for
    * @param options - Optional configuration
    * @param options.requestContext - Optional request context to pass as query parameter
-   * @param options.fields - Optional array of fields to return (e.g., ['status', 'result']). Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. Omitting this returns all fields.
+   * @param options.fields - Optional array of fields to return (e.g., ['result', 'steps']). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
    * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
-   * @returns Promise containing the workflow run execution result
+   * @returns Promise containing the workflow run details with metadata and processed execution state
    */
-  runExecutionResult(
+  runById(
     runId: string,
     options?: {
       requestContext?: RequestContext | Record<string, any>;
       fields?: string[];
       withNestedWorkflows?: boolean;
     },
-  ): Promise<GetWorkflowRunExecutionResultResponse> {
+  ): Promise<GetWorkflowRunByIdResponse> {
     const searchParams = new URLSearchParams();
 
     if (options?.fields && options.fields.length > 0) {
@@ -138,7 +116,18 @@ export class Workflow extends BaseResource {
     }
 
     const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/execution-result${queryString}`);
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}${queryString}`);
+  }
+
+  /**
+   * Deletes a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to delete
+   * @returns Promise containing a success message
+   */
+  deleteRunById(runId: string): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`, {
+      method: 'DELETE',
+    });
   }
 
   /**

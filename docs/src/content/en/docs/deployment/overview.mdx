@@ -1,6 +1,8 @@
 ---
 title: "Deployment Overview | Deployment"
 description: Learn about different deployment options for your Mastra applications
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deployment Overview
@@ -22,7 +24,7 @@ Mastra can run against any of these runtime environments:
 
 Mastra provides a [server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently. Use the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
 
-Visit the [Mastra server deployment guide](/docs/v1/deployment/mastra-server).
+Use this option when you need full control over your infrastructure, long-running processes, or WebSocket connections. The [Mastra server deployment guide](/docs/v1/deployment/mastra-server) provides more details.
 
 ### Monorepo
 
@@ -34,6 +36,8 @@ Read about [monorepo deployment](/docs/v1/deployment/monorepo).
 
 Mastra applications can be deployed to cloud providers and serverless platforms. Mastra includes optional built-in deployers for Vercel, Netlify, and Cloudflare to automate the build and deployment process.
 
+Use this option for auto-scaling, minimal infrastructure management, or when you're already using one of these platforms.
+
 - [Amazon EC2](/guides/v1/deployment/amazon-ec2)
 - [AWS Lambda](/guides/v1/deployment/aws-lambda)
 - [Azure App Services](/guides/v1/deployment/azure-app-services)
@@ -44,7 +48,9 @@ Mastra applications can be deployed to cloud providers and serverless platforms.
 
 ### Web Framework
 
-When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. The guides below cover framework-specific configuration requirements for deployment:
+When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. The guides below cover framework-specific configuration requirements for deployment.
+
+Use these guides when adding Mastra to an existing Next.js or Astro application.
 
 - [With Next.js on Vercel](/docs/v1/deployment/web-framework#with-nextjs-on-vercel)
 - [With Astro on Vercel](/docs/v1/deployment/web-framework#with-astro-on-vercel)

@@ -1,6 +1,8 @@
 ---
 title: "Reference: System Prompt Scrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # SystemPromptScrubber
@@ -112,7 +114,7 @@ const processor = new SystemPromptScrubber({
     },
     {
       name: "processOutputResult",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
       description: "Processes final output results to detect and handle system prompts in non-streaming scenarios",
       isOptional: false,
     },

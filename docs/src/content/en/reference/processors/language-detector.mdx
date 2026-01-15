@@ -1,6 +1,8 @@
 ---
 title: "Reference: Language Detector | Processors"
 description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # LanguageDetector
@@ -127,7 +129,7 @@ const processor = new LanguageDetector({
     },
     {
       name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
       description: "Processes input messages to detect language and optionally translate content before sending to LLM",
       isOptional: false,
     },
@@ -141,6 +143,7 @@ import { Agent } from "@mastra/core/agent";
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
+  id: "multilingual-agent",
   name: "multilingual-agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-5.1",

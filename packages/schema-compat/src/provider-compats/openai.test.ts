@@ -441,6 +441,98 @@ describe('OpenAISchemaCompatLayer - Edge Cases', () => {
   });
 });
 
+describe('OpenAISchemaCompatLayer - Partial Nested Objects (GitHub #11457)', () => {
+  // This test suite verifies the behavior related to GitHub issue #11457
+  // When a nested object has .partial() applied, all its properties become optional.
+  // For OpenAI strict mode, .optional() is converted to .nullable() so fields remain
+  // in the JSON schema's required array. The validation layer (validateToolInput in @mastra/core)
+  // handles converting undefined → null before validation so the full flow works correctly.
+
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should validate partial nested objects when null is provided for optional fields', () => {
+    // This is the schema from the bug report
+    const inputSchema = z.object({
+      eventId: z.string(),
+      request: z
+        .object({
+          City: z.string(),
+          Name: z.string(),
+          Slug: z.string(),
+        })
+        .partial()
+        .passthrough(),
+      eventImageFile: z.any().optional(),
+    });
+
+    // Process through OpenAI compat layer
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processedSchema = layer.processZodType(inputSchema);
+
+    // For OpenAI strict mode, optional fields are converted to nullable.
+    // When null is provided (as the LLM should do), validation passes and
+    // the transform converts null → undefined.
+    const testDataWithNull = {
+      eventId: '123',
+      request: { Name: 'Test', City: null, Slug: null },
+      eventImageFile: null,
+    };
+
+    const result = processedSchema.safeParse(testDataWithNull);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // Verify the transform converted null → undefined
+      expect(result.data.request.City).toBeUndefined();
+      expect(result.data.request.Slug).toBeUndefined();
+      expect(result.data.eventImageFile).toBeUndefined();
+    }
+  });
+
+  it('should convert null to undefined via transform for optional properties', () => {
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // When null is provided (as the LLM should do for optional fields), validation
+    // passes and the transform converts null → undefined
+    const result = processed.safeParse({ name: 'John', age: null });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('John');
+      expect(result.data.age).toBeUndefined(); // null was transformed to undefined
+    }
+  });
+
+  it('should keep fields in required array for OpenAI strict mode compliance', () => {
+    // This test verifies that .optional() fields remain in the required array
+    // by checking that the schema rejects omitted fields (undefined) at the schema level.
+    // The validation layer (validateToolInput) handles this by converting undefined → null.
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // At the schema level, undefined is NOT accepted (this is correct for strict mode)
+    // The validation layer (validateToolInput in @mastra/core) converts undefined → null
+    const result = processed.safeParse({ name: 'John' }); // age is undefined/omitted
+
+    // Schema expects null, not undefined - this is intentional for OpenAI strict mode
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('OpenAISchemaCompatLayer - JSON Serialization', () => {
   const modelInfo: ModelInformation = {
     provider: 'openai',

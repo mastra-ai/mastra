@@ -19,6 +19,9 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
   CreateIndexOptions,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -42,6 +45,16 @@ function getSchemaName(schema?: string) {
 function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
   const quotedIndexName = `"${indexName}"`;
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
+}
+
+/**
+ * Generate SQL placeholder string for IN clauses.
+ * @param count - Number of placeholders to generate
+ * @param startIndex - Starting index for placeholders (default: 1)
+ * @returns Comma-separated placeholder string, e.g. "$1, $2, $3"
+ */
+function inPlaceholders(count: number, startIndex = 1): string {
+  return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
 
 export class MemoryPG extends MemoryStorage {
@@ -229,14 +242,21 @@ export class MemoryPG extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+      // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
+      const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+        dataQuery,
+        [...queryParams, limitValue, offset],
+      );
 
       const threads = (rows || []).map(thread => ({
-        ...thread,
+        id: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
+        // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
+        createdAt: thread.createdAtZ || thread.createdAt,
+        updatedAt: thread.updatedAtZ || thread.updatedAt,
       }));
 
       return {
@@ -351,17 +371,18 @@ export class MemoryPG extends MemoryStorage {
     };
 
     try {
+      const now = new Date().toISOString();
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
                         title = $1,
                         metadata = $2,
                         "updatedAt" = $3,
-                        "updatedAtZ" = $3
-                    WHERE id = $4
+                        "updatedAtZ" = $4
+                    WHERE id = $5
                     RETURNING *
                 `,
-        [title, mergedMetadata, new Date().toISOString(), id],
+        [title, mergedMetadata, now, now, id],
       );
 
       return {
@@ -538,7 +559,7 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const query = `
         ${selectStatement} FROM ${tableName}
-        WHERE id IN (${messageIds.map((_, i) => `$${i + 1}`).join(', ')})
+        WHERE id IN (${inPlaceholders(messageIds.length)})
         ORDER BY "createdAt" DESC
       `;
       const resultRows = await this.#db.client.manyOrNone(query, messageIds);
@@ -608,8 +629,7 @@ export class MemoryPG extends MemoryStorage {
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
-      const threadPlaceholders = threadIds.map((_, i) => `$${i + 1}`).join(', ');
-      const conditions: string[] = [`thread_id IN (${threadPlaceholders})`];
+      const conditions: string[] = [`thread_id IN (${inPlaceholders(threadIds.length)})`];
       const queryParams: any[] = [...threadIds];
       let paramIndex = threadIds.length + 1;
 
@@ -619,12 +639,14 @@ export class MemoryPG extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        conditions.push(`"createdAt" >= $${paramIndex++}`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
-        conditions.push(`"createdAt" <= $${paramIndex++}`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
 
@@ -789,14 +811,15 @@ export class MemoryPG extends MemoryStorage {
         });
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+        const nowStr = new Date().toISOString();
         const threadUpdate = t.none(
           `UPDATE ${threadTableName}
                         SET
                             "updatedAt" = $1,
-                            "updatedAtZ" = $1
-                        WHERE id = $2
+                            "updatedAtZ" = $2
+                        WHERE id = $3
                     `,
-          [new Date().toISOString(), threadId],
+          [nowStr, nowStr, threadId],
         );
 
         await Promise.all([...messageInserts, threadUpdate]);
@@ -847,9 +870,9 @@ export class MemoryPG extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN ($1:list)`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
 
-    const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, [messageIds]);
+    const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, messageIds);
 
     if (existingMessagesDb.length === 0) {
       return [];
@@ -926,10 +949,11 @@ export class MemoryPG extends MemoryStorage {
       }
 
       if (threadIdsToUpdate.size > 0) {
+        const threadIds = Array.from(threadIdsToUpdate);
         queries.push(
           t.none(
-            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN ($1:list)`,
-            [Array.from(threadIdsToUpdate)],
+            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN (${inPlaceholders(threadIds.length)})`,
+            threadIds,
           ),
         );
       }
@@ -939,7 +963,7 @@ export class MemoryPG extends MemoryStorage {
       }
     });
 
-    const updatedMessages = await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, [messageIds]);
+    const updatedMessages = await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, messageIds);
 
     return (updatedMessages || []).map((row: MessageRowFromDB) => {
       const message = this.normalizeMessageRow(row);
@@ -1076,17 +1100,195 @@ export class MemoryPG extends MemoryStorage {
       paramIndex++;
     }
 
-    updates.push(`"updatedAt" = $${paramIndex}`);
-    values.push(updatedResource.updatedAt.toISOString());
+    const updatedAtStr = updatedResource.updatedAt.toISOString();
+    updates.push(`"updatedAt" = $${paramIndex++}`);
+    values.push(updatedAtStr);
     updates.push(`"updatedAtZ" = $${paramIndex++}`);
-    values.push(updatedResource.updatedAt.toISOString());
-
-    paramIndex++;
+    values.push(updatedAtStr);
 
     values.push(resourceId);
 
     await this.#db.client.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return updatedResource;
+  }
+
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    // Get the source thread
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'CLONE_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    try {
+      return await this.#db.client.tx(async t => {
+        // Build message query with filters
+        let messageQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"
+                            FROM ${messageTableName} WHERE thread_id = $1`;
+        const messageParams: any[] = [sourceThreadId];
+        let paramIndex = 2;
+
+        // Apply date filters
+        if (options?.messageFilter?.startDate) {
+          messageQuery += ` AND "createdAt" >= $${paramIndex++}`;
+          messageParams.push(options.messageFilter.startDate);
+        }
+        if (options?.messageFilter?.endDate) {
+          messageQuery += ` AND "createdAt" <= $${paramIndex++}`;
+          messageParams.push(options.messageFilter.endDate);
+        }
+
+        // Apply message ID filter
+        if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
+          messageQuery += ` AND id IN (${options.messageFilter.messageIds.map(() => `$${paramIndex++}`).join(', ')})`;
+          messageParams.push(...options.messageFilter.messageIds);
+        }
+
+        messageQuery += ` ORDER BY "createdAt" ASC`;
+
+        // Apply message limit (from most recent, so we need to reverse order for limit then sort back)
+        if (options?.messageLimit && options.messageLimit > 0) {
+          // Get messages ordered DESC to get most recent, limited, then we'll reverse
+          const limitQuery = `SELECT * FROM (${messageQuery.replace('ORDER BY "createdAt" ASC', 'ORDER BY "createdAt" DESC')} LIMIT $${paramIndex}) AS limited ORDER BY "createdAt" ASC`;
+          messageParams.push(options.messageLimit);
+          messageQuery = limitQuery;
+        }
+
+        const sourceMessages = await t.manyOrNone<MessageRowFromDB>(messageQuery, messageParams);
+
+        const now = new Date();
+
+        // Determine the last message ID for clone metadata
+        const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
+
+        // Create clone metadata
+        const cloneMetadata: ThreadCloneMetadata = {
+          sourceThreadId,
+          clonedAt: now,
+          ...(lastMessageId && { lastMessageId }),
+        };
+
+        // Create the new thread
+        const newThread: StorageThreadType = {
+          id: newThreadId,
+          resourceId: resourceId || sourceThread.resourceId,
+          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+          metadata: {
+            ...metadata,
+            clone: cloneMetadata,
+          },
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        // Insert the new thread
+        await t.none(
+          `INSERT INTO ${threadTableName} (
+            id,
+            "resourceId",
+            title,
+            metadata,
+            "createdAt",
+            "createdAtZ",
+            "updatedAt",
+            "updatedAtZ"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            newThread.id,
+            newThread.resourceId,
+            newThread.title,
+            newThread.metadata ? JSON.stringify(newThread.metadata) : null,
+            now,
+            now,
+            now,
+            now,
+          ],
+        );
+
+        // Clone messages with new IDs
+        const clonedMessages: MastraDBMessage[] = [];
+        const targetResourceId = resourceId || sourceThread.resourceId;
+
+        for (const sourceMsg of sourceMessages) {
+          const newMessageId = crypto.randomUUID();
+          const normalizedMsg = this.normalizeMessageRow(sourceMsg);
+          let parsedContent = normalizedMsg.content;
+          try {
+            parsedContent = JSON.parse(normalizedMsg.content);
+          } catch {
+            // use content as is
+          }
+
+          await t.none(
+            `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              newMessageId,
+              newThreadId,
+              typeof normalizedMsg.content === 'string' ? normalizedMsg.content : JSON.stringify(normalizedMsg.content),
+              normalizedMsg.createdAt,
+              normalizedMsg.createdAt,
+              normalizedMsg.role,
+              normalizedMsg.type || 'v2',
+              targetResourceId,
+            ],
+          );
+
+          clonedMessages.push({
+            id: newMessageId,
+            threadId: newThreadId,
+            content: parsedContent,
+            role: normalizedMsg.role as MastraDBMessage['role'],
+            type: normalizedMsg.type,
+            createdAt: new Date(normalizedMsg.createdAt as string),
+            resourceId: targetResourceId,
+          });
+        }
+
+        return {
+          thread: newThread,
+          clonedMessages,
+        };
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'CLONE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    }
   }
 }

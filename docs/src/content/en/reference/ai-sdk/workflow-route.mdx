@@ -1,6 +1,9 @@
 ---
 title: "Reference: workflowRoute() | AI SDK"
 description: API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -15,7 +18,7 @@ Use [`handleWorkflowStream()`](/reference/v1/ai-sdk/handle-workflow-stream) if y
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 

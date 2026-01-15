@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import type { EntityType } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -13,7 +15,6 @@ import type {
   TimeTravelExecutionParams,
   WorkflowResult,
 } from '@mastra/core/workflows';
-import { RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext } from 'inngest';
 import { InngestWorkflow } from './workflow';
 
@@ -85,43 +86,52 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       runId: string;
     },
   ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
-    try {
-      // Pass retry config to wrapDurableOperation so RetryAfterError is thrown INSIDE step.run()
-      const result = await this.wrapDurableOperation(stepId, runStep, { delay: params.delay });
-      return { ok: true, result };
-    } catch (e) {
-      // After step-level retries exhausted, extract failure from error cause
-      const cause = (e as any)?.cause;
-      if (cause?.status === 'failed') {
-        params.stepSpan?.error({
-          error: e,
-          attributes: { status: 'failed' },
-        });
-        // Ensure cause.error is an Error instance
-        if (cause.error && !(cause.error instanceof Error)) {
-          cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
-        }
-        return { ok: false, error: cause };
+    for (let i = 0; i < params.retries + 1; i++) {
+      if (i > 0 && params.delay) {
+        await new Promise(resolve => setTimeout(resolve, params.delay));
       }
+      try {
+        //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
+        const result = await this.wrapDurableOperation(stepId, runStep);
+        return { ok: true, result };
+      } catch (e) {
+        if (i === params.retries) {
+          // After step-level retries exhausted, extract failure from error cause
+          const cause = (e as any)?.cause;
+          if (cause?.status === 'failed') {
+            params.stepSpan?.error({
+              error: e,
+              attributes: { status: 'failed' },
+            });
+            // Ensure cause.error is an Error instance
+            if (cause.error && !(cause.error instanceof Error)) {
+              cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
+            }
+            return { ok: false, error: cause };
+          }
 
-      // Fallback for other errors - preserve the original error instance
-      const errorInstance = getErrorFromUnknown(e, {
-        serializeStack: false,
-        fallbackMessage: 'Unknown step execution error',
-      });
-      params.stepSpan?.error({
-        error: errorInstance,
-        attributes: { status: 'failed' },
-      });
-      return {
-        ok: false,
-        error: {
-          status: 'failed',
-          error: errorInstance,
-          endedAt: Date.now(),
-        },
-      };
+          // Fallback for other errors - preserve the original error instance
+          const errorInstance = getErrorFromUnknown(e, {
+            serializeStack: false,
+            fallbackMessage: 'Unknown step execution error',
+          });
+          params.stepSpan?.error({
+            error: errorInstance,
+            attributes: { status: 'failed' },
+          });
+          return {
+            ok: false,
+            error: {
+              status: 'failed',
+              error: errorInstance,
+              endedAt: Date.now(),
+            },
+          };
+        }
+      }
     }
+    // Should never reach here, but TypeScript needs it
+    return { ok: false, error: { status: 'failed', error: new Error('Unknown error'), endedAt: Date.now() } };
   }
 
   /**
@@ -140,34 +150,32 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
   /**
    * Wrap durable operations in Inngest step.run() for durability.
-   * If retryConfig is provided, throws RetryAfterError INSIDE step.run() to trigger
-   * Inngest's step-level retry mechanism (not function-level retry).
+   *
+   * IMPORTANT: Errors are wrapped with a cause structure before throwing.
+   * This is necessary because Inngest's error serialization (serialize-error-cjs)
+   * only captures standard Error properties (message, name, stack, code, cause).
+   * Custom properties like statusCode, responseHeaders from AI SDK errors would
+   * be lost. By putting our serialized error (via getErrorFromUnknown with toJSON())
+   * in the cause property, we ensure custom properties survive serialization.
+   * The cause property is in serialize-error-cjs's allowlist, and when the cause
+   * object is finally JSON.stringify'd, our error's toJSON() is called.
    */
-  async wrapDurableOperation<T>(
-    operationId: string,
-    operationFn: () => Promise<T>,
-    retryConfig?: { delay: number },
-  ): Promise<T> {
+  async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
     return this.inngestStep.run(operationId, async () => {
       try {
         return await operationFn();
       } catch (e) {
-        if (retryConfig) {
-          // Throw RetryAfterError INSIDE step.run() to trigger step-level retry
-          // Preserve the original error instance with all its properties
-          const errorInstance = getErrorFromUnknown(e, {
-            serializeStack: false,
-            fallbackMessage: 'Unknown step execution error',
-          });
-          throw new RetryAfterError(errorInstance.message, retryConfig.delay, {
-            cause: {
-              status: 'failed',
-              error: errorInstance,
-              endedAt: Date.now(),
-            },
-          });
-        }
-        throw e; // Re-throw if no retry config
+        const errorInstance = getErrorFromUnknown(e, {
+          serializeStack: false,
+          fallbackMessage: 'Unknown step execution error',
+        });
+        throw new Error(errorInstance.message, {
+          cause: {
+            status: 'failed',
+            error: errorInstance,
+            endedAt: Date.now(),
+          },
+        });
       }
     }) as Promise<T>;
   }
@@ -189,6 +197,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     error?: any;
     steps: Record<string, any>;
     tripwire?: any;
+    runId: string;
+    workflowId: string;
+    resourceId?: string;
+    input?: any;
+    requestContext: RequestContext;
+    state: Record<string, any>;
   }): Promise<void> {
     // No-op: Inngest handles callbacks in workflow.ts finalize step
   }
@@ -202,8 +216,189 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     error?: any;
     steps: Record<string, any>;
     tripwire?: any;
+    runId: string;
+    workflowId: string;
+    resourceId?: string;
+    input?: any;
+    requestContext: RequestContext;
+    state: Record<string, any>;
   }): Promise<void> {
     return super.invokeLifecycleCallbacks(result);
+  }
+
+  // =============================================================================
+  // Durable Span Lifecycle Hooks
+  // =============================================================================
+
+  /**
+   * Create a step span durably - on first execution, creates and exports span.
+   * On replay, returns cached span data without re-creating.
+   */
+  async createStepSpan(params: {
+    parentSpan: any;
+    stepId: string;
+    operationId: string;
+    options: {
+      name: string;
+      type: any;
+      input?: unknown;
+      entityType?: string;
+      entityId?: string;
+      tracingPolicy?: any;
+    };
+    executionContext: ExecutionContext;
+  }): Promise<any> {
+    const { executionContext, operationId, options, parentSpan } = params;
+
+    // Use the actual parent span's ID if provided (e.g., for steps inside control-flow),
+    // otherwise fall back to workflow span
+    const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Use wrapDurableOperation to memoize span creation
+    const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      if (!observability) return undefined;
+
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
+      const span = observability.startSpan({
+        ...options,
+        entityType: options.entityType as EntityType | undefined,
+        traceId: executionContext.tracingIds?.traceId,
+        parentSpanId,
+      });
+
+      // Return serializable form
+      return span?.exportSpan();
+    });
+
+    // Return a rebuilt span that can have .end()/.error() called later
+    if (exportedSpan) {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      return observability?.rebuildSpan(exportedSpan);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * End a step span durably.
+   */
+  async endStepSpan(params: {
+    span: any;
+    operationId: string;
+    endOptions: {
+      output?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, endOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.end(endOptions);
+    });
+  }
+
+  /**
+   * Record error on step span durably.
+   */
+  async errorStepSpan(params: {
+    span: any;
+    operationId: string;
+    errorOptions: {
+      error: Error;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, errorOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.error(errorOptions);
+    });
+  }
+
+  /**
+   * Create a generic child span durably (for control-flow operations).
+   * On first execution, creates and exports span. On replay, returns cached span data.
+   */
+  async createChildSpan(params: {
+    parentSpan: any;
+    operationId: string;
+    options: {
+      name: string;
+      type: any;
+      input?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+    executionContext: ExecutionContext;
+  }): Promise<any> {
+    const { executionContext, operationId, options, parentSpan } = params;
+
+    // Use the actual parent span's ID if provided, otherwise fall back to workflow span
+    const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Use wrapDurableOperation to memoize span creation
+    const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      if (!observability) return undefined;
+
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
+      const span = observability.startSpan({
+        ...options,
+        traceId: executionContext.tracingIds?.traceId,
+        parentSpanId,
+      });
+
+      // Return serializable form
+      return span?.exportSpan();
+    });
+
+    // Return a rebuilt span that can have .end()/.error() called later
+    if (exportedSpan) {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      return observability?.rebuildSpan(exportedSpan);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * End a generic child span durably (for control-flow operations).
+   */
+  async endChildSpan(params: {
+    span: any;
+    operationId: string;
+    endOptions?: {
+      output?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, endOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.end(endOptions);
+    });
+  }
+
+  /**
+   * Record error on a generic child span durably (for control-flow operations).
+   */
+  async errorChildSpan(params: {
+    span: any;
+    operationId: string;
+    errorOptions: {
+      error: Error;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, errorOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.error(errorOptions);
+    });
   }
 
   /**
@@ -225,6 +420,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     pubsub: PubSub;
     startedAt: number;
     perStep?: boolean;
+    stepSpan?: any;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
@@ -242,7 +438,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       pubsub,
       startedAt,
       perStep,
+      stepSpan,
     } = params;
+
+    // Build trace context to propagate to nested workflow
+    const nestedTracingContext = executionContext.tracingIds?.traceId
+      ? {
+          traceId: executionContext.tracingIds.traceId,
+          parentSpanId: stepSpan?.id,
+        }
+      : undefined;
 
     const isResume = !!resume?.steps?.length;
     let result: WorkflowResult<any, any, any, any>;
@@ -274,6 +479,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;
@@ -302,6 +508,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: executionContext.runId,
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;
@@ -315,6 +522,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow.sleepUntil() | Workflows"
 description: Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.sleepUntil()
@@ -56,7 +58,3 @@ export const testWorkflow = createWorkflow({...})
   .then(step2)
   .commit();
 ```
-
-## Related
-
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)

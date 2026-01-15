@@ -9,6 +9,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -65,7 +66,7 @@ export class CoreToolBuilder extends MastraBase {
       }
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional().default(''),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -147,10 +148,11 @@ export class CoreToolBuilder extends MastraBase {
   };
 
   // For provider-defined tools, we need to include all required properties
+  // AI SDK v5 uses type: 'provider-defined', AI SDK v6 uses type: 'provider'
   private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
-      tool.type === 'provider-defined' &&
+      (tool.type === 'provider-defined' || tool.type === 'provider') &&
       'id' in tool &&
       typeof tool.id === 'string' &&
       tool.id.includes('.')
@@ -330,7 +332,9 @@ export class CoreToolBuilder extends MastraBase {
               suspendData = args;
               const newSuspendOptions = {
                 ...(suspendOptions ?? {}),
-                resumeSchema: suspendOptions?.resumeSchema ?? resumeSchema,
+                resumeSchema:
+                  suspendOptions?.resumeSchema ??
+                  (resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined),
               };
               return execOptions.suspend?.(args, newSuspendOptions);
             },
@@ -398,7 +402,7 @@ export class CoreToolBuilder extends MastraBase {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
-              toolSpan?.end({ output: resumeValidation.error });
+              toolSpan?.end({ output: resumeValidation.error, attributes: { success: false } });
               return resumeValidation.error as any;
             }
           }
@@ -411,7 +415,7 @@ export class CoreToolBuilder extends MastraBase {
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
             logger?.warn(suspendValidation.error.message);
-            toolSpan?.end({ output: suspendValidation.error });
+            toolSpan?.end({ output: suspendValidation.error, attributes: { success: false } });
             return suspendValidation.error as any;
           }
         }
@@ -419,7 +423,7 @@ export class CoreToolBuilder extends MastraBase {
         // Skip validation if suspend was called without a result
         const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
         if (shouldSkipValidation) {
-          toolSpan?.end({ output: result });
+          toolSpan?.end({ output: result, attributes: { success: true } });
           return result;
         }
 
@@ -431,17 +435,17 @@ export class CoreToolBuilder extends MastraBase {
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
             logger?.warn(outputValidation.error.message);
-            toolSpan?.end({ output: outputValidation.error });
+            toolSpan?.end({ output: outputValidation.error, attributes: { success: false } });
             return outputValidation.error;
           }
           result = outputValidation.data;
         }
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)
-        toolSpan?.end({ output: result });
+        toolSpan?.end({ output: result, attributes: { success: true } });
         return result;
       } catch (error) {
-        toolSpan?.error({ error: error as Error });
+        toolSpan?.error({ error: error as Error, attributes: { success: false } });
         throw error;
       }
     };
@@ -640,6 +644,7 @@ export class CoreToolBuilder extends MastraBase {
       parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
+      mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
     } as unknown as CoreTool;
   }
 }

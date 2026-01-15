@@ -1,6 +1,8 @@
 ---
 title: "Reference: ChunkType | Streaming"
 description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -1013,6 +1015,11 @@ Stream has completed successfully.
               type: "object",
               description: "Message history",
             },
+            {
+              name: "response",
+              type: "object",
+              description: "Response metadata and messages from the model provider",
+            },
           ],
         },
       ],
@@ -1097,7 +1104,7 @@ Emitted when using output generation with defined schemas. Contains partial or c
     },
     {
       name: "object",
-      type: "PartialSchemaOutput<OUTPUT>",
+      type: "Partial<OUTPUT>",
       description:
         "Partial or complete structured data matching the defined schema. The type is determined by the OUTPUT schema parameter.",
     },

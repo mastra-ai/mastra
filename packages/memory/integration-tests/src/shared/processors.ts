@@ -54,7 +54,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
       vector = new LibSQLVector({
         id: 'processor-test-vector',
-        connectionUrl: `file:${dbPath}`,
+        url: `file:${dbPath}`,
       });
 
       // Initialize memory with the in-memory database
@@ -385,8 +385,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const userMessage = 'Tell me something interesting about space';
 
       const res = await agent.generate([{ role: 'user', content: userMessage }], {
-        threadId: thread.id,
-        resourceId,
+        memory: { thread: thread.id, resource: resourceId },
       });
 
       // Small delay to ensure message persistence completes
@@ -407,8 +406,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const userMessage2 = 'Tell me something else interesting about space';
 
       const res2 = await agent.generate([{ role: 'user', content: userMessage2 }], {
-        threadId: thread.id,
-        resourceId,
+        memory: { thread: thread.id, resource: resourceId },
       });
 
       // Small delay to ensure message persistence completes
@@ -530,13 +528,17 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
 
       // First message - use weather tool
-      await weatherAgent.generate('What is the weather in Seattle?', { threadId, resourceId });
+      await weatherAgent.generate('What is the weather in Seattle?', {
+        memory: { thread: threadId, resource: resourceId },
+      });
       await new Promise(resolve => setTimeout(resolve, 50));
       // Second message - use calculator tool
-      await calculatorAgent.generate('Calculate 123 * 456', { threadId, resourceId });
+      await calculatorAgent.generate('Calculate 123 * 456', { memory: { thread: threadId, resource: resourceId } });
       await new Promise(resolve => setTimeout(resolve, 50));
       // Third message - simple text response
-      await textAgent.generate('Tell me something interesting about space', { threadId, resourceId });
+      await textAgent.generate('Tell me something interesting about space', {
+        memory: { thread: threadId, resource: resourceId },
+      });
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Query with no processors to verify baseline message count
@@ -720,7 +722,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       });
       vector = new LibSQLVector({
         id: 'chunk-test-vector',
-        connectionUrl: `file:${dbPath}`,
+        url: `file:${dbPath}`,
       });
     });
 

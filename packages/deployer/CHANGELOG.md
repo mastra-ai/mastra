@@ -1,5 +1,58 @@
 # @mastra/deployer
 
+## 1.0.0-beta.21
+
+### Patch Changes
+
+- dependencies updates: ([#11642](https://github.com/mastra-ai/mastra/pull/11642))
+  - Updated dependency [`fs-extra@^11.3.3` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.3) (from `^11.3.2`, in `dependencies`)
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`92854c5`](https://github.com/mastra-ai/mastra/commit/92854c581618694f76ca1ee9873f9a10121d03e8), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`92854c5`](https://github.com/mastra-ai/mastra/commit/92854c581618694f76ca1ee9873f9a10121d03e8), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+  - @mastra/server@1.0.0-beta.21
+
+## 1.0.0-beta.20
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Fixed module resolution failing on Windows with `ERR_INVALID_URL_SCHEME` errors. Windows absolute paths (e.g., `C:\path\to\file`) are now correctly skipped during node_modules resolution instead of being treated as package names. ([#11639](https://github.com/mastra-ai/mastra/pull/11639))
+
+- Add Bun runtime detection for bundler platform selection ([#11548](https://github.com/mastra-ai/mastra/pull/11548))
+
+  When running under Bun, the bundler now uses `neutral` esbuild platform instead of `node` to preserve Bun-specific globals (like `Bun.s3`). This fixes compatibility issues where Bun APIs were being incorrectly transformed during the build process.
+
+- Improved file persistence in dev mode. Files created by `mastra dev` are now saved in the public directory, so you can commit them to version control or ignore them via `.gitignore`. ([#11234](https://github.com/mastra-ai/mastra/pull/11234))
+
+- Fixed Windows crash where the Mastra dev server failed to start with `ERR_UNSUPPORTED_ESM_URL_SCHEME` error. The deployer now correctly handles Windows file paths. ([#11340](https://github.com/mastra-ai/mastra/pull/11340))
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`106c960`](https://github.com/mastra-ai/mastra/commit/106c960df5d110ec15ac8f45de8858597fb90ad5), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+  - @mastra/server@1.0.0-beta.20
+
+## 1.0.0-beta.19
+
+### Patch Changes
+
+- Fix npm resolving wrong @mastra/server version ([#11467](https://github.com/mastra-ai/mastra/pull/11467))
+
+  Changed `@mastra/server` dependency from `workspace:^` to `workspace:*` to prevent npm from resolving to incompatible stable versions (e.g., 1.0.3) instead of the required beta versions.
+
+- Remove extra console log statements in node-modules-extension-resolver ([#11470](https://github.com/mastra-ai/mastra/pull/11470))
+
+- Updated dependencies [[`e54953e`](https://github.com/mastra-ai/mastra/commit/e54953ed8ce1b28c0d62a19950163039af7834b4), [`7d56d92`](https://github.com/mastra-ai/mastra/commit/7d56d9213886e8353956d7d40df10045fd12b299), [`fdac646`](https://github.com/mastra-ai/mastra/commit/fdac646033a0930a1a4e00d13aa64c40bb7f1e02), [`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`68ec97d`](https://github.com/mastra-ai/mastra/commit/68ec97d4c07c6393fcf95c2481fc5d73da99f8c8), [`4aa55b3`](https://github.com/mastra-ai/mastra/commit/4aa55b383cf06043943359ea316572fd969861a7)]:
+  - @mastra/core@1.0.0-beta.19
+  - @mastra/server@1.0.0-beta.19
+
 ## 1.0.0-beta.18
 
 ### Patch Changes

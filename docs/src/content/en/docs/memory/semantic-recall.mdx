@@ -1,6 +1,12 @@
 ---
 title: "Semantic Recall | Memory"
 description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # Semantic Recall
@@ -61,7 +67,7 @@ const agent = new Agent({
     // this is the default vector db if omitted
     vector: new LibSQLVector({
       id: 'agent-vector',
-      connectionUrl: "file:./local.db",
+      url: "file:./local.db",
     }),
   }),
 });
@@ -236,5 +242,3 @@ You might want to disable semantic recall in scenarios like:
 ## Viewing Recalled Messages
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent's trace output, alongside recent message history (if configured).
-
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).

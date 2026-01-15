@@ -1,6 +1,8 @@
 ---
 title: "Reference: PII Detector | Processors"
 description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # PIIDetector
@@ -120,7 +122,7 @@ const processor = new PIIDetector({
     },
     {
       name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
       description: "Processes input messages to detect and redact PII before sending to LLM",
       isOptional: false,
     },

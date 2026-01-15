@@ -170,12 +170,14 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       workflowId,
       runId,
       inputData,
+      initialState,
       requestContext: playgroundRequestContext,
       perStep,
     }: {
       workflowId: string;
       runId: string;
       inputData: Record<string, unknown>;
+      initialState?: Record<string, unknown>;
       requestContext: Record<string, unknown>;
       perStep?: boolean;
     }) => {
@@ -194,8 +196,9 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       });
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      const stream = await run.streamVNext({
+      const stream = await run.stream({
         inputData,
+        initialState,
         requestContext,
         closeOnSuspend: true,
         tracingOptions: settings?.tracingOptions,
@@ -277,7 +280,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       }
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      const stream = await run.observeStreamVNext();
+      const stream = await run.observeStream();
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -358,7 +361,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         requestContext.set(key as keyof RequestContext, value);
       });
       const run = await workflow.createRun({ runId });
-      const stream = await run.resumeStreamVNext({
+      const stream = await run.resumeStream({
         step,
         resumeData,
         requestContext,

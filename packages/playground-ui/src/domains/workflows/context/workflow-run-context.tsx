@@ -3,7 +3,7 @@ import { createContext, useEffect, useMemo, useState, type Dispatch, type SetSta
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks';
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { useWorkflow, useWorkflowRunExecutionResult } from '@/hooks';
+import { useWorkflow, useWorkflowRun } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
 import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
 
@@ -72,7 +72,7 @@ export function WorkflowRunProvider({
       ? undefined
       : 5000;
 
-  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRunExecutionResult(
+  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRun(
     workflowId,
     initialRunId ?? '',
     refetchExecResultInterval,
@@ -90,6 +90,7 @@ export function WorkflowRunProvider({
           error: runExecutionResult?.error,
           runId: initialRunId,
           serializedStepGraph: runExecutionResult?.serializedStepGraph,
+          value: runExecutionResult?.initialState,
         } as WorkflowRunState)
       : undefined;
   }, [runExecutionResult, initialRunId]);
@@ -120,7 +121,14 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (runSnapshot?.runId) {
       setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
-      setPayload(runSnapshot.context?.input);
+      if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
+        setPayload({
+          initialState: runSnapshot.value,
+          inputData: runSnapshot.context?.input,
+        });
+      } else {
+        setPayload(runSnapshot.context?.input);
+      }
       setRunId(runSnapshot.runId);
     }
   }, [runSnapshot]);

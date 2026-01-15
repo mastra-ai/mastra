@@ -1,6 +1,10 @@
 ---
 title: "Agent Networks | Agents"
 description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Agent Networks
@@ -229,6 +233,62 @@ routing-agent-end
 tool-execution-start
 tool-execution-end
 network-execution-event-step-finish
+```
+
+## Structured output
+
+When you need typed, validated results from a network, use the `structuredOutput` option. After the network completes its task, it generates a structured response matching your schema.
+
+```typescript
+import { z } from "zod";
+
+const resultSchema = z.object({
+  summary: z.string().describe("A brief summary of the findings"),
+  recommendations: z.array(z.string()).describe("List of recommendations"),
+  confidence: z.number().min(0).max(1).describe("Confidence score"),
+});
+
+const stream = await routingAgent.network("Research AI trends", {
+  structuredOutput: {
+    schema: resultSchema,
+  },
+});
+
+// Consume the stream
+for await (const chunk of stream) {
+  if (chunk.type === "network-object") {
+    // Partial object during generation
+    console.log("Partial:", chunk.payload.object);
+  }
+  if (chunk.type === "network-object-result") {
+    // Final structured object
+    console.log("Final:", chunk.payload.object);
+  }
+}
+
+// Get the typed result
+const result = await stream.object;
+console.log(result?.summary);
+console.log(result?.recommendations);
+console.log(result?.confidence);
+```
+
+### Streaming partial objects
+
+For real-time updates during structured output generation, use `objectStream`:
+
+```typescript
+const stream = await routingAgent.network("Analyze market data", {
+  structuredOutput: { schema: resultSchema },
+});
+
+// Stream partial objects as they're generated
+for await (const partial of stream.objectStream) {
+  console.log("Building result:", partial);
+}
+
+// Get the final typed result
+const final = await stream.object;
 ```
 
 ## Related

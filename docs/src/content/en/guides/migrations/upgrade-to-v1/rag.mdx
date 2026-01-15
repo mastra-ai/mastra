@@ -1,0 +1,47 @@
+---
+title: "RAG | v1 Migration Guide"
+description: "Migrate RAG-related breaking changes when upgrading to v1."
+---
+
+# RAG
+
+The RAG package has renamed chunking parameters and narrowed their types.
+
+## Changed
+
+### `keepSeparator` to `separatorPosition`
+
+The `keepSeparator` parameter has been renamed to `separatorPosition` with a simplified type. The old parameter had a confusing `boolean | 'start' | 'end'` type where `true` was secretly an alias for `'start'`. The new parameter uses explicit `'start' | 'end'` values, and omitting the parameter discards the separator.
+
+To migrate, replace `keepSeparator` with `separatorPosition` using the mapping below:
+
+| Old value | New value |
+|-----------|-----------|
+| `keepSeparator: true` | `separatorPosition: 'start'` |
+| `keepSeparator: 'start'` | `separatorPosition: 'start'` |
+| `keepSeparator: 'end'` | `separatorPosition: 'end'` |
+| `keepSeparator: false` | Remove the parameter |
+| Parameter omitted | No change needed |
+
+```diff
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+-   keepSeparator: true,
++   separatorPosition: 'start',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+-   keepSeparator: 'end',
++   separatorPosition: 'end',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+-   keepSeparator: false,
++   // Parameter removed - separator is discarded by default
+  });
+```

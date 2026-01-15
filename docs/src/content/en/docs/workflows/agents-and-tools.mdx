@@ -1,6 +1,8 @@
 ---
 title: "Agents and Tools | Workflows"
 description: "Learn how to call agents and tools from workflow steps and choose between execute functions and step composition."
+packages:
+  - "@mastra/core"
 ---
 
 # Agents and Tools
@@ -138,12 +140,10 @@ const step2 = createStep({
   execute: async ({ inputData, requestContext }) => {
     const { formatted } = inputData;
 
-    const response = await testTool.execute({
-      context: {
-        text: formatted,
-      },
-      requestContext,
-    });
+    const response = await testTool.execute(
+      { text: formatted },
+      { requestContext },
+    );
 
     return {
       emphasized: response.emphasized,

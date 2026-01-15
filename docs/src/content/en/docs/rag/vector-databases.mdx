@@ -1,6 +1,21 @@
 ---
 title: "Storing Embeddings in A Vector Database | RAG"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+packages:
+  - "@mastra/astra"
+  - "@mastra/chroma"
+  - "@mastra/core"
+  - "@mastra/couchbase"
+  - "@mastra/elasticsearch"
+  - "@mastra/lance"
+  - "@mastra/mongodb"
+  - "@mastra/opensearch"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+  - "@mastra/qdrant"
+  - "@mastra/s3vectors"
+  - "@mastra/upstash"
+  - "@mastra/vectorize"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -19,6 +34,7 @@ After generating embeddings, you need to store them in a database that supports 
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
@@ -151,6 +167,7 @@ await store.upsert({
 import { AstraVector } from "@mastra/astra";
 
 const store = new AstraVector({
+  id: 'astra-vector',
   token: process.env.ASTRA_DB_TOKEN,
   endpoint: process.env.ASTRA_DB_ENDPOINT,
   keyspace: process.env.ASTRA_DB_KEYSPACE,
@@ -177,7 +194,7 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 
@@ -224,6 +241,7 @@ await store.upsert({
 import { CloudflareVector } from "@mastra/vectorize";
 
 const store = new CloudflareVector({
+  id: 'cloudflare-vector',
   accountId: process.env.CF_ACCOUNT_ID,
   apiToken: process.env.CF_API_TOKEN,
 });
@@ -245,7 +263,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { OpenSearchVector } from "@mastra/opensearch";
 
-const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL });
+const store = new OpenSearchVector({ id: "opensearch", node: process.env.OPENSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",
@@ -266,7 +284,7 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
-const store = new ElasticSearchVector({ url: process.env.ELASTICSEARCH_URL });
+const store = new ElasticSearchVector({ id: 'elasticsearch-vector', url: process.env.ELASTICSEARCH_URL });
 
 await store.createIndex({
   indexName: "my-collection",
@@ -287,6 +305,7 @@ await store.upsert({
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
+  id: 'couchbase-vector',
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -338,6 +357,7 @@ For detailed setup instructions and best practices, see the [official LanceDB do
 import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
+  id: 's3-vectors',
   vectorBucketName: "my-vector-bucket",
   clientConfig: {
     region: "us-east-1",
@@ -382,7 +402,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 - Cohere embed-multilingual-v3: 1024 dimensions
 - Google text-embedding-004: 768 dimensions (or custom)
 
-:::important
+:::warning
 Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
 :::
 
@@ -537,7 +557,7 @@ The upsert operation:
 
 Vector stores support rich metadata (any JSON-serializable fields) for filtering and organization. Since metadata is stored with no fixed schema, use consistent field naming to avoid unexpected query results.
 
-:::important
+:::warning
 Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
 :::
 

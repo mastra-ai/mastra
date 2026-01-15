@@ -1,128 +1,99 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
-import pgPromise from 'pg-promise';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { Pool } from 'pg';
 import {
   validateConfig,
   isCloudSqlConfig,
   isConnectionStringConfig,
   isHostConfig,
-  isClientConfig,
+  isPoolConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
-import type { PgDomainConfig } from './db';
+import { PoolAdapter } from './client';
+import type { DbClient } from './client';
+import type { PgDomainClientConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
+/** Default maximum number of connections in the pool */
+const DEFAULT_MAX_CONNECTIONS = 20;
+/** Default idle timeout in milliseconds */
+const DEFAULT_IDLE_TIMEOUT_MS = 30000;
+
+export { exportSchemas } from './db';
 // Export domain classes for direct use with MastraStorage composition
 export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
-export type { PgDomainConfig } from './db';
+export { PoolAdapter } from './client';
+export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
+export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
 
 /**
  * PostgreSQL storage adapter for Mastra.
  *
- * Access domain-specific storage via `getStore()`:
- *
  * @example
  * ```typescript
- * const storage = new PostgresStore({ connectionString: '...' });
+ * // Option 1: Connection string
+ * const store = new PostgresStore({
+ *   id: 'my-store',
+ *   connectionString: 'postgresql://...',
+ * });
  *
- * // Access memory domain
- * const memory = await storage.getStore('memory');
+ * // Option 2: Pre-configured pool
+ * const pool = new Pool({ connectionString: 'postgresql://...' });
+ * const store = new PostgresStore({ id: 'my-store', pool });
+ *
+ * // Access domain storage
+ * const memory = await store.getStore('memory');
  * await memory?.saveThread({ thread });
  *
- * // Access workflows domain
- * const workflows = await storage.getStore('workflows');
- * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ * // Execute custom queries
+ * const rows = await store.db.any('SELECT * FROM my_table');
  * ```
  */
 export class PostgresStore extends MastraStorage {
-  #db: pgPromise.IDatabase<{}>;
-  #pgp: pgPromise.IMain;
+  #pool: Pool;
+  #db: DbClient;
+  #ownsPool: boolean;
   private schema: string;
   private isInitialized: boolean = false;
 
   stores: StorageDomains;
 
   constructor(config: PostgresStoreConfig) {
-    // Validation: connectionString or host/database/user/password must not be empty
     try {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
-      this.schema = config.schemaName || 'public';
+      // Validate schema name to prevent SQL injection
+      this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 
-      // Initialize pg-promise
-      this.#pgp = pgPromise();
-
-      // Handle pre-configured client vs creating new connection
-      if (isClientConfig(config)) {
-        // User provided a pre-configured pg-promise client
-        this.#db = config.client;
+      if (isPoolConfig(config)) {
+        this.#pool = config.pool;
+        this.#ownsPool = false;
       } else {
-        // Create connection from config
-        let pgConfig: PostgresStoreConfig;
-        if (isConnectionStringConfig(config)) {
-          pgConfig = {
-            id: config.id,
-            connectionString: config.connectionString,
-            max: config.max,
-            idleTimeoutMillis: config.idleTimeoutMillis,
-            ssl: config.ssl,
-          };
-        } else if (isCloudSqlConfig(config)) {
-          // Cloud SQL connector config
-          pgConfig = {
-            ...config,
-            id: config.id,
-            max: config.max,
-            idleTimeoutMillis: config.idleTimeoutMillis,
-          };
-        } else if (isHostConfig(config)) {
-          pgConfig = {
-            id: config.id,
-            host: config.host,
-            port: config.port,
-            database: config.database,
-            user: config.user,
-            password: config.password,
-            ssl: config.ssl,
-            max: config.max,
-            idleTimeoutMillis: config.idleTimeoutMillis,
-          };
-        } else {
-          // This should never happen due to validation above, but included for completeness
-          throw new Error(
-            'PostgresStore: invalid config. Provide either {client}, {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
-          );
-        }
-
-        // Note: pg-promise creates connections lazily when queries are executed,
-        // so this is safe to do in the constructor
-        this.#db = this.#pgp(pgConfig as any);
+        this.#pool = this.createPool(config);
+        this.#ownsPool = true;
       }
 
-      // Create all domain instances synchronously in the constructor
-      // This is required for Memory to work correctly, as it checks for
-      // stores.memory during getInputProcessors() before init() is called
-      const skipDefaultIndexes = config.skipDefaultIndexes;
-      const indexes = config.indexes;
-      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema, skipDefaultIndexes, indexes };
+      this.#db = new PoolAdapter(this.#pool);
 
-      const scores = new ScoresPG(domainConfig);
-      const workflows = new WorkflowsPG(domainConfig);
-      const memory = new MemoryPG(domainConfig);
-      const observability = new ObservabilityPG(domainConfig);
-      const agents = new AgentsPG(domainConfig);
+      const domainConfig: PgDomainClientConfig = {
+        client: this.#db,
+        schemaName: this.schema,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+        indexes: config.indexes,
+      };
 
       this.stores = {
-        scores,
-        workflows,
-        memory,
-        observability,
-        agents,
+        scores: new ScoresPG(domainConfig),
+        workflows: new WorkflowsPG(domainConfig),
+        memory: new MemoryPG(domainConfig),
+        observability: new ObservabilityPG(domainConfig),
+        agents: new AgentsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
@@ -136,6 +107,36 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  private createPool(config: PostgresStoreConfig): Pool {
+    if (isConnectionStringConfig(config)) {
+      return new Pool({
+        connectionString: config.connectionString,
+        ssl: config.ssl,
+        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
+        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+      });
+    }
+
+    if (isHostConfig(config)) {
+      return new Pool({
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        password: config.password,
+        ssl: config.ssl,
+        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
+        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+      });
+    }
+
+    if (isCloudSqlConfig(config)) {
+      return new Pool(config as any);
+    }
+
+    throw new Error('PostgresStore: invalid config');
+  }
+
   async init(): Promise<void> {
     if (this.isInitialized) {
       return;
@@ -143,8 +144,6 @@ export class PostgresStore extends MastraStorage {
 
     try {
       this.isInitialized = true;
-
-      // Each domain creates its own indexes during init()
       await super.init();
     } catch (error) {
       this.isInitialized = false;
@@ -159,20 +158,33 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  public get db() {
+  /**
+   * Database client for executing queries.
+   *
+   * @example
+   * ```typescript
+   * const rows = await store.db.any('SELECT * FROM users WHERE active = $1', [true]);
+   * const user = await store.db.one('SELECT * FROM users WHERE id = $1', [userId]);
+   * ```
+   */
+  public get db(): DbClient {
     return this.#db;
   }
 
-  public get pgp() {
-    return this.#pgp;
+  /**
+   * The underlying pg.Pool for direct database access or ORM integration.
+   */
+  public get pool(): Pool {
+    return this.#pool;
   }
 
   /**
-   * Closes the pg-promise connection pool.
-   *
-   * This will close ALL connections in the pool, including pre-configured clients.
+   * Closes the connection pool if it was created by this store.
+   * If a pool was passed in via config, it will not be closed.
    */
   async close(): Promise<void> {
-    this.pgp.end();
+    if (this.#ownsPool) {
+      await this.#pool.end();
+    }
   }
 }

@@ -1,15 +1,24 @@
-import React, { ElementType, ReactNode } from 'react';
-
 import { Txt } from '../Txt';
 
-export interface AvatarProps {
+export type AvatarSize = 'sm' | 'md' | 'lg';
+
+export type AvatarProps = {
   src?: string;
   name: string;
-}
+  size?: AvatarSize;
+};
 
-export const Avatar = ({ src, name }: AvatarProps) => {
+const sizeClasses: Record<AvatarSize, string> = {
+  sm: 'h-avatar-sm w-avatar-sm',
+  md: 'h-avatar-md w-avatar-md',
+  lg: 'h-avatar-lg w-avatar-lg',
+};
+
+export const Avatar = ({ src, name, size = 'sm' }: AvatarProps) => {
   return (
-    <div className="h-avatar-default w-avatar-default border-sm border-border1 bg-surface-3 shrink-0 overflow-hidden rounded-full">
+    <div
+      className={`${sizeClasses[size]} border border-border1 bg-surface3 shrink-0 overflow-hidden rounded-full flex items-center justify-center`}
+    >
       {src ? (
         <img src={src} alt={name} className="h-full w-full object-cover" />
       ) : (

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.0-beta.18",
+  "version": "1.0.0-beta.21",
   "description": "",
   "type": "module",
   "files": [
@@ -73,8 +73,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/server",
+    "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
     "lint": "eslint ."
@@ -100,7 +101,7 @@
     "eslint": "^9.37.0",
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },
@@ -117,6 +118,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.10.5"
+    "hono": "^4.11.3"
   }
 }

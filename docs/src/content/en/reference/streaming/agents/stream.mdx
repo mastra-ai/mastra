@@ -1,13 +1,15 @@
 ---
 title: "Reference: Agent.stream() | Streaming"
 description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
 
 # Agent.stream()
 
-The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5 compatibility.
+The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5+ compatibility.
 
 ## Usage example
 
@@ -322,7 +324,7 @@ const stream = await agent.stream("message for agent");
               type: "MemoryConfig",
               isOptional: true,
               description:
-                "Configuration for memory behavior, like message history and semantic recall.",
+                "Configuration for memory behavior including lastMessages, readOnly, semanticRecall, and workingMemory.",
             },
           ],
         },
@@ -341,13 +343,6 @@ const stream = await agent.stream("message for agent");
       isOptional: true,
       description:
         "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
     },
     {
       name: "telemetry",
@@ -403,13 +398,6 @@ const stream = await agent.stream("message for agent");
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -699,9 +687,9 @@ for await (const chunk of stream.fullStream) {
 const fullText = await stream.text;
 ```
 
-### AI SDK v5 Format
+### AI SDK v5+ Format
 
-To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
+To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
 
 ```ts title="index.ts"
 import { stepCountIs, createUIMessageStreamResponse } from "ai";

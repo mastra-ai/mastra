@@ -1,16 +1,17 @@
 ---
 title: "Reference: Mastra Class | Core"
 description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
 ---
 
 # Mastra Class
 
-The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, telemetry, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
+The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
 
-Think of `Mastra` as a top-level registry:
-
-- Registering **integrations** makes them accessible to **agents**, **workflows**, and **tools** alike.
-- **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
+Think of `Mastra` as a top-level registry where you register agents, workflows, tools, and other components that need to be accessible throughout your application.
 
 ## Usage example
 
@@ -37,14 +38,16 @@ export const mastra = new Mastra({
 
 ## Constructor parameters
 
+Visit the [Configuration reference](/reference/v1/configuration) for detailed documentation on all available configuration options.
+
 <PropertiesTable
   content={[
     {
       name: "agents",
-      type: "Agent[]",
-      description: "Array of Agent instances to register",
+      type: "Record<string, Agent>",
+      description: "Agent instances to register, keyed by name",
       isOptional: true,
-      defaultValue: "[]",
+      defaultValue: "{}",
     },
     {
       name: "tools",
@@ -91,15 +94,15 @@ export const mastra = new Mastra({
     },
     {
       name: "tts",
-      type: "Record<string, MastraTTS>",
+      type: "Record<string, MastraVoice>",
       isOptional: true,
-      description: "An object for registering Text-To-Speech services.",
+      description: "Text-to-speech providers for voice synthesis",
     },
     {
-      name: "telemetry",
-      type: "OtelConfig",
+      name: "observability",
+      type: "ObservabilityEntrypoint",
       isOptional: true,
-      description: "Configuration for OpenTelemetry integration.",
+      description: "Observability configuration for tracing and monitoring",
     },
     {
       name: "deployer",
@@ -113,8 +116,6 @@ export const mastra = new Mastra({
       description:
         "Server configuration including port, host, timeout, API routes, middleware, CORS settings, and build options for Swagger UI, API request logging, and OpenAPI docs.",
       isOptional: true,
-      defaultValue:
-        "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
     },
     {
       name: "mcpServers",
@@ -129,14 +130,20 @@ export const mastra = new Mastra({
       description:
         "Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
       isOptional: true,
-      defaultValue:
-        "{ externals: [], sourcemap: false, transpilePackages: [] }",
     },
     {
       name: "scorers",
-      type: "Record<string, MastraScorer>",
+      type: "Record<string, Scorer>",
       description:
-        "Scorers to register for scoring traces and overriding default scorers used during agent generation or workflow execution. Structured as a key-value pair, with keys being the scorer name and values being the scorer instance.",
+        "Scorers for evaluating agent responses and workflow outputs",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "processors",
+      type: "Record<string, Processor>",
+      description:
+        "Input/output processors for transforming agent inputs and outputs",
       isOptional: true,
       defaultValue: "{}",
     },

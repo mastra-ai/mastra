@@ -1,6 +1,10 @@
 ---
 title: "Agent Approval | Agents"
 description: Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Agent Approval
@@ -89,8 +93,8 @@ export const testTool = createTool({
   resumeSchema: z.object({
     approved: z.boolean()
   }),
-  execute: async ({ location }) => {
-    const response = await fetch(`https://wttr.in/${location}?format=3`);
+  execute: async (inputData) => {
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
     const weather = await response.text();
 
     return { weather };
@@ -126,7 +130,6 @@ const handleResume = async () => {
 With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
 
 ```typescript
-
 export const testToolB = createTool({
   id: "test-tool-b",
   description: "Fetches weather for a location",
@@ -142,14 +145,14 @@ export const testToolB = createTool({
   suspendSchema: z.object({
     reason: z.string()
   }),
-  execute: async ({ location }, { agent } = {}) => {
-    const { resumeData: { approved } = {}, suspend } = agent ?? {};
+  execute: async (inputData, context) => {
+    const { resumeData: { approved } = {}, suspend } = context?.agent ?? {};
 
     if (!approved) {
       return suspend?.({ reason: "Approval required." });
     }
 
-    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
     const weather = await response.text();
 
     return { weather };

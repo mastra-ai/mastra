@@ -1,5 +1,7 @@
 ---
 title: "Custom Scorers | Evals"
+packages:
+  - "@mastra/core"
 ---
 
 # Custom scorers
@@ -33,17 +35,19 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 - Natural language understanding tasks
 - Nuanced context evaluation
 
+**What “prompt object” means:** Instead of a function, the step is an object with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`). That object tells Mastra to run the judge LLM for the step and store the structured output in `results.<step>StepResult`.
+
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
 ### Initializing a Scorer
 
-Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a type specification and judge configuration.
+Every scorer starts with the `createScorer` factory function, which requires an id and description, and optionally accepts a type specification and judge configuration.
 
 ```typescript
 import { createScorer } from '@mastra/core/evals';
 
 const glutenCheckerScorer = createScorer({
-  name: 'Gluten Checker',
+  id: 'gluten-checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
     model: 'openai/gpt-5.1',
@@ -58,6 +62,49 @@ const glutenCheckerScorer = createScorer({
 ```
 
 The judge configuration is only needed if you plan to use prompt objects in any step. Individual steps can override this default configuration with their own judge settings.
+
+If all steps are function-based, the judge is never called and there is no judge output. To see LLM output, define at least one step as a prompt object and read the corresponding step result (for example, `results.analyzeStepResult`).
+
+#### Minimal judge example (prompt object)
+
+This example uses a prompt object in `analyze`, so the judge runs and its structured output is available as `results.analyzeStepResult`.
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import { z } from "zod";
+
+const quoteSourcesScorer = createScorer({
+  id: "quote-sources",
+  description: "Check if the response includes sources",
+  judge: {
+    model: "openai/gpt-4.1-nano",
+    instructions: "You are a strict evaluator.",
+  },
+})
+  .analyze({
+    description: "Detect whether sources are present",
+    outputSchema: z.object({
+      hasSources: z.boolean(),
+      sources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => `
+Does the response contain sources? Extract them as a list.
+
+Response:
+${run.output}
+`,
+  })
+  .generateScore(({ results }) => (results.analyzeStepResult.hasSources ? 1 : 0));
+
+// Run the scorer and inspect judge output
+const result = await quoteSourcesScorer.run({
+  input: "What is the capital of France?",
+  output: "Paris is the capital of France [1]. Source: [1] Wikipedia",
+});
+
+console.log(result.score);              // 1
+console.log(result.analyzeStepResult);  // { hasSources: true, sources: ["Wikipedia"] }
+```
 
 #### Agent Type for Agent Evaluation
 
@@ -301,7 +348,7 @@ Return your response in this format:
 "This recipe is [gluten-free/contains gluten] because [explanation]"`;
 
 export const glutenCheckerScorer = createScorer({
-  name: "Gluten Checker",
+  id: "gluten-checker",
   description: "Check if the output contains any gluten",
   judge: {
     model: "openai/gpt-4.1-nano",
@@ -398,8 +445,6 @@ Provides human-readable explanations for the score using another LLM call.
 
 The reason generation step creates explanations that help users understand why a particular score was assigned, using both the boolean result and the specific gluten sources identified by the analysis step.
 
-````
-
 ## High gluten-free example
 
 ```typescript title="src/example-high-gluten-free.ts"
@@ -411,7 +456,7 @@ const result = await glutenCheckerScorer.run({
 console.log('Score:', result.score);
 console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
 console.log('Reason:', result.reason);
-````
+```
 
 ### High gluten-free output
 

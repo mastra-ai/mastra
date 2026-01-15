@@ -255,7 +255,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        dataQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        dataQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         dataParams.fromDate = startDate;
       }
 
@@ -264,7 +265,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        dataQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        dataQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         dataParams.toDate = endDate;
       }
 
@@ -313,7 +315,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        countQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         countParams.fromDate = startDate;
       }
 
@@ -322,7 +325,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        countQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
       }
 
@@ -1374,10 +1378,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           resource.workingMemory && typeof resource.workingMemory === 'object'
             ? JSON.stringify(resource.workingMemory)
             : resource.workingMemory,
-        metadata:
-          resource.metadata && typeof resource.metadata === 'string'
-            ? JSON.parse(resource.metadata)
-            : resource.metadata,
+        metadata: parseMetadata(resource.metadata),
         createdAt: new Date(resource.createdAt),
         updatedAt: new Date(resource.updatedAt),
       };
@@ -1403,7 +1404,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           {
             id: resource.id,
             workingMemory: resource.workingMemory,
-            metadata: JSON.stringify(resource.metadata),
+            metadata: serializeMetadata(resource.metadata),
             createdAt: resource.createdAt.toISOString(),
             updatedAt: resource.updatedAt.toISOString(),
           },
@@ -1415,7 +1416,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         },
       });
 
-      return resource;
+      // Return resource with normalized metadata
+      return {
+        ...resource,
+        metadata: resource.metadata || {},
+      };
     } catch (error) {
       throw new MastraError(
         {

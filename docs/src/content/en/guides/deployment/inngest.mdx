@@ -311,6 +311,92 @@ When you include custom functions:
 
 This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
 
+## Using with other frameworks
+
+The default `serve` function uses Hono internally. If you're using a different web framework like Express, Fastify, or Koa, use the `createServe` factory function with the appropriate Inngest adapter.
+
+### Express
+
+```ts title="src/server.ts"
+import express from "express";
+import { createServe } from "@mastra/inngest";
+import { serve as expressAdapter } from "inngest/express";
+import { mastra, inngest } from "./mastra";
+
+const app = express();
+
+// Body parsing middleware required for Inngest
+app.use(express.json());
+
+const handler = createServe(expressAdapter)({ mastra, inngest });
+app.use("/api/inngest", handler);
+
+app.listen(3000);
+```
+
+### Fastify
+
+```ts title="src/server.ts"
+import Fastify from "fastify";
+import { createServe } from "@mastra/inngest";
+import { serve as fastifyAdapter } from "inngest/fastify";
+import { mastra, inngest } from "./mastra";
+
+const fastify = Fastify();
+
+// JSON parsing is handled by Fastify's default content-type parser
+const handler = createServe(fastifyAdapter)({ mastra, inngest });
+
+fastify.route({
+  method: ["GET", "POST", "PUT"],
+  url: "/api/inngest",
+  handler,
+});
+
+fastify.listen({ port: 3000 });
+```
+
+### Koa
+
+```ts title="src/server.ts"
+import Koa from "koa";
+import Router from "@koa/router";
+import bodyParser from "koa-bodyparser";
+import { createServe } from "@mastra/inngest";
+import { serve as koaAdapter } from "inngest/koa";
+import { mastra, inngest } from "./mastra";
+
+const app = new Koa();
+const router = new Router();
+
+// Body parsing middleware required for Inngest
+app.use(bodyParser());
+
+const handler = createServe(koaAdapter)({ mastra, inngest });
+router.all("/api/inngest", handler);
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+```
+
+### Next.js
+
+```ts title="app/api/inngest/route.ts"
+import { createServe } from "@mastra/inngest";
+import { serve as nextAdapter } from "inngest/next";
+import { mastra, inngest } from "@/mastra";
+
+const handler = createServe(nextAdapter)({ mastra, inngest });
+
+export { handler as GET, handler as POST, handler as PUT };
+```
+
+### Available adapters
+
+The `createServe` function works with any Inngest adapter. See the [Inngest serve documentation](https://www.inngest.com/docs/reference/serve) for a complete list of available adapters including AWS Lambda, Cloudflare Workers, and more.
+
 ## Flow control
 
 Inngest workflows support flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These options are configured in the `createWorkflow()` call and help manage workflow execution at scale.
@@ -442,3 +528,146 @@ const workflow = createWorkflow({
 ```
 
 All flow control options are optional. If not specified, workflows run with Inngest's default behavior. For more information, see the [Inngest flow control documentation](https://www.inngest.com/docs/guides/flow-control).
+
+## Cron scheduling
+
+Inngest workflows can be automatically triggered on a schedule using cron expressions. This allows you to run workflows at regular intervals, such as daily reports, hourly data syncs, or maintenance tasks.
+
+### Basic cron scheduling
+
+Configure a workflow to run on a schedule by adding a `cron` property:
+
+```ts
+const workflow = createWorkflow({
+  id: "daily-report-workflow",
+  inputSchema: z.object({ reportType: z.string() }),
+  outputSchema: z.object({ generated: z.boolean() }),
+  steps: [generateReportStep],
+  // Run daily at midnight
+  cron: "0 0 * * *",
+});
+```
+
+### Cron schedule format
+
+The `cron` property accepts standard cron expressions in the format: `minute hour day month dayOfWeek`
+
+- **minute**: 0-59
+- **hour**: 0-23
+- **day**: 1-31
+- **month**: 1-12 or JAN-DEC
+- **dayOfWeek**: 0-6 (Sunday = 0) or SUN-SAT
+
+Common cron patterns:
+
+```ts
+// Every 15 minutes
+cron: "*/15 * * * *"
+
+// Every hour at minute 0
+cron: "0 * * * *"
+
+// Every 6 hours
+cron: "0 */6 * * *"
+
+// Daily at midnight
+cron: "0 0 * * *"
+
+// Daily at 9 AM
+cron: "0 9 * * *"
+
+// Every weekday at 9 AM
+cron: "0 9 * * 1-5"
+
+// First day of every month at midnight
+cron: "0 0 1 * *"
+
+// Every Monday at 8 AM
+cron: "0 8 * * 1"
+```
+
+### Providing input data for scheduled runs
+
+You can provide static input data that will be used for each scheduled execution:
+
+```ts
+const workflow = createWorkflow({
+  id: "scheduled-data-sync",
+  inputSchema: z.object({
+    source: z.string(),
+    destination: z.string(),
+  }),
+  outputSchema: z.object({ synced: z.boolean() }),
+  steps: [syncDataStep],
+  cron: "0 */6 * * *", // Every 6 hours
+  // Input data provided to each scheduled run
+  inputData: {
+    source: "production-db",
+    destination: "analytics-warehouse",
+  },
+});
+```
+
+### Providing initial state for scheduled runs
+
+You can also set an initial state for scheduled workflow runs:
+
+```ts
+const workflow = createWorkflow({
+  id: "scheduled-aggregation",
+  inputSchema: z.object({ date: z.string() }),
+  outputSchema: z.object({ aggregated: z.boolean() }),
+  stateSchema: z.object({
+    processedCount: z.number(),
+    lastProcessedDate: z.string(),
+  }),
+  steps: [aggregateDataStep],
+  cron: "0 0 * * *", // Daily at midnight
+  inputData: {
+    date: new Date().toISOString().split("T")[0], // Today's date
+  },
+  initialState: {
+    processedCount: 0,
+    lastProcessedDate: "",
+  },
+});
+```
+
+### Combining cron with flow control
+
+Cron scheduling can be combined with flow control options:
+
+```ts
+const workflow = createWorkflow({
+  id: "scheduled-api-sync",
+  inputSchema: z.object({ endpoint: z.string() }),
+  outputSchema: z.object({ synced: z.boolean() }),
+  steps: [syncApiStep],
+  cron: "*/30 * * * *", // Every 30 minutes
+  inputData: {
+    endpoint: "https://api.example.com/data",
+  },
+  // Limit concurrent executions even for scheduled runs
+  concurrency: {
+    limit: 5,
+  },
+  // Rate limit scheduled executions
+  rateLimit: {
+    period: "1h",
+    limit: 100,
+  },
+});
+```
+
+### How cron functions work
+
+When you configure a workflow with a `cron` property:
+
+1. A separate Inngest function is automatically created with the ID `workflow.${workflowId}.cron`
+2. This function is registered with Inngest and will trigger at the specified schedule
+3. Each scheduled execution creates a new workflow run with the provided `inputData` and `initialState`
+4. The cron function and the main workflow function are both served together when you call `serve()`
+
+You can monitor scheduled executions in the Inngest dashboard under **Functions** and **Runs** sections. The cron function will appear as a separate function alongside your main workflow function.
+
+For more information on cron scheduling, see the [Inngest cron documentation](https://www.inngest.com/docs/guides/scheduled-functions).

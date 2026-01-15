@@ -56,10 +56,9 @@ describe('Agent.stream', () => {
     });
     const jsonSchema = zodToJsonSchema(outputSchema);
     const params: StreamParams<typeof outputSchema> = {
-      messages: [] as any,
       structuredOutput: { schema: outputSchema },
     };
-    await agent.stream(params);
+    await agent.stream([], params);
     expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
@@ -77,12 +76,11 @@ describe('Agent.stream', () => {
     Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
     const params: StreamParams<undefined> = {
-      messages: [] as any,
       requestContext,
     };
 
     // Act: Call stream with the params
-    await agent.stream(params);
+    await agent.stream([], params);
 
     // Assert: Verify requestContext was converted to plain object
     expect(agent.lastProcessedParams?.requestContext).toEqual({
@@ -110,12 +108,11 @@ describe('Agent.stream', () => {
     };
 
     const params: StreamParams<undefined> = {
-      messages: [] as any,
       clientTools,
     };
 
     // Act: Call stream with the params
-    await agent.stream(params);
+    await agent.stream([], params);
 
     // Assert: Verify schemas were converted while preserving other properties
     expect(agent.lastProcessedParams?.clientTools).toEqual({
@@ -129,13 +126,8 @@ describe('Agent.stream', () => {
   });
 
   it('should return a Response object with processDataStream method', async () => {
-    // Arrange: Create minimal params
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
-
     // Act: Call stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([]);
 
     // Assert: Verify response structure
     expect(response).toBeInstanceOf(Response);

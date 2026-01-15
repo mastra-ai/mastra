@@ -1,6 +1,9 @@
 ---
 title: "Publishing an MCP Server | MCP"
 description: Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -132,8 +135,8 @@ const mcp = new MCPClient({
 });
 
 // You can then get tools or toolsets from this configuration to use in your agent
-const tools = await mcp.getTools();
-const toolsets = await mcp.getToolsets();
+const tools = await mcp.listTools();
+const toolsets = await mcp.listToolsets();
 ```
 
 Note: If you published without an organization scope, the `args` might just be `["-y", "your-package-name@latest"]`.

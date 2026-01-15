@@ -1,4 +1,4 @@
-import { Tabs } from '@/components/ui/elements/tabs';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import {
   KeyValueList,
   KeyValueListItemData,
@@ -53,20 +53,18 @@ export function SpanTabs({
 
   return (
     <Tabs defaultTab={defaultActiveTab}>
-      <Tabs.List>
-        <Tabs.Tab value="details">Details</Tabs.Tab>
-        <Tabs.Tab value="scores">
-          Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}
-        </Tabs.Tab>
-      </Tabs.List>
-      <Tabs.Content value="details">
+      <TabList>
+        <Tab value="details">Details</Tab>
+        <Tab value="scores">Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}</Tab>
+      </TabList>
+      <TabContent value="details">
         <Sections>
           {span?.attributes?.usage ? <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} /> : null}
           <KeyValueList data={spanInfo} LinkComponent={Link} />
           <SpanDetails span={span} />
         </Sections>
-      </Tabs.Content>
-      <Tabs.Content value="scores">
+      </TabContent>
+      <TabContent value="scores">
         <Sections>
           <Section>
             <Section.Header>
@@ -100,7 +98,7 @@ export function SpanTabs({
             />
           </Section>
         </Sections>
-      </Tabs.Content>
+      </TabContent>
     </Tabs>
   );
 }

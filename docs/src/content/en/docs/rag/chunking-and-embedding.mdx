@@ -1,6 +1,9 @@
 ---
-title: Chunking and Embedding Documents | RAG | Mastra Docs
+title: Chunking and Embedding Documents | RAG
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
 ---
 
 # Chunking and Embedding Documents
@@ -55,7 +58,6 @@ const chunks = await doc.chunk({
   minSize: 50,
   overlap: 0,
   sentenceEnders: ["."],
-  keepSeparator: true,
 });
 ```
 

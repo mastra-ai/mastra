@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/abacus",
+          label: "Abacus",
+        },
+        {
+          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -170,6 +175,11 @@ const sidebars = {
           type: "doc",
           id: "providers/fireworks-ai",
           label: "Fireworks AI",
+        },
+        {
+          type: "doc",
+          id: "providers/firmware",
+          label: "Firmware",
         },
         {
           type: "doc",
@@ -278,6 +288,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/novita-ai",
+          label: "NovitaAI",
+        },
+        {
+          type: "doc",
           id: "providers/nvidia",
           label: "Nvidia",
         },
@@ -310,6 +325,11 @@ const sidebars = {
           type: "doc",
           id: "providers/poe",
           label: "Poe",
+        },
+        {
+          type: "doc",
+          id: "providers/privatemode-ai",
+          label: "Privatemode AI",
         },
         {
           type: "doc",
@@ -355,6 +375,11 @@ const sidebars = {
           type: "doc",
           id: "providers/venice",
           label: "Venice AI",
+        },
+        {
+          type: "doc",
+          id: "providers/vivgrid",
+          label: "Vivgrid",
         },
         {
           type: "doc",

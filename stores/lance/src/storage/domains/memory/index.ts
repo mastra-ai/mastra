@@ -358,7 +358,8 @@ export class StoreMemoryLance extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.getTime()
             : new Date(filter.dateRange.start).getTime();
-        conditions.push(`\`createdAt\` >= ${startTime}`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`\`createdAt\` ${startOp} ${startTime}`);
       }
 
       if (filter?.dateRange?.end) {
@@ -366,7 +367,8 @@ export class StoreMemoryLance extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.getTime()
             : new Date(filter.dateRange.end).getTime();
-        conditions.push(`\`createdAt\` <= ${endTime}`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`\`createdAt\` ${endOp} ${endTime}`);
       }
 
       const whereClause = conditions.join(' AND ');

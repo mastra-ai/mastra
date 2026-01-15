@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow.sleep() | Workflows"
 description: Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.sleep()
@@ -56,7 +58,3 @@ export const testWorkflow = createWorkflow({...})
   .then(step2)
   .commit();
 ```
-
-## Related
-
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)

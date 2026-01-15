@@ -1,6 +1,9 @@
 ---
 title: "Reference: Semantic Recall Processor | Processors"
 description: "Documentation for the SemanticRecall processor in Mastra, which enables semantic search over conversation history using vector embeddings."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
 ---
 
 # SemanticRecall
@@ -141,10 +144,12 @@ import { PgVector } from "@mastra/pg";
 import { openai } from "@ai-sdk/openai";
 
 const storage = new PostgresStorage({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 
 const vector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.DATABASE_URL,
 });
 

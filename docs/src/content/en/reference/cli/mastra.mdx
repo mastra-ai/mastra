@@ -1,6 +1,8 @@
 ---
 title: "Reference: CLI Commands | CLI"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
+packages:
+  - "@mastra/core"
 ---
 
 # CLI Commands
@@ -19,7 +21,7 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/v1/getting-started/studio#local-https).
+Enable local HTTPS support. [Learn more](/reference/v1/configuration#serverhttps).
 
 #### `--inspect`
 
@@ -90,6 +92,12 @@ If you're deploying to a [serverless platform](/guides/v1/deployment) you need t
 
 It accepts [common flags][common-flags].
 
+### Flags
+
+#### `--studio`
+
+Bundle the Studio UI with the build.
+
 ### Configs
 
 You can set certain environment variables to modify the behavior of `mastra build`.
@@ -135,6 +143,18 @@ The command accepts [common flags][common-flags] and the following additional fl
 #### `--port`
 
 The port to run Studio on. Defaults to `3000`.
+
+#### `--server-host`
+
+The host of the Mastra API server to connect to. Defaults to `localhost`.
+
+#### `--server-port`
+
+The port of the Mastra API server to connect to. Defaults to `4111`.
+
+#### `--server-protocol`
+
+The protocol of the Mastra API server to connect to. Defaults to `http`.
 
 ## `mastra lint`
 

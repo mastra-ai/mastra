@@ -9,11 +9,12 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
+import type { MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
@@ -28,6 +29,7 @@ import type {
   UpdateModelInModelListParams,
   ReorderModelListParams,
   NetworkStreamParams,
+  StreamParamsBaseWithoutMessages,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
@@ -36,7 +38,7 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
-async function executeToolCallAndRespond({
+async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
   resourceId,
@@ -44,8 +46,8 @@ async function executeToolCallAndRespond({
   requestContext,
   respondFn,
 }: {
-  params: StreamParams<any>;
-  response: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>>;
+  params: StreamParams<OUTPUT>;
+  response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -101,11 +103,7 @@ async function executeToolCallAndRespond({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
-        // @ts-ignore
-        return respondFn({
-          ...params,
-          messages: updatedMessages as MessageListInput,
-        });
+        return respondFn(updatedMessages as MessageListInput, params);
       }
     }
   }
@@ -302,30 +300,32 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generate(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: StreamParamsBaseWithoutMessages,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generate<OUTPUT extends {}>(
+    messages: MessageListInput,
+    options: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+    },
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  // Backward compatibility overload
-  async generate<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
+  // Catch-all overload to handle conditional types when OUTPUT is generic
+  async generate<OUTPUT>(
+    messages: MessageListInput,
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: SerializableStructuredOutputOptions<any>;
+    },
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  async generate<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+  async generate<OUTPUT = any>(
+    messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamParams<OUTPUT>;
-    if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
-      // Old signature: single parameter object
-      params = messagesOrParams;
-    } else {
-      // New signature: messages as first param, options as second
-      params = {
-        messages: messagesOrParams as MessageListInput,
-        ...options,
-      } as StreamParams<OUTPUT>;
-    }
+    const params = {
+      ...options,
+      messages: messages,
+    } as StreamParams<OUTPUT>;
     const processedParams = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -338,7 +338,10 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { resourceId, threadId, requestContext } = processedParams as StreamParams;
+    const { memory, requestContext } = processedParams as StreamParams;
+    const { resource, thread } = memory ?? {};
+    const resourceId = resource;
+    const threadId = typeof thread === 'string' ? thread : thread?.id;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
@@ -349,7 +352,7 @@ export class Agent extends BaseResource {
     );
 
     if (response.finishReason === 'tool-calls') {
-      return executeToolCallAndRespond({
+      return executeToolCallAndRespond<OUTPUT>({
         response,
         params,
         resourceId,
@@ -1331,9 +1334,102 @@ export class Agent extends BaseResource {
 
     return streamResponse;
   }
-  async stream<OUTPUT extends OutputSchema = undefined>(
+
+  async approveNetworkToolCall(params: { runId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/approve-network-tool-call`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+    }) => {
+      await processMastraNetworkStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async declineNetworkToolCall(params: { runId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/decline-network-tool-call`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+    }) => {
+      await processMastraNetworkStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async stream<OUTPUT extends {}>(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    streamOptions: Omit<StreamParams<OUTPUT>, 'messages' | 'structuredOutput'> & {
+      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+    },
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1343,9 +1439,23 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  // Backward compatibility overload
-  async stream<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
+  // async stream<OUTPUT>(
+  //   messages: MessageListInput,
+  //   streamOptions: Omit<StreamParams<any>, 'messages' | 'structuredOutput'> & {
+  //     structuredOutput?: SerializableStructuredOutputOptions<any>;
+  //   },
+  // ): Promise<
+  //   Response & {
+  //     processDataStream: ({
+  //       onChunk,
+  //     }: {
+  //       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+  //     }) => Promise<void>;
+  //   }
+  // >;
+  async stream(
+    messages: MessageListInput,
+    streamOptions?: Omit<StreamParams, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1355,8 +1465,8 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async stream<OUTPUT extends OutputSchema = undefined>(
-    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+  async stream<OUTPUT = undefined>(
+    messagesOrParams: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
@@ -1368,26 +1478,19 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamParams<OUTPUT>;
-    if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
-      // Old signature: single parameter object
-      params = messagesOrParams;
-    } else {
-      // New signature: messages as first param, options as second
-      params = {
-        messages: messagesOrParams as MessageListInput,
-        ...options,
-      } as StreamParams<OUTPUT>;
-    }
+    let params: StreamParams<OUTPUT> = {
+      messages: messagesOrParams as MessageListInput,
+      ...options,
+    } as StreamParams<OUTPUT>;
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
-        ? {
+        ? ({
             ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema) as OUTPUT,
-          }
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          } as SerializableStructuredOutputOptions<OUTPUT>)
         : undefined,
     };
 

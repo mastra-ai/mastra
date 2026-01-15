@@ -9,6 +9,69 @@ Client SDK changes align with server-side API updates including renamed utilitie
 
 ## Changed
 
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from agent method calls. Use the `memory` option instead, which provides a cleaner API for memory configuration. This applies to both `@mastra/client-js` and `@mastra/react` packages.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+**Using `@mastra/client-js`:**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+  await agent.generate({
+    messages: [...],
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+
+  await agent.stream({
+    messages: [...],
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+**Using `@mastra/react` `useChat` hook:**
+
+The `useChat` hook internally passes the memory option when you provide a `threadId`. No changes are needed in your component code if you're using the hook's built-in memory handling. However, if you were manually passing options to `sendMessage`, update them accordingly:
+
+```diff
+  const { sendMessage } = useChat({ agentId: 'my-agent' });
+
+  await sendMessage({
+    message: 'Hello',
+    mode: 'stream',
+-   threadId: 'thread-123',
++   threadId: 'thread-123', // Still works - internally converted to memory option
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.generate({
+  messages: [...],
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```
+
 ### Client SDK types from `Get*` to `List*`
 
 Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
@@ -85,7 +148,51 @@ npx @mastra/codemod@beta v1/client-get-memory-thread .
 
 :::
 
+### Unified `runById` API for workflow runs
+
+The `runById()` method now returns a unified `WorkflowState` object containing both metadata (runId, workflowName, resourceId, createdAt, updatedAt) and processed execution state (status, result, error, payload, steps). This unifies the previously separate `runById()` and `runExecutionResult()` methods.
+
+The method also accepts an options object with optional `fields` and `withNestedWorkflows` parameters for performance optimization.
+
+```diff
+  const workflow = client.getWorkflow('my-workflow');
+
+- // Previously: runById returned raw WorkflowRun with snapshot
+- const run = await workflow.runById(runId, requestContext);
+- // Separately: runExecutionResult returned processed execution state
+- const result = await workflow.runExecutionResult(runId);
+
++ // Now: Single method returns unified WorkflowState
++ const run = await workflow.runById(runId, {
++   requestContext,  // Optional request context
++   fields: ['status', 'result'],  // Optional: request only specific fields
++   withNestedWorkflows: false,  // Optional: skip nested workflow data for performance
++ });
++ // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+```
+
 ## Removed
+
+### `runExecutionResult` method and `GetWorkflowRunExecutionResultResponse` type
+
+The `runExecutionResult()` method and `GetWorkflowRunExecutionResultResponse` type have been removed from `@mastra/client-js`. The `/execution-result` API endpoints have also been removed.
+
+To migrate, use `runById()` instead, which now returns the same unified `WorkflowState` with both metadata and processed execution state.
+
+```diff
+- import type { GetWorkflowRunExecutionResultResponse } from '@mastra/client-js';
+-
+- const workflow = client.getWorkflow('my-workflow');
+- const result = await workflow.runExecutionResult(runId);
+
++ const workflow = client.getWorkflow('my-workflow');
++ const result = await workflow.runById(runId);
++ // Or with options for performance optimization:
++ const result = await workflow.runById(runId, {
++   fields: ['status', 'result'],  // Only fetch specific fields
++   withNestedWorkflows: false,     // Skip expensive nested workflow data
++ });
+```
 
 ### `toAISdkFormat` function
 
@@ -169,6 +276,18 @@ Run-related methods cannot be called directly on workflow instance. You need to 
 ```diff
 - const result = await workflow.stream({ runId: '123', inputData: { ... } });
 + const run = await workflow.createRun({ runId: '123' });
++ const stream = await run.stream({ inputData: { ... } });
+```
+
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods instead.
+
+```diff
++ const run = await workflow.createRun({ runId: '123' });
+- const stream = await run.streamVNext({ inputData: { ... } });
 + const stream = await run.stream({ inputData: { ... } });
 ```
 

@@ -29,14 +29,13 @@ import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } fr
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
-import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
@@ -47,20 +46,20 @@ export type { LLMStepResult } from '../stream/types';
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
+export type ToolsInput = Record<string, ToolAction<any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
 
 export type AgentInstructions = SystemMessage;
 export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type FallbackFields<OUTPUT extends OutputSchema = undefined> =
+type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: InferSchemaOutput<OUTPUT> };
+  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+export type StructuredOutputOptions<OUTPUT = {}> = {
   /** Zod schema to validate the output against */
-  schema: OUTPUT;
+  schema: NonNullable<OutputSchema<OUTPUT>>;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
@@ -95,10 +94,9 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
-  StructuredOutputOptions<OUTPUT>,
-  'model'
-> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
+  model?: ModelRouterModelId | OpenAICompatibleConfig;
+};
 
 /**
  * Provide options while creating an agent.
@@ -124,7 +122,11 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
-export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
+export interface AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+> {
   /**
    * Identifier for the agent.
    */
@@ -158,7 +160,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
   /**
    * Default options used when calling `generate()`.
    */
@@ -170,7 +172,32 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
+  /**
+   * Default options used when calling `network()`.
+   * These are merged with options passed to each network() call.
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   // ...
+   *   defaultNetworkOptions: {
+   *     maxSteps: 20,
+   *     routing: {
+   *       verboseIntrospection: true,
+   *     },
+   *     completion: {
+   *       scorers: [testsScorer, buildScorer],
+   *       strategy: 'all',
+   *     },
+   *     onIterationComplete: ({ iteration, isComplete }) => {
+   *       console.log(`Iteration ${iteration} complete: ${isComplete}`);
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  defaultNetworkOptions?: DynamicArgument<NetworkOptions>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -221,7 +248,6 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
   options?: MemoryConfig;
-  readOnly?: boolean;
 };
 
 /**

@@ -3,17 +3,17 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
-import type { Span, SpanType, TracingContext } from '../../../observability';
+import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
+import type { Step } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-interface MapResultsStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
+interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
@@ -26,7 +26,7 @@ interface MapResultsStepOptions<OUTPUT extends OutputSchema | undefined = undefi
   methodType: AgentMethodType;
 }
 
-export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,
@@ -37,19 +37,16 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
   agentSpan,
   agentId,
   methodType,
-}: MapResultsStepOptions<OUTPUT>) {
-  return async ({
-    inputData,
-    bail,
-    tracingContext,
-  }: {
-    inputData: {
-      'prepare-tools-step': PrepareToolsStepOutput;
-      'prepare-memory-step': PrepareMemoryStepOutput;
-    };
-    bail: <T>(value: T) => T;
-    tracingContext: TracingContext;
-  }) => {
+}: MapResultsStepOptions<OUTPUT>): Step<
+  string,
+  unknown,
+  {
+    'prepare-tools-step': PrepareToolsStepOutput;
+    'prepare-memory-step': PrepareMemoryStepOutput;
+  },
+  ModelLoopStreamArgs<any, OUTPUT>
+>['execute'] {
+  return async ({ inputData, bail, tracingContext }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
@@ -66,7 +63,7 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
       requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep) {
+        if (options.savePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -106,15 +103,16 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
         });
       }
 
-      const modelOutput = await getModelOutputForTripwire({
+      const modelOutput = await getModelOutputForTripwire<OUTPUT>({
         tripwire: memoryData.tripwire!,
         runId,
         tracingContext,
-        options,
+        options: options,
         model: agentModel,
         messageList: memoryData.messageList,
       });
 
+      // @ts-ignore - TODO: types are wrong here, maybe wrong in general?
       return bail(modelOutput);
     }
 
@@ -155,7 +153,7 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
-    const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+    const loopOptions = {
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
@@ -191,7 +189,7 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
               outputText,
               thread: result.thread,
               threadId: result.threadId,
-              readOnlyMemory: options.memory?.readOnly,
+              readOnlyMemory: memoryConfig?.readOnly,
               resourceId,
               memoryConfig,
               requestContext,

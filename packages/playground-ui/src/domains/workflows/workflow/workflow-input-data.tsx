@@ -1,13 +1,12 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import { DynamicForm } from '@/lib/form';
 import { Button } from '@/ds/components/Button/Button';
-import { useCodemirrorTheme } from '@/components/ui/syntax-highlighter';
+import { CodeEditor, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Label } from '@/ds/components/Label';
 import { Loader2 } from 'lucide-react';
-import { jsonLanguage } from '@codemirror/lang-json';
-import { CopyButton } from '@/components/ui/copy-button';
+
 import { ZodSchema } from 'zod';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
@@ -44,13 +43,13 @@ export const WorkflowInputData = ({
         <div className="flex flex-row gap-4">
           <div className="flex items-center gap-3">
             <RadioGroupItem value="form" id="form" />
-            <Label htmlFor="form" className="!text-icon3 text-ui-sm">
+            <Label htmlFor="form" className="!text-neutral3 text-ui-sm">
               Form
             </Label>
           </div>
           <div className="flex items-center gap-3">
             <RadioGroupItem value="json" id="json" />
-            <Label htmlFor="json" className="!text-icon3 text-ui-sm">
+            <Label htmlFor="json" className="!text-neutral3 text-ui-sm">
               JSON
             </Label>
           </div>
@@ -116,10 +115,17 @@ const JSONInput = ({
     }
   };
 
+  let data = {};
+  try {
+    data = JSON.parse(inputData);
+  } catch {
+    data = {};
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {errors.length > 0 && (
-        <div className="border-sm border-accent2 rounded-lg p-2">
+        <div className="border border-accent2 rounded-lg p-2">
           <Txt as="p" variant="ui-md" className="text-accent2 font-semibold">
             {errors.length} errors found
           </Txt>
@@ -134,7 +140,7 @@ const JSONInput = ({
         </div>
       )}
 
-      <SyntaxHighlighter data={inputData} onChange={setInputData} />
+      <CodeEditor data={data} onChange={setInputData} />
 
       {children}
 
@@ -143,17 +149,6 @@ const JSONInput = ({
           {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
         </Button>
       )}
-    </div>
-  );
-};
-
-const SyntaxHighlighter = ({ data, onChange }: { data: string; onChange?: (data: string) => void }) => {
-  const theme = useCodemirrorTheme();
-
-  return (
-    <div className="rounded-md bg-[#1a1a1a] p-1 font-mono">
-      <CopyButton content={data} className="absolute top-2 right-2 z-10" />
-      <CodeMirror value={data} theme={theme} extensions={[jsonLanguage]} onChange={onChange} />
     </div>
   );
 };

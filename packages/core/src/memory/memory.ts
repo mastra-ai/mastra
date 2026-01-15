@@ -19,9 +19,12 @@ import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
+import type { IdGeneratorContext } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
@@ -238,7 +241,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any>> {
     return {};
   }
 
@@ -397,7 +400,13 @@ https://mastra.ai/en/docs/memory/overview`,
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
-      id: threadId || this.generateId(),
+      id:
+        threadId ||
+        this.generateId({
+          idType: 'thread',
+          source: 'memory',
+          resourceId,
+        }),
       title: title || `New Thread ${new Date().toISOString()}`,
       resourceId,
       createdAt: new Date(),
@@ -442,10 +451,11 @@ https://mastra.ai/en/docs/memory/overview`,
 
   /**
    * Generates a unique identifier
+   * @param context - Optional context information for deterministic ID generation
    * @returns A unique string ID
    */
-  public generateId(): string {
-    return this.#mastra?.generateId() || crypto.randomUUID();
+  public generateId(context?: IdGeneratorContext): string {
+    return this.#mastra?.generateId(context) || crypto.randomUUID();
   }
 
   /**
@@ -646,6 +656,12 @@ https://mastra.ai/en/docs/memory/overview`,
    * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of output processors configured for this memory instance
+   *
+   * Note: We intentionally do NOT check readOnly here. The readOnly check happens at execution time
+   * in each processor's processOutputResult method. This allows proper isolation when agents share
+   * a RequestContext - each agent's readOnly setting is respected when its processors actually run,
+   * not when processors are resolved (which may happen before the agent sets its MastraMemory context).
+   * See: https://github.com/mastra-ai/mastra/issues/11651
    */
   async getOutputProcessors(
     configuredProcessors: OutputProcessorOrWorkflow[] = [],
@@ -658,10 +674,6 @@ https://mastra.ai/en/docs/memory/overview`,
     const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
-
-    if (effectiveConfig.readOnly) {
-      return [];
-    }
 
     // Add SemanticRecall output processor if configured
     if (effectiveConfig.semanticRecall) {
@@ -741,4 +753,11 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
+
+  /**
+   * Clones a thread with all its messages to a new thread
+   * @param args - Clone parameters including source thread ID and optional filtering options
+   * @returns Promise resolving to the cloned thread and copied messages
+   */
+  abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
 }

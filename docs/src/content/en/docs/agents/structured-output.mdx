@@ -1,6 +1,8 @@
 ---
 title: "Structured Output | Agents"
 description: "Learn how to generate structured data from agents using schemas and validation."
+packages:
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -74,7 +76,7 @@ console.log(response.object);
 
 :::info
 
-Visit [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+Visit [.generate()](/reference/v1/agents/generate) for a full list of configuration options.
 
 :::
 
@@ -160,7 +162,27 @@ const response = await testAgent.generate("Analyze the TypeScript programming la
 console.log(response.object);
 ```
 
-## Response format
+## Combining tools and structured output
+
+When an agent has both tools and structured output configured, some models may not support using both features together. This is a limitation of the underlying model APIs, not Mastra itself.
+
+If your tools aren't being called when structured output is enabled, or you receive an error when combining both features, try one of the workarounds below.
+
+### Workaround options
+
+When your model doesn't support tools and structured output together, you have three options:
+
+1. **Use `jsonPromptInjection: true`** - Injects the schema into the prompt instead of using the API's `response_format` parameter
+2. **Use a separate structuring model** - Pass a `model` to `structuredOutput` to use a second LLM for structuring
+3. **Use `prepareStep`** - Handle tools and structured output in separate steps
+
+Each approach is detailed in the sections below.
+
+## LLM structured output support
+
+Structured output support varies across LLMs due to differences in their APIs. The sections below cover workarounds for models that don't fully support structured output or combining it with tools.
+
+### `jsonPromptInjection`
 
 By default, Mastra passes the schema to the model provider using the `response_format` API parameter. Most model providers have built-in support for this, which reliably enforces the schema.
 
@@ -186,7 +208,11 @@ console.log(response.object);
 
 :::info[Gemini 2.5 with tools]
 
-Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error:
+
+```
+Function calling with a response mime type: 'application/json' is unsupported
+```
 
 ```typescript
 const response = await agentWithTools.generate("Your prompt", {
@@ -197,6 +223,50 @@ const response = await agentWithTools.generate("Your prompt", {
 });
 ```
 :::
+
+### Using a separate structuring model
+
+When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
+
+```typescript
+const response = await testAgent.generate("Tell me about TypeScript.", {
+  structuredOutput: {
+    schema: yourSchema
+    model: 'openai/gpt-4o'
+  }
+});
+```
+
+### Multi-step approach with `prepareStep`
+
+For models that don't support tools and structured outputs together, you can use `prepareStep` to handle them in separate steps.
+
+```typescript
+const result = await agent.stream("weather in vancouver?", {
+  prepareStep: async ({ stepNumber }) => {
+    if (stepNumber === 0) {
+      return {
+        model: "anthropic/claude-sonnet-4-20250514",
+        tools: {
+          weatherTool,
+        },
+        toolChoice: "required",
+      };
+    }
+    return {
+      model: "anthropic/claude-sonnet-4-20250514",
+      tools: undefined,
+      structuredOutput: {
+        schema: z.object({
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+        }),
+      },
+    };
+  },
+});
+```
 
 ## Error handling
 

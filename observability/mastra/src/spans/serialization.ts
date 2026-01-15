@@ -35,6 +35,28 @@ export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
 });
 
 /**
+ * Merge user-provided serialization options with defaults.
+ * Returns a complete DeepCleanOptions object.
+ */
+export function mergeSerializationOptions(userOptions?: {
+  maxStringLength?: number;
+  maxDepth?: number;
+  maxArrayLength?: number;
+  maxObjectKeys?: number;
+}): DeepCleanOptions {
+  if (!userOptions) {
+    return DEFAULT_DEEP_CLEAN_OPTIONS;
+  }
+  return {
+    keysToStrip: DEFAULT_KEYS_TO_STRIP,
+    maxDepth: userOptions.maxDepth ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxDepth,
+    maxStringLength: userOptions.maxStringLength ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxStringLength,
+    maxArrayLength: userOptions.maxArrayLength ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxArrayLength,
+    maxObjectKeys: userOptions.maxObjectKeys ?? DEFAULT_DEEP_CLEAN_OPTIONS.maxObjectKeys,
+  };
+}
+
+/**
  * Hard-cap any string to prevent unbounded growth.
  */
 export function truncateString(s: string, maxChars: number): string {

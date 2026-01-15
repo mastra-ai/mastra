@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow Class | Workflows"
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow Class
@@ -98,6 +100,158 @@ export const workflow = createWorkflow({
       description:
         "Callback invoked only when workflow fails (failed or tripwire status). Receives error details and step results. Errors thrown in this callback are caught and logged, not propagated.",
       isOptional: true,
+    },
+  ]}
+/>
+
+### WorkflowFinishCallbackResult
+
+The result object passed to `onFinish` callbacks.
+
+<PropertiesTable
+  content={[
+    {
+      name: "status",
+      type: "WorkflowRunStatus",
+      description: "The workflow status: 'success', 'failed', 'suspended', or 'tripwire'",
+    },
+    {
+      name: "result",
+      type: "any",
+      description: "The workflow output (when status is 'success')",
+      isOptional: true,
+    },
+    {
+      name: "error",
+      type: "SerializedError",
+      description: "Error details (when status is 'failed')",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, StepResult>",
+      description: "Individual step results with their status and output",
+    },
+    {
+      name: "tripwire",
+      type: "StepTripwireInfo",
+      description: "Tripwire information (when status is 'tripwire')",
+      isOptional: true,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique identifier for this workflow run",
+    },
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow's identifier",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource identifier (if provided when creating the run)",
+      isOptional: true,
+    },
+    {
+      name: "getInitData",
+      type: "() => any",
+      description: "Function that returns the initial input data passed to the workflow",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "The Mastra instance (if workflow is registered with Mastra)",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context data",
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "The workflow's logger instance",
+    },
+    {
+      name: "state",
+      type: "Record<string, any>",
+      description: "The workflow's current state object",
+    },
+  ]}
+/>
+
+### WorkflowErrorCallbackInfo
+
+The error info object passed to `onError` callbacks.
+
+<PropertiesTable
+  content={[
+    {
+      name: "status",
+      type: "'failed' | 'tripwire'",
+      description: "The workflow status (either 'failed' or 'tripwire')",
+    },
+    {
+      name: "error",
+      type: "SerializedError",
+      description: "Error details",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, StepResult>",
+      description: "Individual step results with their status and output",
+    },
+    {
+      name: "tripwire",
+      type: "StepTripwireInfo",
+      description: "Tripwire information (when status is 'tripwire')",
+      isOptional: true,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique identifier for this workflow run",
+    },
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow's identifier",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource identifier (if provided when creating the run)",
+      isOptional: true,
+    },
+    {
+      name: "getInitData",
+      type: "() => any",
+      description: "Function that returns the initial input data passed to the workflow",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "The Mastra instance (if workflow is registered with Mastra)",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context data",
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "The workflow's logger instance",
+    },
+    {
+      name: "state",
+      type: "Record<string, any>",
+      description: "The workflow's current state object",
     },
   ]}
 />

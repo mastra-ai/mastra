@@ -17,7 +17,7 @@ importers:
         version: 2.0.76(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.14.3
-        version: 1.19.6(hono@4.10.7)
+        version: 1.19.6(hono@4.11.3)
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -25,8 +25,8 @@ importers:
         specifier: link:../../server-adapters/hono
         version: link:../../server-adapters/hono
       hono:
-        specifier: ^4.10.4
-        version: 4.10.7
+        specifier: ^4.11.3
+        version: 4.11.3
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -38,7 +38,7 @@ importers:
         specifier: ^4.19.3
         version: 4.21.0
       typescript:
-        specifier: ^5.8.3
+        specifier: ^5.9.3
         version: 5.9.3
 
 packages:
@@ -244,8 +244,8 @@ packages:
   get-tsconfig@4.13.0:
     resolution: {integrity: sha512-1VKTZJCwBrvbd+Wn3AOgQP/2Av+TfTCOlE4AcRJE72W1ksZXbAx8PPBR9RzgTeSPzlPMHrbANMH3LbltH73wxQ==}
 
-  hono@4.10.7:
-    resolution: {integrity: sha512-icXIITfw/07Q88nLSkB9aiUrd8rYzSweK681Kjo/TSggaGbOX4RRyxxm71v+3PC8C/j+4rlxGeoTRxQDkaJkUw==}
+  hono@4.11.3:
+    resolution: {integrity: sha512-PmQi306+M/ct/m5s66Hrg+adPnkD5jiO6IjA7WhWw0gSBSo1EcRegwuI1deZ+wd5pzCGynCcn2DprnE4/yEV4w==}
     engines: {node: '>=16.9.0'}
 
   json-schema@0.4.0:
@@ -367,9 +367,9 @@ snapshots:
   '@esbuild/win32-x64@0.27.0':
     optional: true
 
-  '@hono/node-server@1.19.6(hono@4.10.7)':
+  '@hono/node-server@1.19.6(hono@4.11.3)':
     dependencies:
-      hono: 4.10.7
+      hono: 4.11.3
 
   '@standard-schema/spec@1.0.0': {}
 
@@ -415,7 +415,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  hono@4.10.7: {}
+  hono@4.11.3: {}
 
   json-schema@0.4.0: {}
 

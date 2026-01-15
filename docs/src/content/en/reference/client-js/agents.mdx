@@ -1,6 +1,10 @@
 ---
 title: "Reference: Agents API | Client SDK"
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 # Agents API
@@ -46,25 +50,31 @@ const details = await agent.details();
 Generate a response from the agent:
 
 ```typescript
-const response = await agent.generate({
-  messages: [
+const response = await agent.generate(
+  [
     {
       role: "user",
       content: "Hello, how are you?",
     },
   ],
-  threadId: "thread-1", // Optional: Thread ID for conversation context
-  resourceId: "resource-1", // Optional: Resource ID
-  output: {}, // Optional: Output configuration
-});
+  {
+    memory: {
+      thread: "thread-abc", // Optional: Thread ID for conversation context
+      resource: "user-123", // Optional: Resource ID
+    },
+    structuredOutput: {}    // Optional: Structured Output configuration
+  }
+);
 ```
 
-You can also use the simplified string format:
+You can also use the simplified string format with memory options:
 
 ```typescript
 const response = await agent.generate("Hello, how are you?", {
-  threadId: "thread-1",
-  resourceId: "resource-1",
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
 });
 ```
 
@@ -73,14 +83,7 @@ const response = await agent.generate("Hello, how are you?", {
 Stream responses from the agent for real-time interactions:
 
 ```typescript
-const response = await agent.stream({
-  messages: [
-    {
-      role: "user",
-      content: "Tell me a story",
-    },
-  ],
-});
+const response = await agent.stream("Tell me a story");
 
 // Process data stream with the processDataStream util
 response.processDataStream({
@@ -90,11 +93,14 @@ response.processDataStream({
 });
 ```
 
-You can also use the simplified string format:
+You can also use the simplified string format with memory options:
 
 ```typescript
 const response = await agent.stream("Tell me a story", {
-  threadId: "thread-1",
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
   clientTools: { colorChangeTool },
 });
 
@@ -249,14 +255,16 @@ const colorChangeTool = createTool({
 });
 
 // Use with generate
-const response = await agent.generate({
-  messages: "Change the background to blue",
+const response = await agent.generate("Change the background to blue", {
   clientTools: { colorChangeTool },
 });
 
 // Use with stream
-const response = await agent.stream({
-  messages: "Change the background to green",
+const response = await agent.stream("Tell me a story", {
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
   clientTools: { colorChangeTool },
 });
 
@@ -266,7 +274,11 @@ response.processDataStream({
       console.log(chunk.payload.text);
     } else if (chunk.type === "tool-call") {
       console.log(
-        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`,
+        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(
+          chunk.payload.args,
+          null,
+          2
+        )}`
       );
     }
   },

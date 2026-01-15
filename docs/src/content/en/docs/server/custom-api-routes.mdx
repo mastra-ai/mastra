@@ -1,6 +1,8 @@
 ---
 title: "Custom API Routes | Server"
 description: "Expose additional HTTP endpoints from your Mastra server."
+packages:
+  - "@mastra/core"
 ---
 
 # Custom API Routes
@@ -20,7 +22,7 @@ export const mastra = new Mastra({
         method: "GET",
         handler: async (c) => {
           const mastra = c.get("mastra");
-          const agents = await mastra.getAgent("my-agent");
+          const agent = await mastra.getAgent("my-agent");
 
           return c.json({ message: "Custom route" });
         },

@@ -23,8 +23,7 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRun, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -129,15 +128,19 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
+export type StreamParamsBase<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
+export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = Omit<StreamParamsBase<OUTPUT>, 'messages'>;
+export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> &
+  (OUTPUT extends {}
+    ? { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> }
+    : { structuredOutput?: never });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -180,9 +183,7 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
-export type GetWorkflowRunByIdResponse = WorkflowRun;
-
-export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
+export type GetWorkflowRunByIdResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -195,6 +196,7 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      stateSchema: string;
     };
   };
   allSteps: {
@@ -205,12 +207,14 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      stateSchema: string;
       isWorkflow: boolean;
     };
   };
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  stateSchema: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
@@ -274,7 +278,11 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
   resourceId: string;
-  agentId: string;
+  /**
+   * Optional agentId. When not provided and storage is configured on the server,
+   * threads will be retrieved using storage directly.
+   */
+  agentId?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
@@ -304,6 +312,27 @@ export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'thr
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
+};
+
+export interface CloneMemoryThreadParams {
+  newThreadId?: string;
+  resourceId?: string;
+  title?: string;
+  metadata?: Record<string, any>;
+  options?: {
+    messageLimit?: number;
+    messageFilter?: {
+      startDate?: Date;
+      endDate?: Date;
+      messageIds?: string[];
+    };
+  };
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type CloneMemoryThreadResponse = {
+  thread: StorageThreadType;
+  clonedMessages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent Class | Agents"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent Class
@@ -192,12 +194,6 @@ export const agent = new Agent({
         "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
     },
     {
-      name: "evals",
-      type: "Record<string, Metric>",
-      isOptional: true,
-      description: "Evaluation metrics for scoring agent responses.",
-    },
-    {
       name: "memory",
       type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
@@ -240,7 +236,7 @@ export const agent = new Agent({
   content={[
     {
       name: "agent",
-      type: "Agent<TAgentId, TTools, TMetrics>",
+      type: "Agent<TAgentId, TTools>",
       description: "A new Agent instance with the specified configuration.",
     },
   ]}

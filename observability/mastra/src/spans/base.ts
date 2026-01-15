@@ -18,7 +18,8 @@ import type {
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
-import { deepClean } from './serialization';
+import { deepClean, mergeSerializationOptions } from './serialization';
+import type { DeepCleanOptions } from './serialization';
 
 /**
  * Determines if a span type should be considered internal based on flags.
@@ -136,31 +137,37 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityName?: string;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
+  /** Deep clean options for serialization */
+  protected deepCleanOptions: DeepCleanOptions;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    // Get serialization options from observability instance config
+    const serializationOptions = observabilityInstance.getConfig().serializationOptions;
+    this.deepCleanOptions = mergeSerializationOptions(serializationOptions);
+
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes) || ({} as SpanTypeMap[TType]);
-    this.metadata = deepClean(options.metadata);
+    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
+    this.metadata = deepClean(options.metadata, this.deepCleanOptions);
     this.parent = options.parent;
-    this.startTime = new Date();
+    this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
-    // Entity identification
-    this.entityType = options.entityType;
-    this.entityId = options.entityId;
-    this.entityName = options.entityName;
+    // Entity identification - inherit from parent if not explicitly provided
+    this.entityType = options.entityType ?? options.parent?.entityType;
+    this.entityId = options.entityId ?? options.parent?.entityId;
+    this.entityName = options.entityName ?? options.parent?.entityName;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     } else {
-      this.input = deepClean(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
   }
 
@@ -232,6 +239,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns a lightweight span ready for export */
   public exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> {
+    // Check if input/output should be hidden based on traceState
+    const hideInput = this.traceState?.hideInput ?? false;
+    const hideOutput = this.traceState?.hideOutput ?? false;
+
     return {
       id: this.id,
       traceId: this.traceId,
@@ -244,8 +255,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       metadata: this.metadata,
       startTime: this.startTime,
       endTime: this.endTime,
-      input: this.input,
-      output: this.output,
+      input: hideInput ? undefined : this.input,
+      output: hideOutput ? undefined : this.output,
       errorInfo: this.errorInfo,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,

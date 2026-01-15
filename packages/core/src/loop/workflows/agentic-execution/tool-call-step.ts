@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -13,7 +13,7 @@ type AddToolMetadataOptions = {
   toolCallId: string;
   toolName: string;
   args: unknown;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 } & (
   | {
       type: 'approval';
@@ -25,10 +25,7 @@ type AddToolMetadataOptions = {
     }
 );
 
-export function createToolCallStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
   messageList,
   options,
@@ -115,15 +112,58 @@ export function createToolCallStep<
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
           const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
-          return !!suspendedTools?.[toolName];
+          const foundTool = !!suspendedTools?.[toolName];
+          if (foundTool) {
+            return true;
+          }
+          const dataToolSuspendedParts = msg.content.parts?.filter(
+            part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
+          );
+          if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+            const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === toolName);
+            if (foundTool) {
+              return true;
+            }
+          }
+          return false;
         });
 
         if (lastAssistantMessage) {
           const metadata = getMetadata(lastAssistantMessage);
-          const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
+          let suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
+          if (!suspendedTools) {
+            suspendedTools = lastAssistantMessage.content.parts
+              ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
+              ?.reduce(
+                (acc, part) => {
+                  if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                    acc[(part.data as any).toolName] = part.data;
+                  }
+                  return acc;
+                },
+                {} as Record<string, any>,
+              );
+          }
 
           if (suspendedTools && typeof suspendedTools === 'object') {
-            delete suspendedTools[toolName];
+            if (metadata) {
+              delete suspendedTools[toolName];
+            } else {
+              lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
+                if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                  if ((part.data as any).toolName === toolName) {
+                    return {
+                      ...part,
+                      data: {
+                        ...(part.data as any),
+                        resumed: true,
+                      },
+                    };
+                  }
+                }
+                return part;
+              });
+            }
 
             // If no more pending suspensions, remove the whole object
             if (metadata && Object.keys(suspendedTools).length === 0) {
@@ -244,6 +284,17 @@ export function createToolCallStep<
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
+                resumeSchema: JSON.stringify(
+                  zodToJsonSchema(
+                    z.object({
+                      approved: z
+                        .boolean()
+                        .describe(
+                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                        ),
+                    }),
+                  ),
+                ),
               },
             });
 
@@ -253,13 +304,17 @@ export function createToolCallStep<
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: z.object({
-                approved: z
-                  .boolean()
-                  .describe(
-                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                  ),
-              }),
+              resumeSchema: JSON.stringify(
+                zodToJsonSchema(
+                  z.object({
+                    approved: z
+                      .boolean()
+                      .describe(
+                        'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                      ),
+                  }),
+                ),
+              ),
             });
 
             // Flush messages before suspension to ensure they are persisted
@@ -293,6 +348,12 @@ export function createToolCallStep<
           await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
+        //this is to avoid passing resume data to the tool if it's not needed
+        const resumeDataToPassToToolOptions =
+          toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+            ? undefined
+            : resumeData;
+
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
@@ -310,6 +371,7 @@ export function createToolCallStep<
                 toolName: inputData.toolName,
                 suspendPayload,
                 args: inputData.args,
+                resumeSchema: options?.resumeSchema,
               },
             });
 
@@ -338,7 +400,7 @@ export function createToolCallStep<
               },
             );
           },
-          resumeData,
+          resumeData: resumeDataToPassToToolOptions,
         };
 
         const result = await tool.execute(args, toolOptions);

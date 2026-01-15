@@ -1,6 +1,10 @@
 ---
 title: "Reference: MongoDB Storage | Storage"
 description: Documentation for the MongoDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
 ---
 
 # MongoDB Storage
@@ -21,7 +25,8 @@ Ensure you have a MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instan
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 ```
@@ -31,11 +36,24 @@ const storage = new MongoDBStore({
 <PropertiesTable
   content={[
     {
-      name: "url",
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
+    {
+      name: "uri",
       type: "string",
       description:
         "MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)",
       isOptional: false,
+    },
+    {
+      name: "url",
+      type: "string",
+      description:
+        "Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).",
+      isOptional: true,
     },
     {
       name: "dbName",
@@ -53,6 +71,10 @@ const storage = new MongoDBStore({
   ]}
 />
 
+:::note[Deprecation Notice]
+The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
+:::
+
 ## Constructor Examples
 
 You can instantiate `MongoDBStore` in the following ways:
@@ -62,13 +84,15 @@ import { MongoDBStore } from "@mastra/mongodb";
 
 // Basic connection without custom options
 const store1 = new MongoDBStore({
-  url: "mongodb+srv://user:password@cluster.mongodb.net",
+  id: 'mongodb-storage-01',
+  uri: "mongodb+srv://user:password@cluster.mongodb.net",
   dbName: "mastra_storage",
 });
 
 // Using connection string with options
 const store2 = new MongoDBStore({
-  url: "mongodb+srv://user:password@cluster.mongodb.net",
+  id: 'mongodb-storage-02',
+  uri: "mongodb+srv://user:password@cluster.mongodb.net",
   dbName: "mastra_storage",
   options: {
     retryWrites: true,
@@ -102,7 +126,8 @@ import { Mastra } from "@mastra/core";
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
@@ -118,7 +143,7 @@ import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
   id: 'mongodb-storage',
-  url: process.env.MONGODB_URL,
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
@@ -144,7 +169,8 @@ MongoDB storage includes built-in vector search capabilities for AI applications
 import { MongoDBVector } from "@mastra/mongodb";
 
 const vectorStore = new MongoDBVector({
-  url: process.env.MONGODB_URL,
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
   dbName: process.env.MONGODB_DATABASE,
 });
 
@@ -204,13 +230,11 @@ export const mongodbAgent = new Agent({
   model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
+      uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     options: {
-      threads: {
-        generateTitle: true,
-      },
+      generateTitle: true,
     },
   }),
 });
