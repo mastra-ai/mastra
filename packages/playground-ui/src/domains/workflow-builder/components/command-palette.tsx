@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   Bot,
   Wrench,
@@ -44,10 +44,43 @@ export interface CommandPaletteProps {
   onClose: () => void;
 }
 
+// Focus trap hook for modal accessibility
+function useFocusTrap(isOpen: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return;
+
+    const focusableElements = containerRef.current.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.shiftKey && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement?.focus();
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  return containerRef;
+}
+
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
+  const focusTrapRef = useFocusTrap(isOpen);
+  const titleId = 'command-palette-title';
 
   const reactFlow = useReactFlow();
   const addNode = useWorkflowBuilderStore(state => state.addNode);
@@ -262,12 +295,21 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 z-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 z-50" onClick={onClose} aria-hidden="true" />
 
       {/* Palette */}
-      <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg z-50">
+      <div
+        ref={focusTrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg z-50"
+      >
         <div className="bg-surface2 border border-border1 rounded-lg shadow-2xl overflow-hidden">
           {/* Search input */}
+          <h2 id={titleId} className="sr-only">
+            Command Palette
+          </h2>
           <div className="flex items-center border-b border-border1 px-4 py-3">
             <Search className="w-5 h-5 text-icon3 mr-3" />
             <input
@@ -306,7 +348,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                           onMouseEnter={() => setHighlightedIndex(index)}
                           className={cn(
                             'w-full flex items-center gap-3 px-3 py-2 rounded-md text-left',
-                            'transition-colors duration-75',
+                            'transition-colors duration-150',
                             isHighlighted ? 'bg-accent1/20 text-accent1' : 'text-icon5 hover:bg-surface3',
                           )}
                         >

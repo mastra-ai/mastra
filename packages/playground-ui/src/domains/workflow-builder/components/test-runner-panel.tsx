@@ -14,9 +14,13 @@ import {
   Zap,
   History,
   X,
+  AlertCircle,
+  Save,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 import { Button } from '@/ds/components/Button';
+import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { useTestRunnerStore, type TestRunResult, type StepResult, type StepStatus } from '../store/test-runner-store';
 
 // ============================================================================
@@ -158,7 +162,7 @@ function RunSummary({ run }: { run: TestRunResult }) {
   );
 }
 
-function HistoryItem({ run, onClick }: { run: TestRunResult; onClick: () => void }) {
+function HistoryItem({ run, onClick, isSelected }: { run: TestRunResult; onClick: () => void; isSelected?: boolean }) {
   const statusColors: Record<TestRunResult['status'], string> = {
     running: 'bg-blue-500',
     completed: 'bg-green-500',
@@ -170,7 +174,10 @@ function HistoryItem({ run, onClick }: { run: TestRunResult; onClick: () => void
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface3 transition-colors text-left"
+      className={cn(
+        'w-full flex items-center gap-2 px-3 py-2 hover:bg-surface3 transition-colors text-left',
+        isSelected && 'bg-surface3 border-l-2 border-blue-500',
+      )}
     >
       <div className={cn('w-2 h-2 rounded-full', statusColors[run.status])} />
       <span className="text-xs text-icon4 flex-1 truncate">{formatTimestamp(run.startedAt)}</span>
@@ -183,12 +190,16 @@ function HistoryItem({ run, onClick }: { run: TestRunResult; onClick: () => void
 // Main Component
 // ============================================================================
 
-export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) {
+export function TestRunnerPanel({ className }: TestRunnerPanelProps) {
+  // Workflow builder state - check if workflow is saved
+  const workflowId = useWorkflowBuilderStore(state => state.workflowId);
+  const isDirty = useWorkflowBuilderStore(state => state.isDirty);
+
+  // Test runner state
   const isOpen = useTestRunnerStore(state => state.isOpen);
   const isRunning = useTestRunnerStore(state => state.isRunning);
   const currentRun = useTestRunnerStore(state => state.currentRun);
   const runHistory = useTestRunnerStore(state => state.runHistory);
-  const testInput = useTestRunnerStore(state => state.testInput);
 
   const setOpen = useTestRunnerStore(state => state.setOpen);
   const setShowInputModal = useTestRunnerStore(state => state.setShowInputModal);
@@ -197,6 +208,16 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
 
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedHistoryRunId, setSelectedHistoryRunId] = useState<string | null>(null);
+
+  // Derived state - workflow must be saved to test
+  const needsSave = !workflowId || isDirty;
+
+  // Display the selected history run or the current run
+  const displayedRun = selectedHistoryRunId
+    ? runHistory.find(r => r.runId === selectedHistoryRunId) || currentRun
+    : currentRun;
+  const isViewingHistory = !!selectedHistoryRunId && displayedRun?.runId !== currentRun?.runId;
 
   const toggleStep = (stepId: string) => {
     setExpandedSteps(prev => {
@@ -211,17 +232,35 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
   };
 
   const handleRun = async () => {
-    if (onRunTest) {
-      await onRunTest(testInput);
-    } else {
-      setShowInputModal(true);
+    // Check if workflow needs to be saved first
+    if (!workflowId) {
+      toast.warning('Workflow must be saved before testing', {
+        description: 'Save the workflow first to enable test execution.',
+      });
+      return;
     }
+
+    if (isDirty) {
+      toast.warning('Workflow has unsaved changes', {
+        description: 'Save your changes before running the test to ensure the latest version is executed.',
+      });
+      return;
+    }
+
+    // Show input modal to collect test inputs
+    setShowInputModal(true);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className={cn('flex flex-col bg-surface1 border-l border-border1 w-[350px]', className)}>
+    <div
+      className={cn(
+        'flex flex-col bg-surface1 border-l border-border1 w-[350px]',
+        'animate-in fade-in slide-in-from-right-2 duration-150',
+        className,
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-border1">
         <div className="flex items-center gap-2">
@@ -243,6 +282,16 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
         </div>
       </div>
 
+      {/* Save warning banner */}
+      {needsSave && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border-b border-amber-500/30">
+          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          <span className="text-xs text-amber-400">
+            {!workflowId ? 'Save workflow to enable testing' : 'Save changes to test latest version'}
+          </span>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex items-center gap-2 p-3 border-b border-border1">
         {isRunning ? (
@@ -251,9 +300,23 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
             Stop
           </Button>
         ) : (
-          <Button variant="default" size="md" onClick={handleRun} className="flex-1">
-            <Play className="w-4 h-4 mr-1" />
-            Run Test
+          <Button
+            variant={needsSave ? 'outline' : 'default'}
+            size="md"
+            onClick={handleRun}
+            className={cn('flex-1', needsSave && 'opacity-70')}
+          >
+            {needsSave ? (
+              <>
+                <Save className="w-4 h-4 mr-1" />
+                Save First
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-1" />
+                Run Test
+              </>
+            )}
           </Button>
         )}
         {currentRun && !isRunning && (
@@ -266,11 +329,27 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
       {/* History Panel */}
       {showHistory && (
         <div className="border-b border-border1">
-          <div className="px-3 py-2 text-xs text-icon3 bg-surface2">Recent Runs</div>
+          <div className="flex items-center justify-between px-3 py-2 text-xs text-icon3 bg-surface2">
+            <span>Recent Runs</span>
+            {isViewingHistory && (
+              <button
+                type="button"
+                onClick={() => setSelectedHistoryRunId(null)}
+                className="text-[10px] text-blue-400 hover:underline"
+              >
+                Back to current
+              </button>
+            )}
+          </div>
           {runHistory.length > 0 ? (
             <div className="max-h-[150px] overflow-y-auto">
               {runHistory.map(run => (
-                <HistoryItem key={run.runId} run={run} onClick={() => {}} />
+                <HistoryItem
+                  key={run.runId}
+                  run={run}
+                  isSelected={selectedHistoryRunId === run.runId}
+                  onClick={() => setSelectedHistoryRunId(run.runId)}
+                />
               ))}
             </div>
           ) : (
@@ -279,20 +358,36 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
         </div>
       )}
 
-      {/* Current Run */}
+      {/* Run Details */}
       <div className="flex-1 overflow-y-auto">
-        {currentRun ? (
+        {displayedRun ? (
           <>
-            <RunSummary run={currentRun} />
+            {/* History view banner */}
+            {isViewingHistory && (
+              <div className="flex items-center justify-between px-3 py-2 bg-blue-500/10 border-b border-blue-500/30">
+                <span className="text-xs text-blue-400">
+                  Viewing past run from {formatTimestamp(displayedRun.startedAt)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHistoryRunId(null)}
+                  className="text-[10px] text-blue-400 hover:underline"
+                >
+                  Back to current
+                </button>
+              </div>
+            )}
 
-            {/* Suspend Info */}
-            {currentRun.status === 'suspended' && currentRun.suspend && (
+            <RunSummary run={displayedRun} />
+
+            {/* Suspend Info - only show for current run */}
+            {!isViewingHistory && displayedRun.status === 'suspended' && displayedRun.suspend && (
               <div className="p-3 bg-amber-500/10 border-b border-amber-500/30">
                 <div className="flex items-center gap-2 mb-2">
                   <PauseCircle className="w-4 h-4 text-amber-400" />
                   <span className="text-xs font-medium text-amber-400">Waiting for Human Input</span>
                 </div>
-                <p className="text-xs text-icon4">Step "{currentRun.suspend.stepId}" requires input to continue.</p>
+                <p className="text-xs text-icon4">Step "{displayedRun.suspend.stepId}" requires input to continue.</p>
                 <Button variant="default" size="md" className="mt-2 w-full" onClick={() => setShowInputModal(true)}>
                   Provide Input
                 </Button>
@@ -301,7 +396,7 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
 
             {/* Step Results */}
             <div>
-              {Object.values(currentRun.steps).map(step => (
+              {Object.values(displayedRun.steps).map(step => (
                 <StepResultRow
                   key={step.stepId}
                   step={step}
@@ -312,21 +407,31 @@ export function TestRunnerPanel({ className, onRunTest }: TestRunnerPanelProps) 
             </div>
 
             {/* Final Output */}
-            {currentRun.output !== undefined && currentRun.status === 'completed' && (
+            {displayedRun.output !== undefined && displayedRun.status === 'completed' && (
               <div className="p-3 border-t border-border1">
                 <div className="text-[10px] text-icon3 uppercase mb-1">Final Output</div>
                 <pre className="p-2 bg-surface4 rounded overflow-x-auto text-icon4 font-mono text-xs">
-                  {JSON.stringify(currentRun.output, null, 2)}
+                  {JSON.stringify(displayedRun.output, null, 2)}
                 </pre>
               </div>
             )}
 
             {/* Error */}
-            {currentRun.error && currentRun.status === 'failed' && (
+            {displayedRun.error && displayedRun.status === 'failed' && (
               <div className="p-3 border-t border-border1">
                 <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-xs">
-                  {currentRun.error}
+                  {displayedRun.error}
                 </div>
+              </div>
+            )}
+
+            {/* Input data - show what was passed to the run */}
+            {displayedRun.input && Object.keys(displayedRun.input).length > 0 && (
+              <div className="p-3 border-t border-border1">
+                <div className="text-[10px] text-icon3 uppercase mb-1">Input Data</div>
+                <pre className="p-2 bg-surface4 rounded overflow-x-auto text-icon4 font-mono text-xs">
+                  {JSON.stringify(displayedRun.input, null, 2)}
+                </pre>
               </div>
             )}
           </>

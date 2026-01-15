@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   PlayCircle,
   Bot,
@@ -31,9 +31,62 @@ import { WorkflowConfig } from './panels/workflow-config';
 import { SleepConfig } from './panels/sleep-config';
 import { AgentNetworkConfig } from './panels/agent-network-config';
 import { DataPreviewPanel } from './panels/data-preview-panel';
+import { ErrorBoundary } from './error-boundary';
 import { cn } from '@/lib/utils';
-import type { BuilderNodeType } from '../types';
+import type { BuilderNodeType, BuilderNode } from '../types';
 import { useSelectedNodeDataContext } from '../hooks/use-data-context';
+
+/**
+ * Error boundary wrapper for config panel components.
+ * Provides a compact error UI when a config panel crashes.
+ */
+function ConfigPanelErrorBoundary({ children, nodeType }: { children: ReactNode; nodeType: string }) {
+  return (
+    <ErrorBoundary minimal context={`${nodeType} config`} className="m-0">
+      {children}
+    </ErrorBoundary>
+  );
+}
+
+/**
+ * Renders the appropriate config component for a node type with error boundary.
+ */
+function NodeConfigRenderer({ node }: { node: BuilderNode }) {
+  const nodeType = node.data.type;
+
+  const configComponent = (() => {
+    switch (nodeType) {
+      case 'trigger':
+        return <TriggerConfig node={node} />;
+      case 'agent':
+        return <AgentConfig node={node} />;
+      case 'tool':
+        return <ToolConfig node={node} />;
+      case 'condition':
+        return <ConditionConfig node={node} />;
+      case 'parallel':
+        return <ParallelConfig node={node} />;
+      case 'loop':
+        return <LoopConfig node={node} />;
+      case 'foreach':
+        return <ForeachConfig node={node} />;
+      case 'transform':
+        return <TransformConfig node={node} />;
+      case 'suspend':
+        return <SuspendConfig node={node} />;
+      case 'workflow':
+        return <WorkflowConfig node={node} />;
+      case 'sleep':
+        return <SleepConfig node={node} />;
+      case 'agent-network':
+        return <AgentNetworkConfig node={node} />;
+      default:
+        return <p className="text-xs text-icon3">Unknown node type: {nodeType}</p>;
+    }
+  })();
+
+  return <ConfigPanelErrorBoundary nodeType={nodeType}>{configComponent}</ConfigPanelErrorBoundary>;
+}
 
 export interface PropertiesPanelProps {
   className?: string;
@@ -122,20 +175,9 @@ export function PropertiesPanel({ className, onCollapse }: PropertiesPanelProps)
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Node-specific config */}
+        {/* Node-specific config with error boundary */}
         <div className="p-4">
-          {nodeType === 'trigger' && <TriggerConfig node={selectedNode} />}
-          {nodeType === 'agent' && <AgentConfig node={selectedNode} />}
-          {nodeType === 'tool' && <ToolConfig node={selectedNode} />}
-          {nodeType === 'condition' && <ConditionConfig node={selectedNode} />}
-          {nodeType === 'parallel' && <ParallelConfig node={selectedNode} />}
-          {nodeType === 'loop' && <LoopConfig node={selectedNode} />}
-          {nodeType === 'foreach' && <ForeachConfig node={selectedNode} />}
-          {nodeType === 'transform' && <TransformConfig node={selectedNode} />}
-          {nodeType === 'suspend' && <SuspendConfig node={selectedNode} />}
-          {nodeType === 'workflow' && <WorkflowConfig node={selectedNode} />}
-          {nodeType === 'sleep' && <SleepConfig node={selectedNode} />}
-          {nodeType === 'agent-network' && <AgentNetworkConfig node={selectedNode} />}
+          <NodeConfigRenderer node={selectedNode} />
         </div>
 
         {/* Data Preview Section (collapsible) */}

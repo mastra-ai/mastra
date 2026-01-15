@@ -23,7 +23,7 @@ const DEFAULT_EDGE_OPTIONS = {
 
 const CONNECTION_LINE_STYLE = { stroke: '#6b7280', strokeWidth: 2 } as const;
 
-const FIT_VIEW_OPTIONS = { padding: 0.2 } as const;
+const FIT_VIEW_OPTIONS = { padding: 0.4, maxZoom: 1 } as const;
 
 const SNAP_GRID: [number, number] = [16, 16];
 

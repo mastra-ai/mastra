@@ -114,7 +114,13 @@ export function ValidationPanel({ toolInputSchemas, onClose, className }: Valida
   };
 
   return (
-    <div className={cn('bg-surface1 border border-border1 rounded-lg shadow-lg', className)}>
+    <div
+      className={cn(
+        'bg-surface1 border border-border1 rounded-lg shadow-lg',
+        'animate-in fade-in slide-in-from-top-2 duration-150',
+        className,
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-border1">
         <div className="flex items-center gap-2">

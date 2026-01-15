@@ -62,7 +62,7 @@ export function ConfigSection({
 
       <div
         className={cn(
-          'ml-6 overflow-hidden transition-all duration-200',
+          'ml-6 overflow-hidden transition-all duration-150',
           isExpanded ? 'mt-3 opacity-100' : 'mt-0 max-h-0 opacity-0',
         )}
       >

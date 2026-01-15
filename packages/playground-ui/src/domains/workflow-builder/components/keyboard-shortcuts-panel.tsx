@@ -1,6 +1,40 @@
+import { useEffect, useRef } from 'react';
 import { X, Keyboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SHORTCUT_DEFINITIONS, type ShortcutConfig } from '../hooks/use-keyboard-shortcuts';
+
+// Focus trap hook for modal accessibility
+function useFocusTrap(isOpen: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return;
+
+    const focusableElements = containerRef.current.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    firstElement?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.shiftKey && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement?.focus();
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  return containerRef;
+}
 
 // ============================================================================
 // Props
@@ -91,6 +125,9 @@ function CategorySection({ category, shortcuts }: { category: string; shortcuts:
 // ============================================================================
 
 export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPanelProps) {
+  const focusTrapRef = useFocusTrap(isOpen);
+  const titleId = 'keyboard-shortcuts-title';
+
   if (!isOpen) return null;
 
   const grouped = groupByCategory(SHORTCUT_DEFINITIONS);
@@ -103,17 +140,30 @@ export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPan
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
 
       {/* Panel */}
-      <div className="relative bg-surface1 border border-border1 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+      <div
+        ref={focusTrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative bg-surface1 border border-border1 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border1">
           <div className="flex items-center gap-2">
             <Keyboard className="w-5 h-5 text-icon4" />
-            <h2 className="text-sm font-semibold text-icon6">Keyboard Shortcuts</h2>
+            <h2 id={titleId} className="text-sm font-semibold text-icon6">
+              Keyboard Shortcuts
+            </h2>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 hover:bg-surface3 rounded-lg transition-colors">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 hover:bg-surface3 rounded-lg transition-colors"
+            aria-label="Close keyboard shortcuts"
+          >
             <X className="w-4 h-4 text-icon3" />
           </button>
         </div>

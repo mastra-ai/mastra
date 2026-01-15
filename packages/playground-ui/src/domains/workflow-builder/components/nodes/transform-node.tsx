@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { ArrowRightLeft } from 'lucide-react';
 import { BaseNode } from './base-node';
 import { Badge } from '@/ds/components/Badge';
@@ -7,10 +7,12 @@ import type { TransformNodeData } from '../../types';
 
 const TRANSFORM_COLOR = '#14b8a6'; // teal-500
 
-export const TransformNode = memo(function TransformNode({ id, data, selected }: NodeProps) {
-  const nodeData = data as unknown as TransformNodeData;
-
-  const outputKeys = Object.keys(nodeData.output || {});
+export const TransformNode = memo(function TransformNode({
+  id,
+  data,
+  selected,
+}: NodeProps<Node<TransformNodeData, 'transform'>>) {
+  const outputKeys = Object.keys(data.output || {});
 
   return (
     <BaseNode
@@ -18,7 +20,7 @@ export const TransformNode = memo(function TransformNode({ id, data, selected }:
       selected={selected}
       accentColor={TRANSFORM_COLOR}
       quickAddExcludeTypes={['trigger']}
-      comment={nodeData.comment}
+      comment={data.comment}
     >
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
@@ -29,7 +31,7 @@ export const TransformNode = memo(function TransformNode({ id, data, selected }:
             <ArrowRightLeft className="w-4 h-4" style={{ color: TRANSFORM_COLOR }} />
           </div>
           <div className="flex-1">
-            <div className="font-medium text-icon6 text-sm">{nodeData.label}</div>
+            <div className="font-medium text-icon6 text-sm">{data.label}</div>
           </div>
           <Badge className="text-[10px] px-1.5 py-0.5 !bg-teal-500/20 !text-teal-500">TRANSFORM</Badge>
         </div>
@@ -40,7 +42,7 @@ export const TransformNode = memo(function TransformNode({ id, data, selected }:
               <div key={key} className="flex items-center gap-2 text-xs text-icon4">
                 <span className="font-mono text-icon3">{key}:</span>
                 <span className="truncate">
-                  {typeof nodeData.output[key] === 'object' ? 'ref' : String(nodeData.output[key])}
+                  {typeof data.output[key] === 'object' ? 'ref' : String(data.output[key])}
                 </span>
               </div>
             ))}

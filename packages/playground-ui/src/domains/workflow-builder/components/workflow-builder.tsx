@@ -83,7 +83,7 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
           <div className="flex-1 flex overflow-hidden">
             {/* Left sidebar - step palette (collapsible) */}
             <div
-              className={`h-full border-r border-border1 bg-surface2 transition-all duration-200 ${
+              className={`h-full border-r border-border1 bg-surface2 transition-all duration-150 ${
                 sidebarCollapsed ? 'w-10' : 'w-60'
               }`}
             >
@@ -123,7 +123,7 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
 
             {/* Right panel - properties (collapsible, wider) */}
             <div
-              className={`h-full border-l border-border1 bg-surface2 transition-all duration-200 ${
+              className={`h-full border-l border-border1 bg-surface2 transition-all duration-150 ${
                 propertiesCollapsed ? 'w-10' : 'w-96'
               }`}
             >
@@ -151,7 +151,7 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
           <CommandPalette isOpen={showCommandPalette} onClose={closeCommandPalette} />
 
           {/* Test runner panel */}
-          {isTestRunnerOpen && <TestRunnerPanel onRunTest={runTest} />}
+          {isTestRunnerOpen && <TestRunnerPanel />}
 
           {/* Test input modal */}
           <TestInputModal

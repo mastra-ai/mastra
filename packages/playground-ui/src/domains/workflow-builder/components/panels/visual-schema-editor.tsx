@@ -18,9 +18,18 @@ interface SchemaField {
   items?: { type: JsonSchemaType };
 }
 
+/** Represents a single property definition in a JSON Schema */
+interface JsonSchemaProperty {
+  type: JsonSchemaType;
+  description?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+  items?: { type: JsonSchemaType };
+}
+
 interface JsonSchema {
   type: 'object';
-  properties?: Record<string, any>;
+  properties?: Record<string, JsonSchemaProperty>;
   required?: string[];
   [key: string]: unknown;
 }
@@ -75,11 +84,11 @@ function jsonSchemaToFields(schema: Record<string, unknown>): SchemaField[] {
 }
 
 function fieldsToJsonSchema(fields: SchemaField[]): JsonSchema {
-  const properties: Record<string, any> = {};
+  const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
 
   for (const field of fields) {
-    const prop: any = { type: field.type };
+    const prop: JsonSchemaProperty = { type: field.type };
 
     if (field.description) {
       prop.description = field.description;
