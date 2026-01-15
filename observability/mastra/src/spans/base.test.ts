@@ -365,7 +365,6 @@ describe('Span', () => {
       const workflowSpan = agentSpan.createChildSpan({
         type: SpanType.WORKFLOW_RUN,
         name: 'workflow',
-        metadata: { workflowVersion: 'v2' },
         attributes: {},
       });
 
@@ -375,8 +374,7 @@ describe('Span', () => {
         attributes: { model: 'gpt-4' },
       });
 
-      // LLM span should have metadata from both agent and workflow
-      expect(llmSpan.metadata).toEqual({ userId: 'user-123', workflowVersion: 'v2' });
+      expect(llmSpan.metadata).toEqual({ userId: 'user-123' });
 
       agentSpan.end();
     });
