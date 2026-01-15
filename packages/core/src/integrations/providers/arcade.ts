@@ -28,6 +28,28 @@ const ARCADE_BASE_URL = 'https://api.arcade.dev';
  * Arcade API response types
  * Based on Arcade API OpenAPI spec at https://api.arcade.dev/v1/swagger
  */
+
+/** Arcade parameter value schema */
+interface ArcadeValueSchema {
+  val_type: string;
+  inner_val_type?: string;
+  enum?: string[];
+}
+
+/** Arcade tool parameter */
+interface ArcadeParameter {
+  name: string;
+  value_schema: ArcadeValueSchema;
+  description?: string;
+  required?: boolean;
+  inferrable?: boolean;
+}
+
+/** Arcade tool input definition */
+interface ArcadeInput {
+  parameters?: ArcadeParameter[];
+}
+
 interface ArcadeToolResponse {
   fully_qualified_name: string;
   name: string;
@@ -37,11 +59,7 @@ interface ArcadeToolResponse {
     name?: string;
     id?: string;
   };
-  input?: {
-    type?: string;
-    properties?: Record<string, unknown>;
-    required?: string[];
-  };
+  input?: ArcadeInput;
   output?: {
     type?: string;
     properties?: Record<string, unknown>;
@@ -302,6 +320,81 @@ export class ArcadeProvider implements ToolProvider {
   }
 
   /**
+   * Convert Arcade's val_type to JSON Schema type
+   */
+  private arcadeTypeToJsonSchemaType(valType: string): string {
+    const typeMap: Record<string, string> = {
+      str: 'string',
+      string: 'string',
+      int: 'integer',
+      integer: 'integer',
+      float: 'number',
+      number: 'number',
+      bool: 'boolean',
+      boolean: 'boolean',
+      list: 'array',
+      array: 'array',
+      dict: 'object',
+      object: 'object',
+      any: 'string', // Default to string for any type
+    };
+    return typeMap[valType.toLowerCase()] || 'string';
+  }
+
+  /**
+   * Convert Arcade parameter format to JSON Schema
+   */
+  private convertArcadeInputToJsonSchema(input?: ArcadeInput): Record<string, unknown> {
+    if (!input?.parameters || input.parameters.length === 0) {
+      return {
+        type: 'object',
+        properties: {},
+        required: [],
+      };
+    }
+
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+
+    for (const param of input.parameters) {
+      const jsonSchemaType = this.arcadeTypeToJsonSchemaType(param.value_schema.val_type);
+      const propSchema: Record<string, unknown> = {
+        type: jsonSchemaType,
+      };
+
+      // Add description if available
+      if (param.description) {
+        propSchema.description = param.description;
+      }
+
+      // Handle array types with inner type
+      if (jsonSchemaType === 'array' && param.value_schema.inner_val_type) {
+        propSchema.items = {
+          type: this.arcadeTypeToJsonSchemaType(param.value_schema.inner_val_type),
+        };
+      }
+
+      // Handle enum values
+      if (param.value_schema.enum && param.value_schema.enum.length > 0) {
+        propSchema.enum = param.value_schema.enum;
+      }
+
+      properties[param.name] = propSchema;
+
+      // Track required fields
+      if (param.required) {
+        required.push(param.name);
+      }
+    }
+
+    return {
+      type: 'object',
+      properties,
+      required,
+    };
+  }
+
+  /**
    * Map Arcade tool response to ProviderTool
    */
   private mapTool(tool: ArcadeToolResponse): ProviderTool {
@@ -310,7 +403,7 @@ export class ArcadeProvider implements ToolProvider {
       slug: tool.fully_qualified_name || tool.name,
       name: tool.name,
       description: tool.description,
-      inputSchema: tool.input || {},
+      inputSchema: this.convertArcadeInputToJsonSchema(tool.input),
       outputSchema: tool.output,
       toolkit: toolkitSlug,
       metadata: {

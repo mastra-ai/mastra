@@ -629,6 +629,11 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
             <ToolkitBrowser
               toolkits={toolkits}
               isLoading={isLoadingToolkits}
+              loadingMessage={
+                selectedProvider === 'arcade'
+                  ? "Gathering all of Arcade's available tools... this may take a minute."
+                  : undefined
+              }
               selectedToolkits={selectedToolkits}
               onSelectionChange={handleToolkitSelectionChange}
               hasMore={hasNextPage}

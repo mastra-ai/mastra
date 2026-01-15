@@ -15,6 +15,8 @@ export interface ToolkitBrowserProps {
   toolkits?: ProviderToolkit[];
   /** Whether the toolkits are currently loading */
   isLoading?: boolean;
+  /** Optional message to show while loading */
+  loadingMessage?: string;
   /** Set of toolkit slugs that are currently selected */
   selectedToolkits?: Set<string>;
   /** Callback when toolkit selection changes */
@@ -49,6 +51,7 @@ export interface ToolkitBrowserProps {
 export function ToolkitBrowser({
   toolkits = [],
   isLoading = false,
+  loadingMessage,
   selectedToolkits = new Set(),
   onSelectionChange,
   className,
@@ -97,8 +100,13 @@ export function ToolkitBrowser({
 
   if (isLoading) {
     return (
-      <div className={cn('flex items-center justify-center py-12', className)}>
+      <div className={cn('flex flex-col items-center justify-center py-12 gap-4', className)}>
         <Loader2 className="h-8 w-8 animate-spin text-icon3" />
+        {loadingMessage && (
+          <Txt variant="ui-sm" className="text-icon3 text-center max-w-md">
+            {loadingMessage}
+          </Txt>
+        )}
       </div>
     );
   }
