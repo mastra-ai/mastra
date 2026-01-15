@@ -1,6 +1,6 @@
 import { useComposerRuntime } from '@assistant-ui/react';
 
-import { Dialog, DialogHeader, DialogTitle, DialogContent } from '@/ds/components/Dialog';
+import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogDescription } from '@/ds/components/Dialog';
 import { FormEvent } from 'react';
 import { Input } from '@/ds/components/Input';
 import { Button } from '@/ds/components/Button';
@@ -46,9 +46,10 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="bg-surface3">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add attachment</DialogTitle>
+          <DialogDescription className="sr-only">Add a file attachment via URL or from your computer</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-4">

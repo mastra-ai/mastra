@@ -10,7 +10,7 @@ import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown } from 'lucide-react';
 import { getConditionIconAndColor } from './workflow-node-badges';
-import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCurrentRun } from '../context/use-current-run';
 import { Badge } from '@/ds/components/Badge';
@@ -141,9 +141,12 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                     </Highlight>
 
                     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                      <DialogContent className="max-w-[30rem] bg-surface2 p-4">
-                        <DialogTitle className="sr-only">Condition Function</DialogTitle>
-                        <ScrollArea className="w-full p-2 pt-4" maxHeight="400px">
+                      <DialogContent className="max-w-[30rem]">
+                        <DialogHeader>
+                          <DialogTitle className="sr-only">Condition Function</DialogTitle>
+                          <DialogDescription className="sr-only">View the condition function code</DialogDescription>
+                        </DialogHeader>
+                        <ScrollArea className="w-full" maxHeight="400px">
                           <Highlight
                             theme={themes.oneDark}
                             code={String(condition.fnString).trim()}

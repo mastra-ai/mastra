@@ -1,5 +1,5 @@
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from '@/ds/components/Dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useContext, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -65,8 +65,7 @@ export const WorkflowStepActionBar = ({
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
 
-  const dialogContentClass = 'bg-surface2 rounded-lg border border-border1 max-w-4xl w-full px-0';
-  const dialogTitleClass = 'border-b border-border1 pb-4 px-6';
+  const dialogContentClass = 'max-w-4xl w-full';
 
   const showTimeTravel =
     !withoutTimeTravel && stepKey && !mapConfig && workflowStatus !== 'running' && workflowStatus !== 'paused';
@@ -192,9 +191,11 @@ export const WorkflowStepActionBar = ({
               </Button>
               <Dialog open={isTimeTravelOpen} onOpenChange={setIsTimeTravelOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Time travel to {stepKey}</DialogTitle>
-
-                  <div className="px-4 overflow-scroll max-h-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Time travel to {stepKey}</DialogTitle>
+                    <DialogDescription className="sr-only">Time travel to a specific workflow step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-auto max-h-[600px]">
                     <WorkflowTimeTravelForm stepKey={stepKey} closeModal={() => setIsTimeTravelOpen(false)} />
                   </div>
                 </DialogContent>
@@ -217,9 +218,11 @@ export const WorkflowStepActionBar = ({
               </Button>
               <Dialog open={isPerStepRunOpen} onOpenChange={setIsPerStepRunOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Run step {stepKey}</DialogTitle>
-
-                  <div className="px-4 overflow-scroll max-h-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Run step {stepKey}</DialogTitle>
+                    <DialogDescription className="sr-only">Run a specific workflow step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-auto max-h-[600px]">
                     <WorkflowTimeTravelForm
                       stepKey={stepKey}
                       closeModal={() => setIsPerStepRunOpen(false)}
@@ -245,9 +248,11 @@ export const WorkflowStepActionBar = ({
               </Button>
               <Dialog open={isContinueRunOpen} onOpenChange={setIsContinueRunOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Continue run {stepKey}</DialogTitle>
-
-                  <div className="px-4 overflow-scroll max-h-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Continue run {stepKey}</DialogTitle>
+                    <DialogDescription className="sr-only">Continue the workflow run from this step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-auto max-h-[600px]">
                     <WorkflowTimeTravelForm
                       stepKey={stepKey}
                       closeModal={() => setIsContinueRunOpen(false)}
@@ -273,9 +278,11 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isInputOpen} onOpenChange={setIsInputOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} input</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} input</DialogTitle>
+                    <DialogDescription className="sr-only">View the input data for this step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-hidden">
                     <CodeDialogContent data={input} />
                   </div>
                 </DialogContent>
@@ -291,9 +298,11 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isResumeDataOpen} onOpenChange={setIsResumeDataOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} resume data</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} resume data</DialogTitle>
+                    <DialogDescription className="sr-only">View the resume data for this step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-hidden">
                     <CodeDialogContent data={resumeData} />
                   </div>
                 </DialogContent>
@@ -309,8 +318,11 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isOutputOpen} onOpenChange={setIsOutputOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} output</DialogTitle>
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} output</DialogTitle>
+                    <DialogDescription className="sr-only">View the output data for this step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-hidden">
                     <CodeDialogContent data={output ?? suspendOutput} />
                   </div>
                 </DialogContent>
@@ -326,9 +338,11 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isErrorOpen} onOpenChange={setIsErrorOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} error</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} error</DialogTitle>
+                    <DialogDescription className="sr-only">View the error details for this step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-hidden">
                     <CodeDialogContent data={error} />
                   </div>
                 </DialogContent>
@@ -344,9 +358,11 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isTripwireOpen} onOpenChange={setIsTripwireOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} tripwire</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} tripwire</DialogTitle>
+                    <DialogDescription className="sr-only">View the tripwire details for this step</DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-hidden">
                     <CodeDialogContent
                       data={{
                         reason: tripwire.reason,

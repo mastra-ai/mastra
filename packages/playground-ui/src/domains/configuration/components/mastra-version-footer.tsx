@@ -6,7 +6,7 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates, type PackageUpdateInfo } from '../hooks/use-package-updates';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/ds/components/Dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { SelectField } from '@/ds/components/FormFields';
 
@@ -164,9 +164,10 @@ const PackagesModalContent = ({
   });
 
   return (
-    <DialogContent className="bg-surface1 border-border1 max-w-2xl">
+    <DialogContent className="max-w-2xl">
       <DialogHeader>
-        <DialogTitle className="text-text1">Installed Mastra Packages</DialogTitle>
+        <DialogTitle>Installed Mastra Packages</DialogTitle>
+        <DialogDescription className="sr-only">View and update installed Mastra packages</DialogDescription>
       </DialogHeader>
 
       {/* Status summary */}
