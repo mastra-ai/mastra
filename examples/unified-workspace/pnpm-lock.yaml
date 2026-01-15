@@ -8,7 +8,6 @@ overrides:
   '@mastra/core': link:../../packages/core
   '@mastra/memory': link:../../packages/memory
   '@mastra/libsql': link:../../stores/libsql
-  '@mastra/skills': link:../../packages/skills
   mastra: link:../../packages/cli
 
 importers:
@@ -30,9 +29,6 @@ importers:
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory
-      '@mastra/skills':
-        specifier: link:../../packages/skills
-        version: link:../../packages/skills
       ai:
         specifier: ^6.0.1
         version: 6.0.5(zod@3.25.76)
