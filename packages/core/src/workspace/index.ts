@@ -42,6 +42,7 @@ export {
   WorkspaceError,
   FilesystemNotAvailableError,
   SandboxNotAvailableError,
+  SearchNotAvailableError,
   WorkspaceNotReadyError,
   type WorkspaceConfig,
   type WorkspaceScope,
@@ -129,3 +130,39 @@ export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
 // =============================================================================
 
 export { createWorkspaceTools, WORKSPACE_TOOL_NAMES } from './tools';
+
+// =============================================================================
+// Search Engine (BM25, Vector, Hybrid search)
+// =============================================================================
+
+export {
+  SearchEngine,
+  type Embedder,
+  type VectorConfig,
+  type BM25SearchConfig,
+  type IndexDocument,
+  type SearchResult,
+  type SearchOptions,
+  type SearchEngineConfig,
+  type SearchMode,
+} from './search-engine';
+
+// =============================================================================
+// BM25 Index (for advanced use cases)
+// =============================================================================
+
+export {
+  BM25Index,
+  tokenize,
+  findLineRange,
+  extractLines,
+  charIndexToLineNumber,
+  charRangeToLineRange,
+  DEFAULT_STOPWORDS,
+  type BM25Config,
+  type BM25Document,
+  type BM25SearchResult,
+  type BM25IndexData,
+  type TokenizeOptions,
+  type LineRange,
+} from './bm25';

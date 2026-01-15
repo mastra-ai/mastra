@@ -30,6 +30,8 @@
  * ```
  */
 
+import type { MastraVector } from '../vector';
+
 import type {
   WorkspaceFilesystem,
   WorkspaceState,
@@ -47,6 +49,14 @@ import type {
   ExecuteCodeOptions,
   ExecuteCommandOptions,
 } from './sandbox';
+import type { BM25Config } from './bm25';
+import {
+  SearchEngine,
+  type Embedder,
+  type SearchOptions,
+  type SearchResult,
+  type IndexDocument,
+} from './search-engine';
 
 // =============================================================================
 // Workspace Scope
@@ -98,6 +108,46 @@ export interface WorkspaceConfig {
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
    */
   sandbox?: WorkspaceSandbox;
+
+  // ---------------------------------------------------------------------------
+  // Search Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Vector store for semantic search.
+   * When provided along with embedder, enables vector and hybrid search.
+   */
+  vectorStore?: MastraVector;
+
+  /**
+   * Embedder function for generating vectors.
+   * Required when vectorStore is provided.
+   */
+  embedder?: Embedder;
+
+  /**
+   * Enable BM25 keyword search.
+   * Pass true for defaults, or a BM25Config object for custom parameters.
+   */
+  bm25?: boolean | BM25Config;
+
+  /**
+   * Paths to auto-index on init().
+   * Files in these directories will be indexed for search.
+   * @example ['/docs', '/support']
+   */
+  autoIndexPaths?: string[];
+
+  /**
+   * Paths where skills are located.
+   * Workspace will discover SKILL.md files in these directories.
+   * @default ['/skills']
+   */
+  skillsPaths?: string[];
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Options
+  // ---------------------------------------------------------------------------
 
   /** Auto-initialize on construction (default: false) */
   autoInit?: boolean;
@@ -215,6 +265,7 @@ export class Workspace {
   private readonly _sandbox?: WorkspaceSandbox;
   private _state?: WorkspaceState;
   private readonly _config: WorkspaceConfig;
+  private readonly _searchEngine?: SearchEngine;
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -229,6 +280,25 @@ export class Workspace {
     // Create state layer if filesystem is available
     if (this._fs) {
       this._state = new FilesystemState(this._fs);
+    }
+
+    // Create search engine if search is configured
+    if (config.bm25 || (config.vectorStore && config.embedder)) {
+      this._searchEngine = new SearchEngine({
+        bm25: config.bm25
+          ? {
+              bm25: typeof config.bm25 === 'object' ? config.bm25 : undefined,
+            }
+          : undefined,
+        vector:
+          config.vectorStore && config.embedder
+            ? {
+                vectorStore: config.vectorStore,
+                embedder: config.embedder,
+                indexName: `${this.id}-search`,
+              }
+            : undefined,
+      });
     }
 
     // Validate at least one provider is given
@@ -271,6 +341,31 @@ export class Workspace {
    */
   get state(): WorkspaceState | undefined {
     return this._state;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Search Capabilities
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Check if BM25 keyword search is available.
+   */
+  get canBM25(): boolean {
+    return this._searchEngine?.canBM25 ?? false;
+  }
+
+  /**
+   * Check if vector semantic search is available.
+   */
+  get canVector(): boolean {
+    return this._searchEngine?.canVector ?? false;
+  }
+
+  /**
+   * Check if hybrid search is available.
+   */
+  get canHybrid(): boolean {
+    return this._searchEngine?.canHybrid ?? false;
   }
 
   // ---------------------------------------------------------------------------
@@ -350,6 +445,160 @@ export class Workspace {
     }
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCommand(command, args, options);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Search Operations
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Index content for search.
+   * The path becomes the document ID in search results.
+   *
+   * @param path - File path (used as document ID)
+   * @param content - Text content to index
+   * @param options - Index options (metadata, type hints)
+   * @throws {SearchNotAvailableError} if search is not configured
+   */
+  async index(
+    path: string,
+    content: string,
+    options?: {
+      type?: 'text' | 'image' | 'file';
+      mimeType?: string;
+      metadata?: Record<string, unknown>;
+      startLineOffset?: number;
+    },
+  ): Promise<void> {
+    if (!this._searchEngine) {
+      throw new SearchNotAvailableError();
+    }
+    this.lastAccessedAt = new Date();
+
+    const doc: IndexDocument = {
+      id: path,
+      content,
+      metadata: {
+        type: options?.type,
+        mimeType: options?.mimeType,
+        ...options?.metadata,
+      },
+      startLineOffset: options?.startLineOffset,
+    };
+
+    await this._searchEngine.index(doc);
+  }
+
+  /**
+   * Index multiple documents.
+   *
+   * @param docs - Array of documents with path, content, and optional options
+   * @throws {SearchNotAvailableError} if search is not configured
+   */
+  async indexMany(
+    docs: Array<{
+      path: string;
+      content: string;
+      options?: {
+        type?: 'text' | 'image' | 'file';
+        mimeType?: string;
+        metadata?: Record<string, unknown>;
+        startLineOffset?: number;
+      };
+    }>,
+  ): Promise<void> {
+    if (!this._searchEngine) {
+      throw new SearchNotAvailableError();
+    }
+    this.lastAccessedAt = new Date();
+
+    const indexDocs: IndexDocument[] = docs.map(({ path, content, options }) => ({
+      id: path,
+      content,
+      metadata: {
+        type: options?.type,
+        mimeType: options?.mimeType,
+        ...options?.metadata,
+      },
+      startLineOffset: options?.startLineOffset,
+    }));
+
+    await this._searchEngine.indexMany(indexDocs);
+  }
+
+  /**
+   * Remove a document from the search index.
+   *
+   * @param path - File path (document ID) to remove
+   * @throws {SearchNotAvailableError} if search is not configured
+   */
+  async unindex(path: string): Promise<void> {
+    if (!this._searchEngine) {
+      throw new SearchNotAvailableError();
+    }
+    this.lastAccessedAt = new Date();
+    await this._searchEngine.remove(path);
+  }
+
+  /**
+   * Search indexed content.
+   *
+   * @param query - Search query string
+   * @param options - Search options (topK, mode, filters)
+   * @returns Array of search results
+   * @throws {SearchNotAvailableError} if search is not configured
+   */
+  async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+    if (!this._searchEngine) {
+      throw new SearchNotAvailableError();
+    }
+    this.lastAccessedAt = new Date();
+    return this._searchEngine.search(query, options);
+  }
+
+  /**
+   * Rebuild the BM25 index from filesystem paths.
+   * Reads files from the specified paths (or autoIndexPaths from config) and indexes them.
+   *
+   * @param paths - Paths to index (defaults to autoIndexPaths from config)
+   * @throws {SearchNotAvailableError} if search is not configured
+   * @throws {FilesystemNotAvailableError} if filesystem is not configured
+   */
+  async rebuildIndex(paths?: string[]): Promise<void> {
+    if (!this._searchEngine) {
+      throw new SearchNotAvailableError();
+    }
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+
+    const pathsToIndex = paths ?? this._config.autoIndexPaths ?? [];
+    if (pathsToIndex.length === 0) {
+      return;
+    }
+
+    // Clear existing BM25 index
+    this._searchEngine.clear();
+
+    // Index all files from specified paths
+    for (const basePath of pathsToIndex) {
+      try {
+        const files = await this.getAllFiles(basePath);
+        for (const filePath of files) {
+          try {
+            const content = await this._fs.readFile(filePath, { encoding: 'utf-8' });
+            await this._searchEngine.index({
+              id: filePath,
+              content: content as string,
+            });
+          } catch {
+            // Skip files that can't be read as text
+          }
+        }
+      } catch {
+        // Skip paths that don't exist
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -737,6 +986,13 @@ export class SandboxNotAvailableError extends WorkspaceError {
   constructor() {
     super('Workspace does not have a sandbox configured', 'NO_SANDBOX');
     this.name = 'SandboxNotAvailableError';
+  }
+}
+
+export class SearchNotAvailableError extends WorkspaceError {
+  constructor() {
+    super('Workspace does not have search configured (enable bm25 or provide vectorStore + embedder)', 'NO_SEARCH');
+    this.name = 'SearchNotAvailableError';
   }
 }
 
