@@ -342,4 +342,9 @@ createVectorTestSuite({
   },
   waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 5000)),
   supportsContains: false,
+  // MongoDB limitations:
+  // - $not at top level doesn't work (MongoDB requires $not inside a field filter)
+  // - Empty logical operator arrays ($and: [], $or: [], $nor: []) are rejected
+  supportsNotOperator: false,
+  supportsEmptyLogicalOperators: false,
 });

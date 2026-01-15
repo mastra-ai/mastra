@@ -647,4 +647,5 @@ createVectorTestSuite({
   supportsContains: false,
   supportsNorOperator: false,
   supportsElemMatch: false,
+  supportsEmptyLogicalOperators: false,
 });

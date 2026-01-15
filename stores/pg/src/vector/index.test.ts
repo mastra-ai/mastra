@@ -43,6 +43,7 @@ describe('PgVector', () => {
       },
       // PgVector doesn't throw on malformed operator syntax (e.g., $gt with array value)
       supportsStrictOperatorValidation: false,
+      supportsEmptyLogicalOperators: false,
     });
   });
 
