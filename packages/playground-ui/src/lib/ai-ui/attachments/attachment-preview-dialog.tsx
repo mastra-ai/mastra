@@ -1,4 +1,4 @@
-import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogDescription } from '@/ds/components/Dialog';
+import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogDescription, DialogBody } from '@/ds/components/Dialog';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
 
@@ -43,9 +43,9 @@ export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogP
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>PDF preview</DialogTitle>
-          <DialogDescription className="sr-only">Preview of the PDF document</DialogDescription>
+          <DialogDescription>Preview of the PDF document</DialogDescription>
         </DialogHeader>
-        {open && <iframe src={data} width="100%" height="600px"></iframe>}
+        <DialogBody>{open && <iframe src={data} width="100%" height="600px"></iframe>}</DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -80,9 +80,9 @@ export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDial
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Image preview</DialogTitle>
-          <DialogDescription className="sr-only">Preview of the image</DialogDescription>
+          <DialogDescription>Preview of the image</DialogDescription>
         </DialogHeader>
-        {open && <img src={src} alt="Image" />}
+        <DialogBody>{open && <img src={src} alt="Image" />}</DialogBody>
       </DialogContent>
     </Dialog>
   );
@@ -121,9 +121,9 @@ export const TxtPreviewDialog = ({ data, open, onOpenChange }: TxtPreviewDialogP
       <DialogContent className="max-w-4xl h-[80vh]">
         <DialogHeader>
           <DialogTitle>Text preview</DialogTitle>
-          <DialogDescription className="sr-only">Preview of the text file</DialogDescription>
+          <DialogDescription>Preview of the text file</DialogDescription>
         </DialogHeader>
-        {open && <div className="whitespace-pre-wrap overflow-y-auto">{data}</div>}
+        <DialogBody>{open && <div className="whitespace-pre-wrap">{data}</div>}</DialogBody>
       </DialogContent>
     </Dialog>
   );

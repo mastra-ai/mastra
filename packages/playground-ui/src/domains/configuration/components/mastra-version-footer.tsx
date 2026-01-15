@@ -6,7 +6,7 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates, type PackageUpdateInfo } from '../hooks/use-package-updates';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogBody } from '@/ds/components/Dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { SelectField } from '@/ds/components/FormFields';
 
@@ -167,11 +167,12 @@ const PackagesModalContent = ({
     <DialogContent className="max-w-2xl">
       <DialogHeader>
         <DialogTitle>Installed Mastra Packages</DialogTitle>
-        <DialogDescription className="sr-only">View and update installed Mastra packages</DialogDescription>
+        <DialogDescription>View and update installed Mastra packages</DialogDescription>
       </DialogHeader>
 
-      {/* Status summary */}
-      <div className="text-sm text-neutral3 py-2">
+      <DialogBody>
+        {/* Status summary */}
+        <div className="text-sm text-neutral3 py-2">
         {isLoadingUpdates ? (
           <span className="text-neutral3">Checking for updates...</span>
         ) : !hasUpdates ? (
@@ -293,6 +294,7 @@ const PackagesModalContent = ({
           </button>
         </div>
       )}
+      </DialogBody>
     </DialogContent>
   );
 };

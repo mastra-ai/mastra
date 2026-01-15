@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { TooltipIconButton } from '../../tooltip-icon-button';
@@ -31,7 +31,7 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
           <DialogDescription>View the metadata of the agent's network choice.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Txt className="text-neutral3">Selection Reason</Txt>
             <div className="text-neutral6 text-ui-md">{selectionReason}</div>
@@ -43,7 +43,7 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
               <div className="text-neutral6 text-ui-md">{inputSlot}</div>
             </div>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

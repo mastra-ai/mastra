@@ -619,7 +619,7 @@ export const AgentMetadataModelSwitcher = ({
                     <div
                       key={`${model.provider}-${model.model}`}
                       data-model-highlighted={isHighlighted}
-                      className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${
+                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded-md hover:bg-surface5 ${
                         isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                       } ${isSelected ? 'bg-surface5' : ''}`}
                       onMouseDown={e => {

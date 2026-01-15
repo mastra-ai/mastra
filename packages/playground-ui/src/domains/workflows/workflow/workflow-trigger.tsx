@@ -17,7 +17,14 @@ import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogDescription } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
 import { isObjectEmpty } from '@/lib/object';
@@ -400,14 +407,14 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh]">
+        <DialogContent className="max-w-6xl">
           <DialogHeader>
             <DialogTitle>Workflow Execution (JSON)</DialogTitle>
-            <DialogDescription className="sr-only">JSON view of the workflow execution result</DialogDescription>
+            <DialogDescription>JSON view of the workflow execution result</DialogDescription>
           </DialogHeader>
-          <div className="w-full h-full overflow-auto">
+          <DialogBody className="max-h-[90vh]">
             <CodeEditor data={result} className="p-4" />
-          </div>
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </>

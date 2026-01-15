@@ -1,5 +1,5 @@
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription, DialogBody } from '@/ds/components/Dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useContext, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -193,11 +193,11 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>Time travel to {stepKey}</DialogTitle>
-                    <DialogDescription className="sr-only">Time travel to a specific workflow step</DialogDescription>
+                    <DialogDescription>Time travel to a specific workflow step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-auto max-h-[600px]">
+                  <DialogBody className="max-h-[600px]">
                     <WorkflowTimeTravelForm stepKey={stepKey} closeModal={() => setIsTimeTravelOpen(false)} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -220,9 +220,9 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>Run step {stepKey}</DialogTitle>
-                    <DialogDescription className="sr-only">Run a specific workflow step</DialogDescription>
+                    <DialogDescription>Run a specific workflow step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-auto max-h-[600px]">
+                  <DialogBody className="max-h-[600px]">
                     <WorkflowTimeTravelForm
                       stepKey={stepKey}
                       closeModal={() => setIsPerStepRunOpen(false)}
@@ -230,7 +230,7 @@ export const WorkflowStepActionBar = ({
                       buttonText="Run step"
                       inputData={stepPayload?.input}
                     />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
 
@@ -250,9 +250,9 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>Continue run {stepKey}</DialogTitle>
-                    <DialogDescription className="sr-only">Continue the workflow run from this step</DialogDescription>
+                    <DialogDescription>Continue the workflow run from this step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-auto max-h-[600px]">
+                  <DialogBody className="max-h-[600px]">
                     <WorkflowTimeTravelForm
                       stepKey={stepKey}
                       closeModal={() => setIsContinueRunOpen(false)}
@@ -260,7 +260,7 @@ export const WorkflowStepActionBar = ({
                       buttonText="Continue run"
                       inputData={stepPayload?.input}
                     />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -280,11 +280,11 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>{stepName} input</DialogTitle>
-                    <DialogDescription className="sr-only">View the input data for this step</DialogDescription>
+                    <DialogDescription>View the input data for this step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-hidden">
+                  <DialogBody>
                     <CodeDialogContent data={input} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -300,11 +300,11 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>{stepName} resume data</DialogTitle>
-                    <DialogDescription className="sr-only">View the resume data for this step</DialogDescription>
+                    <DialogDescription>View the resume data for this step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-hidden">
+                  <DialogBody>
                     <CodeDialogContent data={resumeData} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -320,11 +320,11 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>{stepName} output</DialogTitle>
-                    <DialogDescription className="sr-only">View the output data for this step</DialogDescription>
+                    <DialogDescription>View the output data for this step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-hidden">
+                  <DialogBody>
                     <CodeDialogContent data={output ?? suspendOutput} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -340,11 +340,11 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>{stepName} error</DialogTitle>
-                    <DialogDescription className="sr-only">View the error details for this step</DialogDescription>
+                    <DialogDescription>View the error details for this step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-hidden">
+                  <DialogBody>
                     <CodeDialogContent data={error} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -360,9 +360,9 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogHeader>
                     <DialogTitle>{stepName} tripwire</DialogTitle>
-                    <DialogDescription className="sr-only">View the tripwire details for this step</DialogDescription>
+                    <DialogDescription>View the tripwire details for this step</DialogDescription>
                   </DialogHeader>
-                  <div className="overflow-hidden">
+                  <DialogBody>
                     <CodeDialogContent
                       data={{
                         reason: tripwire.reason,
@@ -371,7 +371,7 @@ export const WorkflowStepActionBar = ({
                         processorId: tripwire.processorId,
                       }}
                     />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
