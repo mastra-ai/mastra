@@ -21,6 +21,7 @@ import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
+import type { OutputSchema } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -845,7 +846,7 @@ export type LLMStepResult<OUTPUT = undefined> = {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
     uiMessages?: UIMessage<
-      OUTPUT extends unknown
+      [OUTPUT] extends [undefined]
         ? undefined
         : {
             structuredOutput?: OUTPUT;
