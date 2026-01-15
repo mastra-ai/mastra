@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { Button } from '@/ds/components/Button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { useTestRunnerStore, type TestRunResult, type StepResult, type StepStatus } from '../store/test-runner-store';
 
