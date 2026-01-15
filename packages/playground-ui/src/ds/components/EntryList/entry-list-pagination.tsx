@@ -13,7 +13,7 @@ export function EntryListPagination({ currentPage, hasMore, onNextPage, onPrevPa
   const showNavigation = (typeof currentPage === 'number' && currentPage > 0) || hasMore;
 
   return (
-    <div className={cn('flex pt-[1.5rem] items-center justify-center text-neutral3 text-[0.875rem] gap-[2rem] ')}>
+    <div className={cn('flex pt-[1.5rem] items-center justify-center text-neutral3 text-ui-md gap-[2rem] ')}>
       <span>
         Page <b>{currentPage ? currentPage + 1 : '1'}</b>
       </span>

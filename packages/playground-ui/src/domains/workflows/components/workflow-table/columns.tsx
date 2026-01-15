@@ -26,7 +26,7 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
               )}
             </div>
           }
-          description={undefined}
+          description={workflow.description}
           meta={undefined}
         />
       );

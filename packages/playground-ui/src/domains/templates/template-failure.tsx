@@ -47,8 +47,8 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       >
         {icon}
         <div className="text-center space-y-2">
-          <p className="text-[0.875rem] font-medium text-neutral5">{title}</p>
-          <p className="text-[0.875rem] text-neutral3">{getUserFriendlyMessage()}</p>
+          <p className="text-ui-md font-medium text-neutral5">{title}</p>
+          <p className="text-ui-md text-neutral3">{getUserFriendlyMessage()}</p>
         </div>
       </div>
 

@@ -73,13 +73,13 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                   '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3',
                 )}
               >
-                <h2 className="text-[1rem] text-neutral5">{template.title}</h2>
-                <p className="text-[0.875rem] text-neutral4 transition-colors duration-500">{template.description}</p>
-                <div className="hidden 2xl:flex text-neutral3 text-[0.875rem] flex-wrap items-center gap-[1rem] mt-[0.75rem]">
+                <h2 className="text-ui-lg text-neutral5">{template.title}</h2>
+                <p className="text-ui-md text-neutral4 transition-colors duration-500">{template.description}</p>
+                <div className="hidden 2xl:flex text-neutral3 text-ui-md flex-wrap items-center gap-[1rem] mt-[0.75rem]">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
-                        'flex gap-[1rem] text-[0.875rem] text-neutral3 m-0 p-0 list-none',
+                        'flex gap-[1rem] text-ui-md text-neutral3 m-0 p-0 list-none',
                         '[&>li]:flex [&>li]:items-center [&>li]:gap-[0.1rem] text-neutral4',
                       )}
                     >
@@ -123,7 +123,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
             </LinkComponent>
             <a
               href={template.githubUrl}
-              className={cn('group items-center gap-[0.5rem] text-[0.875rem] ml-auto pr-[1rem] hidden', 'lg:flex')}
+              className={cn('group items-center gap-[0.5rem] text-ui-md ml-auto pr-[1rem] hidden', 'lg:flex')}
               target="_blank"
               rel="noopener noreferrer"
             >

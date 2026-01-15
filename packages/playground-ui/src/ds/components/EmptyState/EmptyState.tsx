@@ -20,7 +20,7 @@ export const EmptyState = ({
   return (
     <div className="flex w-[340px] flex-col items-center justify-center text-center">
       <div className="h-auto [&>svg]:w-[126px]">{iconSlot}</div>
-      <Component className="text-neutral6 pt-[34px] font-serif text-[1.75rem] font-semibold">{titleSlot}</Component>
+      <Component className="text-neutral6 pt-[34px] font-serif text-header-xl font-semibold">{titleSlot}</Component>
 
       <Txt variant="ui-lg" className="text-neutral3 pb-[34px]">
         {descriptionSlot}

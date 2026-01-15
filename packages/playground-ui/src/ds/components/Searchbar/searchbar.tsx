@@ -69,5 +69,5 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: Se
 };
 
 export const SearchbarWrapper = ({ children }: { children: React.ReactNode }) => {
-  return <div className="px-4 py-2 border-b border-border1">{children}</div>;
+  return <div className="px-3 py-2.5 border-b border-border1">{children}</div>;
 };
