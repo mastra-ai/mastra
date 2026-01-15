@@ -192,12 +192,12 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <button className="bg-surface2 border border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-form-sm gap-md hover:bg-surface4 text-neutral3 hover:text-neutral6">
+          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Cancel
           </button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <button className="bg-surface2 border border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-form-sm gap-md hover:bg-surface4 text-neutral3 hover:text-neutral6">
+          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Send
           </button>
         </ComposerPrimitive.Send>

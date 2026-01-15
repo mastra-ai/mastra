@@ -16,9 +16,9 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const sizeClasses = {
-  sm: `${formElementSizes.sm} gap-sm`,
-  md: `${formElementSizes.md} gap-md`,
-  lg: `${formElementSizes.lg} gap-lg`,
+  sm: `${formElementSizes.sm} gap-0.5`,
+  md: `${formElementSizes.md} gap-1`,
+  lg: `${formElementSizes.lg} gap-2`,
 };
 
 const variantClasses = {
@@ -33,7 +33,7 @@ export function buttonVariants(options?: { variant?: ButtonProps['variant']; siz
   const size = options?.size || 'md';
 
   return cn(
-    'bg-surface2 border border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
+    'bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border',
     formElementFocus,
     variantClasses[variant],
     sizeClasses[size],
@@ -48,7 +48,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Component
         ref={ref}
         className={cn(
-          'bg-surface2 border border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border',
+          'bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border',
           formElementFocus,
           variantClasses[variant],
           sizeClasses[size],
