@@ -116,7 +116,7 @@ export class StoredScorersLibSQL extends StoredScorersStorage {
           scoreRange: scorer.scoreRange,
           metadata: scorer.metadata ?? null,
           ownerId: scorer.ownerId ?? null,
-          activeVersionId: scorer.activeVersionId ?? null,
+          activeVersionId: null,
           createdAt: now,
           updatedAt: now,
         },

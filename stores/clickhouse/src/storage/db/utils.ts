@@ -14,6 +14,8 @@ import {
   TABLE_AGENT_VERSIONS,
   TABLE_INTEGRATIONS,
   TABLE_CACHED_TOOLS,
+  TABLE_STORED_SCORERS,
+  TABLE_STORED_SCORER_VERSIONS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -31,6 +33,8 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_CACHED_TOOLS]: `ReplacingMergeTree()`,
   [TABLE_WORKFLOW_DEFINITIONS]: `ReplacingMergeTree()`,
   [TABLE_WORKFLOW_DEFINITION_VERSIONS]: `MergeTree()`,
+  [TABLE_STORED_SCORERS]: `ReplacingMergeTree()`,
+  [TABLE_STORED_SCORER_VERSIONS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

@@ -17,6 +17,8 @@ import type {
   TABLE_CACHED_TOOLS,
   TABLE_WORKFLOW_DEFINITIONS,
   TABLE_WORKFLOW_DEFINITION_VERSIONS,
+  TABLE_STORED_SCORERS,
+  TABLE_STORED_SCORER_VERSIONS,
   SpanRecord,
   StorageAgentType,
   StorageAgentVersionType,
@@ -24,6 +26,8 @@ import type {
   StorageCachedTool,
   StorageWorkflowDefinitionType,
   StorageWorkflowDefinitionVersionType,
+  StoredScorerType,
+  StoredScorerVersionType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
@@ -124,6 +128,8 @@ export type RecordTypes = {
   [TABLE_CACHED_TOOLS]: StorageCachedTool;
   [TABLE_WORKFLOW_DEFINITIONS]: StorageWorkflowDefinitionType;
   [TABLE_WORKFLOW_DEFINITION_VERSIONS]: StorageWorkflowDefinitionVersionType;
+  [TABLE_STORED_SCORERS]: StoredScorerType;
+  [TABLE_STORED_SCORER_VERSIONS]: StoredScorerVersionType;
 };
 
 export type ListOptions = {
