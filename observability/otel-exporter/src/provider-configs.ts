@@ -173,7 +173,6 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
   // Read from config or environment variables
   // LMNR_PROJECT_API_KEY is the standard Laminar environment variable
   const apiKey = config.apiKey ?? process.env.LMNR_PROJECT_API_KEY;
-  const teamId = config.teamId ?? process.env.LAMINAR_TEAM_ID;
   const configEndpoint = config.endpoint ?? process.env.LAMINAR_ENDPOINT;
 
   if (!apiKey) {
@@ -191,11 +190,6 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
   };
-
-  // Only add team ID header if provided (for backwards compatibility)
-  if (teamId) {
-    headers['x-laminar-team-id'] = teamId;
-  }
 
   return {
     endpoint,

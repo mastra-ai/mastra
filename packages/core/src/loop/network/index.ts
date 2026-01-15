@@ -11,8 +11,7 @@ import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType, OutputSchema } from '../../stream';
-import type { InferSchemaOutput } from '../../stream/base/schema';
+import type { ChunkType } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
@@ -480,7 +479,7 @@ export async function createNetworkLoop({
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
-      const object = result.object;
+      const object = await result.object;
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 
@@ -1593,7 +1592,7 @@ export async function createNetworkLoop({
   return { networkWorkflow };
 }
 
-export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
+export async function networkLoop<OUTPUT = undefined>({
   networkName,
   requestContext,
   runId,
@@ -1615,7 +1614,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   networkName: string;
   requestContext: RequestContext;
   runId: string;
-  routingAgent: Agent;
+  routingAgent: Agent<any, any, any>;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
   generateId: NetworkIdGenerator;
   maxIterations: number;
@@ -1648,7 +1647,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
    * Structured output configuration for the network's final result.
    * When provided, generates a structured response matching the schema.
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
 
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
@@ -1826,7 +1825,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       // Run either configured scorers or the default LLM completion check
       let completionResult;
       let generatedFinalResult: string | undefined;
-      let structuredObject: InferSchemaOutput<OUTPUT> | undefined;
+      let structuredObject: OUTPUT | undefined;
 
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);

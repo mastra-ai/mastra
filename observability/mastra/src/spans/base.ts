@@ -239,6 +239,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns a lightweight span ready for export */
   public exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> {
+    // Check if input/output should be hidden based on traceState
+    const hideInput = this.traceState?.hideInput ?? false;
+    const hideOutput = this.traceState?.hideOutput ?? false;
+
     return {
       id: this.id,
       traceId: this.traceId,
@@ -251,8 +255,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       metadata: this.metadata,
       startTime: this.startTime,
       endTime: this.endTime,
-      input: this.input,
-      output: this.output,
+      input: hideInput ? undefined : this.input,
+      output: hideOutput ? undefined : this.output,
       errorInfo: this.errorInfo,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
