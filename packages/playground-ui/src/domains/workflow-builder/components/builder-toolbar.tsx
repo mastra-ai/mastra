@@ -84,7 +84,16 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
 
     try {
       // Serialize the graph to workflow definition format
-      const { stepGraph, steps } = serializeGraph(nodes, edges);
+      const { stepGraph, steps, warnings } = serializeGraph(nodes, edges);
+
+      // Show warnings if any nodes were skipped during serialization
+      if (warnings.length > 0) {
+        toast.warning('Some nodes were skipped', {
+          description:
+            warnings.slice(0, 3).join('\n') + (warnings.length > 3 ? `\n...and ${warnings.length - 3} more` : ''),
+          duration: 8000,
+        });
+      }
 
       await updateWorkflowDefinition.mutateAsync({
         id: workflowId,

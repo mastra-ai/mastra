@@ -35,6 +35,7 @@ export interface SerializeOptions {
 export interface SerializedGraph {
   stepGraph: DefinitionStepFlowEntry[];
   steps: Record<string, DeclarativeStepDefinition>;
+  warnings: string[];
 }
 
 /**
@@ -44,6 +45,7 @@ export interface SerializedGraph {
 export function serializeGraph(nodes: BuilderNode[], edges: BuilderEdge[]): SerializedGraph {
   // Build steps object from non-trigger nodes
   const steps: Record<string, DeclarativeStepDefinition> = {};
+  const warnings: string[] = [];
 
   for (const node of nodes) {
     // Skip types that don't have step definitions (handled in stepGraph only)
@@ -53,18 +55,34 @@ export function serializeGraph(nodes: BuilderNode[], edges: BuilderEdge[]): Seri
     if (node.data.type === 'loop') continue;
     if (node.data.type === 'foreach') continue;
     if (node.data.type === 'sleep') continue;
-    if (node.data.type === 'agent-network') continue; // Not yet supported in core
+    if (node.data.type === 'agent-network') {
+      // Not yet supported in core - collect warning
+      warnings.push(
+        `Agent network node "${node.data.label || node.id}" was skipped: agent-network is not yet supported`,
+      );
+      continue;
+    }
 
     const stepDef = nodeToStepDef(node);
     if (stepDef) {
       steps[node.id] = stepDef;
+    } else {
+      // Node type exists but failed to serialize (e.g., missing required fields)
+      warnings.push(
+        `Node "${node.data.label || node.id}" (${node.data.type}) was skipped: missing required configuration`,
+      );
     }
   }
 
   // Build stepGraph by traversing from trigger
-  const stepGraph = buildStepGraph(nodes, edges);
+  const stepGraph = buildStepGraph(nodes, edges, warnings);
 
-  return { stepGraph, steps };
+  return { stepGraph, steps, warnings };
+}
+
+export interface SerializedGraphFull {
+  definition: Omit<StorageWorkflowDefinitionType, 'createdAt' | 'updatedAt'>;
+  warnings: string[];
 }
 
 /**
@@ -74,18 +92,21 @@ export function serializeGraphFull(
   nodes: BuilderNode[],
   edges: BuilderEdge[],
   options: SerializeOptions,
-): Omit<StorageWorkflowDefinitionType, 'createdAt' | 'updatedAt'> {
-  const { stepGraph, steps } = serializeGraph(nodes, edges);
+): SerializedGraphFull {
+  const { stepGraph, steps, warnings } = serializeGraph(nodes, edges);
 
   return {
-    id: options.id,
-    name: options.name,
-    description: options.description,
-    inputSchema: options.inputSchema ?? {},
-    outputSchema: options.outputSchema ?? {},
-    stateSchema: options.stateSchema,
-    stepGraph,
-    steps,
+    definition: {
+      id: options.id,
+      name: options.name,
+      description: options.description,
+      inputSchema: options.inputSchema ?? {},
+      outputSchema: options.outputSchema ?? {},
+      stateSchema: options.stateSchema,
+      stepGraph,
+      steps,
+    },
+    warnings,
   };
 }
 
@@ -175,7 +196,7 @@ function nodeToStepDef(node: BuilderNode): DeclarativeStepDefinition | null {
 /**
  * Build stepGraph by traversing edges from trigger node
  */
-function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[]): DefinitionStepFlowEntry[] {
+function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[], warnings: string[]): DefinitionStepFlowEntry[] {
   const stepGraph: DefinitionStepFlowEntry[] = [];
 
   // Find trigger node
@@ -294,24 +315,16 @@ function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[]): DefinitionS
           if (branchId === 'default' || branchId === data.defaultBranch) {
             defaultStepId = edge.target;
           } else {
+            // Find branch by ID - branches should have UUID-based IDs
             const branch = data.branches.find(b => b.id === branchId);
             if (branch?.condition) {
               branches.push({
                 condition: branch.condition,
                 stepId: edge.target,
               });
-            } else {
-              // Try matching by index
-              const branchIndex = parseInt(branchId ?? '0', 10);
-              if (!isNaN(branchIndex) && branchIndex < data.branches.length) {
-                const indexedBranch = data.branches[branchIndex];
-                if (indexedBranch?.condition) {
-                  branches.push({
-                    condition: indexedBranch.condition,
-                    stepId: edge.target,
-                  });
-                }
-              }
+            } else if (branchId) {
+              // Branch ID not found - this could indicate data inconsistency
+              warnings.push(`Condition node "${data.label || node.id}": could not find branch with ID "${branchId}"`);
             }
           }
         }
@@ -338,6 +351,8 @@ function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[]): DefinitionS
               description: data.description,
             },
           });
+        } else {
+          warnings.push(`Transform node "${data.label || node.id}" was skipped: output mapping is empty`);
         }
         break;
       }
