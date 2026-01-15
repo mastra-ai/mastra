@@ -46,10 +46,6 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
-import Knowledge from './pages/knowledge';
-import KnowledgeNamespaceDetail from './pages/knowledge/[namespace]';
-import Skills from './pages/skills';
-import SkillDetailPage from './pages/skills/[skillName]';
 import { AgentSkillDetailPage } from './pages/agents/skills/[skillName]';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
@@ -181,12 +177,6 @@ function App() {
 
                 <Route path="/mcps/:serverId" element={<McpServerPage />} />
                 <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
-
-                <Route path="/knowledge" element={<Knowledge />} />
-                <Route path="/knowledge/:namespace" element={<KnowledgeNamespaceDetail />} />
-
-                <Route path="/skills" element={<Skills />} />
-                <Route path="/skills/:skillName" element={<SkillDetailPage />} />
 
                 <Route path="/workspace" element={<Workspace />} />
                 <Route path="/workspace/skills/:skillName" element={<WorkspaceSkillDetailPage />} />

@@ -1,4 +1,4 @@
-// File browser components (workspace-specific, no conflicts)
+// File browser components
 export {
   FileBrowser,
   FileViewer,
@@ -8,26 +8,16 @@ export {
 } from './file-browser';
 
 // Search components
-export { SearchWorkspacePanel, type SearchWorkspacePanelProps } from './search-panel';
-
-// Re-export skills components with Workspace prefix to avoid conflicts with skills domain
 export {
-  SkillsTable as WorkspaceSkillsTable,
-  SkillsNotConfigured as WorkspaceSkillsNotConfigured,
-  type SkillsTableProps as WorkspaceSkillsTableProps,
-} from './skills-table';
-
-export {
-  SkillDetail as WorkspaceSkillDetail,
-  type SkillDetailProps as WorkspaceSkillDetailProps,
-} from './skill-detail';
-
-export {
-  SearchSkillsPanel as WorkspaceSearchSkillsPanel,
-  type SearchSkillsPanelProps as WorkspaceSearchSkillsPanelProps,
+  SearchWorkspacePanel,
+  SearchSkillsPanel,
+  type SearchWorkspacePanelProps,
+  type SearchSkillsPanelProps,
 } from './search-panel';
 
-export {
-  ReferenceViewerDialog as WorkspaceReferenceViewerDialog,
-  type ReferenceViewerDialogProps as WorkspaceReferenceViewerDialogProps,
-} from './reference-viewer-dialog';
+// Skills components
+export { SkillsTable, SkillsNotConfigured, type SkillsTableProps } from './skills-table';
+
+export { SkillDetail, type SkillDetailProps } from './skill-detail';
+
+export { ReferenceViewerDialog, type ReferenceViewerDialogProps } from './reference-viewer-dialog';

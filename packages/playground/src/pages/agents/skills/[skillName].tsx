@@ -11,7 +11,7 @@ import {
   SkillDetail,
   ReferenceViewerDialog,
   useAgentSkill,
-  useSkillReference,
+  useWorkspaceSkillReference,
 } from '@mastra/playground-ui';
 
 import { Link, useParams } from 'react-router';
@@ -32,7 +32,7 @@ export function AgentSkillDetailPage() {
     data: referenceData,
     isLoading: isLoadingReference,
     error: referenceError,
-  } = useSkillReference(decodedSkillName, viewingReference ?? '', {
+  } = useWorkspaceSkillReference(decodedSkillName, viewingReference ?? '', {
     enabled: !!viewingReference,
   });
 
