@@ -31,7 +31,7 @@ const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.T
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        'flex w-full items-center justify-between border border-surface4 bg-transparent py-2 shadow-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
+        'flex w-full items-center justify-between border border-border1 bg-transparent py-2 shadow-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
         formElementRadius,
         formElementFocus,
         selectTriggerSizeClasses[size],

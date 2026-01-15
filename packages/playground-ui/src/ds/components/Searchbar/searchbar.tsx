@@ -62,7 +62,7 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size
   return (
     <div
       className={cn(
-        'border border-icon-3 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
+        'border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
         formElementRadius,
         formElementFocusWithin,
         searchbarSizeClasses[size],
