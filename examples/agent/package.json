@@ -11,6 +11,7 @@
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
     "@ai-sdk/provider": "^2.0.0",
     "@mastra/auth-better-auth": "latest",
+    "@mastra/auth-workos": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
@@ -20,6 +21,7 @@
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
     "@mastra/voice-openai": "latest",
+    "@workos-inc/node": "^8.0.0",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5.0.93",
     "better-auth": "^1.2.8",
@@ -32,6 +34,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/auth-better-auth": "link:../../auth/better-auth",
+      "@mastra/auth-workos": "link:../../auth/workos",
       "@mastra/core": "link:../../packages/core",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",
