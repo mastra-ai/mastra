@@ -86,4 +86,14 @@ export interface ICredentialsProvider<TUser extends EEUser = EEUser> {
    * @returns Promise that resolves when password is reset
    */
   resetPassword?(token: string, newPassword: string): Promise<void>;
+
+  /**
+   * Optional: Check if sign-up is enabled.
+   * Defaults to true if not implemented.
+   *
+   * Use this to disable public registration while still allowing sign-in.
+   *
+   * @returns Whether sign-up is enabled
+   */
+  isSignUpEnabled?(): boolean;
 }

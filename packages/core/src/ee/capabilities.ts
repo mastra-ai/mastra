@@ -11,6 +11,7 @@ import type {
   IACLProvider,
   ISessionProvider,
   IAuditLogger,
+  ICredentialsProvider,
 } from './interfaces';
 import { isEELicenseValid } from './license';
 
@@ -25,6 +26,8 @@ export interface PublicAuthCapabilities {
   login: {
     /** Type of login available */
     type: 'sso' | 'credentials' | 'both';
+    /** Whether sign-up is enabled (defaults to true) */
+    signUpEnabled?: boolean;
     /** SSO configuration */
     sso?: {
       /** Provider name */
@@ -149,10 +152,20 @@ export async function buildCapabilities(
   const hasSSO = implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud;
   const hasCredentials = implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud;
 
+  // Check if sign-up is enabled (defaults to true)
+  let signUpEnabled = true;
+  if (implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
+    const credentialsProvider = auth as ICredentialsProvider;
+    if (typeof credentialsProvider.isSignUpEnabled === 'function') {
+      signUpEnabled = credentialsProvider.isSignUpEnabled();
+    }
+  }
+
   if (hasSSO && hasCredentials) {
     const ssoConfig = (auth as ISSOProvider).getLoginButtonConfig();
     login = {
       type: 'both',
+      signUpEnabled,
       sso: {
         ...ssoConfig,
         url: '/api/auth/sso/login',
@@ -171,6 +184,7 @@ export async function buildCapabilities(
     // Credentials-only auth (e.g., Better Auth with email/password)
     login = {
       type: 'credentials',
+      signUpEnabled,
     };
   }
 

@@ -19,6 +19,8 @@ export type SSOConfig = {
  */
 export type LoginConfig = {
   type: 'sso' | 'credentials' | 'both';
+  /** Whether sign-up is enabled (defaults to true) */
+  signUpEnabled?: boolean;
   sso?: SSOConfig;
 } | null;
 
