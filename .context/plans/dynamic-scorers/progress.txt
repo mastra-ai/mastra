@@ -502,3 +502,64 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 013 - Create scorer form validation and default template - COMPLETED
+==========================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive Zod validation schema for scorer form
+- Defined ScorerFormValues interface with all required fields
+- Created DEFAULT_PROMPT_TEMPLATE with all 4 template variables
+- Added validation for all required fields and constraints
+- Followed exact same patterns as agent-form validation for consistency
+
+Files created:
+- packages/playground-ui/src/domains/scores/components/create-scorer/scorer-form-validation.ts (89 lines)
+- packages/playground-ui/src/domains/scores/components/create-scorer/index.ts (export file)
+
+Key features implemented:
+1. DEFAULT_PROMPT_TEMPLATE constant with template variables:
+   - {{minScore}}: Minimum score from scoreRange
+   - {{maxScore}}: Maximum score from scoreRange
+   - {{input}}: The input to the evaluated agent/tool
+   - {{output}}: The output from the evaluated agent/tool
+
+2. Zod schema validation (scorerFormSchema):
+   - name: required, min 1, max 100 chars
+   - description: optional, max 500 chars
+   - model: required provider and name, optional toolChoice and reasoningEffort
+   - prompt: required, min 1 char
+   - scoreRange: min and max numbers with defaults (0, 1), validated min < max
+   - metadata: optional record of string keys to unknown values
+   - ownerId: optional string
+
+3. ScorerFormValues TypeScript type inferred from schema
+
+4. defaultScorerFormValues constant for initializing forms
+
+Validation rules:
+- Score range: min must be less than max
+- Name: required, max 100 characters
+- Description: optional, max 500 characters
+- Prompt: required and non-empty
+- Model: provider and name are required
+
+Acceptance criteria met:
+✓ ScorerFormValues interface is complete
+✓ DEFAULT_PROMPT_TEMPLATE contains all 4 template variables
+✓ Validation catches all required field errors
+✓ Score range validation ensures min < max
+
+Verification:
+- TypeScript compilation: PASSED (no errors in scorer-form-validation.ts)
+- All acceptance criteria met
+
+Next steps:
+- Task 014: Create scorer form component (uses scorer-form-validation.ts)
+- Task 015: Create stored scorers mutations hook
+- Task 016: Create scorer dialog component
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
