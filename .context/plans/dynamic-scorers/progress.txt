@@ -631,3 +631,75 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 014 - Create scorer form component - COMPLETED
+====================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive ScorerForm React component for creating and editing scorers
+- Followed the exact same patterns as AgentForm for consistency
+- Implemented all form fields with proper validation and error handling
+- Supports both create and edit modes with delete functionality
+
+Files created:
+- packages/playground-ui/src/domains/scores/components/create-scorer/scorer-form.tsx (287 lines)
+
+Files modified:
+- packages/playground-ui/src/domains/scores/components/create-scorer/index.ts (added export)
+
+Key features implemented:
+1. Form fields:
+   - Name (required, max 100 chars)
+   - Description (optional, max 500 chars)
+   - Model (ModelPicker component with provider + name)
+   - Score Range (min/max number inputs, defaults 0-1)
+   - Prompt (Textarea with default template pre-filled)
+
+2. Validation:
+   - Simple resolver without zod to avoid version conflicts (matches agent form pattern)
+   - All required fields validated
+   - Score range validation (min < max)
+   - Character limit validation for name and description
+
+3. UI components:
+   - Two-column layout for name/description matching agent form
+   - ModelPicker for model selection
+   - Score range with two number inputs (min/max)
+   - Large textarea for prompt with template variable hints
+   - Form actions with Cancel/Submit/Delete buttons
+
+4. Mode support:
+   - Create mode: Shows "Create Scorer" button, default template
+   - Edit mode: Shows ID badge, version badge, pre-populated values, delete button
+   - Version info display (optional versionNumber and updatedAt)
+
+5. Loading states:
+   - isSubmitting: Shows spinner on submit button
+   - isDeleting: Shows spinner on delete button
+   - Disables all buttons during submission/deletion
+
+Template variable hints:
+- {{minScore}}, {{maxScore}}, {{input}}, {{output}}
+- Displayed below prompt textarea for user reference
+
+Verification:
+- TypeScript compilation: PASSED (no errors in scorer-form)
+- Fixed Badge variant from "outline" to default (Badge only supports default/success/error/info)
+- Fixed Button size from "sm" to default (Button only supports md/lg)
+- All acceptance criteria met:
+  ✓ Form renders all fields correctly
+  ✓ ModelPicker allows provider and model selection
+  ✓ Prompt textarea shows default template on create
+  ✓ Score range defaults to 0-1
+  ✓ Form validates before submission
+  ✓ Edit mode shows pre-populated values (with ID badge and version info)
+
+Next steps:
+- Task 016: Create scorer dialog component (P0, wraps ScorerForm)
+- Task 017: Update scorers page with Create Scorer button (P0)
+- Task 018: Create edit scorer dialog component (P1)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
