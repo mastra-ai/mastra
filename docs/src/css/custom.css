@@ -416,10 +416,6 @@ article a:hover {
   color: var(--mastra-green-accent-2);
 }
 
-#docs-search-results {
-  scrollbar-width: none;
-}
-
 p {
   @apply tracking-[-0.09px] leading-[1.6];
 }

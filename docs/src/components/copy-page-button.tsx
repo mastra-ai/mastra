@@ -44,6 +44,8 @@ function openWindow(url: string) {
   window.open(url, "_blank");
 }
 
+// TODO: Do not hide this button in some viewports
+
 export const CopyPageButton = () => {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);

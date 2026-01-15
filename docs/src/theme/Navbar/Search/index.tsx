@@ -11,7 +11,6 @@ import { Button } from "@site/src/components/ui/button";
 import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useChatbotSidebar } from "@site/src/theme/DocRoot/Layout/ChatbotSidebar/context";
-import { cn } from "@site/src/lib/utils";
 
 export function Shortcut({ shortcut }: { shortcut: string }) {
   const [os, setOS] = useState<"mac" | "other" | null>(null);
@@ -113,7 +112,12 @@ export function AskAI() {
   const { toggle } = useChatbotSidebar();
 
   return (
-    <Button onClick={toggle} size="sm" variant="outline" className={cn()}>
+    <Button
+      onClick={toggle}
+      size="sm"
+      variant="outline"
+      className="rounded-lg shadow-none dark:bg-(--mastra-surface-4) border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2) hover:text-(--mastra-text-primary"
+    >
       <span className="text-sm">Ask AI</span>
     </Button>
   );

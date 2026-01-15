@@ -23,6 +23,8 @@ import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import YouTube from "@site/src/components/YouTube-player";
 import type { MDXComponentsObject } from "@theme/MDXComponents";
 
+// TODO: Do not hide "Copy page" and instead move it to the sidebar
+
 const MDXComponents: MDXComponentsObject = {
   Head,
   details: MDXDetails, // For MD mode support, see https://github.com/facebook/docusaurus/issues/9092#issuecomment-1602902274
