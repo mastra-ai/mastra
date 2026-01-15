@@ -52,13 +52,14 @@ createVectorTestSuite({
   testDomains: {
     // DEBUGGING: Enable domains one at a time to find interference
     // Round 1: filterOps only - PASSED
-    // Round 2: filterOps + basicOps
-    filterOps: true,
+    // Round 2: filterOps + basicOps - FAILED
+    // Round 3: everything except filterOps
+    filterOps: false,
     basicOps: true,
-    advancedOps: false,
-    edgeCases: false,
-    errorHandling: false,
-    metadataFiltering: false,
+    advancedOps: true,
+    edgeCases: true,
+    errorHandling: true,
+    metadataFiltering: true,
     largeBatch: false,
   },
 });
