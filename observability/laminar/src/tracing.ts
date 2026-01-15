@@ -17,11 +17,11 @@ import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanKind, SpanStatusCode, TraceFlags } from '@opentelemetry/api';
 import type { Attributes, HrTime, Link, SpanContext, SpanStatus } from '@opentelemetry/api';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { Resource } from '@opentelemetry/resources';
 import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { ReadableSpan, SpanExporter, TimedEvent } from '@opentelemetry/sdk-trace-base';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -367,7 +367,7 @@ export class LaminarExporter extends BaseExporter {
     this.isSetup = true;
   }
 
-  async addScoreToTrace({
+  async _addScoreToTrace({
     traceId,
     spanId,
     score,
@@ -425,7 +425,12 @@ export class LaminarExporter extends BaseExporter {
         });
       }
     } catch (error) {
-      this.logger.error('[LaminarExporter] Error attaching score to trace/span', { error, traceId, spanId, scorerName });
+      this.logger.error('[LaminarExporter] Error attaching score to trace/span', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
     }
   }
 
@@ -597,16 +602,12 @@ function toLaminarAttributeValue(value: unknown): Attributes[string] | undefined
     return value;
   }
 
-  if (Array.isArray(value) && value.every(v => typeof v === 'string')) {
-    return value;
-  }
-
-  if (Array.isArray(value) && value.every(v => typeof v === 'number')) {
-    return value;
-  }
-
-  if (Array.isArray(value) && value.every(v => typeof v === 'boolean')) {
-    return value;
+  if (Array.isArray(value)) {
+    const isHomogeneous =
+      value.every(v => typeof v === 'string') ||
+      value.every(v => typeof v === 'number') ||
+      value.every(v => typeof v === 'boolean');
+    if (isHomogeneous) return value;
   }
 
   return serializeForLaminar(value);
@@ -692,18 +693,12 @@ export function otelSpanIdToUUID(spanId: string): string {
   const normalized = normalizeSpanId(spanId);
   return normalized
     .padStart(32, '0')
-    .replace(
-      /^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/,
-      '$1-$2-$3-$4-$5',
-    );
+    .replace(/^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/, '$1-$2-$3-$4-$5');
 }
 
 export function otelTraceIdToUUID(traceId: string): string {
   const normalized = normalizeTraceId(traceId);
-  return normalized.replace(
-    /^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/,
-    '$1-$2-$3-$4-$5',
-  );
+  return normalized.replace(/^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/, '$1-$2-$3-$4-$5');
 }
 
 function normalizeProvider(provider: string): string {

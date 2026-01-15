@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # LaminarExporter
 
-Sends Tracing data to Laminar via OTLP/HTTP (protobuf). Also supports attaching scorer results to traces/spans in Laminar via `addScoreToTrace()`.
+Sends Tracing data to Laminar via OTLP/HTTP (protobuf).
 
 ## Constructor
 
@@ -105,21 +105,6 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to Laminar.
-
-### addScoreToTrace
-
-```typescript
-async addScoreToTrace(args: {
-  traceId: string;
-  spanId?: string;
-  score: number;
-  reason?: string;
-  scorerName: string;
-  metadata?: Record<string, any>;
-}): Promise<void>
-```
-
-Attaches a score to a Laminar trace/span.
 
 ### shutdown
 

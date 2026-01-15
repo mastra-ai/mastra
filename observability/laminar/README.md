@@ -69,19 +69,18 @@ const mastra = new Mastra({
 
 ### Configuration Options
 
-| Option          | Type                   | Description                                                                  |
-| --------------- | ---------------------- | ---------------------------------------------------------------------------- |
-| `apiKey`        | `string`               | Laminar project API key. Defaults to `LMNR_PROJECT_API_KEY` env var          |
-| `baseUrl`       | `string`               | Laminar base URL. Defaults to `LMNR_BASE_URL` env var or `https://api.lmnr.ai` |
-| `endpoint`      | `string`               | OTLP/HTTP traces endpoint. Defaults to `LAMINAR_ENDPOINT` env var or `/v1/traces` |
-| `teamId`        | `string`               | Optional Laminar team ID header. Defaults to `LAMINAR_TEAM_ID` env var       |
-| `headers`       | `Record<string,string>`| Additional OTLP headers                                                      |
-| `realtime`      | `boolean`              | Flush after each span for immediate visibility. Defaults to `false`          |
-| `disableBatch`  | `boolean`              | Disable batching (SimpleSpanProcessor). Defaults to `false`                  |
-| `batchSize`     | `number`               | Max spans per batch (BatchSpanProcessor). Defaults to `512`                  |
-| `timeoutMillis` | `number`               | OTLP export timeout (ms). Defaults to `30000`                                |
+| Option          | Type                    | Description                                                                       |
+| --------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| `apiKey`        | `string`                | Laminar project API key. Defaults to `LMNR_PROJECT_API_KEY` env var               |
+| `baseUrl`       | `string`                | Laminar base URL. Defaults to `LMNR_BASE_URL` env var or `https://api.lmnr.ai`    |
+| `endpoint`      | `string`                | OTLP/HTTP traces endpoint. Defaults to `LAMINAR_ENDPOINT` env var or `/v1/traces` |
+| `teamId`        | `string`                | Optional Laminar team ID header. Defaults to `LAMINAR_TEAM_ID` env var            |
+| `headers`       | `Record<string,string>` | Additional OTLP headers                                                           |
+| `realtime`      | `boolean`               | Flush after each span for immediate visibility. Defaults to `false`               |
+| `disableBatch`  | `boolean`               | Disable batching (SimpleSpanProcessor). Defaults to `false`                       |
+| `batchSize`     | `number`                | Max spans per batch (BatchSpanProcessor). Defaults to `512`                       |
+| `timeoutMillis` | `number`                | OTLP export timeout (ms). Defaults to `30000`                                     |
 
 ## Notes
 
 - The exporter sets Laminar-specific attributes (`lmnr.span.*`, `lmnr.association.properties.*`) so traces render correctly in Laminar.
-- `addScoreToTrace()` posts to `POST /v1/evaluators/score` to attach scores to a trace/span.

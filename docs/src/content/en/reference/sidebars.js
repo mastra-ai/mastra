@@ -381,11 +381,6 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/laminar",
-                  label: "LaminarExporter",
-                },
-                {
-                  type: "doc",
                   id: "observability/tracing/exporters/cloud-exporter",
                   label: "CloudExporter",
                 },
@@ -398,6 +393,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/default-exporter",
                   label: "DefaultExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/laminar",
+                  label: "LaminarExporter",
                 },
                 {
                   type: "doc",

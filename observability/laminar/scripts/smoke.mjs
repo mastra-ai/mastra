@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { LaminarExporter, otelTraceIdToUUID } from '@mastra/laminar';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { LaminarExporter, otelTraceIdToUUID } from '@mastra/laminar';
 
 if (!process.env.LMNR_PROJECT_API_KEY) {
   console.error('Missing LMNR_PROJECT_API_KEY. Set it in your env or .env file.');
@@ -50,6 +50,13 @@ const llmSpan = {
 const exporter = new LaminarExporter({ realtime: true });
 exporter.init?.({ config: { serviceName: 'laminar-smoke' } });
 
+const TIMEOUT_MS = 30000;
+
+const timeoutId = setTimeout(() => {
+  console.error('Laminar smoke test timed out');
+  process.exit(1);
+}, TIMEOUT_MS);
+
 try {
   await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
   await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: llmSpan });
@@ -57,6 +64,7 @@ try {
   await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: rootSpan });
 
   await exporter.shutdown();
+  clearTimeout(timeoutId);
 
   console.log('exported:', {
     traceId,
@@ -64,6 +72,7 @@ try {
     service: 'laminar-smoke',
   });
 } catch (error) {
+  clearTimeout(timeoutId);
   console.error('Laminar smoke test failed:', error);
   try {
     await exporter.shutdown();

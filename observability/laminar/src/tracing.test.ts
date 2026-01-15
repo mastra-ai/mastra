@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LaminarExporter, otelSpanIdToUUID, otelTraceIdToUUID } from './tracing';
 
 // Mock OTLP exporter so tests never hit the network.
@@ -107,30 +107,30 @@ describe('LaminarExporter', () => {
   });
 
   it('converts OTEL IDs to UUIDs for evaluator score API', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
-    vi.stubGlobal('fetch', fetchMock as any);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as Response);
 
-    await exporter.addScoreToTrace({
+    await exporter._addScoreToTrace({
       traceId: '00000000000000000000000000000001',
       score: 0.9,
       scorerName: 'quality',
     });
 
-    expect(fetchMock).toHaveBeenCalled();
-    const [url, req] = fetchMock.mock.calls[0];
+    expect(fetchSpy).toHaveBeenCalled();
+    const [url, req] = fetchSpy.mock.calls[0];
     expect(String(url)).toContain('/v1/evaluators/score');
-    const body = JSON.parse((req as any).body);
+    const body = JSON.parse((req as RequestInit).body as string);
     expect(body.traceId).toBe(otelTraceIdToUUID('00000000000000000000000000000001'));
 
-    await exporter.addScoreToTrace({
+    await exporter._addScoreToTrace({
       traceId: '00000000000000000000000000000001',
       spanId: '0000000000000002',
       score: 0.1,
       scorerName: 'toxicity',
     });
 
-    const body2 = JSON.parse(fetchMock.mock.calls[1][1].body);
+    const body2 = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
     expect(body2.spanId).toBe(otelSpanIdToUUID('0000000000000002'));
   });
 });
-
