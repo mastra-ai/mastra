@@ -82,10 +82,11 @@ In addition to the internal exporters, Mastra supports integration with popular 
 
 - **[Arize](/docs/v1/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/v1/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 - **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
 
 ## Bridges
@@ -332,12 +333,12 @@ Custom metadata allows you to attach additional context to your traces, making i
 You can add metadata to any span using the tracing context:
 
 ```ts
-execute: async ({ inputData, tracingContext }) => {
+execute: async (inputData, context) => {
   const startTime = Date.now();
   const response = await fetch(inputData.endpoint);
 
   // Add custom metadata to the current span
-  tracingContext.currentSpan?.update({
+  context?.tracingContext.currentSpan?.update({
     metadata: {
       apiStatusCode: response.status,
       endpoint: inputData.endpoint,
@@ -500,19 +501,19 @@ const result = await agent.generate({
 When creating child spans within tools or workflow steps, you can pass the `requestContext` parameter to enable metadata extraction:
 
 ```ts
-execute: async ({ tracingContext, requestContext }) => {
+execute: async (inputData, context) => {
   // Create child span WITH requestContext - gets metadata extraction
-  const dbSpan = tracingContext.currentSpan?.createChildSpan({
+  const dbSpan = context?.tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
-    requestContext, // Pass to enable metadata extraction
+    requestContext: context?.requestContext, // Pass to enable metadata extraction
   });
 
   const results = await db.query("SELECT * FROM users");
   dbSpan?.end({ output: results });
 
   // Or create child span WITHOUT requestContext - no metadata extraction
-  const cacheSpan = tracingContext.currentSpan?.createChildSpan({
+  const cacheSpan = context?.tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "cache-check",
     // No requestContext - won't extract metadata
@@ -531,9 +532,9 @@ Child spans allow you to track fine-grained operations within your workflow step
 Create child spans inside a tool call or workflow step to track specific operations:
 
 ```ts
-execute: async ({ inputData, tracingContext }) => {
+execute: async (inputData, context) => {
   // Create another child span for the main database operation
-  const querySpan = tracingContext.currentSpan?.createChildSpan({
+  const querySpan = context?.tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
     input: { query: inputData.query },
@@ -874,7 +875,7 @@ Mastra automatically creates spans for:
 - [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
-- [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
+- [MLflow](/docs/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Bridges

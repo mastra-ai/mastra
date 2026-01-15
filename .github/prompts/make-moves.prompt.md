@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: Make moves on a GitHub issue
 ---
 
