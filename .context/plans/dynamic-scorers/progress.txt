@@ -1264,3 +1264,38 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+
+Task 011 - Implement PostgreSQL storage for stored scorers - COMPLETED
+========================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Added TABLE_STORED_SCORERS and TABLE_STORED_SCORER_VERSIONS constants
+- Added schemas and updated type unions
+- Created PostgreSQL implementation with all CRUD and version methods
+- Registered storedScorers domain in PostgresStore
+- Fixed all method signatures to match StoredScorersStorage base class
+
+Files modified:
+- stores/pg/src/storage/domains/stored-scorers/index.ts (complete implementation)
+- stores/pg/src/storage/index.ts (registered storedScorers domain)
+
+Key fixes applied:
+1. Fixed all method signatures to match base class (removed wrapper objects)
+2. Renamed getScorer → getScorerById
+3. Fixed updateScorer to destructure {id, ...updates}
+4. Fixed all version methods to use direct parameters instead of wrappers
+5. Renamed deleteScorerVersions → deleteScorerVersionsByScorerId
+6. Fixed pagination logic to return proper output with total, page, perPage, hasMore
+7. Added missing imports for ListScorerVersionsInput and ListScorerVersionsOutput
+
+Verification:
+- pnpm typecheck: PASSED (no errors)
+- pnpm --filter @mastra/pg build:lib: PASSED
+- All method signatures match base class from packages/core/src/storage/domains/stored-scorers/base.ts
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
+

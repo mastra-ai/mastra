@@ -11,6 +11,8 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_STORED_SCORERS = 'mastra_stored_scorers';
+export const TABLE_STORED_SCORER_VERSIONS = 'mastra_stored_scorer_versions';
 export const TABLE_INTEGRATIONS = 'mastra_integrations';
 export const TABLE_CACHED_TOOLS = 'mastra_cached_tools';
 export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
@@ -26,6 +28,8 @@ export type TABLE_NAMES =
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
   | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_STORED_SCORERS
+  | typeof TABLE_STORED_SCORER_VERSIONS
   | typeof TABLE_INTEGRATIONS
   | typeof TABLE_CACHED_TOOLS
   | typeof TABLE_WORKFLOW_DEFINITIONS
@@ -125,6 +129,31 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   versionNumber: { type: 'integer', nullable: false },
   name: { type: 'text', nullable: true }, // Vanity name
   snapshot: { type: 'jsonb', nullable: false }, // Full agent config
+  changedFields: { type: 'jsonb', nullable: true }, // Array of field names
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const STORED_SCORERS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  model: { type: 'jsonb', nullable: false }, // Model configuration (provider, name, toolChoice, reasoningEffort)
+  prompt: { type: 'text', nullable: false }, // Judge prompt/instructions
+  scoreRange: { type: 'jsonb', nullable: false }, // { min: number, max: number }
+  metadata: { type: 'jsonb', nullable: true }, // Additional metadata
+  ownerId: { type: 'text', nullable: true }, // Owner identifier for multi-tenant filtering
+  activeVersionId: { type: 'text', nullable: true }, // FK to stored_scorer_versions.id
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const STORED_SCORER_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
+  scorerId: { type: 'text', nullable: false }, // FK to stored_scorers.id
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: true }, // Vanity name
+  snapshot: { type: 'jsonb', nullable: false }, // Full scorer config
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
@@ -249,6 +278,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_STORED_SCORERS]: STORED_SCORERS_SCHEMA,
+  [TABLE_STORED_SCORER_VERSIONS]: STORED_SCORER_VERSIONS_SCHEMA,
   [TABLE_INTEGRATIONS]: INTEGRATIONS_SCHEMA,
   [TABLE_CACHED_TOOLS]: CACHED_TOOLS_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
