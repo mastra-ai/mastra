@@ -1105,6 +1105,36 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
+   * Resolves model configuration that may be a dynamic function returning a single model or array of models.
+   * @internal
+   */
+  private async resolveModelFallbacks(
+    modelConfig: MastraModelConfig | DynamicModel | ModelFallbacks,
+    requestContext: RequestContext,
+  ): Promise<MastraModelConfig | ModelFallbacks> {
+    // If it's a dynamic function, resolve it
+    if (typeof modelConfig === 'function') {
+      const resolved = await modelConfig({ requestContext, mastra: this.#mastra });
+
+      // If function returns an array, normalize it to ModelFallbacks
+      if (Array.isArray(resolved)) {
+        return resolved.map(m => ({
+          id: m.id ?? randomUUID(),
+          model: m.model as DynamicArgument<MastraModelConfig>,
+          maxRetries: m.maxRetries ?? 0,
+          enabled: m.enabled ?? true,
+        })) as ModelFallbacks;
+      }
+
+      // Function returned single model
+      return resolved;
+    }
+
+    // Already resolved (static config or array)
+    return modelConfig;
+  }
+
+  /**
    * Gets the model instance, resolving it if it's a function or model configuration.
    * When the agent has multiple models configured, returns the first enabled model.
    *
@@ -2621,27 +2651,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext,
     model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
+    // Resolve dynamic model functions first
     if (typeof this.model === 'function' && !model) {
-      const resolved = await this.model({ requestContext, mastra: this.#mastra });
-      if (Array.isArray(resolved)) {
-        return this.prepareModels(
-          requestContext,
-          resolved.map(m => ({
-            id: m.id ?? randomUUID(),
-            model: m.model as DynamicArgument<MastraModelConfig>,
-            maxRetries: m.maxRetries ?? 0,
-            enabled: m.enabled ?? true,
-          })) as ModelFallbacks,
-        );
-      }
-      // Handle single model returned from dynamic function
-      return this.prepareModels(requestContext, resolved as DynamicArgument<MastraLanguageModel>);
+      const resolved = await this.resolveModelFallbacks(this.model, requestContext);
+      return this.prepareModels(requestContext, resolved as DynamicArgument<MastraLanguageModel> | ModelFallbacks);
     }
 
-    if (
-      (model && !Array.isArray(model)) ||
-      (!model && !Array.isArray(this.model) && typeof this.model !== 'function')
-    ) {
+    if ((model && !Array.isArray(model)) || (!model && !Array.isArray(this.model))) {
       const modelToUse = model ?? this.model;
       const resolvedModel = await this.resolveModelConfig(
         modelToUse as DynamicArgument<MastraModelConfig>,
