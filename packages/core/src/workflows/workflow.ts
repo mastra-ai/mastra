@@ -20,7 +20,7 @@ import type { TracingContext, TracingOptions, TracingPolicy } from '../observabi
 import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import { ProcessorRunner } from '../processors';
 import type { Processor } from '../processors';
-import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
+import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { InferSchemaOutput, InferZodLikeSchema, OutputSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -30,7 +30,6 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
-import type { ZodLikeSchema } from '../types/zod-compat';
 import { isZodType } from '../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
@@ -193,7 +192,13 @@ export function createStep<
   TStepOutput extends { text: string },
   TResume,
   TSuspend,
->(agent: Agent<TStepId, any>): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+>(
+  agent: Agent<TStepId, any>,
+  agentOptions?: AgentStepOptions<TStepOutput> & {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
+): Step<TStepId, unknown, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
  * Creates a step from a tool
@@ -208,7 +213,7 @@ export function createStep<
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
+): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
 
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step
@@ -225,8 +230,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferSchemaOutput<typeof ProcessorStepSchema>,
-  InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+  z.infer<typeof ProcessorStepInputSchema>,
+  z.infer<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -327,7 +332,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
-): Step<TStepId, any, any, TStepOutput, unknown, unknown, DefaultEngineType> {
+): Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
     | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
     | undefined;
@@ -533,7 +538,15 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
 
 function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
-): Step<`processor:${TProcessorId}`, unknown, any, any, unknown, unknown, DefaultEngineType> {
+): Step<
+  `processor:${TProcessorId}`,
+  unknown,
+  z.infer<typeof ProcessorStepInputSchema>,
+  z.infer<typeof ProcessorStepOutputSchema>,
+  unknown,
+  unknown,
+  DefaultEngineType
+> {
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -590,7 +603,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   return {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
-    inputSchema: ProcessorStepSchema,
+    inputSchema: ProcessorStepInputSchema,
     outputSchema: ProcessorStepOutputSchema,
     execute: async ({ inputData, requestContext, tracingContext }) => {
       // Cast to output type for easier property access - the discriminated union
@@ -1081,7 +1094,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   } satisfies Step<
     `processor:${TProcessorId}`,
     unknown,
-    InferSchemaOutput<typeof ProcessorStepSchema>,
+    InferSchemaOutput<typeof ProcessorStepInputSchema>,
     InferSchemaOutput<typeof ProcessorStepOutputSchema>,
     unknown,
     unknown,

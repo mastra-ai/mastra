@@ -1,10 +1,16 @@
 import { expectTypeOf, describe, it } from 'vitest';
 import { z } from 'zod';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import type { Step } from '@mastra/core/workflows';
-import { Agent } from '@mastra/core/agent';
+import type { Step, DefaultEngineType } from '@mastra/core/workflows';
+import { Agent, MastraDBMessage } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
-import type { Processor } from '@mastra/core/processors';
+import type {
+  Processor,
+  ProcessorStepInput,
+  ProcessorStepOutput,
+  ProcessorStepInputSchema,
+  ProcessorStepOutputSchema,
+} from '@mastra/core/processors';
 
 describe('workflow', () => {
   describe('createStep', () => {
@@ -34,6 +40,7 @@ describe('workflow', () => {
           execute: async ({ inputData, state, setState }) => {
             expectTypeOf(state).toEqualTypeOf<{ counter: number }>();
             expectTypeOf(setState).toBeFunction();
+            expectTypeOf(setState).toBeCallableWith({ counter: 1 });
             return { result: inputData.value + state.counter };
           },
         });
@@ -58,12 +65,12 @@ describe('workflow', () => {
       });
 
       it('should error when execute returns wrong type', () => {
-        // @ts-expect-error - execute returns { greeting } but outputSchema requires { greeting, name }
         const step = createStep({
           id: 'bad-step',
           inputSchema: z.object({ name: z.string() }),
           outputSchema: z.object({ greeting: z.string(), name: z.string() }),
-          execute: async ({ inputData }) => {
+          // @ts-expect-error - Return type is missing required 'name' property
+          execute: async () => {
             return { greeting: `Hello!` }; // Missing 'name' property
           },
         });
@@ -90,6 +97,17 @@ describe('workflow', () => {
         expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{
           sentiment: 'positive' | 'negative' | 'neutral';
         }>();
+        expectTypeOf(step).toEqualTypeOf<
+          Step<
+            'my-agent',
+            unknown,
+            { prompt: string },
+            { sentiment: 'positive' | 'negative' | 'neutral' },
+            unknown,
+            unknown,
+            DefaultEngineType
+          >
+        >();
       });
 
       it('should accept retries and scorers options', () => {
@@ -106,6 +124,27 @@ describe('workflow', () => {
             schema: z.object({ answer: z.string() }),
           },
         });
+
+        expectTypeOf(step).toEqualTypeOf<
+          Step<'retry-agent', unknown, { prompt: string }, { answer: string }, unknown, unknown, DefaultEngineType>
+        >();
+      });
+
+      it('should accept retries and scorers options without structured output', () => {
+        const agent = new Agent({
+          id: 'retry-agent',
+          name: 'Retry Agent',
+          instructions: 'Retry on failure',
+          model: 'gpt-4o',
+        });
+
+        const step = createStep(agent, {
+          retries: 3,
+        });
+
+        expectTypeOf(step).toEqualTypeOf<
+          Step<'retry-agent', unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>
+        >();
       });
     });
 
@@ -120,10 +159,12 @@ describe('workflow', () => {
 
         const step = createStep(agent);
 
-        expectTypeOf(step.id).toEqualTypeOf<'text-agent'>();
         expectTypeOf<z.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
         // Default output is { text: string }
-        expectTypeOf<z.infer<typeof step.outputSchema>>().toMatchTypeOf<{ text: string }>();
+        expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{ text: string }>();
+        expectTypeOf(step).toEqualTypeOf<
+          Step<'text-agent', unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>
+        >();
       });
     });
 
@@ -134,7 +175,7 @@ describe('workflow', () => {
           description: 'Performs calculations',
           inputSchema: z.object({ a: z.number(), b: z.number(), op: z.enum(['+', '-', '*', '/']) }),
           outputSchema: z.object({ result: z.number() }),
-          execute: async ({ context }) => {
+          execute: async inputData => {
             return { result: 42 };
           },
         });
@@ -148,6 +189,17 @@ describe('workflow', () => {
           op: '+' | '-' | '*' | '/';
         }>();
         expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{ result: number }>();
+        expectTypeOf(step).toEqualTypeOf<
+          Step<
+            'calculator',
+            unknown,
+            { a: number; b: number; op: '+' | '-' | '*' | '/' },
+            { result: number },
+            unknown,
+            unknown,
+            DefaultEngineType
+          >
+        >();
       });
 
       it('should accept tool options', () => {
@@ -162,19 +214,52 @@ describe('workflow', () => {
         const step = createStep(tool, {
           retries: 5,
         });
+        expectTypeOf(step).toEqualTypeOf<
+          Step<'fetch-data', unknown, { url: string }, { data?: unknown }, unknown, unknown, DefaultEngineType>
+        >();
       });
     });
 
     describe('Processor overload', () => {
       it('should create step from processor with processInput', () => {
-        const processor: Processor<'my-processor'> & { processInput: Function } = {
-          id: 'my-processor',
-          processInput: async () => ({ messages: [] }),
-        };
+        const processor = new (class TestProcessor implements Processor<'test'> {
+          readonly id = 'test';
+          readonly name = 'Test';
+
+          constructor() {}
+
+          processInput(): MastraDBMessage[] {
+            return [
+              {
+                id: 'msg-123',
+                role: 'user',
+                createdAt: new Date(),
+                content: {
+                  format: 2,
+                  parts: [
+                    {
+                      type: 'text',
+                      text: 'yo',
+                    },
+                  ],
+                },
+              },
+            ];
+          }
+        })();
 
         const step = createStep(processor);
-
-        expectTypeOf(step.id).toEqualTypeOf<`processor:my-processor`>();
+        expectTypeOf(step).toEqualTypeOf<
+          Step<
+            'processor:test',
+            unknown,
+            z.infer<typeof ProcessorStepInputSchema>,
+            z.infer<typeof ProcessorStepOutputSchema>,
+            unknown,
+            unknown,
+            DefaultEngineType
+          >
+        >();
       });
 
       it('should create step from processor with processOutputStream', () => {
@@ -184,15 +269,20 @@ describe('workflow', () => {
         };
 
         const step = createStep(processor);
-
-        expectTypeOf(step.id).toEqualTypeOf<`processor:stream-processor`>();
+        expectTypeOf(step).toEqualTypeOf<
+          Step<
+            'processor:stream-processor',
+            unknown,
+            z.infer<typeof ProcessorStepInputSchema>,
+            z.infer<typeof ProcessorStepOutputSchema>,
+            unknown,
+            unknown,
+            DefaultEngineType
+          >
+        >();
       });
     });
   });
-
-  // ============================================
-  // Workflow .then() chaining
-  // ============================================
 
   describe('workflow chaining', () => {
     describe('.then() type constraints', () => {
@@ -279,6 +369,7 @@ describe('workflow', () => {
           inputSchema: z.object({ name: z.string() }), // Missing 'age'
           outputSchema: z.object({ canVote: z.boolean() }),
         })
+          // @ts-expect-error - step input requires 'age' which is not in workflow input
           .then(step)
           .commit();
       });
@@ -334,9 +425,9 @@ describe('workflow', () => {
           description: 'Fetch user data',
           inputSchema: z.object({ userId: z.string() }),
           outputSchema: z.object({ name: z.string(), prompt: z.string() }),
-          execute: async ({ context }) => ({
+          execute: async inputData => ({
             name: 'John',
-            prompt: `Generate greeting for John`,
+            prompt: `Generate greeting for John ${inputData.userId}`,
           }),
         });
 
