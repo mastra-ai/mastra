@@ -20,6 +20,7 @@ import type {
   CreateSpanOptions,
   ObservabilityInstance,
   CustomSamplerOptions,
+  ExportedSpan,
   AnyExportedSpan,
   TraceState,
   TracingOptions,
@@ -154,8 +155,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
+    // Extract traceId and parentSpanId from tracingOptions for root spans (no parent)
+    // These allow nested workflows to join the parent workflow's trace
+    const traceId = !options.parent ? (options.traceId ?? tracingOptions?.traceId) : options.traceId;
+    const parentSpanId = !options.parent
+      ? (options.parentSpanId ?? tracingOptions?.parentSpanId)
+      : options.parentSpanId;
+
     const span = this.createSpan<TType>({
       ...rest,
+      traceId,
+      parentSpanId,
       metadata: enrichedMetadata,
       traceState,
       tags,
@@ -170,6 +180,42 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       // Emit span started event
       this.emitSpanStarted(span);
     }
+
+    return span;
+  }
+
+  /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * The rebuilt span:
+   * - Does NOT emit SPAN_STARTED (assumes original span already did)
+   * - Can have end(), update(), error() called on it
+   * - Will emit SPAN_ENDED or SPAN_UPDATED when those methods are called
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have lifecycle methods called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
+    // Create span with existing IDs from cached data
+    const span = this.createSpan<TType>({
+      name: cached.name,
+      type: cached.type,
+      traceId: cached.traceId,
+      spanId: cached.id,
+      parentSpanId: cached.parentSpanId,
+      startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
+      input: cached.input,
+      attributes: cached.attributes,
+      metadata: cached.metadata,
+      entityType: cached.entityType,
+      entityId: cached.entityId,
+      entityName: cached.entityName,
+    });
+
+    // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
+    this.wireSpanLifecycle(span);
 
     return span;
   }
