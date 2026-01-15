@@ -358,8 +358,10 @@ function processStepGraphEntry(
 
     case 'conditional': {
       const conditionNodeId = `condition-${counters.conditionCounter++}`;
+      // Generate stable unique IDs for branches (using crypto.randomUUID for uniqueness)
+      const branchIds = entry.branches.map(() => crypto.randomUUID());
       const branches: ConditionBranch[] = entry.branches.map((branch, i) => ({
-        id: String(i),
+        id: branchIds[i],
         label: `Branch ${i + 1}`,
         condition: branch.condition,
       }));
@@ -395,17 +397,18 @@ function processStepGraphEntry(
         type: 'data',
       });
 
-      // Create edges to each branch target
+      // Create edges to each branch target using the generated branch IDs
       for (let i = 0; i < entry.branches.length; i++) {
         const branch = entry.branches[i];
+        const branchId = branchIds[i];
         edges.push({
-          id: `e-${conditionNodeId}-${branch.stepId}-${i}`,
+          id: `e-${conditionNodeId}-${branch.stepId}-${branchId}`,
           source: conditionNodeId,
           target: branch.stepId,
           type: 'data',
-          sourceHandle: `branch-${i}`,
+          sourceHandle: `branch-${branchId}`,
           data: {
-            branchId: String(i),
+            branchId,
             label: `Branch ${i + 1}`,
           },
         });
@@ -417,7 +420,7 @@ function processStepGraphEntry(
           source: conditionNodeId,
           target: entry.default,
           type: 'data',
-          sourceHandle: `branch-${entry.branches.length}`,
+          sourceHandle: 'branch-default',
           data: {
             branchId: 'default',
             label: 'Default',

@@ -6,7 +6,9 @@ import {
   MiniMap,
   useReactFlow,
   type NodeMouseHandler,
+  type OnSelectionChangeFunc,
   BackgroundVariant,
+  SelectionMode,
 } from '@xyflow/react';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { nodeTypes } from './nodes';
@@ -44,6 +46,7 @@ export function BuilderCanvas({ className }: BuilderCanvasProps) {
   const onConnect = useWorkflowBuilderStore(state => state.onConnect);
   const selectNode = useWorkflowBuilderStore(state => state.selectNode);
   const clearSelection = useWorkflowBuilderStore(state => state.clearSelection);
+  const selectNodes = useWorkflowBuilderStore(state => state.selectNodes);
   const selectAll = useWorkflowBuilderStore(state => state.selectAll);
   const deleteSelected = useWorkflowBuilderStore(state => state.deleteSelected);
   const copySelected = useWorkflowBuilderStore(state => state.copySelected);
@@ -96,6 +99,16 @@ export function BuilderCanvas({ className }: BuilderCanvasProps) {
   const handlePaneClick = useCallback(() => {
     clearSelection();
   }, [clearSelection]);
+
+  // Handle selection change from React Flow's built-in box selection
+  const handleSelectionChange: OnSelectionChangeFunc = useCallback(
+    ({ nodes: selectedNodes }) => {
+      if (selectedNodes.length > 0) {
+        selectNodes(selectedNodes.map(n => n.id));
+      }
+    },
+    [selectNodes],
+  );
 
   // Keyboard shortcuts for selection and clipboard
   useEffect(() => {
@@ -166,6 +179,10 @@ export function BuilderCanvas({ className }: BuilderCanvasProps) {
         onConnect={onConnect}
         onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
+        onSelectionChange={handleSelectionChange}
+        selectionOnDrag
+        selectionMode={SelectionMode.Partial}
+        panOnDrag={[1, 2]}
         fitView
         fitViewOptions={FIT_VIEW_OPTIONS}
         proOptions={{ hideAttribution: true }}
@@ -192,9 +209,6 @@ export function BuilderCanvas({ className }: BuilderCanvasProps) {
         {/* Empty state overlay */}
         <EmptyState />
       </ReactFlow>
-
-      {/* Box selection overlay - temporarily disabled for debugging */}
-      {/* <SelectionBox containerRef={reactFlowWrapper} /> */}
     </div>
   );
 }

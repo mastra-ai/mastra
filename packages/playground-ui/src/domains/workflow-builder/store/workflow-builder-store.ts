@@ -79,6 +79,9 @@ interface WorkflowBuilderState {
   isSaving: boolean;
   lastSavedAt: Date | null;
 
+  // Deserialization error (set when loadFromDefinition fails partially)
+  deserializationError: string | null;
+
   // Validation
   validationResult: ValidationResult | null;
 
@@ -118,9 +121,10 @@ interface WorkflowBuilderState {
   // Actions: Persistence
   reset: () => void;
   loadFromDefinition: (definition: WorkflowDefinitionInput) => void;
-  toDefinition: () => Partial<StorageWorkflowDefinitionType>;
+  toDefinition: () => { definition: Partial<StorageWorkflowDefinitionType>; warnings: string[] };
   setDirty: (dirty: boolean) => void;
   setSaving: (saving: boolean) => void;
+  clearDeserializationError: () => void;
 
   // Actions: Metadata
   setWorkflowMeta: (meta: { name?: string; description?: string }) => void;
@@ -153,6 +157,7 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
   isDirty: false,
   isSaving: false,
   lastSavedAt: null,
+  deserializationError: null,
   validationResult: null,
 
   // ========================================================================
@@ -622,6 +627,7 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
       isDirty: false,
       isSaving: false,
       lastSavedAt: null,
+      deserializationError: null,
       validationResult: null,
     });
   },
@@ -651,6 +657,7 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
     const hasStepGraph = definition.stepGraph && definition.stepGraph.length > 0;
     let nodes: BuilderNode[];
     let edges: BuilderEdge[];
+    let deserializationError: string | null = null;
 
     if (hasSteps && hasStepGraph) {
       // Use deserializer to convert stored definition to React Flow format
@@ -661,6 +668,8 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
         console.log('[WorkflowBuilder] Deserialized definition:', { nodes, edges });
       } catch (err) {
         console.error('[WorkflowBuilder] Failed to deserialize definition:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        deserializationError = `Failed to load workflow: ${errorMessage}. Starting with empty canvas.`;
         // Fallback to empty canvas
         nodes = [
           {
@@ -697,6 +706,7 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
       historyIndex: -1,
       nodes,
       edges,
+      deserializationError,
     });
 
     get().pushHistory();
@@ -704,17 +714,20 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
 
   toDefinition: () => {
     const state = get();
-    const { stepGraph, steps } = serializeGraph(state.nodes, state.edges);
+    const { stepGraph, steps, warnings } = serializeGraph(state.nodes, state.edges);
 
     return {
-      id: state.workflowId ?? '',
-      name: state.workflowName,
-      description: state.workflowDescription,
-      inputSchema: state.inputSchema,
-      outputSchema: state.outputSchema,
-      stateSchema: state.stateSchema,
-      stepGraph,
-      steps,
+      definition: {
+        id: state.workflowId ?? '',
+        name: state.workflowName,
+        description: state.workflowDescription,
+        inputSchema: state.inputSchema,
+        outputSchema: state.outputSchema,
+        stateSchema: state.stateSchema,
+        stepGraph,
+        steps,
+      },
+      warnings,
     };
   },
 
@@ -727,6 +740,10 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
       isSaving: saving,
       lastSavedAt: saving ? state.lastSavedAt : new Date(),
     }));
+  },
+
+  clearDeserializationError: () => {
+    set({ deserializationError: null });
   },
 
   // ========================================================================
@@ -777,3 +794,4 @@ export const selectCanUndo = (state: WorkflowBuilderState) => state.historyIndex
 export const selectCanRedo = (state: WorkflowBuilderState) => state.historyIndex < state.history.length - 1;
 export const selectValidationResult = (state: WorkflowBuilderState) => state.validationResult;
 export const selectIsValid = (state: WorkflowBuilderState) => state.validationResult?.isValid ?? true;
+export const selectDeserializationError = (state: WorkflowBuilderState) => state.deserializationError;

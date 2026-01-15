@@ -259,7 +259,7 @@ describe('serialize/deserialize round-trip', () => {
 
       // Deserialize
       const deserialized = deserializeDefinition({
-        ...serialized,
+        ...serialized.definition,
         createdAt: new Date(),
         updatedAt: new Date(),
       } as StorageWorkflowDefinitionType);

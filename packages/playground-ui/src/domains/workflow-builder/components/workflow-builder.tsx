@@ -3,7 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
 import { PanelLeftClose, PanelRightClose } from 'lucide-react';
 import type { WorkflowDefinitionInput } from '../types';
-import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
+import { useWorkflowBuilderStore, selectDeserializationError } from '../store/workflow-builder-store';
 import { useTestRunnerStore } from '../store/test-runner-store';
 import { BuilderCanvas } from './builder-canvas';
 import { BuilderToolbar } from './builder-toolbar';
@@ -16,6 +16,7 @@ import { TestInputModal } from './test-input-modal';
 import { ErrorBoundary, CanvasErrorBoundary, PanelErrorBoundary } from './error-boundary';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { useTestWorkflow } from '../hooks/use-test-workflow';
+import { toast } from '@/lib/toast';
 
 import '@xyflow/react/dist/style.css';
 
@@ -37,6 +38,10 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
   const currentRun = useTestRunnerStore(state => state.currentRun);
   const isResume = currentRun?.status === 'suspended';
 
+  // Deserialization error handling
+  const deserializationError = useWorkflowBuilderStore(selectDeserializationError);
+  const clearDeserializationError = useWorkflowBuilderStore(state => state.clearDeserializationError);
+
   // Resizable panel layout persistence
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: 'workflow-builder-layout',
@@ -54,6 +59,17 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Show toast when deserialization error occurs
+  useEffect(() => {
+    if (deserializationError) {
+      toast.error('Workflow Load Error', {
+        description: deserializationError,
+        duration: 10000,
+      });
+      clearDeserializationError();
+    }
+  }, [deserializationError, clearDeserializationError]);
 
   const closeCommandPalette = useCallback(() => setShowCommandPalette(false), []);
 
@@ -142,6 +158,9 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
                 </PanelErrorBoundary>
               )}
             </div>
+
+            {/* Test runner panel - slides in from right */}
+            {isTestRunnerOpen && <TestRunnerPanel className="h-full" />}
           </div>
 
           {/* Keyboard shortcuts modal */}
@@ -149,9 +168,6 @@ export function WorkflowBuilder({ definition }: WorkflowBuilderProps) {
 
           {/* Command palette */}
           <CommandPalette isOpen={showCommandPalette} onClose={closeCommandPalette} />
-
-          {/* Test runner panel */}
-          {isTestRunnerOpen && <TestRunnerPanel />}
 
           {/* Test input modal */}
           <TestInputModal
