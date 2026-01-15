@@ -24,6 +24,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_cached_tools: new Map(),
       mastra_workflow_definitions: new Map(),
       mastra_workflow_definition_versions: new Map(),
+      mastra_audit: new Map(),
     };
   }
 

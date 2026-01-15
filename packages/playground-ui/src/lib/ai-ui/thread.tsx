@@ -19,6 +19,7 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ThreadProps {
   agentName?: string;
@@ -91,6 +92,9 @@ interface ComposerProps {
 const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { canExecute } = usePermissions();
+  const canExecuteAgent = canExecute('agents');
+
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -107,17 +111,18 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
               autoFocus={document.activeElement === document.body}
-              placeholder="Enter your message..."
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
+              disabled={!canExecuteAgent}
             />
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
-            <SpeechInput agentId={agentId} />
-            <ComposerAction />
+            {canExecuteAgent && <SpeechInput agentId={agentId} />}
+            <ComposerAction canExecute={canExecuteAgent} />
           </div>
         </div>
       </ComposerPrimitive.Root>
@@ -147,28 +152,35 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   );
 };
 
-const ComposerAction = () => {
+interface ComposerActionProps {
+  canExecute?: boolean;
+}
+
+const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
   const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
 
   return (
     <>
-      <TooltipIconButton
-        type="button"
-        tooltip="Add attachment"
-        className="rounded-full"
-        onClick={() => setIsAddAttachmentDialogOpen(true)}
-      >
-        <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-      </TooltipIconButton>
+      {canExecute && (
+        <TooltipIconButton
+          type="button"
+          tooltip="Add attachment"
+          className="rounded-full"
+          onClick={() => setIsAddAttachmentDialogOpen(true)}
+        >
+          <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        </TooltipIconButton>
+      )}
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
-        <ComposerPrimitive.Send asChild>
+        <ComposerPrimitive.Send asChild disabled={!canExecute}>
           <TooltipIconButton
-            tooltip="Send"
+            tooltip={canExecute ? 'Send' : 'No permission to execute'}
             variant="default"
             className="rounded-full border border-border1 bg-surface5"
+            disabled={!canExecute}
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
           </TooltipIconButton>

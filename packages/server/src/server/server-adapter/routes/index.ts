@@ -9,6 +9,8 @@ import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENT_VERSIONS_ROUTES } from './agent-versions';
 import { AGENTS_ROUTES } from './agents';
 import { INTEGRATIONS_ROUTES } from './integrations';
+import { AUDIT_ROUTES } from './audit';
+import { AUTH_ROUTES } from './auth';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -89,10 +91,22 @@ export type ServerRoute<
   openapi?: any; // Auto-generated OpenAPI spec for this route
   maxBodySize?: number; // Optional route-specific body size limit in bytes
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
+  /**
+   * Permission required to access this route (EE feature).
+   * If set, the user must have this permission to access the route.
+   * Uses the format: `resource:action` or `resource:action:resourceId`
+   *
+   * @example
+   * requiresPermission: 'agents:read'
+   * requiresPermission: 'workflows:execute'
+   */
+  requiresPermission?: string;
 };
 
 export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...AGENTS_ROUTES,
+  ...AUDIT_ROUTES,
+  ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,
   ...MEMORY_ROUTES,

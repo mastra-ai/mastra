@@ -47,11 +47,14 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
+import Audit from './pages/audit';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
 import { OAuthCallback } from './pages/oauth/callback';
+import { Login } from './pages/login';
+import { SignUp } from './pages/signup';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -111,6 +114,9 @@ function App() {
 
               {/* Workflow builder - full screen without layout */}
               <Route path="/workflows/:workflowId/edit" element={<WorkflowEdit />} />
+              {/* Auth pages - no layout */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
 
               <Route
                 element={
@@ -149,6 +155,15 @@ function App() {
                 }
               >
                 <Route path="/observability" element={<Observability />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/audit" element={<Audit />} />
               </Route>
               <Route
                 element={

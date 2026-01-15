@@ -14,6 +14,7 @@ import type {
 import type { AgentVersion } from './agents/base';
 import type { TraceEntry } from './observability';
 import type { WorkflowDefinitionVersion } from './workflow-definitions/base';
+import type { AuditEvent } from './audit';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -37,6 +38,7 @@ export class InMemoryDB {
   readonly workflowDefinitionVersions = new Map<string, WorkflowDefinitionVersion>();
   readonly storedScorers = new Map<string, StoredScorerType>();
   readonly scorerVersions = new Map<string, StoredScorerVersionType>();
+  readonly audit = new Map<string, AuditEvent>();
 
   /**
    * Clears all data from all collections.
@@ -57,5 +59,6 @@ export class InMemoryDB {
     this.workflowDefinitionVersions.clear();
     this.storedScorers.clear();
     this.scorerVersions.clear();
+    this.audit.clear();
   }
 }

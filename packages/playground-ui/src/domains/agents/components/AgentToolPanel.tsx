@@ -9,6 +9,7 @@ import { useAgent } from '../hooks/use-agent';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 import { toast } from '@/lib/toast';
 import { useEffect } from 'react';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface AgentToolPanelProps {
   toolId: string;
@@ -16,6 +17,9 @@ export interface AgentToolPanelProps {
 }
 
 export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
+  const { canExecute } = usePermissions();
+  const canExecuteTool = canExecute('tools');
+
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
@@ -52,6 +56,15 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       <div className="py-12 text-center px-6">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
+        </Txt>
+      </div>
+    );
+
+  if (!canExecuteTool)
+    return (
+      <div className="py-12 text-center px-6">
+        <Txt variant="ui-sm" className="text-neutral3">
+          You don't have permission to execute tools.
         </Txt>
       </div>
     );

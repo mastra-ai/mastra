@@ -135,10 +135,15 @@ export async function createHonoServer(
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
+    // Check if auth is configured - if so, we need credentials for cookie-based sessions
+    const hasAuth = !!server?.auth;
+
     const corsConfig = {
-      origin: '*',
+      // When credentials are enabled, origin cannot be '*' - use dynamic origin
+      origin: hasAuth ? (origin: string) => origin || '*' : (server?.cors?.origin ?? '*'),
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      credentials: false,
+      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
+      credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],

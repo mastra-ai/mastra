@@ -6,6 +6,7 @@ import {
   isDevPlaygroundRequest,
   isProtectedPath,
 } from '@mastra/server/auth';
+import type { IRBACProvider, EEUser } from '@mastra/core/ee';
 import type { Next } from 'hono';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
@@ -44,8 +45,12 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     token = c.req.query('apiKey') || null;
   }
 
-  // Handle missing token
-  if (!token) {
+  // Check if there are cookies that might contain session tokens
+  const hasCookies = !!c.req.header('Cookie');
+
+  // Handle missing token - but allow through if cookies are present
+  // (auth provider may use cookie-based sessions like Better Auth)
+  if (!token && !hasCookies) {
     return c.json({ error: 'Authentication required' }, 401);
   }
 
@@ -55,7 +60,8 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     // Client provided verify function
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token, c.req);
+      // Pass empty string if no token but cookies present - provider will check cookies
+      user = await authConfig.authenticateToken(token || '', c.req);
     } else {
       throw new Error('No token verification method configured');
     }
@@ -66,6 +72,24 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     // Store user in context
     c.get('requestContext').set('user', user);
+
+    // Resolve and store user permissions using RBAC provider (EE feature)
+    try {
+      const serverConfig = mastra.getServer();
+      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+
+      if (rbacProvider) {
+        // Use the RBAC provider to resolve permissions
+        const permissions = await rbacProvider.getPermissions(user as EEUser);
+        c.get('requestContext').set('userPermissions', permissions);
+
+        // Also store roles for UI display
+        const roles = await rbacProvider.getRoles(user as EEUser);
+        c.get('requestContext').set('userRoles', roles);
+      }
+    } catch {
+      // RBAC not available or failed, continue without permissions
+    }
 
     return next();
   } catch (err) {

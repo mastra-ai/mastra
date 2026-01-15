@@ -28,6 +28,10 @@ import type {
   StorageWorkflowDefinitionVersionType,
   StoredScorerType,
   StoredScorerVersionType,
+  TABLE_AUDIT,
+  SpanRecord,
+  StorageAgentType,
+  AuditEvent,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
@@ -130,6 +134,7 @@ export type RecordTypes = {
   [TABLE_WORKFLOW_DEFINITION_VERSIONS]: StorageWorkflowDefinitionVersionType;
   [TABLE_STORED_SCORERS]: StoredScorerType;
   [TABLE_STORED_SCORER_VERSIONS]: StoredScorerVersionType;
+  [TABLE_AUDIT]: AuditEvent;
 };
 
 export type ListOptions = {

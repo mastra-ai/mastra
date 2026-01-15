@@ -91,6 +91,8 @@ import type {
   SearchSmitheryServersParams,
   SearchSmitheryServersResponse,
   GetSmitheryServerResponse,
+  ListAuditLogsParams,
+  ListAuditLogsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -426,6 +428,55 @@ export class MastraClient extends BaseResource {
       return this.request(`/api/logs?${searchParams}`);
     } else {
       return this.request(`/api/logs`);
+    }
+  }
+
+  /**
+   * Retrieves audit logs
+   * @param params - Parameters for filtering audit logs
+   * @returns Promise containing paginated audit events
+   */
+  public listAuditLogs(params?: ListAuditLogsParams): Promise<ListAuditLogsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.actorId) {
+      searchParams.set('actorId', params.actorId);
+    }
+    if (params?.actorType) {
+      searchParams.set('actorType', params.actorType);
+    }
+    if (params?.action) {
+      searchParams.set('action', params.action);
+    }
+    if (params?.actionPrefix) {
+      searchParams.set('actionPrefix', params.actionPrefix);
+    }
+    if (params?.resourceType) {
+      searchParams.set('resourceType', params.resourceType);
+    }
+    if (params?.resourceId) {
+      searchParams.set('resourceId', params.resourceId);
+    }
+    if (params?.outcome) {
+      searchParams.set('outcome', params.outcome);
+    }
+    if (params?.startDate) {
+      searchParams.set('startDate', params.startDate.toISOString());
+    }
+    if (params?.endDate) {
+      searchParams.set('endDate', params.endDate.toISOString());
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/audit?${searchParams}`);
+    } else {
+      return this.request(`/api/audit`);
     }
   }
 

@@ -17,6 +17,7 @@ export const TABLE_INTEGRATIONS = 'mastra_integrations';
 export const TABLE_CACHED_TOOLS = 'mastra_cached_tools';
 export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
 export const TABLE_WORKFLOW_DEFINITION_VERSIONS = 'mastra_workflow_definition_versions';
+export const TABLE_AUDIT = 'mastra_audit';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -33,7 +34,8 @@ export type TABLE_NAMES =
   | typeof TABLE_INTEGRATIONS
   | typeof TABLE_CACHED_TOOLS
   | typeof TABLE_WORKFLOW_DEFINITIONS
-  | typeof TABLE_WORKFLOW_DEFINITION_VERSIONS;
+  | typeof TABLE_WORKFLOW_DEFINITION_VERSIONS
+  | typeof TABLE_AUDIT;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -215,6 +217,23 @@ export const WORKFLOW_DEFINITION_VERSIONS_SCHEMA: Record<string, StorageColumn> 
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const AUDIT_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  actorType: { type: 'text', nullable: false }, // 'user' | 'system' | 'apikey'
+  actorId: { type: 'text', nullable: false },
+  actorEmail: { type: 'text', nullable: true },
+  actorIp: { type: 'text', nullable: true },
+  actorUserAgent: { type: 'text', nullable: true },
+  action: { type: 'text', nullable: false }, // e.g., 'auth.login', 'agent.execute'
+  resourceType: { type: 'text', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  resourceName: { type: 'text', nullable: true },
+  outcome: { type: 'text', nullable: false }, // 'success' | 'failure' | 'denied'
+  metadata: { type: 'jsonb', nullable: true },
+  duration: { type: 'integer', nullable: true }, // Duration in milliseconds
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -284,4 +303,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_CACHED_TOOLS]: CACHED_TOOLS_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
   [TABLE_WORKFLOW_DEFINITION_VERSIONS]: WORKFLOW_DEFINITION_VERSIONS_SCHEMA,
+  [TABLE_AUDIT]: AUDIT_SCHEMA,
 };

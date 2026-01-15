@@ -5,6 +5,7 @@ import { MastraStorage } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
 import { IntegrationsLibSQL } from './domains/integrations';
+import { AuditLibSQL } from './domains/audit';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { ScoresLibSQL } from './domains/scores';
@@ -23,6 +24,7 @@ export {
   WorkflowDefinitionsLibSQL,
   WorkflowsLibSQL,
 };
+export { AgentsLibSQL, AuditLibSQL, MemoryLibSQL, ObservabilityLibSQL, ScoresLibSQL, WorkflowsLibSQL };
 export type { LibSQLDomainConfig } from './db';
 
 /**
@@ -146,6 +148,7 @@ export class LibSQLStore extends MastraStorage {
     const integrations = new IntegrationsLibSQL(domainConfig);
     const storedScorers = new StoredScorersLibSQL(domainConfig);
     const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
+    const audit = new AuditLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -156,6 +159,7 @@ export class LibSQLStore extends MastraStorage {
       integrations,
       storedScorers,
       workflowDefinitions,
+      audit,
     };
   }
 }

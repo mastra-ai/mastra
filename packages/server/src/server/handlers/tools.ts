@@ -13,12 +13,44 @@ import {
 } from '../schemas/agents';
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getAuditService, AuditService, MastraAuthProvider } from '@mastra/core/server';
 
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { validateBody } from './utils';
 import { executeMCPTool } from './mcp-tool-provider';
 import type { MCPIntegrationMetadata } from '@mastra/core/integrations';
+
+/**
+ * Helper to get auth provider from Mastra instance.
+ */
+function getAuthProvider(mastra: any): MastraAuthProvider | null {
+  const serverConfig = mastra.getServer?.();
+  if (!serverConfig?.auth) return null;
+
+  // Auth can be either MastraAuthConfig or MastraAuthProvider
+  // If it has authenticateToken method, it's a provider
+  if (typeof serverConfig.auth.authenticateToken === 'function') {
+    return serverConfig.auth as MastraAuthProvider;
+  }
+
+  return null;
+}
+
+/**
+ * Helper to get current user from auth provider.
+ */
+async function getCurrentUser(mastra: any, request: Request): Promise<any | null> {
+  const auth = getAuthProvider(mastra);
+  if (!auth || typeof (auth as any).getCurrentUser !== 'function') {
+    return null;
+  }
+  try {
+    return await (auth as any).getCurrentUser(request);
+  } catch {
+    return null;
+  }
+}
 
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
@@ -201,7 +233,11 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   summary: 'Execute tool',
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
-  handler: async ({ mastra, runId, toolId, tools, requestContext, ...bodyParams }) => {
+  handler: async ctx => {
+    const { mastra, runId, toolId, tools, requestContext, request, ...bodyParams } = ctx as any;
+    const auditService = getAuditService(mastra);
+    const startTime = Date.now();
+
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -318,27 +354,49 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       validateBody({ data });
 
+      let result;
       if (isVercelTool(tool)) {
-        const result = await (tool as any).execute(data);
-        return result;
+        result = await (tool as any).execute(data);
+      } else {
+        result = await tool.execute(data!, {
+          mastra,
+          requestContext,
+          // TODO: Pass proper tracing context when server API supports tracing
+          tracingContext: { currentSpan: undefined },
+          ...(runId
+            ? {
+                workflow: {
+                  runId,
+                  suspend: async () => {},
+                },
+              }
+            : {}),
+        });
       }
 
-      const result = await tool.execute(data!, {
-        mastra,
-        requestContext,
-        // TODO: Pass proper tracing context when server API supports tracing
-        tracingContext: { currentSpan: undefined },
-        ...(runId
-          ? {
-              workflow: {
-                runId,
-                suspend: async () => {},
-              },
-            }
-          : {}),
+      // Log successful tool execution - get user from auth provider like auth handlers do
+      const user = await getCurrentUser(mastra, request);
+      await auditService.log('tools', {
+        actor: user ? AuditService.createActorFromUser(user, request) : AuditService.createSystemActor(),
+        action: 'tools.execute',
+        resource: AuditService.createResource('tool', toolId, tool.id),
+        outcome: 'success',
+        duration: Date.now() - startTime,
       });
+
       return result;
     } catch (error) {
+      // Log failed tool execution - get user from auth provider like auth handlers do
+      const user = await getCurrentUser(mastra, request);
+      await auditService.log('tools', {
+        actor: user ? AuditService.createActorFromUser(user, request) : AuditService.createSystemActor(),
+        action: 'tools.execute',
+        resource: AuditService.createResource('tool', toolId || 'unknown'),
+        outcome: 'failure',
+        duration: Date.now() - startTime,
+        metadata: { error: error instanceof Error ? error.message : 'Unknown error' },
+      });
+
       return handleError(error, 'Error executing tool');
     }
   },
@@ -396,7 +454,11 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   summary: 'Execute agent tool',
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
+  handler: async ctx => {
+    const { mastra, agentId, toolId, data, requestContext, request } = ctx as any;
+    const auditService = getAuditService(mastra);
+    const startTime = Date.now();
+
     try {
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
@@ -423,8 +485,30 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
         tracingContext: { currentSpan: undefined },
       });
 
+      // Log successful agent tool execution - get user from auth provider like auth handlers do
+      const user = await getCurrentUser(mastra, request);
+      await auditService.log('tools', {
+        actor: user ? AuditService.createActorFromUser(user, request) : AuditService.createSystemActor(),
+        action: 'tools.execute',
+        resource: AuditService.createResource('tool', toolId, tool.id),
+        outcome: 'success',
+        duration: Date.now() - startTime,
+        metadata: { agentId },
+      });
+
       return result;
     } catch (error) {
+      // Log failed agent tool execution - get user from auth provider like auth handlers do
+      const user = await getCurrentUser(mastra, request);
+      await auditService.log('tools', {
+        actor: user ? AuditService.createActorFromUser(user, request) : AuditService.createSystemActor(),
+        action: 'tools.execute',
+        resource: AuditService.createResource('tool', toolId || 'unknown'),
+        outcome: 'failure',
+        duration: Date.now() - startTime,
+        metadata: { agentId, error: error instanceof Error ? error.message : 'Unknown error' },
+      });
+
       return handleError(error, 'Error executing agent tool');
     }
   },

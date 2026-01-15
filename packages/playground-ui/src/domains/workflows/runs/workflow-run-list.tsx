@@ -12,6 +12,7 @@ import { Spinner } from '@/ds/components/Spinner';
 import { useInView } from '@/hooks';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface WorkflowRunListProps {
   workflowId: string;
@@ -20,6 +21,10 @@ export interface WorkflowRunListProps {
 
 export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => {
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
+  const { canDelete } = usePermissions();
+
+  // Check if user can delete workflow runs
+  const canDeleteRun = canDelete('workflows');
 
   const { Link, paths, navigate } = useLinkComponent();
   const { isLoading, data: runs, setEndOfListElement, isFetchingNextPage } = useWorkflowRuns(workflowId);
@@ -84,7 +89,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                 </span>
               </ThreadLink>
 
-              <ThreadDeleteButton onClick={() => setDeleteRunId(run.runId)} />
+              {canDeleteRun && <ThreadDeleteButton onClick={() => setDeleteRunId(run.runId)} />}
             </ThreadItem>
           ))}
         </ThreadList>

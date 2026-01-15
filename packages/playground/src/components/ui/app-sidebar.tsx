@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  ScrollTextIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -69,6 +70,17 @@ const mainNavigation: NavSection[] = [
         name: 'Observability',
         url: '/observability',
         icon: <EyeIcon />,
+      },
+    ],
+  },
+  {
+    key: 'audit',
+    separator: true,
+    links: [
+      {
+        name: 'Audit Logs',
+        url: '/audit',
+        icon: <ScrollTextIcon />,
       },
     ],
   },
@@ -189,7 +201,7 @@ export function AppSidebar() {
                     url: 'https://mastra.ai/cloud',
                     icon: <CloudUploadIcon />,
                     variant: 'featured',
-                    tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
+                    tooltipMsg: "You're running Mastra Studio locally. Want your team to collaborate?",
                   }}
                   state={state}
                 />
