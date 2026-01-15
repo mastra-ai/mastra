@@ -169,6 +169,7 @@ program
   .option('--from-failures [path]', 'Re-prepare failed questions (uses latest failures.json if no path given)')
   .option('--older-than <duration>', 'Only re-prepare questions older than this duration (e.g., "1h", "30m", "2d")')
   .option('--dry-run', 'Show what would be re-prepared without actually doing it (use with --from-failures)')
+  .option('--force-regenerate', 'Force regeneration by deleting existing prepared data first')
   .option('-y, --yes', 'Skip confirmation prompt')
   // Legacy options for backwards compatibility
   .option('-d, --dataset <dataset>', 'Dataset to use (legacy)')
@@ -308,6 +309,7 @@ program
         fromFailures: options.fromFailures,
         olderThan: options.olderThan,
         dryRun: options.dryRun,
+        forceRegenerate: options.forceRegenerate,
       });
 
       // Force exit after completion

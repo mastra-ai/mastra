@@ -145,6 +145,7 @@ export interface PrepareOptions {
   fromFailures?: string | boolean; // Path to failures.json, or true/latest for most recent
   dryRun?: boolean; // Show what would be re-prepared without actually doing it
   olderThan?: string; // Only re-prepare questions older than this duration (e.g., "1h", "30m", "2d")
+  forceRegenerate?: boolean; // Force regeneration by deleting existing data first
   _useTempDir?: string; // Internal: prepare to temp directory for atomic swap
 }
 
@@ -528,9 +529,22 @@ export class PrepareCommand {
           }
         }
 
+        // Force regenerate: delete existing data first
+        if (options.forceRegenerate && existsSync(questionDir)) {
+          const { rm } = await import('fs/promises');
+          await rm(questionDir, { recursive: true, force: true });
+          mainSpinner.clear();
+          console.log(
+            chalk.yellow(`🗑️`),
+            chalk.blue(`${question.question_id}`),
+            chalk.gray(`- cleaned for regeneration`),
+          );
+          mainSpinner.render();
+        }
+
         // Skip cache check if we're resuming from a specific message OR re-preparing from failures
         // (when _useTempDir is set, we explicitly want to re-prepare, not use cache)
-        if (!options.resumeFromMessageId && !options._useTempDir && existsSync(join(questionDir, 'meta.json'))) {
+        if (!options.resumeFromMessageId && !options._useTempDir && !options.forceRegenerate && existsSync(join(questionDir, 'meta.json'))) {
           cachedCount++;
           completedCount++;
 
