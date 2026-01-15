@@ -30,6 +30,9 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     supportsRegex = true,
     supportsContains = true,
     supportsNotOperator = true,
+    supportsNorOperator = true,
+    supportsElemMatch = true,
+    supportsSize = true,
   } = config;
 
   describe('Filter Operators', () => {
@@ -109,6 +112,14 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           ...(supportsArrayMetadata ? { tags: ['sale'] } : {}),
           available: false,
           description: 'Classic novel',
+          ...(supportsArrayMetadata
+            ? {
+                reviews: [
+                  { score: 3, author: 'user1' },
+                  { score: 5, author: 'user2' },
+                ],
+              }
+            : {}),
         },
         {
           name: 'Product H',
@@ -117,6 +128,15 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           category: 'home',
           ...(supportsArrayMetadata ? { tags: ['premium', 'luxury'] } : {}),
           available: true,
+          ...(supportsArrayMetadata
+            ? {
+                reviews: [
+                  { score: 5, author: 'user3' },
+                  { score: 4, author: 'user4' },
+                  { score: 5, author: 'user5' },
+                ],
+              }
+            : {}),
         },
       ];
 
@@ -576,5 +596,461 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         });
       }
     });
+
+    // $nor operator tests - only run if store supports it
+    if (supportsNorOperator) {
+      describe('$nor Operator', () => {
+        it('should filter with $nor operator', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $nor: [{ category: 'electronics' }, { category: 'books' }],
+            },
+          });
+
+          // Should return products that are neither electronics nor books (home: 3 products)
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.category !== 'electronics' && r.metadata?.category !== 'books')).toBe(
+            true,
+          );
+          expect(results.length).toBe(3);
+        });
+
+        it('should handle $nor with comparison operators', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $nor: [{ price: { $lt: 20 } }, { price: { $gt: 100 } }],
+            },
+          });
+
+          // Should return products with 20 <= price <= 100
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const price = r.metadata?.price as number;
+              return price >= 20 && price <= 100;
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle $nor with nested $or', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $nor: [{ $or: [{ category: 'electronics' }, { price: { $gt: 150 } }] }],
+            },
+          });
+
+          // Should return products that are NOT (electronics OR price > 150)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const isElectronics = r.metadata?.category === 'electronics';
+              const isExpensive = (r.metadata?.price as number) > 150;
+              return !isElectronics && !isExpensive;
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle $nor with nested $and conditions', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $nor: [{ $and: [{ category: 'electronics' }, { available: true }] }],
+            },
+          });
+
+          // Should return products that are NOT (electronics AND available)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const isAvailableElectronics = r.metadata?.category === 'electronics' && r.metadata?.available === true;
+              return !isAvailableElectronics;
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle empty $nor conditions', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { $nor: [] },
+          });
+
+          // Empty $nor should match all documents
+          expect(results.length).toBe(8);
+        });
+      });
+    }
+
+    // Advanced $not operator combinations - only run if store supports $not
+    if (supportsNotOperator) {
+      describe('Advanced $not Combinations', () => {
+        it('should handle $not with $in operator', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { category: { $not: { $in: ['electronics', 'books'] } } },
+          });
+
+          // Should return products NOT in electronics or books (home: 3 products)
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => !['electronics', 'books'].includes(r.metadata?.category as string))).toBe(true);
+          expect(results.length).toBe(3);
+        });
+
+        it('should handle $not with $and combination', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $not: {
+                $and: [{ price: { $gt: 50 } }, { rating: { $gte: 4.5 } }],
+              },
+            },
+          });
+
+          // Should return products where NOT (price > 50 AND rating >= 4.5)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const price = r.metadata?.price as number;
+              const rating = r.metadata?.rating as number;
+              return !(price > 50 && rating >= 4.5);
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle nested $not with $or', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $not: {
+                $or: [{ category: 'electronics' }, { available: false }],
+              },
+            },
+          });
+
+          // Should return products that are NOT (electronics OR unavailable)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const isElectronics = r.metadata?.category === 'electronics';
+              const isUnavailable = r.metadata?.available === false;
+              return !isElectronics && !isUnavailable;
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle $not with boolean values', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { available: { $not: { $eq: false } } },
+          });
+
+          // Should return available products
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.available !== false)).toBe(true);
+        });
+
+        it('should handle $not with multiple conditions on same field', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { price: { $not: { $gte: 20, $lte: 80 } } },
+          });
+
+          // Should return products where NOT (20 <= price <= 80)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const price = r.metadata?.price as number;
+              return !(price >= 20 && price <= 80);
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle $not with $ne (double negation)', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { category: { $not: { $ne: 'electronics' } } },
+          });
+
+          // Double negation: NOT (NOT equal to electronics) = equal to electronics
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => r.metadata?.category === 'electronics')).toBe(true);
+          expect(results.length).toBe(3);
+        });
+
+        it('should handle $not in nested field paths', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { rating: { $not: { $lt: 4.0 } } },
+          });
+
+          // Should return products with rating >= 4.0
+          expect(results.length).toBeGreaterThan(0);
+          expect(results.every(r => (r.metadata?.rating as number) >= 4.0)).toBe(true);
+        });
+
+        it('should handle $not negating $and conditions', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $not: {
+                $and: [{ category: 'home' }, { price: { $gte: 100 } }],
+              },
+            },
+          });
+
+          // Should return products that are NOT (home category AND price >= 100)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const isExpensiveHome = r.metadata?.category === 'home' && (r.metadata?.price as number) >= 100;
+              return !isExpensiveHome;
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle $or with multiple $not conditions', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $or: [{ price: { $not: { $gt: 50 } } }, { rating: { $not: { $lt: 4.5 } } }],
+            },
+          });
+
+          // Should return products where price <= 50 OR rating >= 4.5
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const price = r.metadata?.price as number;
+              const rating = r.metadata?.rating as number;
+              return price <= 50 || rating >= 4.5;
+            }),
+          ).toBe(true);
+        });
+
+        if (supportsExistsOperator) {
+          it('should handle $not with $exists operator', async () => {
+            const results = await config.vector.query({
+              indexName: testIndexName,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { description: { $not: { $exists: true } } },
+            });
+
+            // Should return products WITHOUT description field
+            expect(results.length).toBeGreaterThan(0);
+            expect(results.every(r => r.metadata?.description === undefined)).toBe(true);
+          });
+        }
+
+        if (supportsArrayMetadata) {
+          it('should handle $not with $all operator', async () => {
+            const results = await config.vector.query({
+              indexName: testIndexName,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { tags: { $not: { $all: ['premium'] } } },
+            });
+
+            // Should return products that don't have all of ['premium']
+            expect(results.length).toBeGreaterThan(0);
+            expect(
+              results.every(r => {
+                const tags = r.metadata?.tags as string[] | undefined;
+                return !tags?.includes('premium');
+              }),
+            ).toBe(true);
+          });
+        }
+      });
+    }
+
+    // $elemMatch operator tests - only run if store supports it and array metadata
+    if (supportsElemMatch && supportsArrayMetadata) {
+      describe('$elemMatch Operator', () => {
+        it('should filter with $elemMatch using comparison', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { reviews: { $elemMatch: { score: { $gte: 5 } } } },
+          });
+
+          // Should return products with at least one review score >= 5
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const reviews = r.metadata?.reviews as Array<{ score: number }> | undefined;
+              return reviews?.some(review => review.score >= 5);
+            }),
+          ).toBe(true);
+        });
+
+        it('should filter with $elemMatch using equality', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { reviews: { $elemMatch: { author: 'user3' } } },
+          });
+
+          // Should return products with a review by user3
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const reviews = r.metadata?.reviews as Array<{ author: string }> | undefined;
+              return reviews?.some(review => review.author === 'user3');
+            }),
+          ).toBe(true);
+        });
+
+        it('should filter with $elemMatch using multiple conditions', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              reviews: { $elemMatch: { score: { $gte: 4 }, author: { $in: ['user3', 'user4', 'user5'] } } },
+            },
+          });
+
+          // Should return products with a review that has score >= 4 AND author in list
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const reviews = r.metadata?.reviews as Array<{ score: number; author: string }> | undefined;
+              return reviews?.some(review => review.score >= 4 && ['user3', 'user4', 'user5'].includes(review.author));
+            }),
+          ).toBe(true);
+        });
+
+        it('should handle $elemMatch with no matches', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { reviews: { $elemMatch: { score: { $gt: 10 } } } },
+          });
+
+          // No review has score > 10
+          expect(results.length).toBe(0);
+        });
+
+        it('should filter with $elemMatch on nested numeric range', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { reviews: { $elemMatch: { score: { $gte: 3, $lte: 4 } } } },
+          });
+
+          // Should return products with a review score between 3 and 4
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const reviews = r.metadata?.reviews as Array<{ score: number }> | undefined;
+              return reviews?.some(review => review.score >= 3 && review.score <= 4);
+            }),
+          ).toBe(true);
+        });
+      });
+    }
+
+    // $size operator tests - only run if store supports it and array metadata
+    if (supportsSize && supportsArrayMetadata) {
+      describe('$size Operator', () => {
+        it('should filter arrays by size', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { tags: { $size: 2 } },
+          });
+
+          // Should return products with exactly 2 tags
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const tags = r.metadata?.tags as string[] | undefined;
+              return tags?.length === 2;
+            }),
+          ).toBe(true);
+        });
+
+        it('should filter reviews array by size', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { reviews: { $size: 3 } },
+          });
+
+          // Should return products with exactly 3 reviews (Product H)
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const reviews = r.metadata?.reviews as unknown[] | undefined;
+              return reviews?.length === 3;
+            }),
+          ).toBe(true);
+        });
+      });
+    }
+
+    // Additional edge case for multiple logical operators at root level
+    if (supportsNotOperator) {
+      describe('Multiple Logical Operators at Root', () => {
+        it('should handle multiple logical operators at root level', async () => {
+          const results = await config.vector.query({
+            indexName: testIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: {
+              $and: [{ category: { $in: ['electronics', 'home'] } }],
+              price: { $gte: 50 },
+            },
+          });
+
+          // Should combine implicit $and with explicit conditions
+          expect(results.length).toBeGreaterThan(0);
+          expect(
+            results.every(r => {
+              const category = r.metadata?.category as string;
+              const price = r.metadata?.price as number;
+              return ['electronics', 'home'].includes(category) && price >= 50;
+            }),
+          ).toBe(true);
+        });
+      });
+    }
   });
 }

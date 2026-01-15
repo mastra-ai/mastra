@@ -12,7 +12,12 @@ import { createUnitVector, createVector, VECTOR_DIMENSION } from './test-helpers
  * This test domain ensures that vector stores implement the core MastraVector interface correctly.
  */
 export function createBasicOperationsTest(config: VectorTestConfig) {
-  const { createIndex, deleteIndex, waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)) } = config;
+  const {
+    createIndex,
+    deleteIndex,
+    waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)),
+    supportsMinScore = true,
+  } = config;
 
   describe('Basic Vector Operations', () => {
     describe('Index Lifecycle', () => {
@@ -367,6 +372,41 @@ export function createBasicOperationsTest(config: VectorTestConfig) {
           expect(result.vector).toBeUndefined();
         });
       });
+
+      // minScore threshold test - only run if store supports it
+      if (supportsMinScore) {
+        it('should respect minimum score threshold', async () => {
+          // Query with an unrelated vector to get low similarity scores
+          const unrelatedVector = createUnitVector(VECTOR_DIMENSION - 1); // Very different direction
+
+          // First, query without minScore to see what scores we get
+          const allResults = await config.vector.query({
+            indexName: queryTestIndex,
+            queryVector: unrelatedVector,
+            topK: 10,
+          });
+
+          // Get the median score to use as threshold
+          const scores = allResults.map(r => r.score).sort((a, b) => b - a);
+          const medianScore = scores[Math.floor(scores.length / 2)] ?? 0.5;
+
+          // Query with minScore set above median - should filter out lower scoring results
+          const filteredResults = await config.vector.query({
+            indexName: queryTestIndex,
+            queryVector: unrelatedVector,
+            topK: 10,
+            minScore: medianScore,
+          });
+
+          // Should return fewer results than without minScore
+          expect(filteredResults.length).toBeLessThanOrEqual(allResults.length);
+
+          // All returned results should have score >= minScore
+          filteredResults.forEach(result => {
+            expect(result.score).toBeGreaterThanOrEqual(medianScore);
+          });
+        });
+      }
     });
   });
 }

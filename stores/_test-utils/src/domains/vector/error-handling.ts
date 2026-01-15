@@ -485,5 +485,47 @@ export function createErrorHandlingTest(config: VectorTestConfig) {
         expect(failures.length === 0 || failures.length === results.length).toBe(true);
       }, 30000);
     });
+
+    describe('Invalid Filter Operator Errors', () => {
+      it('should reject query with invalid/unsupported operator', async () => {
+        // Insert test data first
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(400)],
+          metadata: [{ name: 'test', value: 42 }],
+        });
+        await waitForIndexing(testIndexName);
+
+        // Try to query with an invalid operator
+        await expect(
+          config.vector.query({
+            indexName: testIndexName,
+            queryVector: createVector(400),
+            topK: 10,
+            filter: { value: { $invalidOperator: 10 } } as any,
+          }),
+        ).rejects.toThrow(/unsupported|invalid|unknown.*operator/i);
+      });
+
+      it('should reject query with malformed operator syntax', async () => {
+        // Insert test data first
+        await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(401)],
+          metadata: [{ name: 'test', price: 100 }],
+        });
+        await waitForIndexing(testIndexName);
+
+        // Try to query with malformed operator (array instead of value)
+        await expect(
+          config.vector.query({
+            indexName: testIndexName,
+            queryVector: createVector(401),
+            topK: 10,
+            filter: { price: { $gt: [10, 20] } } as any, // $gt should take a number, not an array
+          }),
+        ).rejects.toThrow();
+      });
+    });
   });
 }

@@ -83,6 +83,18 @@ export interface VectorTestConfig {
   /** Whether the store supports the $not operator for logical negation. Default: true.
    *  Set to false for stores that don't support $not. */
   supportsNotOperator?: boolean;
+  /** Whether the store supports the $nor operator for "not or" logical operations. Default: true.
+   *  Set to false for stores that don't support $nor. */
+  supportsNorOperator?: boolean;
+  /** Whether the store supports the $elemMatch operator for array element matching. Default: true.
+   *  Set to false for stores that don't support $elemMatch. */
+  supportsElemMatch?: boolean;
+  /** Whether the store supports the $size operator for array length filtering. Default: true.
+   *  Set to false for stores that don't support $size. */
+  supportsSize?: boolean;
+  /** Whether the store supports minimum score threshold filtering (minScore). Default: true.
+   *  Set to false for stores that don't support score-based filtering. */
+  supportsMinScore?: boolean;
 }
 
 /**

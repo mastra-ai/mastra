@@ -19,7 +19,13 @@ export interface EdgeCasesOptions {
  * These tests ensure vector stores handle edge cases gracefully and scale properly.
  */
 export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCasesOptions = {}) {
-  const { createIndex, deleteIndex, waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)) } = config;
+  const {
+    createIndex,
+    deleteIndex,
+    waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 100)),
+    supportsNotOperator = true,
+    supportsNorOperator = true,
+  } = config;
 
   describe('Vector Store Edge Cases', () => {
     describe('Empty Index Operations', () => {
@@ -314,27 +320,20 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
       it('should handle vectors with zero magnitude gracefully', async () => {
         const zeroVector = new Array(VECTOR_DIMENSION).fill(0);
 
-        // Some stores may reject zero vectors, others may accept them
-        // We test that the operation either succeeds or throws a clear error
-        try {
-          await config.vector.upsert({
-            indexName: normalizationTestIndex,
-            vectors: [zeroVector],
-            metadata: [{ test: 'zero-magnitude' }],
-          });
-          await waitForIndexing(normalizationTestIndex);
+        // Most stores accept zero vectors
+        await config.vector.upsert({
+          indexName: normalizationTestIndex,
+          vectors: [zeroVector],
+          metadata: [{ test: 'zero-magnitude' }],
+        });
+        await waitForIndexing(normalizationTestIndex);
 
-          // If accepted, verify we can query it
-          const results = await config.vector.query({
-            indexName: normalizationTestIndex,
-            queryVector: createVector(1),
-            topK: 10,
-          });
-          expect(results).toBeDefined();
-        } catch (error) {
-          // If rejected, error should be meaningful
-          expect(error).toBeDefined();
-        }
+        const results = await config.vector.query({
+          indexName: normalizationTestIndex,
+          queryVector: createVector(1),
+          topK: 10,
+        });
+        expect(results).toBeDefined();
       });
 
       it('should reject vectors with NaN values', async () => {
@@ -365,25 +364,19 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
         // Vector with very small but non-zero values (near machine epsilon)
         const tinyVector = new Array(VECTOR_DIMENSION).fill(1e-10);
 
-        try {
-          await config.vector.upsert({
-            indexName: normalizationTestIndex,
-            vectors: [tinyVector],
-            metadata: [{ test: 'tiny-magnitude' }],
-          });
-          await waitForIndexing(normalizationTestIndex);
+        await config.vector.upsert({
+          indexName: normalizationTestIndex,
+          vectors: [tinyVector],
+          metadata: [{ test: 'tiny-magnitude' }],
+        });
+        await waitForIndexing(normalizationTestIndex);
 
-          // If accepted, verify we can query it
-          const results = await config.vector.query({
-            indexName: normalizationTestIndex,
-            queryVector: createVector(1),
-            topK: 10,
-          });
-          expect(results).toBeDefined();
-        } catch (error) {
-          // If rejected, error should be meaningful
-          expect(error).toBeDefined();
-        }
+        const results = await config.vector.query({
+          indexName: normalizationTestIndex,
+          queryVector: createVector(1),
+          topK: 10,
+        });
+        expect(results).toBeDefined();
       });
 
       it('should handle vectors with mixed extreme values', async () => {
@@ -393,25 +386,128 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
         extremeVector[1] = 0.001;
         extremeVector[2] = -1000;
 
-        try {
-          await config.vector.upsert({
-            indexName: normalizationTestIndex,
-            vectors: [extremeVector],
-            metadata: [{ test: 'extreme-values' }],
-          });
-          await waitForIndexing(normalizationTestIndex);
+        await config.vector.upsert({
+          indexName: normalizationTestIndex,
+          vectors: [extremeVector],
+          metadata: [{ test: 'extreme-values' }],
+        });
+        await waitForIndexing(normalizationTestIndex);
 
-          // If accepted, verify we can query it
-          const results = await config.vector.query({
-            indexName: normalizationTestIndex,
-            queryVector: createVector(1),
-            topK: 10,
-          });
-          expect(results).toBeDefined();
-        } catch (error) {
-          // If rejected, error should be meaningful
-          expect(error).toBeDefined();
+        const results = await config.vector.query({
+          indexName: normalizationTestIndex,
+          queryVector: createVector(1),
+          topK: 10,
+        });
+        expect(results).toBeDefined();
+      });
+    });
+
+    describe('Empty Logical Operator Conditions', () => {
+      const emptyLogicalTestIndex = `empty_logical_test_${Date.now()}`;
+
+      beforeAll(async () => {
+        await createIndex(emptyLogicalTestIndex);
+        await waitForIndexing(emptyLogicalTestIndex);
+
+        // Insert test vectors
+        await config.vector.upsert({
+          indexName: emptyLogicalTestIndex,
+          vectors: [createVector(1), createVector(2), createVector(3)],
+          metadata: [
+            { category: 'A', value: 1 },
+            { category: 'B', value: 2 },
+            { category: 'C', value: 3 },
+          ],
+        });
+        await waitForIndexing(emptyLogicalTestIndex);
+      });
+
+      afterAll(async () => {
+        try {
+          await deleteIndex(emptyLogicalTestIndex);
+        } catch {
+          // Ignore cleanup errors
         }
+      });
+
+      it('should handle empty $and conditions', async () => {
+        // Empty $and should match all documents (no conditions to fail)
+        const results = await config.vector.query({
+          indexName: emptyLogicalTestIndex,
+          queryVector: createUnitVector(0),
+          topK: 10,
+          filter: { $and: [] },
+        });
+
+        expect(results.length).toBe(3);
+      });
+
+      it('should handle empty $or conditions', async () => {
+        // Empty $or should match no documents (no conditions to satisfy)
+        const results = await config.vector.query({
+          indexName: emptyLogicalTestIndex,
+          queryVector: createUnitVector(0),
+          topK: 10,
+          filter: { $or: [] },
+        });
+
+        // Most implementations treat empty $or as matching nothing
+        expect(results.length).toBe(0);
+      });
+
+      if (supportsNorOperator) {
+        it('should handle empty $nor conditions', async () => {
+          // Empty $nor should match all documents (nothing to exclude)
+          const results = await config.vector.query({
+            indexName: emptyLogicalTestIndex,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { $nor: [] },
+          });
+
+          expect(results.length).toBe(3);
+        });
+      }
+
+      if (supportsNotOperator) {
+        it('should handle empty $not conditions', async () => {
+          const results = await config.vector.query({
+            indexName: emptyLogicalTestIndex,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { $not: {} },
+          });
+          // Empty $not should match all documents
+          expect(results.length).toBe(3);
+        });
+      }
+
+      it('should handle multiple empty logical operators combined', async () => {
+        const results = await config.vector.query({
+          indexName: emptyLogicalTestIndex,
+          queryVector: createUnitVector(0),
+          topK: 10,
+          filter: {
+            $and: [],
+            category: 'A',
+          },
+        });
+        // Empty $and with additional filter should apply the additional filter
+        expect(results.length).toBe(1);
+        expect(results[0]?.metadata?.category).toBe('A');
+      });
+
+      it('should handle nested empty logical operators', async () => {
+        const results = await config.vector.query({
+          indexName: emptyLogicalTestIndex,
+          queryVector: createUnitVector(0),
+          topK: 10,
+          filter: {
+            $and: [{ $or: [] }],
+          },
+        });
+        // Empty $or inside $and should result in no matches
+        expect(results.length).toBe(0);
       });
     });
   });
