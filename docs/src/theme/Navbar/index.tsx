@@ -1,6 +1,5 @@
 import Link from "@docusaurus/Link";
 import { GitHubIconLink } from "@site/src/components/github-icon-link";
-import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import { type ReactNode } from "react";

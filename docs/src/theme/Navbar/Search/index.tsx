@@ -116,7 +116,7 @@ export function AskAI() {
       onClick={toggle}
       size="sm"
       variant="outline"
-      className="rounded-lg shadow-none dark:bg-(--mastra-surface-4) border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2) hover:text-(--mastra-text-primary"
+      className="rounded-lg shadow-none dark:bg-(--mastra-surface-4) border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2) hover:text-(--mastra-text-primary)"
     >
       <span className="text-sm">Ask AI</span>
     </Button>
