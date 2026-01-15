@@ -556,6 +556,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private hasher = xxhash();
   private threadIdCache = new Map<string, string>();
 
+  /**
+   * TEMPORARY DEBUG: Track all message IDs that have been observed during this instance's lifetime.
+   * Used to detect duplicate observation bugs. Throws an error if the same message is observed twice.
+   */
+  private observedMessageIds = new Set<string>();
+
   /** Whether to extract patterns in Observer */
   private observerRecognizePatterns: boolean;
 
@@ -1155,6 +1161,25 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const allMessages: MastraDBMessage[] = [];
     for (const msgs of messagesByThread.values()) {
       allMessages.push(...msgs);
+    }
+
+    // TEMPORARY DEBUG: Check for duplicate message observation
+    const duplicateIds: string[] = [];
+    for (const msg of allMessages) {
+      if (this.observedMessageIds.has(msg.id)) {
+        duplicateIds.push(msg.id);
+      }
+    }
+    if (duplicateIds.length > 0) {
+      throw new Error(
+        `[OM BUG] Attempting to observe ${duplicateIds.length} messages that were already observed! ` +
+          `Message IDs: ${duplicateIds.slice(0, 5).join(', ')}${duplicateIds.length > 5 ? '...' : ''}. ` +
+          `This indicates a bug in the observation flow - messages should only be observed once.`,
+      );
+    }
+    // Mark all messages as observed
+    for (const msg of allMessages) {
+      this.observedMessageIds.add(msg.id);
     }
 
     const result = await this.withRetry(
