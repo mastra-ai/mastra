@@ -1,22 +1,34 @@
 # Changeset
 
-Create a changeset in `.changeset`, ensuring the naming convention for the changeset file is inline with other changesets in the `.changeset` folder.
+Create a changeset using the CLI. The CLI will automatically detect changed packages and create the changeset file.
 
-The frontmatter of the changeset file should include the package names being changed, along with the type of version bump for each package:
+## CLI Usage
 
-```yaml
----
-'package-name': 'type-of-bump'
----
+```bash
+pnpm changeset -s -m "your changeset message" [--major pkg1] [--minor pkg2] [--patch pkg3]
 ```
 
-Where `type-of-bump` is one of the following:
+**Arguments:**
+
+- `-s` or `--skipPrompt` - Run non-interactively (required for automation)
+- `-m "message"` or `--message "message"` - The changeset message (required)
+- `--major @scope/pkg` - Packages that should have a major version bump
+- `--minor @scope/pkg` - Packages that should have a minor version bump
+- `--patch @scope/pkg` - Packages that should have a patch version bump (default for detected changes)
+
+**Notes:**
+
+- The CLI auto-detects changed packages from git and defaults them to `patch` bumps
+- You can override the bump type by specifying `--major` or `--minor` for specific packages
+- Multiple packages can be specified by repeating the flag: `--minor @mastra/core --minor @mastra/cli`
+
+## Version Bump Types
 
 - `patch` - Bugfixes with backward-compatible changes
 - `minor` - New features with backward-compatible changes
 - `major` - Breaking changes that are not backward-compatible
 
-The body of the changeset should follow these guidelines:
+## Message Guidelines
 
 - The target audience are developers
 - Write short, direct sentences that anyone can understand. Avoid commit messages, technical jargon, and acronyms. Use action-oriented verbs (Added, Fixed, Improved, Deprecated, Removed)
@@ -26,4 +38,4 @@ The body of the changeset should follow these guidelines:
 - If the change is a breaking change or is adding a new feature, ensure that a code example is provided. This code example should show the public API usage (the before and after). Do not show code examples of internal implementation details.
 - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
 - For larger, more substantial changes, also answer the "Why" behind the changes
-- Check that the description inside the changeset file only applies to the packages listed in the frontmatter. Do not allow descriptions that mention changes to packages not listed in the frontmatter. In these cases, you must create a separate changeset file for those packages.
+- If changes span multiple packages with different purposes, run the CLI multiple times to create separate changesets for each logical group of changes.

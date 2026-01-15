@@ -2,8 +2,14 @@ import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { TriangleAlertIcon } from 'lucide-react';
 import * as React from 'react';
+import {
+  formElementSizes,
+  formElementFocus,
+  formElementRadius,
+  type FormElementSize,
+} from '@/ds/primitives/form-element';
 
-export type InputFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
+export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   name?: string;
   testId?: string;
   label?: string;
@@ -14,6 +20,13 @@ export type InputFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
   helpMsg?: string;
   error?: boolean;
   errorMsg?: string;
+  size?: FormElementSize;
+};
+
+const inputFieldSizeClasses = {
+  sm: `${formElementSizes.sm} px-2`,
+  md: `${formElementSizes.md} px-3`,
+  lg: `${formElementSizes.lg} px-3 py-2`,
 };
 
 export function InputField({
@@ -28,6 +41,7 @@ export function InputField({
   helpMsg,
   error,
   errorMsg,
+  size = 'lg',
   ...props
 }: InputFieldProps) {
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -56,8 +70,10 @@ export function InputField({
         name={name}
         value={value}
         className={cn(
-          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none rounded-lg bg-transparent min-h-10 px-3 py-2 w-full',
-          'focus:outline-none focus:shadow-[inset_0_0_0_1px_#18fb6f]',
+          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none bg-transparent w-full',
+          formElementRadius,
+          formElementFocus,
+          inputFieldSizeClasses[size],
           'placeholder:text-neutral3 placeholder:text-ui-sm',
           {
             'cursor-not-allowed opacity-50': disabled,

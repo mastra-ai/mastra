@@ -117,8 +117,8 @@ These are non-blocking warnings. The `dd-trace` native modules (`@datadog/native
 When using bundlers, mark `dd-trace` and native modules as external:
 
 ```typescript
-// mastra.config.ts
-export default {
+// src/mastra/index.ts
+export const mastra = new Mastra({
   bundler: {
     externals: [
       'dd-trace',
@@ -128,7 +128,7 @@ export default {
       '@datadog/pprof',
     ],
   },
-};
+});
 ```
 
 ## License
