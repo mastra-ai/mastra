@@ -239,8 +239,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
                 const { data } = bodyParams;
                 validateBody({ data });
 
-                // Handle MCP tools specially - need to get integration metadata for transport config
-                if (cachedTool.provider === 'mcp') {
+                // Handle MCP/Smithery tools specially - need to get integration metadata for transport config
+                // Smithery servers are MCP servers under the hood
+                if (cachedTool.provider === 'mcp' || cachedTool.provider === 'smithery') {
                   // Get the integration to access metadata
                   const integration = await integrationsStore.getIntegrationById({ id: cachedTool.integrationId });
                   if (!integration) {

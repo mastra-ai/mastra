@@ -125,6 +125,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@smithery/sdk": "^4.0.1",
     "hono": "^4.11.3"
   }
 }

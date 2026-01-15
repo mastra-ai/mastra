@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/ds/components/Dialog';
 import { Button } from '@/ds/components/Button';
@@ -14,7 +15,8 @@ import { ToolSelector } from './tool-selector';
 import { MCPConnectionInput } from './mcp-connection-input';
 import { SmitheryBrowser } from './smithery-browser';
 import type { MCPConnectionConfig } from './mcp-connection-input';
-import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations } from '../hooks';
+import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations, useOAuthCallback } from '../hooks';
+import { SmitheryBrowserOAuthProvider, storePendingOAuthState } from '../lib/smithery-oauth-provider';
 import type { IntegrationProvider } from '../types';
 import type { ValidateMCPResponse, SmitheryServer, SmitheryServerConnection } from '@mastra/client-js';
 
@@ -55,6 +57,7 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedProvider, setSelectedProvider] = useState<IntegrationProvider | null>(null);
   const [selectedToolkits, setSelectedToolkits] = useState<Set<string>>(new Set());
+  const [selectedToolkitNames, setSelectedToolkitNames] = useState<string[]>([]);
   const [deselectedTools, setDeselectedTools] = useState<Set<string>>(new Set());
 
   // MCP-specific state
@@ -67,9 +70,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const [smitheryServer, setSmitheryServer] = useState<SmitheryServer | null>(null);
   const [smitheryConnection, setSmitheryConnection] = useState<SmitheryServerConnection | null>(null);
   const [smitheryValidated, setSmitheryValidated] = useState(false);
-  const [smitheryAuthToken, setSmitheryAuthToken] = useState('');
+  const [smitheryOAuthProvider, setSmitheryOAuthProvider] = useState<SmitheryBrowserOAuthProvider | null>(null);
   const [smitheryValidating, setSmitheryValidating] = useState(false);
   const [smitheryValidationError, setSmitheryValidationError] = useState<string | undefined>();
+
+  // OAuth callback handling
+  const { isReturningFromOAuth, authorizationCode, serverUrl: pendingServerUrl, clearOAuthState } = useOAuthCallback();
 
   // Determine if we're in MCP or Smithery mode
   const isMCPProvider = selectedProvider === 'mcp';
@@ -99,9 +105,10 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
             env: mcpConfig.env ? JSON.stringify(mcpConfig.env) : undefined,
           };
     }
-    // For Smithery, use the connection from Smithery server with auth headers
-    if (smitheryConnection) {
-      const headers = smitheryAuthToken ? { Authorization: `Bearer ${smitheryAuthToken}` } : undefined;
+    // For Smithery, use the connection from Smithery server with OAuth tokens
+    if (smitheryConnection && smitheryOAuthProvider) {
+      const tokens = smitheryOAuthProvider.tokens();
+      const headers = tokens?.access_token ? { Authorization: `Bearer ${tokens.access_token}` } : undefined;
       return smitheryConnection.type === 'http'
         ? { url: smitheryConnection.url, headers: headers ? JSON.stringify(headers) : undefined }
         : {
@@ -153,7 +160,7 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       .map(tool => tool.slug)
   );
 
-  // Smithery server selection handler - just select, don't validate yet (need auth token)
+  // Smithery server selection handler - select and initialize OAuth provider
   const handleSmitheryServerSelect = async (server: SmitheryServer, connection?: SmitheryServerConnection) => {
     setSmitheryServer(server);
     setSmitheryConnection(connection || null);
@@ -162,23 +169,37 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
 
     if (!connection) {
       setSmitheryValidationError('Connection details not available for this server. Please try a different server or use MCP directly.');
+      return;
+    }
+
+    // Initialize OAuth provider for HTTP connections
+    if (connection.type === 'http' && connection.url) {
+      const provider = new SmitheryBrowserOAuthProvider(connection.url);
+      setSmitheryOAuthProvider(provider);
+
+      // Check if we already have tokens (user authenticated previously)
+      if (provider.hasTokens()) {
+        // Try to validate with existing tokens
+        handleSmitheryValidateWithProvider(connection, provider);
+      }
     }
   };
 
-  // Smithery validation handler - validates with auth token
-  const handleSmitheryValidate = async () => {
-    if (!smitheryConnection) return;
-
+  // Helper to validate with a specific OAuth provider
+  const handleSmitheryValidateWithProvider = async (
+    connection: SmitheryServerConnection,
+    provider: SmitheryBrowserOAuthProvider
+  ) => {
     setSmitheryValidating(true);
     setSmitheryValidationError(undefined);
 
     try {
-      // Build headers with auth token if provided
-      const headers = smitheryAuthToken ? { Authorization: `Bearer ${smitheryAuthToken}` } : undefined;
+      const tokens = provider.tokens();
+      const headers = tokens?.access_token ? { Authorization: `Bearer ${tokens.access_token}` } : undefined;
 
-      const validationParams = smitheryConnection.type === 'http'
-        ? { transport: 'http' as const, url: smitheryConnection.url!, headers }
-        : { transport: 'stdio' as const, command: smitheryConnection.command!, args: smitheryConnection.args, env: smitheryConnection.env };
+      const validationParams = connection.type === 'http'
+        ? { transport: 'http' as const, url: connection.url!, headers }
+        : { transport: 'stdio' as const, command: connection.command!, args: connection.args, env: connection.env };
 
       const result = await validateMCPConnection.mutateAsync(validationParams) as ValidateMCPResponse;
 
@@ -187,9 +208,11 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
         setMcpToolCount(result.toolCount);
       } else {
         const errorMsg = result.error || 'Unknown error';
-        // Check if it's an auth error
+        // Check if it's an auth error - need to re-authenticate
         if (errorMsg.includes('401') || errorMsg.includes('Unauthorized')) {
-          setSmitheryValidationError('Authentication required. Please enter your Smithery OAuth token.');
+          // Clear invalid tokens and prompt for OAuth
+          provider.clearState();
+          setSmitheryValidationError('Authentication required. Click "Sign in with Smithery" to authenticate.');
         } else {
           setSmitheryValidationError(errorMsg);
         }
@@ -198,13 +221,173 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       if (errorMsg.includes('401') || errorMsg.includes('Unauthorized')) {
-        setSmitheryValidationError('Authentication required. Please enter your Smithery OAuth token.');
+        provider.clearState();
+        setSmitheryValidationError('Authentication required. Click "Sign in with Smithery" to authenticate.');
       } else {
         setSmitheryValidationError(errorMsg);
       }
       setSmitheryValidated(false);
     } finally {
       setSmitheryValidating(false);
+    }
+  };
+
+  // Smithery OAuth handler - initiates OAuth flow
+  const handleSmitheryOAuth = async () => {
+    if (!smitheryConnection?.url || !smitheryOAuthProvider || !smitheryServer) return;
+
+    setSmitheryValidating(true);
+    setSmitheryValidationError(undefined);
+
+    // Store server info before OAuth redirect so we can restore it after
+    storePendingOAuthState({
+      serverUrl: smitheryConnection.url,
+      serverQualifiedName: smitheryServer.qualifiedName,
+      serverDisplayName: smitheryServer.displayName,
+      connectionType: smitheryConnection.type as 'http' | 'stdio',
+    });
+
+    try {
+      // Use the MCP SDK's auth function to handle OAuth
+      const result = await auth(smitheryOAuthProvider, {
+        serverUrl: smitheryConnection.url,
+      });
+
+      if (result === 'AUTHORIZED') {
+        // OAuth successful, validate the connection
+        handleSmitheryValidateWithProvider(smitheryConnection, smitheryOAuthProvider);
+      }
+      // If result is 'REDIRECT', the user will be redirected to OAuth provider
+      // and we'll handle the callback when they return
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setSmitheryValidationError(`OAuth error: ${errorMsg}`);
+      setSmitheryValidating(false);
+    }
+  };
+
+  // Listen for OAuth popup completion
+  useEffect(() => {
+    const handleOAuthMessage = async (event: MessageEvent) => {
+      // Only accept messages from same origin
+      if (event.origin !== window.location.origin) return;
+
+      if (event.data?.type === 'oauth_success' && event.data?.code) {
+        const code = event.data.code;
+
+        // Complete OAuth with the code
+        if (smitheryOAuthProvider && smitheryConnection?.url) {
+          setSmitheryValidating(true);
+          try {
+            const result = await auth(smitheryOAuthProvider, {
+              serverUrl: smitheryConnection.url,
+              authorizationCode: code,
+            });
+
+            if (result === 'AUTHORIZED') {
+              toast.success('Successfully authenticated');
+              // Now validate the connection with the tokens
+              handleSmitheryValidateWithProvider(smitheryConnection, smitheryOAuthProvider);
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            setSmitheryValidationError(`Authentication failed: ${errorMsg}`);
+            setSmitheryValidating(false);
+          }
+        }
+      } else if (event.data?.type === 'oauth_error') {
+        setSmitheryValidationError(`Authentication failed: ${event.data.error}`);
+        setSmitheryValidating(false);
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, [smitheryOAuthProvider, smitheryConnection]);
+
+  // Handle OAuth callback completion (fallback for redirect flow)
+  useEffect(() => {
+    if (isReturningFromOAuth && authorizationCode && pendingServerUrl) {
+      // Reconstruct the OAuth provider and complete the flow
+      const provider = new SmitheryBrowserOAuthProvider(pendingServerUrl);
+      setSmitheryOAuthProvider(provider);
+
+      // Set provider as Smithery and navigate to step 2
+      setSelectedProvider('smithery');
+      setStep(2);
+
+      // Complete OAuth by calling auth again with the code
+      const completeOAuth = async () => {
+        setSmitheryValidating(true);
+        try {
+          const result = await auth(provider, {
+            serverUrl: pendingServerUrl,
+            authorizationCode,
+          });
+
+          if (result === 'AUTHORIZED') {
+            clearOAuthState();
+            toast.success('Successfully authenticated');
+            // The server will be auto-selected based on the pending URL
+            // For now, just show success - user can select the server again
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          setSmitheryValidationError(`OAuth completion failed: ${errorMsg}`);
+          clearOAuthState();
+        } finally {
+          setSmitheryValidating(false);
+        }
+      };
+
+      completeOAuth();
+    }
+  }, [isReturningFromOAuth, authorizationCode, pendingServerUrl, clearOAuthState]);
+
+  // Smithery validation handler - tries without auth first, then prompts for OAuth
+  const handleSmitheryValidate = async () => {
+    if (!smitheryConnection) return;
+
+    // For stdio connections, just validate directly
+    if (smitheryConnection.type !== 'http') {
+      setSmitheryValidating(true);
+      setSmitheryValidationError(undefined);
+
+      try {
+        const validationParams = {
+          transport: 'stdio' as const,
+          command: smitheryConnection.command!,
+          args: smitheryConnection.args,
+          env: smitheryConnection.env
+        };
+
+        const result = await validateMCPConnection.mutateAsync(validationParams) as ValidateMCPResponse;
+
+        if (result.valid) {
+          setSmitheryValidated(true);
+          setMcpToolCount(result.toolCount);
+        } else {
+          setSmitheryValidationError(result.error || 'Unknown error');
+          setSmitheryValidated(false);
+        }
+      } catch (error) {
+        setSmitheryValidationError(error instanceof Error ? error.message : 'Unknown error');
+        setSmitheryValidated(false);
+      } finally {
+        setSmitheryValidating(false);
+      }
+      return;
+    }
+
+    // For HTTP connections, use OAuth provider
+    if (smitheryOAuthProvider) {
+      if (smitheryOAuthProvider.hasTokens()) {
+        // Already have tokens, validate with them
+        handleSmitheryValidateWithProvider(smitheryConnection, smitheryOAuthProvider);
+      } else {
+        // No tokens, start OAuth flow
+        handleSmitheryOAuth();
+      }
     }
   };
 
@@ -254,6 +437,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
         setSelectedToolkits(new Set(['mcp-server']));
         setStep(3);
       } else if (selectedToolkits.size > 0) {
+        // Store the selected toolkit names before moving to step 3
+        // (toolkits data won't be available in step 3 since the query is disabled)
+        const names = toolkits
+          .filter(t => selectedToolkits.has(t.slug))
+          .map(t => t.name);
+        setSelectedToolkitNames(names);
         setStep(3);
       }
     }
@@ -297,6 +486,8 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     setSmitheryServer(null);
     setSmitheryConnection(null);
     setSmitheryValidated(false);
+    setSmitheryOAuthProvider(null);
+    setSmitheryValidationError(undefined);
     onOpenChange(false);
   };
 
@@ -323,11 +514,7 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
           integrationName = `MCP: ${mcpConfig.command}`;
         }
       } else {
-        // For Composio/Arcade, use the toolkit name(s)
-        const selectedToolkitNames = toolkits
-          .filter(t => selectedToolkits.has(t.slug))
-          .map(t => t.name);
-
+        // For Composio/Arcade, use the stored toolkit names
         if (selectedToolkitNames.length > 0) {
           integrationName = selectedToolkitNames.join(', ');
         } else {
@@ -345,7 +532,9 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
 
       if (isSmitheryProvider && smitheryServer && smitheryConnection) {
         // Smithery integration with MCP connection details
-        const authHeaders = smitheryAuthToken ? { Authorization: `Bearer ${smitheryAuthToken}` } : undefined;
+        // Use OAuth tokens from the provider for authentication
+        const tokens = smitheryOAuthProvider?.tokens();
+        const authHeaders = tokens?.access_token ? { Authorization: `Bearer ${tokens.access_token}` } : undefined;
         integrationMetadata = {
           smitheryQualifiedName: smitheryServer.qualifiedName,
           smitheryDisplayName: smitheryServer.displayName,
@@ -411,6 +600,8 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       setSmitheryServer(null);
       setSmitheryConnection(null);
       setSmitheryValidated(false);
+      setSmitheryOAuthProvider(null);
+      setSmitheryValidationError(undefined);
     }
   };
 
@@ -541,39 +732,22 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
                 onServerSelect={handleSmitheryServerSelect}
               />
 
-              {/* Auth token input - shown when server is selected but not validated */}
+              {/* OAuth authentication - shown when server is selected but not validated */}
               {smitheryServer && smitheryConnection && !smitheryValidated && (
                 <div className="bg-surface3 rounded-lg p-4 space-y-3">
                   <div>
                     <Txt variant="ui-sm" className="text-icon6 font-medium">
                       {smitheryServer.displayName} selected
                     </Txt>
-                    <Txt variant="ui-xs" className="text-icon3 mt-1">
-                      Smithery-hosted servers require OAuth authentication.{' '}
-                      <a
-                        href="https://smithery.ai/docs/use/connect"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-accent1 hover:underline"
-                      >
-                        Learn how to get a token
-                      </a>
-                    </Txt>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block">
-                      <Txt variant="ui-xs" className="text-icon4 mb-1 block">
-                        OAuth Bearer Token (optional for some servers)
+                    {smitheryConnection.type === 'http' ? (
+                      <Txt variant="ui-xs" className="text-icon3 mt-1">
+                        This server requires authentication. You'll be redirected to authorize access with the service provider.
                       </Txt>
-                      <input
-                        type="password"
-                        value={smitheryAuthToken}
-                        onChange={e => setSmitheryAuthToken(e.target.value)}
-                        placeholder="Enter your Smithery OAuth token..."
-                        className="w-full px-3 py-2 text-sm bg-surface2 border border-border1 rounded-md text-icon6 placeholder:text-icon2 focus:outline-none focus:ring-1 focus:ring-accent1"
-                      />
-                    </label>
+                    ) : (
+                      <Txt variant="ui-xs" className="text-icon3 mt-1">
+                        Click below to connect to this server.
+                      </Txt>
+                    )}
                   </div>
 
                   {smitheryValidationError && (
@@ -593,8 +767,10 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
                     {smitheryValidating ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Connecting...
+                        {smitheryConnection.type === 'http' ? 'Authorizing...' : 'Connecting...'}
                       </>
+                    ) : smitheryConnection.type === 'http' && !smitheryOAuthProvider?.hasTokens() ? (
+                      'Authorize Connection'
                     ) : (
                       'Connect to Server'
                     )}
