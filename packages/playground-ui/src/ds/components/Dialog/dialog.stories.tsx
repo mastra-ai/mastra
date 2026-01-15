@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -86,27 +87,30 @@ export const LongContent: Story = {
       <DialogTrigger asChild>
         <Button>View Terms</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[80vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Terms of Service</DialogTitle>
           <DialogDescription>Please read these terms carefully.</DialogDescription>
         </DialogHeader>
-        <div className="py-4 space-y-4">
-          <p className="text-sm text-neutral5">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
-            dolore magna aliqua.
-          </p>
-          <p className="text-sm text-neutral5">
-            Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-          </p>
-          <p className="text-sm text-neutral5">
-            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-          </p>
-          <p className="text-sm text-neutral5">
-            Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
-            laborum.
-          </p>
-        </div>
+        <DialogBody className="max-h-[80vh]">
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-neutral5">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
+              dolore magna aliqua.
+            </p>
+            <p className="text-sm text-neutral5">
+              Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+              consequat.
+            </p>
+            <p className="text-sm text-neutral5">
+              Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+            </p>
+            <p className="text-sm text-neutral5">
+              Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+              laborum.
+            </p>
+          </div>
+        </DialogBody>
         <DialogFooter>
           <Button variant="outline">Decline</Button>
           <Button>Accept</Button>
