@@ -655,6 +655,10 @@ kbd {
   background: var(--ifm-navbar-background-color);
 }
 
+#doc-item-container {
+  gap: 2rem;
+}
+
 @media (min-width: 62.25rem) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
