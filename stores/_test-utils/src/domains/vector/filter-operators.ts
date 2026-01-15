@@ -104,7 +104,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         {
           name: 'Product G',
           price: 30,
-          rating: 4.0,
+          rating: 4.1,
           category: 'books',
           ...(supportsArrayMetadata ? { tags: ['sale'] } : {}),
           available: false,
@@ -113,7 +113,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
         {
           name: 'Product H',
           price: 200,
-          rating: 5.0,
+          rating: 4.95,
           category: 'home',
           ...(supportsArrayMetadata ? { tags: ['premium', 'luxury'] } : {}),
           available: true,
@@ -218,7 +218,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           filter: { rating: { $gte: 4.5 } },
         });
 
-        // Should return products with rating >= 4.5 (Product A: 4.5, Product C: 4.9, Product F: 4.7, Product H: 5.0)
+        // Should return products with rating >= 4.5 (Product A: 4.5, Product C: 4.9, Product F: 4.7, Product H: 4.95)
         expect(results.length).toBeGreaterThan(0);
         expect(results.every(r => (r.metadata?.rating as number) >= 4.5)).toBe(true);
         expect(results.length).toBe(4);
