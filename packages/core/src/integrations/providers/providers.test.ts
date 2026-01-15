@@ -52,19 +52,26 @@ describe('ComposioProvider', () => {
         items: [
           {
             name: 'GitHub',
-            key: 'github',
-            description: 'GitHub integration',
-            logo: 'https://example.com/github.png',
-            categories: ['development', 'vcs'],
-            actions: 50,
+            slug: 'github',
+            meta: {
+              description: 'GitHub integration',
+              logo: 'https://example.com/github.png',
+              categories: [
+                { id: 'dev', name: 'development' },
+                { id: 'vcs', name: 'vcs' },
+              ],
+              tools_count: 50,
+            },
           },
           {
             name: 'Slack',
-            key: 'slack',
-            description: 'Slack integration',
-            logo: 'https://example.com/slack.png',
-            categories: ['communication'],
-            actions: 30,
+            slug: 'slack',
+            meta: {
+              description: 'Slack integration',
+              logo: 'https://example.com/slack.png',
+              categories: [{ id: 'comm', name: 'communication' }],
+              tools_count: 30,
+            },
           },
         ],
         cursor: 'next-page-cursor',
@@ -139,9 +146,11 @@ describe('ComposioProvider', () => {
         items: [
           {
             name: 'Custom App',
-            key: 'custom-app',
-            description: 'Custom integration',
-            logo: 'https://example.com/custom.png',
+            slug: 'custom-app',
+            meta: {
+              description: 'Custom integration',
+              logo: 'https://example.com/custom.png',
+            },
           },
         ],
         hasMore: false,
@@ -164,24 +173,26 @@ describe('ComposioProvider', () => {
         items: [
           {
             name: 'Create Issue',
-            key: 'github_create_issue',
+            slug: 'github_create_issue',
             description: 'Create a new GitHub issue',
-            parameters: {
+            input_parameters: {
               type: 'object',
               properties: {
                 title: { type: 'string' },
                 body: { type: 'string' },
               },
             },
-            response: {
+            output_parameters: {
               type: 'object',
               properties: {
                 id: { type: 'number' },
                 url: { type: 'string' },
               },
             },
-            appKey: 'github',
-            appName: 'GitHub',
+            toolkit: {
+              slug: 'github',
+              name: 'GitHub',
+            },
           },
         ],
         cursor: 'tools-cursor',
@@ -200,11 +211,12 @@ describe('ComposioProvider', () => {
         slug: 'github_create_issue',
         name: 'Create Issue',
         description: 'Create a new GitHub issue',
-        inputSchema: mockResponse.items[0]!.parameters,
-        outputSchema: mockResponse.items[0]!.response,
+        inputSchema: mockResponse.items[0]!.input_parameters,
+        outputSchema: mockResponse.items[0]!.output_parameters,
         toolkit: 'github',
         metadata: {
-          appName: 'GitHub',
+          toolkitName: 'GitHub',
+          toolkitLogo: undefined,
         },
       });
       expect(result.nextCursor).toBe('tools-cursor');
@@ -260,7 +272,7 @@ describe('ComposioProvider', () => {
         items: [
           {
             name: 'Simple Tool',
-            key: 'simple_tool',
+            slug: 'simple_tool',
             description: 'A simple tool',
           },
         ],
@@ -282,22 +294,24 @@ describe('ComposioProvider', () => {
     it('should successfully get tool details', async () => {
       const mockTool = {
         name: 'Create Issue',
-        key: 'github_create_issue',
+        slug: 'github_create_issue',
         description: 'Create a new GitHub issue',
-        parameters: {
+        input_parameters: {
           type: 'object',
           properties: {
             title: { type: 'string' },
           },
         },
-        response: {
+        output_parameters: {
           type: 'object',
           properties: {
             id: { type: 'number' },
           },
         },
-        appKey: 'github',
-        appName: 'GitHub',
+        toolkit: {
+          slug: 'github',
+          name: 'GitHub',
+        },
       };
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -311,11 +325,12 @@ describe('ComposioProvider', () => {
         slug: 'github_create_issue',
         name: 'Create Issue',
         description: 'Create a new GitHub issue',
-        inputSchema: mockTool.parameters,
-        outputSchema: mockTool.response,
+        inputSchema: mockTool.input_parameters,
+        outputSchema: mockTool.output_parameters,
         toolkit: 'github',
         metadata: {
-          appName: 'GitHub',
+          toolkitName: 'GitHub',
+          toolkitLogo: undefined,
         },
       });
 
@@ -382,24 +397,24 @@ describe('ArcadeProvider', () => {
   describe('listToolkits', () => {
     it('should derive toolkits from tool toolkit field', async () => {
       const mockResponse = {
-        tools: [
+        items: [
           {
-            id: 'tool-1',
+            fully_qualified_name: 'tool-1',
             name: 'GitHub Create Issue',
             description: 'Create an issue',
-            toolkit: 'github',
+            toolkit: { name: 'github' },
           },
           {
-            id: 'tool-2',
+            fully_qualified_name: 'tool-2',
             name: 'GitHub Close Issue',
             description: 'Close an issue',
-            toolkit: 'github',
+            toolkit: { name: 'github' },
           },
           {
-            id: 'tool-3',
+            fully_qualified_name: 'tool-3',
             name: 'Slack Send Message',
             description: 'Send a message',
-            toolkit: 'slack',
+            toolkit: { name: 'slack' },
           },
         ],
       };
@@ -432,9 +447,9 @@ describe('ArcadeProvider', () => {
 
     it('should handle tools without toolkit field', async () => {
       const mockResponse = {
-        tools: [
+        items: [
           {
-            id: 'tool-1',
+            fully_qualified_name: 'tool-1',
             name: 'Generic Tool',
             description: 'A generic tool',
           },
@@ -455,18 +470,18 @@ describe('ArcadeProvider', () => {
 
     it('should apply search filter to toolkit names', async () => {
       const mockResponse = {
-        tools: [
+        items: [
           {
-            id: 'tool-1',
+            fully_qualified_name: 'tool-1',
             name: 'GitHub Tool',
             description: 'GitHub tool',
-            toolkit: 'github',
+            toolkit: { name: 'github' },
           },
           {
-            id: 'tool-2',
+            fully_qualified_name: 'tool-2',
             name: 'Slack Tool',
             description: 'Slack tool',
-            toolkit: 'slack',
+            toolkit: { name: 'slack' },
           },
         ],
       };
@@ -484,11 +499,11 @@ describe('ArcadeProvider', () => {
 
     it('should handle pagination for derived toolkits', async () => {
       const mockResponse = {
-        tools: Array.from({ length: 50 }, (_, i) => ({
-          id: `tool-${i}`,
+        items: Array.from({ length: 50 }, (_, i) => ({
+          fully_qualified_name: `tool-${i}`,
           name: `Tool ${i}`,
           description: `Tool ${i}`,
-          toolkit: `toolkit-${i}`,
+          toolkit: { name: `toolkit-${i}` },
         })),
       };
 
@@ -523,12 +538,12 @@ describe('ArcadeProvider', () => {
   describe('listTools', () => {
     it('should successfully list tools', async () => {
       const mockResponse = {
-        tools: [
+        items: [
           {
-            id: 'tool-1',
+            fully_qualified_name: 'tool-1',
             name: 'Create Issue',
             description: 'Create a GitHub issue',
-            toolkit: 'github',
+            toolkit: { name: 'github' },
             input: {
               type: 'object',
               properties: {
@@ -543,7 +558,7 @@ describe('ArcadeProvider', () => {
             },
           },
         ],
-        total: 1,
+        total_count: 1,
         limit: 20,
         offset: 0,
       };
@@ -560,11 +575,12 @@ describe('ArcadeProvider', () => {
         slug: 'tool-1',
         name: 'Create Issue',
         description: 'Create a GitHub issue',
-        inputSchema: mockResponse.tools[0]!.input,
-        outputSchema: mockResponse.tools[0]!.output,
+        inputSchema: mockResponse.items[0]!.input,
+        outputSchema: mockResponse.items[0]!.output,
         toolkit: 'github',
         metadata: {
           arcadeId: 'tool-1',
+          qualifiedName: undefined,
         },
       });
     });
@@ -572,7 +588,7 @@ describe('ArcadeProvider', () => {
     it('should handle toolkit filter', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ tools: [], total: 0 }),
+        json: async () => ({ items: [], total_count: 0 }),
       });
 
       await provider.listTools({ toolkitSlug: 'github' });
@@ -582,21 +598,21 @@ describe('ArcadeProvider', () => {
 
     it('should handle client-side filtering for multiple toolkits', async () => {
       const mockResponse = {
-        tools: [
+        items: [
           {
-            id: 'tool-1',
+            fully_qualified_name: 'tool-1',
             name: 'GitHub Tool',
             description: 'GitHub tool',
-            toolkit: 'github',
+            toolkit: { name: 'github' },
           },
           {
-            id: 'tool-2',
+            fully_qualified_name: 'tool-2',
             name: 'Slack Tool',
             description: 'Slack tool',
-            toolkit: 'slack',
+            toolkit: { name: 'slack' },
           },
         ],
-        total: 2,
+        total_count: 2,
       };
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -612,7 +628,7 @@ describe('ArcadeProvider', () => {
     it('should handle offset-based pagination', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ tools: [], total: 0, limit: 20, offset: 0 }),
+        json: async () => ({ items: [], total_count: 0, limit: 20, offset: 0 }),
       });
 
       await provider.listTools({ limit: 10, cursor: '20' });
@@ -623,12 +639,12 @@ describe('ArcadeProvider', () => {
 
     it('should calculate hasMore based on total and returned count', async () => {
       const mockResponse = {
-        tools: Array.from({ length: 20 }, (_, i) => ({
-          id: `tool-${i}`,
+        items: Array.from({ length: 20 }, (_, i) => ({
+          fully_qualified_name: `tool-${i}`,
           name: `Tool ${i}`,
           description: `Tool ${i}`,
         })),
-        total: 50,
+        total_count: 50,
         limit: 20,
         offset: 0,
       };
@@ -663,10 +679,10 @@ describe('ArcadeProvider', () => {
   describe('getTool', () => {
     it('should successfully get tool details', async () => {
       const mockTool = {
-        id: 'tool-1',
+        fully_qualified_name: 'tool-1',
         name: 'Create Issue',
         description: 'Create a GitHub issue',
-        toolkit: 'github',
+        toolkit: { name: 'github' },
         input: {
           type: 'object',
           properties: {
@@ -697,6 +713,7 @@ describe('ArcadeProvider', () => {
         toolkit: 'github',
         metadata: {
           arcadeId: 'tool-1',
+          qualifiedName: undefined,
         },
       });
 

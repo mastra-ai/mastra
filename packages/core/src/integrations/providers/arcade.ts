@@ -26,12 +26,17 @@ const ARCADE_BASE_URL = 'https://api.arcade.dev';
 
 /**
  * Arcade API response types
+ * Based on Arcade API OpenAPI spec at https://api.arcade.dev/v1/swagger
  */
 interface ArcadeToolResponse {
-  id: string;
+  fully_qualified_name: string;
   name: string;
+  qualified_name?: string;
   description: string;
-  toolkit?: string;
+  toolkit?: {
+    name?: string;
+    id?: string;
+  };
   input?: {
     type?: string;
     properties?: Record<string, unknown>;
@@ -41,11 +46,14 @@ interface ArcadeToolResponse {
     type?: string;
     properties?: Record<string, unknown>;
   };
+  formatted_schema?: unknown;
+  requirements?: unknown;
 }
 
 interface ArcadeListToolsResponse {
-  tools: ArcadeToolResponse[];
-  total?: number;
+  items: ArcadeToolResponse[];
+  total_count?: number;
+  page_count?: number;
   limit?: number;
   offset?: number;
 }
@@ -116,8 +124,11 @@ export class ArcadeProvider implements ToolProvider {
     // Group tools by toolkit to create toolkit summaries
     const toolkitMap = new Map<string, { name: string; tools: ArcadeToolResponse[] }>();
 
-    for (const tool of data.tools) {
-      const toolkitSlug = tool.toolkit || 'general';
+    // Safely handle empty or missing items array
+    const toolItems = Array.isArray(data.items) ? data.items : [];
+
+    for (const tool of toolItems) {
+      const toolkitSlug = tool.toolkit?.name || tool.toolkit?.id || 'general';
       const existing = toolkitMap.get(toolkitSlug);
       if (existing) {
         existing.tools.push(tool);
@@ -213,7 +224,9 @@ export class ArcadeProvider implements ToolProvider {
 
     const data = (await response.json()) as ArcadeListToolsResponse;
 
-    let tools = data.tools.map(tool => this.mapTool(tool));
+    // Safely handle empty or missing items array
+    const toolItems = Array.isArray(data.items) ? data.items : [];
+    let tools = toolItems.map(tool => this.mapTool(tool));
 
     // Client-side filtering for multiple toolkits if needed
     if (options?.toolkitSlugs && options.toolkitSlugs.length > 1) {
@@ -231,8 +244,8 @@ export class ArcadeProvider implements ToolProvider {
     }
 
     // Calculate next cursor (convert offset back to cursor)
-    const totalReturned = data.tools.length;
-    const hasMore = totalReturned === limit && (data.total ? offset + limit < data.total : true);
+    const totalReturned = toolItems.length;
+    const hasMore = totalReturned === limit && (data.total_count ? offset + limit < data.total_count : true);
     const nextCursor = hasMore ? (offset + limit).toString() : undefined;
 
     return {
@@ -280,15 +293,17 @@ export class ArcadeProvider implements ToolProvider {
    * Map Arcade tool response to ProviderTool
    */
   private mapTool(tool: ArcadeToolResponse): ProviderTool {
+    const toolkitSlug = tool.toolkit?.name || tool.toolkit?.id || 'general';
     return {
-      slug: tool.id || tool.name,
+      slug: tool.fully_qualified_name || tool.name,
       name: tool.name,
       description: tool.description,
       inputSchema: tool.input || {},
       outputSchema: tool.output,
-      toolkit: tool.toolkit || 'general',
+      toolkit: toolkitSlug,
       metadata: {
-        arcadeId: tool.id,
+        arcadeId: tool.fully_qualified_name,
+        qualifiedName: tool.qualified_name,
       },
     };
   }
