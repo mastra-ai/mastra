@@ -55,10 +55,20 @@ interface MastraRBACWorkosFullOptions extends MastraRBACWorkosOptions {
  * });
  * ```
  */
+/** Cache entry with expiration timestamp */
+interface CacheEntry {
+  permissions: string[];
+  expiresAt: number;
+}
+
+/** Default cache TTL in milliseconds (60 seconds) */
+const DEFAULT_CACHE_TTL_MS = 60 * 1000;
+
 export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   private workos: WorkOS;
   private options: MastraRBACWorkosOptions;
-  private permissionCache = new Map<string, string[]>();
+  private permissionCache = new Map<string, CacheEntry>();
+  private cacheTtlMs = DEFAULT_CACHE_TTL_MS;
 
   /**
    * Expose roleMapping for middleware access.
@@ -153,11 +163,11 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   async getPermissions(user: WorkOSUser): Promise<string[]> {
     console.log(`[WorkOS RBAC] getPermissions called for user ${user.id}`);
 
-    // Check cache first
+    // Check cache first (with TTL)
     const cached = this.permissionCache.get(user.id);
-    if (cached) {
-      console.log(`[WorkOS RBAC] Returning cached permissions: ${JSON.stringify(cached)}`);
-      return cached;
+    if (cached && Date.now() < cached.expiresAt) {
+      console.log(`[WorkOS RBAC] Returning cached permissions: ${JSON.stringify(cached.permissions)}`);
+      return cached.permissions;
     }
 
     // Get roles and resolve permissions
@@ -173,8 +183,11 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
       console.log(`[WorkOS RBAC] Resolved permissions from roles: ${JSON.stringify(permissions)}`);
     }
 
-    // Cache the result
-    this.permissionCache.set(user.id, permissions);
+    // Cache the result with TTL
+    this.permissionCache.set(user.id, {
+      permissions,
+      expiresAt: Date.now() + this.cacheTtlMs,
+    });
 
     return permissions;
   }

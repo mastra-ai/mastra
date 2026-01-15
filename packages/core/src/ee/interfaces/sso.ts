@@ -32,6 +32,11 @@ export interface SSOCallbackResult<TUser> {
     /** Token expiration time */
     expiresAt?: Date;
   };
+  /**
+   * Session cookies to set in the response.
+   * Providers using encrypted cookie sessions (like AuthKit) should populate this.
+   */
+  cookies?: string[];
 }
 
 /**

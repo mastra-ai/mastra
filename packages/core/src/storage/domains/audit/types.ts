@@ -14,6 +14,8 @@ export interface AuditActor {
   id: string;
   /** Actor email (for users) */
   email?: string;
+  /** Organization ID (for multi-tenant systems like WorkOS) */
+  organizationId?: string;
   /** IP address of the request */
   ip?: string;
   /** User agent of the request */

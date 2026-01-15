@@ -5,8 +5,20 @@
  */
 
 import type { Mastra } from '../mastra';
-import type { AuditConfig, ServerConfig } from './types';
-import type { CreateAuditEventInput, AuditActor, AuditResource } from '../storage/domains/audit';
+import type { AuditConfig, MastraAuditProvider, ServerConfig } from './types';
+import type { AuditEvent, CreateAuditEventInput, AuditActor, AuditResource } from '../storage/domains/audit';
+
+/**
+ * Check if a value is a MastraAuditProvider.
+ */
+function isAuditProvider(value: unknown): value is MastraAuditProvider {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'logEvent' in value &&
+    typeof (value as MastraAuditProvider).logEvent === 'function'
+  );
+}
 
 /**
  * Normalized audit configuration with defaults applied.
@@ -23,13 +35,16 @@ export interface NormalizedAuditConfig {
   retention?: {
     days?: number;
   };
+  provider?: MastraAuditProvider;
 }
 
 /**
  * Normalize audit config from server config.
  * Handles `true` (enable all) vs config object.
  */
-export function normalizeAuditConfig(config: true | AuditConfig | undefined): NormalizedAuditConfig {
+export function normalizeAuditConfig(
+  config: true | AuditConfig | MastraAuditProvider | undefined,
+): NormalizedAuditConfig {
   if (!config) {
     return {
       enabled: false,
@@ -43,8 +58,23 @@ export function normalizeAuditConfig(config: true | AuditConfig | undefined): No
     };
   }
 
+  // Check if it's a provider instance
+  if (isAuditProvider(config)) {
+    return {
+      enabled: true,
+      events: {
+        auth: true,
+        agents: true,
+        workflows: true,
+        tools: true,
+        permissions: true,
+      },
+      provider: config,
+    };
+  }
+
   if (config === true) {
-    // Enable all events with defaults
+    // Enable all events with defaults (local storage)
     return {
       enabled: true,
       events: {
@@ -118,12 +148,33 @@ export class AuditService {
   /**
    * Log an audit event.
    *
+   * If a provider is configured, events are sent to that provider.
+   * Otherwise, events are stored in local storage.
+   *
    * @param category - Event category (determines if event should be logged based on config)
    * @param event - Event data
    */
   async log(category: AuditEventCategory, event: CreateAuditEventInput): Promise<void> {
     if (!this.shouldLog(category)) return;
 
+    // Create the full event with id and timestamp
+    const fullEvent: AuditEvent = {
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      ...event,
+    };
+
+    // If a provider is configured, use it
+    if (this.config.provider) {
+      try {
+        await this.config.provider.logEvent(fullEvent);
+      } catch (error) {
+        this.mastra.getLogger?.().warn('Failed to log audit event to provider', { error, event });
+      }
+      return;
+    }
+
+    // Default: store in local storage
     const storage = this.mastra.getStorage?.();
     if (!storage) return;
 
@@ -133,7 +184,6 @@ export class AuditService {
     try {
       await auditStore.logEvent(event);
     } catch (error) {
-      // Log error but don't throw - audit logging should not break main flow
       this.mastra.getLogger?.().warn('Failed to log audit event', { error, event });
     }
   }
@@ -141,11 +191,15 @@ export class AuditService {
   /**
    * Helper to create an actor from request context.
    */
-  static createActorFromUser(user: { id: string; email?: string }, request?: Request): AuditActor {
+  static createActorFromUser(
+    user: { id: string; email?: string; organizationId?: string },
+    request?: Request,
+  ): AuditActor {
     return {
       type: 'user',
       id: user.id,
       email: user.email,
+      organizationId: user.organizationId,
       ip: request?.headers.get('x-forwarded-for') ?? request?.headers.get('x-real-ip') ?? undefined,
       userAgent: request?.headers.get('user-agent') ?? undefined,
     };
