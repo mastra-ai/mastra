@@ -9,7 +9,11 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type {
+  AgentExecutionOptions,
+  AgentExecutionOptionsBase,
+  SerializableStructuredOutputOptions,
+} from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -29,6 +33,8 @@ import type {
   UpdateModelInModelListParams,
   ReorderModelListParams,
   NetworkStreamParams,
+  StreamParamsBase,
+  StreamParamsBaseWithoutMessages,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
@@ -298,30 +304,32 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate<OUTPUT = undefined>(
+  async generate(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: StreamParamsBaseWithoutMessages,
+  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generate<OUTPUT extends {}>(
+    messages: MessageListInput,
+    options: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+    },
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  // Backward compatibility overload
-  async generate<OUTPUT = undefined>(
-    params: StreamParams<OUTPUT>,
+  // Catch-all overload to handle conditional types when OUTPUT is generic
+  async generate<OUTPUT>(
+    messages: MessageListInput,
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: SerializableStructuredOutputOptions<any>;
+    },
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  async generate<OUTPUT = undefined>(
-    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+  async generate<OUTPUT = any>(
+    messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamParams<OUTPUT>;
-    if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
-      // Old signature: single parameter object
-      params = messagesOrParams;
-    } else {
-      // New signature: messages as first param, options as second
-      params = {
-        messages: messagesOrParams as MessageListInput,
-        ...options,
-      } as StreamParams<OUTPUT>;
-    }
+    const params = {
+      messages: messages,
+      ...options,
+    } as StreamParams<OUTPUT>;
     const processedParams = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),

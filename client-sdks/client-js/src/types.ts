@@ -128,14 +128,16 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<OUTPUT = undefined> = {
+export type StreamParamsBase<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
-> &
+>;
+export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = Omit<StreamParamsBase<OUTPUT>, 'messages'>;
+export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> &
   (OUTPUT extends {}
     ? { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> }
     : { structuredOutput?: never });
