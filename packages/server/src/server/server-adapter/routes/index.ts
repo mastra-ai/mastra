@@ -7,6 +7,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import { AUTH_ROUTES } from './auth';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -89,6 +90,7 @@ export type ServerRoute<
 
 export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...AGENTS_ROUTES,
+  ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,
   ...PROCESSORS_ROUTES,
