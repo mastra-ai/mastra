@@ -12,7 +12,7 @@ export interface BreadcrumbProps {
 export const Breadcrumb = ({ children, label }: BreadcrumbProps) => {
   return (
     <nav aria-label={label}>
-      <ol className="gap-sm flex items-center">{children}</ol>
+      <ol className="gap-0.5 flex items-center">{children}</ol>
     </nav>
   );
 };
