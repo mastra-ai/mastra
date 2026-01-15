@@ -62,6 +62,11 @@ export interface InvestigateOptions {
   staleOnly?: boolean;    // Only list stale questions from failures
   // Original dataset search
   searchOriginal?: string; // Search original dataset for a keyword
+  // Improve question/answer in dataset
+  improve?: string;        // Question ID to add improvements for
+  improveQuestion?: string; // Improved question text
+  improveAnswer?: string;   // Improved answer text
+  improveNote?: string;     // Improvement note
 }
 
 interface FailuresFile {
@@ -258,6 +263,12 @@ export class InvestigateCommand {
     // Original dataset search
     if (options.searchOriginal && options.questionId) {
       await this.searchOriginalDataset(options.questionId, options.searchOriginal);
+      return;
+    }
+
+    // Improve question/answer in dataset
+    if (options.improve) {
+      await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote);
       return;
     }
 
@@ -1915,6 +1926,72 @@ export class InvestigateCommand {
     return { omPath: null, config: '', dataset: '', questionDir: '' };
   }
 
+  // --------------------------------------------------------------------------
+  // Add Improvement to Dataset
+  // --------------------------------------------------------------------------
+
+  private async addImprovement(
+    questionId: string,
+    improvedQuestion?: string,
+    improvedAnswer?: string,
+    improvementNote?: string,
+  ): Promise<void> {
+    if (!improvedQuestion && !improvedAnswer && !improvementNote) {
+      console.log('❌ At least one of --improve-question, --improve-answer, or --improve-note is required');
+      return;
+    }
+
+    const datasetPath = join(this.datasetDir, 'longmemeval_s.json');
+    
+    if (!existsSync(datasetPath)) {
+      console.log(`❌ Dataset not found: ${datasetPath}`);
+      return;
+    }
+
+    // Load dataset
+    const datasetContent = await readFile(datasetPath, 'utf-8');
+    const dataset: LongMemEvalQuestion[] = JSON.parse(datasetContent);
+
+    // Find the question
+    const questionIndex = dataset.findIndex(q => q.question_id === questionId);
+    if (questionIndex === -1) {
+      console.log(`❌ Question not found: ${questionId}`);
+      return;
+    }
+
+    const question = dataset[questionIndex];
+    
+    // Show current state
+    console.log(`\n📝 Updating question: ${questionId}`);
+    console.log(`   Type: ${question.question_type}`);
+    console.log(`   Question: ${question.question.substring(0, 80)}...`);
+    console.log(`   Expected: ${String(question.answer).substring(0, 80)}`);
+    
+    // Show what's being updated
+    console.log('\n📋 Changes:');
+    
+    if (improvedQuestion) {
+      console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
+      question.improved_question = improvedQuestion;
+    }
+    
+    if (improvedAnswer) {
+      console.log(`   improved_answer: ${question.improved_answer || '(not set)'} → ${improvedAnswer}`);
+      question.improved_answer = improvedAnswer;
+    }
+    
+    if (improvementNote) {
+      console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
+      question.improvement_note = improvementNote;
+    }
+
+    // Save dataset
+    await writeFile(datasetPath, JSON.stringify(dataset, null, 2));
+    
+    console.log('\n✅ Dataset updated!');
+    console.log('   Run `pnpm run sync-improved-om-qa` to sync to prepared data');
+  }
+
   private showHelp(): void {
     console.log(`
 📋 Investigation Workflow
@@ -1935,6 +2012,9 @@ Data Freshness:
   pnpm investigate --check-stale                     Check all data for staleness
   pnpm investigate --check-stale -q <id>             Check specific question
   pnpm investigate --check-stale --stale-only        List only stale questions
+
+Dataset Improvements:
+  pnpm investigate --improve <id> --improve-question "..." --improve-answer "..." --improve-note "..."
 
 Examples:
   pnpm investigate run_1234567890

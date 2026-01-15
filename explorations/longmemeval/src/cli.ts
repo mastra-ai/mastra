@@ -1213,6 +1213,10 @@ program
   .option('--check-stale', 'Check if prepared data is stale (pre-cursor-fix)')
   .option('--stale-only', 'Only list stale questions (use with --check-stale)')
   .option('--search-original <keyword>', 'Search original dataset for a keyword (shows full context)')
+  .option('--improve <question-id>', 'Add improvements to a question in the dataset')
+  .option('--improve-question <text>', 'Improved question text (use with --improve)')
+  .option('--improve-answer <text>', 'Improved answer text (use with --improve)')
+  .option('--improve-note <text>', 'Improvement note (use with --improve)')
   .action(async (runId, options) => {
     try {
       const command = new InvestigateCommand({
@@ -1242,6 +1246,10 @@ program
         checkStale: options.checkStale,
         staleOnly: options.staleOnly,
         searchOriginal: options.searchOriginal,
+        improve: options.improve,
+        improveQuestion: options.improveQuestion,
+        improveAnswer: options.improveAnswer,
+        improveNote: options.improveNote,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
