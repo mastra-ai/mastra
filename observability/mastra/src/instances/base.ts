@@ -28,7 +28,7 @@ import { TracingEventType } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
-import { CachedSpan, NoOpSpan } from '../spans';
+import { NoOpSpan } from '../spans';
 
 // ============================================================================
 // Abstract Base Class
@@ -197,7 +197,21 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * @returns A span that can have lifecycle methods called on it
    */
   rebuildSpan<TType extends SpanType>(cached: AnyExportedSpan): Span<TType> {
-    const span = new CachedSpan<TType>(cached as any, this);
+    // Create span with existing IDs from cached data
+    const span = this.createSpan<TType>({
+      name: cached.name,
+      type: cached.type as TType,
+      traceId: cached.traceId,
+      spanId: cached.id,
+      parentSpanId: cached.parentSpanId,
+      startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
+      input: cached.input,
+      attributes: cached.attributes as any,
+      metadata: cached.metadata,
+      entityType: cached.entityType,
+      entityId: cached.entityId,
+      entityName: cached.entityName,
+    });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);

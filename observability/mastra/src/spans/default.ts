@@ -17,6 +17,16 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     super(options, observabilityInstance);
 
+    // If spanId is provided, this is a rebuilt span - use provided IDs directly
+    if (options.spanId) {
+      this.id = options.spanId;
+      this.traceId = options.traceId!;
+      if (options.parentSpanId) {
+        this.parentSpanId = options.parentSpanId;
+      }
+      return;
+    }
+
     // If bridge and not internal span, use bridge to init span
     const bridge = observabilityInstance.getBridge();
     if (bridge && !this.isInternal) {

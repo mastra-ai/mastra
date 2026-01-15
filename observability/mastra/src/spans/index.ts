@@ -3,7 +3,6 @@
  */
 
 export * from './base';
-export * from './cached';
 export * from './default';
 export * from './no-op';
 export * from './serialization';

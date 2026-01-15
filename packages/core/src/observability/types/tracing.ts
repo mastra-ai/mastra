@@ -716,10 +716,20 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    */
   traceId?: string;
   /**
+   * Span ID to use for this span (1-16 hexadecimal characters).
+   * Only used when rebuilding a span from cached data.
+   */
+  spanId?: string;
+  /**
    * Parent span ID to use for this span (1-16 hexadecimal characters).
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /**
+   * Start time for this span.
+   * Only used when rebuilding a span from cached data.
+   */
+  startTime?: Date;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
 }
