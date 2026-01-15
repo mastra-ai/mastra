@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Key } from 'lucide-react';
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/ds/components/Dialog';
@@ -15,9 +15,9 @@ import { ToolSelector } from './tool-selector';
 import { MCPConnectionInput } from './mcp-connection-input';
 import { SmitheryBrowser } from './smithery-browser';
 import type { MCPConnectionConfig } from './mcp-connection-input';
-import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations, useOAuthCallback } from '../hooks';
+import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations, useOAuthCallback, useArcadeAuth } from '../hooks';
 import { SmitheryBrowserOAuthProvider, storePendingOAuthState } from '../lib/smithery-oauth-provider';
-import type { IntegrationProvider } from '../types';
+import type { IntegrationProvider, ProviderToolkit } from '../types';
 import type { ValidateMCPResponse, SmitheryServer, SmitheryServerConnection } from '@mastra/client-js';
 
 /**
@@ -73,6 +73,35 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const [smitheryOAuthProvider, setSmitheryOAuthProvider] = useState<SmitheryBrowserOAuthProvider | null>(null);
   const [smitheryValidating, setSmitheryValidating] = useState(false);
   const [smitheryValidationError, setSmitheryValidationError] = useState<string | undefined>();
+
+  // Arcade-specific state for auth
+  const [arcadeToolkitsRequiringOAuth, setArcadeToolkitsRequiringOAuth] = useState<ProviderToolkit[]>([]);
+  const [arcadeToolkitsRequiringSecrets, setArcadeToolkitsRequiringSecrets] = useState<ProviderToolkit[]>([]);
+  const [arcadeAuthPending, setArcadeAuthPending] = useState(false);
+  const [showArcadeSecretsWarning, setShowArcadeSecretsWarning] = useState(false);
+
+  // Arcade auth hook
+  const {
+    authState: arcadeAuthState,
+    authorize: arcadeAuthorize,
+    reset: resetArcadeAuth,
+    isAuthorizing: isArcadeAuthorizing,
+  } = useArcadeAuth({
+    onSuccess: () => {
+      toast.success('Successfully authorized');
+      // After successful auth, move to step 3
+      const names = toolkits
+        .filter(t => selectedToolkits.has(t.slug))
+        .map(t => t.name);
+      setSelectedToolkitNames(names);
+      setArcadeAuthPending(false);
+      setStep(3);
+    },
+    onError: (error) => {
+      toast.error(`Authorization failed: ${error}`);
+      setArcadeAuthPending(false);
+    },
+  });
 
   // OAuth callback handling
   const { isReturningFromOAuth, authorizationCode, serverUrl: pendingServerUrl, clearOAuthState } = useOAuthCallback();
@@ -414,6 +443,9 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     setMcpToolCount(result.toolCount);
   };
 
+  // Check if Arcade provider
+  const isArcadeProvider = selectedProvider === 'arcade';
+
   // Navigation handlers
   const handleNext = () => {
     if (step === 1 && selectedProvider) {
@@ -437,6 +469,34 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
         setSelectedToolkits(new Set(['mcp-server']));
         setStep(3);
       } else if (selectedToolkits.size > 0) {
+        // For Arcade, check if any selected toolkits require auth
+        if (isArcadeProvider) {
+          const selectedToolkitsList = toolkits.filter(t => selectedToolkits.has(t.slug));
+
+          // Separate OAuth and secret-based toolkits
+          const oauthToolkits = selectedToolkitsList.filter(t => t.metadata?.authType === 'oauth');
+          const secretToolkits = selectedToolkitsList.filter(t => t.metadata?.authType === 'secret');
+
+          setArcadeToolkitsRequiringOAuth(oauthToolkits);
+          setArcadeToolkitsRequiringSecrets(secretToolkits);
+
+          // If there are secret-based toolkits, show warning but allow proceeding
+          if (secretToolkits.length > 0) {
+            setShowArcadeSecretsWarning(true);
+          }
+
+          // If there are OAuth toolkits, start auth flow
+          if (oauthToolkits.length > 0) {
+            const firstToolkit = oauthToolkits[0];
+            if (firstToolkit?.slug) {
+              setArcadeAuthPending(true);
+              // Start authorization for the first OAuth toolkit
+              arcadeAuthorize(firstToolkit.slug);
+              return;
+            }
+          }
+        }
+
         // Store the selected toolkit names before moving to step 3
         // (toolkits data won't be available in step 3 since the query is disabled)
         const names = toolkits
@@ -488,6 +548,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     setSmitheryValidated(false);
     setSmitheryOAuthProvider(null);
     setSmitheryValidationError(undefined);
+    // Reset Arcade auth state
+    setArcadeToolkitsRequiringOAuth([]);
+    setArcadeToolkitsRequiringSecrets([]);
+    setArcadeAuthPending(false);
+    setShowArcadeSecretsWarning(false);
+    resetArcadeAuth();
     onOpenChange(false);
   };
 
@@ -625,7 +691,7 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const canGoNext = step === 1
     ? (isMCPProvider ? mcpValidated : !!selectedProvider)
     : step === 2
-    ? (isSmitheryProvider ? smitheryValidated : selectedToolkits.size > 0)
+    ? (isSmitheryProvider ? smitheryValidated : selectedToolkits.size > 0 && !arcadeAuthPending)
     : false;
   const isLastStep = step === 3;
 
@@ -802,20 +868,156 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
           )}
 
           {step === 2 && selectedProvider && !isMCPProvider && !isSmitheryProvider && (
-            <ToolkitBrowser
-              toolkits={toolkits}
-              isLoading={isLoadingToolkits}
-              loadingMessage={
-                selectedProvider === 'arcade'
-                  ? "Gathering all of Arcade's available tools... this may take a minute."
-                  : undefined
-              }
-              selectedToolkits={selectedToolkits}
-              onSelectionChange={handleToolkitSelectionChange}
-              hasMore={hasNextPage}
-              onLoadMore={fetchNextPage}
-              isLoadingMore={isFetchingNextPage}
-            />
+            <div className="relative">
+              <ToolkitBrowser
+                toolkits={toolkits}
+                isLoading={isLoadingToolkits}
+                loadingMessage={
+                  selectedProvider === 'arcade'
+                    ? "Gathering all of Arcade's available tools... this may take a minute."
+                    : undefined
+                }
+                selectedToolkits={selectedToolkits}
+                onSelectionChange={handleToolkitSelectionChange}
+                hasMore={hasNextPage}
+                onLoadMore={fetchNextPage}
+                isLoadingMore={isFetchingNextPage}
+              />
+
+              {/* Arcade authorization overlay */}
+              {arcadeAuthPending && (
+                <div className="absolute inset-0 bg-surface1/90 flex items-center justify-center z-10">
+                  <div className="bg-surface3 rounded-lg p-6 max-w-md text-center space-y-4 shadow-lg border border-border1">
+                    {isArcadeAuthorizing ? (
+                      <>
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-accent1" />
+                        <div className="space-y-2">
+                          <Txt variant="ui-md" className="text-icon6 font-medium">
+                            Authorizing {arcadeToolkitsRequiringOAuth[0]?.name || 'toolkit'}
+                          </Txt>
+                          <Txt variant="ui-sm" className="text-icon3">
+                            {arcadeAuthState.authorizationUrl
+                              ? 'Complete authorization in the popup window...'
+                              : 'Initiating authorization...'}
+                          </Txt>
+                        </div>
+                        {arcadeAuthState.authorizationUrl && (
+                          <div className="pt-2">
+                            <Button
+                              variant="outline"
+                              size="md"
+                              onClick={() => window.open(arcadeAuthState.authorizationUrl, '_blank')}
+                            >
+                              Reopen Authorization Window
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : arcadeAuthState.status === 'failed' ? (
+                      <>
+                        <div className="h-8 w-8 mx-auto rounded-full bg-destructive1/10 flex items-center justify-center">
+                          <Txt variant="ui-lg" className="text-destructive1">✕</Txt>
+                        </div>
+                        <div className="space-y-2">
+                          <Txt variant="ui-md" className="text-icon6 font-medium">
+                            Authorization Failed
+                          </Txt>
+                          <Txt variant="ui-sm" className="text-destructive1">
+                            {arcadeAuthState.error || 'Unable to authorize. Please try again.'}
+                          </Txt>
+                        </div>
+                        <div className="flex gap-2 justify-center pt-2">
+                          <Button
+                            variant="outline"
+                            size="md"
+                            onClick={() => {
+                              setArcadeAuthPending(false);
+                              resetArcadeAuth();
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="md"
+                            onClick={() => {
+                              const firstToolkit = arcadeToolkitsRequiringOAuth[0];
+                              if (firstToolkit?.slug) {
+                                arcadeAuthorize(firstToolkit.slug);
+                              }
+                            }}
+                          >
+                            Try Again
+                          </Button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {/* Arcade API key warning banner */}
+              {showArcadeSecretsWarning && arcadeToolkitsRequiringSecrets.length > 0 && !arcadeAuthPending && (
+                <div className="absolute inset-0 bg-surface1/90 flex items-center justify-center z-10">
+                  <div className="bg-surface3 rounded-lg p-6 max-w-lg text-center space-y-4 shadow-lg border border-border1">
+                    <div className="h-10 w-10 mx-auto rounded-full bg-warning1/10 flex items-center justify-center">
+                      <Key className="h-5 w-5 text-warning1" />
+                    </div>
+                    <div className="space-y-2">
+                      <Txt variant="ui-md" className="text-icon6 font-medium">
+                        API Keys Required
+                      </Txt>
+                      <Txt variant="ui-sm" className="text-icon3">
+                        The following toolkits require API keys to be configured in your{' '}
+                        <a
+                          href="https://arcade.dev/dashboard"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-accent1 hover:underline"
+                        >
+                          Arcade dashboard
+                        </a>
+                        :
+                      </Txt>
+                      <div className="bg-surface2 rounded p-3 mt-2 text-left max-h-32 overflow-y-auto">
+                        {arcadeToolkitsRequiringSecrets.map(toolkit => (
+                          <div key={toolkit.slug} className="flex items-center justify-between py-1">
+                            <Txt variant="ui-sm" className="text-icon6">{toolkit.name}</Txt>
+                            <Txt variant="ui-xs" className="text-icon3 font-mono">
+                              {(toolkit.metadata?.secretKey as string) || 'API_KEY'}
+                            </Txt>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-center pt-2">
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={() => setShowArcadeSecretsWarning(false)}
+                      >
+                        Go Back
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="md"
+                        onClick={() => {
+                          setShowArcadeSecretsWarning(false);
+                          // Proceed to step 3
+                          const names = toolkits
+                            .filter(t => selectedToolkits.has(t.slug))
+                            .map(t => t.name);
+                          setSelectedToolkitNames(names);
+                          setStep(3);
+                        }}
+                      >
+                        Continue Anyway
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {step === 3 && selectedProvider && (

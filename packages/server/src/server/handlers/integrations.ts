@@ -1187,13 +1187,13 @@ export const ARCADE_AUTHORIZE_ROUTE = createRoute({
   responseType: 'json',
   bodySchema: arcadeAuthorizeBodySchema,
   responseSchema: arcadeAuthorizeResponseSchema,
-  summary: 'Authorize Arcade tool',
-  description: 'Initiate OAuth authorization for an Arcade tool that requires authentication',
+  summary: 'Authorize Arcade toolkit',
+  description: 'Initiate OAuth authorization for an Arcade toolkit that requires authentication',
   tags: ['Integrations', 'Arcade'],
-  handler: async ({ toolName, userId }) => {
+  handler: async ({ toolkitSlug, userId }) => {
     try {
       const arcadeProvider = new ArcadeProvider();
-      const response = await arcadeProvider.authorize(toolName, userId);
+      const response = await arcadeProvider.authorize(toolkitSlug, userId);
       return response;
     } catch (error) {
       return handleError(error, 'Error initiating Arcade authorization');

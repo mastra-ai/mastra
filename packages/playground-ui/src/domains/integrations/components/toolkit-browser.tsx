@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Lock, Key } from 'lucide-react';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
@@ -7,6 +7,7 @@ import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { Button } from '@/ds/components/Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import type { ProviderToolkit } from '../types';
 
@@ -233,6 +234,11 @@ function ToolkitCard({ toolkit, isSelected, onToggle }: ToolkitCardProps) {
     onToggle?.();
   };
 
+  // Check auth requirements from metadata
+  const authType = toolkit.metadata?.authType as 'oauth' | 'secret' | undefined;
+  const authProvider = toolkit.metadata?.authProvider as string | undefined;
+  const secretKey = toolkit.metadata?.secretKey as string | undefined;
+
   return (
     <div
       className={cn(
@@ -265,9 +271,41 @@ function ToolkitCard({ toolkit, isSelected, onToggle }: ToolkitCardProps) {
           />
         )}
         <div className="flex-1 space-y-1">
-          <Txt variant="ui-md" className="text-icon6 font-medium">
-            {toolkit.name}
-          </Txt>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Txt variant="ui-md" className="text-icon6 font-medium">
+              {toolkit.name}
+            </Txt>
+            {authType === 'oauth' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 rounded bg-accent1/10 px-1.5 py-0.5">
+                    <Lock className="h-3 w-3 text-accent1" />
+                    <Txt variant="ui-xs" className="text-accent1">
+                      OAuth
+                    </Txt>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Requires {authProvider || 'OAuth'} authorization
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {authType === 'secret' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 rounded bg-warning1/10 px-1.5 py-0.5">
+                    <Key className="h-3 w-3 text-warning1" />
+                    <Txt variant="ui-xs" className="text-warning1">
+                      API Key
+                    </Txt>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Requires {secretKey || 'API key'} configured in Arcade
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
           {toolkit.category && (
             <Txt variant="ui-xs" className="text-icon3">
               {toolkit.category}

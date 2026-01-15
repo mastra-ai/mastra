@@ -25,6 +25,204 @@ import type {
 const ARCADE_BASE_URL = 'https://api.arcade.dev';
 
 /**
+ * Static list of known Arcade toolkits.
+ * This avoids the expensive operation of fetching all 7000+ tools just to discover toolkit names.
+ * Updated: 2025-01-15
+ */
+const ARCADE_TOOLKITS = [
+  'AirtableApi',
+  'ArcadeEngineApi',
+  'Asana',
+  'AsanaApi',
+  'AshbyApi',
+  'BoxApi',
+  'Brightdata',
+  'CalendlyApi',
+  'Clickup',
+  'ClickupApi',
+  'CodeSandbox',
+  'Confluence',
+  'CursorAgentsApi',
+  'CustomerioApi',
+  'CustomerioPipelinesApi',
+  'CustomerioTrackApi',
+  'DatadogApi',
+  'Dropbox',
+  'E2b',
+  'ExaApi',
+  'Figma',
+  'FigmaApi',
+  'Firecrawl',
+  'FreshserviceApi',
+  'Github',
+  'GithubApi',
+  'Gmail',
+  'Google',
+  'GoogleCalendar',
+  'GoogleContacts',
+  'GoogleDocs',
+  'GoogleDrive',
+  'GoogleFinance',
+  'GoogleFlights',
+  'GoogleHotels',
+  'GoogleJobs',
+  'GoogleMaps',
+  'GoogleNews',
+  'GoogleSearch',
+  'GoogleSheets',
+  'GoogleShopping',
+  'GoogleSlides',
+  'Hubspot',
+  'HubspotAutomationApi',
+  'HubspotCmsApi',
+  'HubspotConversationsApi',
+  'HubspotCrmApi',
+  'HubspotEventsApi',
+  'HubspotMarketingApi',
+  'HubspotMeetingsApi',
+  'HubspotUsersApi',
+  'Imgflip',
+  'IntercomApi',
+  'Jira',
+  'Linear',
+  'Linkedin',
+  'LumaApi',
+  'MailchimpMarketingApi',
+  'Math',
+  'Microsoft',
+  'MicrosoftTeams',
+  'MiroApi',
+  'NotionToolkit',
+  'OutlookCalendar',
+  'OutlookMail',
+  'Pagerduty',
+  'PagerdutyApi',
+  'PosthogApi',
+  'Pylon',
+  'PylonApi',
+  'Reddit',
+  'Salesforce',
+  'Search',
+  'Sharepoint',
+  'Slack',
+  'SlackApi',
+  'Spotify',
+  'SquareupApi',
+  'Stripe',
+  'StripeApi',
+  'TicktickApi',
+  'TrelloApi',
+  'VercelApi',
+  'Walmart',
+  'WeaviateApi',
+  'Web',
+  'X',
+  'XeroApi',
+  'Youtube',
+  'Zendesk',
+  'ZohoBooksApi',
+  'Zoom',
+] as const;
+
+/**
+ * Auth requirements for each Arcade toolkit.
+ * - oauth: Requires user authorization via OAuth popup
+ * - secret: Requires API key configured in Arcade dashboard
+ * Updated: 2025-01-15
+ */
+const ARCADE_TOOLKIT_AUTH: Record<string, { type: 'oauth' | 'secret'; provider?: string; secretKey?: string }> = {
+  AirtableApi: { type: 'oauth', provider: 'airtable' },
+  ArcadeEngineApi: { type: 'secret', secretKey: 'ARCADE_API_KEY' },
+  Asana: { type: 'oauth', provider: 'asana' },
+  AsanaApi: { type: 'oauth', provider: 'asana' },
+  AshbyApi: { type: 'secret', secretKey: 'ASHBY_API_KEY' },
+  Brightdata: { type: 'secret', secretKey: 'BRIGHTDATA_API_KEY' },
+  CalendlyApi: { type: 'oauth', provider: 'calendly' },
+  Clickup: { type: 'oauth', provider: 'clickup' },
+  ClickupApi: { type: 'oauth', provider: 'clickup' },
+  CodeSandbox: { type: 'secret', secretKey: 'E2B_API_KEY' },
+  Confluence: { type: 'oauth', provider: 'atlassian' },
+  CursorAgentsApi: { type: 'secret', secretKey: 'CURSOR_AGENTS_API_KEY' },
+  CustomerioApi: { type: 'secret', secretKey: 'CUSTOMERIO_API_KEY' },
+  CustomerioPipelinesApi: { type: 'secret', secretKey: 'CUSTOMERIO_TRACK_API_KEY' },
+  CustomerioTrackApi: { type: 'secret', secretKey: 'CUSTOMERIO_SITE_ID' },
+  DatadogApi: { type: 'secret', secretKey: 'DATADOG_API_KEY' },
+  Dropbox: { type: 'oauth', provider: 'dropbox' },
+  E2b: { type: 'secret', secretKey: 'E2B_API_KEY' },
+  ExaApi: { type: 'secret', secretKey: 'EXA_API_KEY' },
+  Figma: { type: 'oauth', provider: 'figma' },
+  FigmaApi: { type: 'oauth', provider: 'figma' },
+  Firecrawl: { type: 'secret', secretKey: 'FIRECRAWL_API_KEY' },
+  FreshserviceApi: { type: 'secret', secretKey: 'FRESHSERVICE_SUBDOMAIN' },
+  Github: { type: 'oauth', provider: 'github' },
+  GithubApi: { type: 'oauth', provider: 'github' },
+  Gmail: { type: 'oauth', provider: 'google' },
+  Google: { type: 'oauth', provider: 'google' },
+  GoogleCalendar: { type: 'oauth', provider: 'google' },
+  GoogleContacts: { type: 'oauth', provider: 'google' },
+  GoogleDocs: { type: 'oauth', provider: 'google' },
+  GoogleDrive: { type: 'oauth', provider: 'google' },
+  GoogleFinance: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleFlights: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleHotels: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleJobs: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleMaps: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleNews: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleSearch: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleSheets: { type: 'oauth', provider: 'google' },
+  GoogleShopping: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  GoogleSlides: { type: 'oauth', provider: 'google' },
+  Hubspot: { type: 'oauth', provider: 'hubspot' },
+  HubspotAutomationApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotCmsApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotConversationsApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotCrmApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotEventsApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotMarketingApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotMeetingsApi: { type: 'oauth', provider: 'hubspot' },
+  HubspotUsersApi: { type: 'oauth', provider: 'hubspot' },
+  Imgflip: { type: 'secret', secretKey: 'IMGFLIP_USERNAME' },
+  IntercomApi: { type: 'secret', secretKey: 'INTERCOM_API_SUBDOMAIN' },
+  Jira: { type: 'oauth', provider: 'atlassian' },
+  Linear: { type: 'oauth', provider: 'linear' },
+  Linkedin: { type: 'oauth', provider: 'linkedin' },
+  LumaApi: { type: 'secret', secretKey: 'LUMA_API_KEY' },
+  MailchimpMarketingApi: { type: 'oauth', provider: 'mailchimp' },
+  Microsoft: { type: 'oauth', provider: 'microsoft' },
+  MicrosoftTeams: { type: 'oauth', provider: 'microsoft' },
+  MiroApi: { type: 'oauth', provider: 'miro' },
+  NotionToolkit: { type: 'oauth', provider: 'notion' },
+  OutlookCalendar: { type: 'oauth', provider: 'microsoft' },
+  OutlookMail: { type: 'oauth', provider: 'microsoft' },
+  Pagerduty: { type: 'oauth', provider: 'pagerduty' },
+  PagerdutyApi: { type: 'oauth', provider: 'pagerduty' },
+  PosthogApi: { type: 'secret', secretKey: 'POSTHOG_SERVER_URL' },
+  Pylon: { type: 'secret', secretKey: 'PYLON_API_TOKEN' },
+  PylonApi: { type: 'secret', secretKey: 'PYLON_SECRET_TOKEN' },
+  Reddit: { type: 'oauth', provider: 'reddit' },
+  Salesforce: { type: 'secret', secretKey: 'SALESFORCE_ORG_SUBDOMAIN' },
+  Search: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  Sharepoint: { type: 'oauth', provider: 'microsoft' },
+  Slack: { type: 'oauth', provider: 'slack' },
+  SlackApi: { type: 'oauth', provider: 'slack' },
+  Spotify: { type: 'oauth', provider: 'spotify' },
+  SquareupApi: { type: 'oauth', provider: 'squareup' },
+  Stripe: { type: 'secret', secretKey: 'STRIPE_SECRET_KEY' },
+  StripeApi: { type: 'secret', secretKey: 'STRIPE_API_KEY' },
+  TicktickApi: { type: 'secret', secretKey: 'TICKTICK_API_KEY' },
+  TrelloApi: { type: 'secret', secretKey: 'TRELLO_API_KEY' },
+  VercelApi: { type: 'secret', secretKey: 'VERCEL_ACCESS_TOKEN' },
+  Walmart: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  WeaviateApi: { type: 'secret', secretKey: 'WEAVIATE_API_KEY' },
+  Web: { type: 'secret', secretKey: 'FIRECRAWL_API_KEY' },
+  X: { type: 'oauth', provider: 'x' },
+  Youtube: { type: 'secret', secretKey: 'SERP_API_KEY' },
+  Zendesk: { type: 'secret', secretKey: 'ZENDESK_SUBDOMAIN' },
+  ZohoBooksApi: { type: 'secret', secretKey: 'ZOHO_SERVER_URL' },
+  Zoom: { type: 'oauth', provider: 'zoom' },
+};
+
+/**
  * Arcade API response types
  * Based on Arcade API OpenAPI spec at https://api.arcade.dev/v1/swagger
  */
@@ -138,91 +336,27 @@ export class ArcadeProvider implements ToolProvider {
   /**
    * List available toolkits from Arcade
    *
-   * Note: Arcade API doesn't provide explicit toolkit groupings, so we derive them
-   * from tool toolkit field. This method aggregates tools to create toolkit summaries.
-   * We fetch ALL tools to ensure we discover all available toolkits.
+   * Uses a static list of known toolkits to avoid the expensive operation of
+   * fetching all 7000+ tools just to discover toolkit names.
    */
   async listToolkits(options?: ListToolkitsOptions): Promise<ListToolkitsResponse> {
     if (!this.apiKey) {
       throw new Error('ARCADE_API_KEY is not configured');
     }
 
-    // Fetch ALL tools by paginating through the API to discover all toolkits
-    const allTools: ArcadeToolResponse[] = [];
-    const pageSize = 100;
-    let offset = 0;
-    let hasMoreTools = true;
-
-    while (hasMoreTools) {
-      const params = new URLSearchParams();
-      params.append('limit', pageSize.toString());
-      params.append('offset', offset.toString());
-
-      const url = `${this.baseUrl}/v1/tools?${params.toString()}`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Arcade API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as ArcadeListToolsResponse;
-      const toolItems = Array.isArray(data.items) ? data.items : [];
-      allTools.push(...toolItems);
-
-      // Check if there are more tools to fetch
-      if (toolItems.length < pageSize) {
-        hasMoreTools = false;
-      } else if (data.total_count !== undefined && offset + pageSize >= data.total_count) {
-        hasMoreTools = false;
-      } else {
-        offset += pageSize;
-      }
-    }
-
-    // Group tools by toolkit to create toolkit summaries
-    const toolkitMap = new Map<string, { name: string; tools: ArcadeToolResponse[] }>();
-
-    for (const tool of allTools) {
-      const toolkitSlug = tool.toolkit?.name || tool.toolkit?.id || 'general';
-      const existing = toolkitMap.get(toolkitSlug);
-      if (existing) {
-        existing.tools.push(tool);
-      } else {
-        toolkitMap.set(toolkitSlug, {
-          name: this.formatToolkitName(toolkitSlug),
-          tools: [tool],
-        });
-      }
-    }
-
-    // Convert to toolkit array with auth info
-    let toolkits: ProviderToolkit[] = Array.from(toolkitMap.entries()).map(([slug, data]) => {
-      // Check if any tools in this toolkit require authorization
-      const toolsWithAuth = data.tools.filter(t => t.requirements?.authorization?.provider_id);
-      const authProvider = toolsWithAuth[0]?.requirements?.authorization?.provider_id;
-      const authProviderType = toolsWithAuth[0]?.requirements?.authorization?.provider_type;
-
-      // Check how many tools have unmet requirements
-      const toolsWithUnmetRequirements = data.tools.filter(t => t.requirements && !t.requirements.met);
-
+    // Use static toolkit list with auth info - much faster than fetching all tools
+    let toolkits: ProviderToolkit[] = ARCADE_TOOLKITS.map(slug => {
+      const authInfo = ARCADE_TOOLKIT_AUTH[slug];
       return {
         slug,
-        name: data.name,
-        description: data.tools[0]?.toolkit?.description || `${data.name} tools`,
-        toolCount: data.tools.length,
+        name: this.formatToolkitName(slug),
+        description: `${this.formatToolkitName(slug)} tools from Arcade`,
         metadata: {
           source: 'arcade',
-          // Auth info for the toolkit
-          requiresAuth: toolsWithAuth.length > 0,
-          authProvider,
-          authProviderType,
-          toolsRequiringAuth: toolsWithAuth.length,
-          toolsWithUnmetRequirements: toolsWithUnmetRequirements.length,
+          // Auth requirements
+          authType: authInfo?.type, // 'oauth' | 'secret' | undefined
+          authProvider: authInfo?.type === 'oauth' ? authInfo.provider : undefined,
+          secretKey: authInfo?.type === 'secret' ? authInfo.secretKey : undefined,
         },
       };
     });
@@ -233,18 +367,12 @@ export class ArcadeProvider implements ToolProvider {
       toolkits = toolkits.filter(
         toolkit =>
           toolkit.name.toLowerCase().includes(searchLower) ||
-          toolkit.description?.toLowerCase().includes(searchLower),
+          toolkit.slug.toLowerCase().includes(searchLower),
       );
     }
 
-    // Apply category filter if provided (Arcade may not have categories, so we skip this)
-    if (options?.category) {
-      // Arcade doesn't have categories, so we skip this filter
-      // In a real implementation, we might map toolkit slugs to categories
-    }
-
-    // Simple pagination for derived toolkits
-    const limit = options?.limit || 20;
+    // Simple pagination
+    const limit = options?.limit || 100;
     const startIndex = options?.cursor ? parseInt(options.cursor, 10) : 0;
     const paginatedToolkits = toolkits.slice(startIndex, startIndex + limit);
     const hasMore = startIndex + limit < toolkits.length;
@@ -356,14 +484,14 @@ export class ArcadeProvider implements ToolProvider {
   }
 
   /**
-   * Initiate authorization for a tool that requires OAuth
+   * Initiate authorization for a toolkit that requires OAuth
    *
-   * @param toolName - The fully qualified tool name (e.g., "Google.ListEmails")
+   * @param toolkitSlug - The toolkit slug (e.g., "Google", "Github")
    * @param userId - The user ID for the authorization context
    * @returns Authorization response with URL if auth is needed
    */
   async authorize(
-    toolName: string,
+    toolkitSlug: string,
     userId: string,
   ): Promise<{
     status: 'pending' | 'completed';
@@ -375,6 +503,28 @@ export class ArcadeProvider implements ToolProvider {
       throw new Error('ARCADE_API_KEY is not configured');
     }
 
+    // Extract toolkit from tool name if it contains a dot (e.g., "Google.Authorization" -> "Google")
+    const toolkit = toolkitSlug.includes('.') ? toolkitSlug.split('.')[0] : toolkitSlug;
+
+    // First, fetch a tool from this toolkit to get its auth requirements
+    const toolsResponse = await this.listTools({ toolkitSlug: toolkit, limit: 1 });
+    const sampleTool = toolsResponse.tools[0];
+
+    if (!sampleTool) {
+      throw new Error(`No tools found for toolkit: ${toolkit}`);
+    }
+
+    // Get auth requirements from the tool's metadata
+    const authInfo = sampleTool.metadata?.authorization as {
+      providerId?: string;
+      providerType?: string;
+      scopes?: string[];
+    } | undefined;
+
+    if (!authInfo?.providerId) {
+      throw new Error(`Toolkit ${toolkit} does not require OAuth authorization`);
+    }
+
     const url = `${this.baseUrl}/v1/auth/authorize`;
     const response = await fetch(url, {
       method: 'POST',
@@ -383,8 +533,14 @@ export class ArcadeProvider implements ToolProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        tool_name: toolName,
         user_id: userId,
+        auth_requirement: {
+          provider_id: authInfo.providerId,
+          provider_type: authInfo.providerType || 'oauth2',
+          oauth2: {
+            scopes: authInfo.scopes || [],
+          },
+        },
       }),
     });
 

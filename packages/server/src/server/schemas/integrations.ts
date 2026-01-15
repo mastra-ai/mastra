@@ -391,7 +391,7 @@ export const smitheryServerDetailsResponseSchema = smitheryServerSchema.extend({
  * Body schema for POST /api/integrations/arcade/authorize
  */
 export const arcadeAuthorizeBodySchema = z.object({
-  toolName: z.string().describe('Fully qualified tool name (e.g., "Google.ListEmails")'),
+  toolkitSlug: z.string().describe('Toolkit slug (e.g., "Google", "Github")'),
   userId: z.string().describe('User ID for the authorization context'),
 });
 
