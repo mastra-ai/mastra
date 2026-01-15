@@ -549,7 +549,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 
       validateBody({ messages });
 
-      const result = await agent.generate(messages, {
+      const result = await agent.generate<unknown>(messages, {
         ...rest,
         abortSignal,
       });
@@ -726,7 +726,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       const { messages, ...rest } = params;
       validateBody({ messages });
 
-      const streamResult = await agent.stream(messages, {
+      const streamResult = await agent.stream<unknown>(messages, {
         ...rest,
         abortSignal,
       });

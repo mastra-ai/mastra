@@ -65,9 +65,9 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="bg-black/20 p-[1rem] overflow-hidden rounded-xl border border-white/10 text-neutral4 text-[0.875rem] break-all">
+        <div className="bg-black/20 p-4 overflow-hidden rounded-xl border border-white/10 text-neutral4 text-ui-md break-all">
           {simplified ? (
-            <div className="text-neutral4 font-mono break-all px-[0.5rem]">
+            <div className="text-neutral4 font-mono break-all px-2">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (
@@ -79,7 +79,7 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
   );
 }
 
-export function containsInnerNewline(obj: unknown): boolean {
+function containsInnerNewline(obj: unknown): boolean {
   if (typeof obj === 'string') {
     const idx = obj.indexOf('\n');
     return idx !== -1 && idx !== obj.length - 1;

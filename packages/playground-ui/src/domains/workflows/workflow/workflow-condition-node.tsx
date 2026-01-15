@@ -10,7 +10,14 @@ import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown } from 'lucide-react';
 import { getConditionIconAndColor } from './workflow-node-badges';
-import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCurrentRun } from '../context/use-current-run';
 import { Badge } from '@/ds/components/Badge';
@@ -141,35 +148,40 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                     </Highlight>
 
                     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                      <DialogContent className="max-w-[30rem] bg-surface2 p-4">
-                        <DialogTitle className="sr-only">Condition Function</DialogTitle>
-                        <ScrollArea className="w-full p-2 pt-4" maxHeight="400px">
-                          <Highlight
-                            theme={themes.oneDark}
-                            code={String(condition.fnString).trim()}
-                            language="javascript"
-                          >
-                            {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                              <pre
-                                className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
-                                style={{
-                                  ...style,
-                                  backgroundColor: '#121212',
-                                  padding: '0 0.75rem 0 0',
-                                }}
-                              >
-                                {tokens.map((line, i) => (
-                                  <div key={i} {...getLineProps({ line })}>
-                                    <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
-                                    {line.map((token, key) => (
-                                      <span key={key} {...getTokenProps({ token })} />
-                                    ))}
-                                  </div>
-                                ))}
-                              </pre>
-                            )}
-                          </Highlight>
-                        </ScrollArea>
+                      <DialogContent className="max-w-[30rem]">
+                        <DialogHeader>
+                          <DialogTitle className="sr-only">Condition Function</DialogTitle>
+                          <DialogDescription>View the condition function code</DialogDescription>
+                        </DialogHeader>
+                        <DialogBody>
+                          <ScrollArea className="w-full" maxHeight="400px">
+                            <Highlight
+                              theme={themes.oneDark}
+                              code={String(condition.fnString).trim()}
+                              language="javascript"
+                            >
+                              {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                                <pre
+                                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                                  style={{
+                                    ...style,
+                                    backgroundColor: '#121212',
+                                    padding: '0 0.75rem 0 0',
+                                  }}
+                                >
+                                  {tokens.map((line, i) => (
+                                    <div key={i} {...getLineProps({ line })}>
+                                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                                      {line.map((token, key) => (
+                                        <span key={key} {...getTokenProps({ token })} />
+                                      ))}
+                                    </div>
+                                  ))}
+                                </pre>
+                              )}
+                            </Highlight>
+                          </ScrollArea>
+                        </DialogBody>
                       </DialogContent>
                     </Dialog>
                   </div>

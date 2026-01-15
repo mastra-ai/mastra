@@ -443,7 +443,7 @@ export const AgentMetadataModelSwitcher = ({
                   <div
                     key={provider.id}
                     data-provider-highlighted={isHighlighted}
-                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-4 rounded ${
+                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-2 rounded-md ${
                       isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                     } ${isSelected ? 'bg-surface5' : ''}`}
                     onClick={() => handleProviderSelect(provider)}
@@ -619,7 +619,7 @@ export const AgentMetadataModelSwitcher = ({
                     <div
                       key={`${model.provider}-${model.model}`}
                       data-model-highlighted={isHighlighted}
-                      className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${
+                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded-md hover:bg-surface5 ${
                         isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                       } ${isSelected ? 'bg-surface5' : ''}`}
                       onMouseDown={e => {
@@ -693,8 +693,8 @@ export const AgentMetadataModelSwitcher = ({
       {infoMsg && (
         <div
           className={cn(
-            'text-[0.75rem] text-neutral3 flex gap-[.5rem] mt-[0.5rem] ml-[.5rem]',
-            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-[0.1rem]',
+            'text-ui-sm text-neutral3 flex gap-2 mt-2 ml-2',
+            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-0.5',
           )}
         >
           <Info /> {infoMsg}

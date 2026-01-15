@@ -87,16 +87,16 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       <div className="bg-surface3 border border-border1 rounded-lg" style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
                           <div
-                            className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-[10px]"
+                            className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
                             onClick={handleCopy}
                           >
                             <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
                             {isCopied && (
-                              <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+                              <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
                                 Copied!
                               </span>
                             )}
-                            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
                               Click to copy
                             </span>
                           </div>
