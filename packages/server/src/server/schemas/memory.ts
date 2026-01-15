@@ -184,17 +184,20 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        // Return invalid string to fail validation (z.record will reject string type)
-        return val;
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
       }
-    }
-    return val;
-  }, z.record(z.unknown()).optional()),
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
   orderBy: storageOrderBySchema,
 });
 
@@ -243,17 +246,20 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        // Return invalid string to fail validation (z.record will reject string type)
-        return val;
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
       }
-    }
-    return val;
-  }, z.record(z.unknown()).optional()),
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
   orderBy: storageOrderBySchema,
 });
 
