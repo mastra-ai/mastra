@@ -15,8 +15,8 @@ createVectorTestSuite({
   deleteIndex: async (indexName: string) => {
     try {
       await libSQLVectorDB.deleteIndex({ indexName });
-    } catch {
-      // Ignore cleanup errors
+    } catch (error) {
+      console.error(`Error deleting index ${indexName}:`, error);
     }
   },
   waitForIndexing: async () => {},
