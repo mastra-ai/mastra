@@ -1209,6 +1209,7 @@ program
   .option('--list-sessions', 'List all sessions with dates for a question')
   .option('--check-stale', 'Check if prepared data is stale (pre-cursor-fix)')
   .option('--stale-only', 'Only list stale questions (use with --check-stale)')
+  .option('--search-original <keyword>', 'Search original dataset for a keyword (shows full context)')
   .action(async (runId, options) => {
     try {
       const command = new InvestigateCommand({
@@ -1236,6 +1237,7 @@ program
         listSessions: options.listSessions,
         checkStale: options.checkStale,
         staleOnly: options.staleOnly,
+        searchOriginal: options.searchOriginal,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);

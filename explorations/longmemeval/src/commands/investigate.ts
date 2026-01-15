@@ -59,6 +59,8 @@ export interface InvestigateOptions {
   // Data freshness detection
   checkStale?: boolean;   // Check if prepared data is stale (pre-cursor-fix)
   staleOnly?: boolean;    // Only list stale questions from failures
+  // Original dataset search
+  searchOriginal?: string; // Search original dataset for a keyword
 }
 
 interface FailuresFile {
@@ -244,6 +246,12 @@ export class InvestigateCommand {
     // Data freshness detection
     if (options.checkStale) {
       await this.checkStaleData(options.questionId, options.staleOnly);
+      return;
+    }
+
+    // Original dataset search
+    if (options.searchOriginal && options.questionId) {
+      await this.searchOriginalDataset(options.questionId, options.searchOriginal);
       return;
     }
 
@@ -1079,6 +1087,61 @@ export class InvestigateCommand {
       console.log(`   ✓ Found in both raw messages and observations`);
     } else if (!inRaw && !inObs) {
       console.log(`   ❌ Not found in raw data or observations`);
+    }
+  }
+
+  /**
+   * Search original dataset for a keyword and show full context
+   */
+  private async searchOriginalDataset(questionId: string, keyword: string): Promise<void> {
+    console.log(`\n🔍 Searching original dataset for "${keyword}" in question ${questionId}\n`);
+
+    const loader = new DatasetLoader(this.datasetDir);
+    const dataset = await loader.loadDataset('longmemeval_s');
+    const question = dataset.find(q => q.question_id === questionId);
+
+    if (!question?.haystack_sessions || !question?.haystack_dates) {
+      console.log(`❌ Question not found or has no sessions`);
+      return;
+    }
+
+    const keywordLower = keyword.toLowerCase();
+    let totalMatches = 0;
+
+    for (let sessionIdx = 0; sessionIdx < question.haystack_sessions.length; sessionIdx++) {
+      const session = question.haystack_sessions[sessionIdx];
+      const date = question.haystack_dates[sessionIdx] || 'unknown';
+
+      for (let turnIdx = 0; turnIdx < session.length; turnIdx++) {
+        const turn = session[turnIdx];
+        const content = turn.content || '';
+        
+        if (content.toLowerCase().includes(keywordLower)) {
+          totalMatches++;
+          const roleColor = turn.role === 'user' ? '\x1b[36m' : '\x1b[90m';
+          const reset = '\x1b[0m';
+          const yellow = '\x1b[33m';
+          
+          // Highlight the keyword
+          const highlighted = content.replace(
+            new RegExp(`(${keyword})`, 'gi'),
+            `${yellow}$1${reset}`
+          );
+          
+          console.log(`${'─'.repeat(70)}`);
+          console.log(`📅 Session ${sessionIdx}, Turn ${turnIdx} | ${date}`);
+          console.log(`${roleColor}[${turn.role.toUpperCase()}]:${reset}`);
+          console.log(highlighted);
+          console.log();
+        }
+      }
+    }
+
+    if (totalMatches === 0) {
+      console.log(`❌ No matches found for "${keyword}" in original dataset`);
+    } else {
+      console.log(`${'─'.repeat(70)}`);
+      console.log(`\n📊 Total: ${totalMatches} matches across ${question.haystack_sessions.length} sessions`);
     }
   }
 
