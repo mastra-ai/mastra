@@ -147,7 +147,7 @@ npx @mastra/codemod@beta v1/agent-processor-methods .
 
 ### Default options method renames for AI SDK versions
 
-Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5+) APIs. This change helps developers understand which AI SDK version they're targeting.
 
 To migrate, update method names based on which AI SDK version you're using.
 
@@ -158,7 +158,7 @@ To migrate, update method names based on which AI SDK version you're using.
 + const options = await agent.getDefaultGenerateOptionsLegacy();
 + const streamOptions = await agent.getDefaultStreamOptionsLegacy();
 
-  // For new AI SDK v5 (default)
+  // For new AI SDK v5+ (default)
   const streamOptions = await agent.getDefaultStreamOptions();
 ```
 
@@ -246,7 +246,7 @@ This behavior is enabled by default. If you need access to the full request data
 
 ### `generateVNext` and `streamVNext` methods
 
-The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5+ compatibility but are now the standard implementation.
 
 To migrate, use the standard `generate()` and `stream()` methods.
 
@@ -365,21 +365,53 @@ The step results now also include tripwire information:
 
 ### `prepareStep` messages format
 
-The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5+ model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
 
-If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
 
 ```diff
   agent.generate({
     prompt: 'Hello',
     prepareStep: async ({ messages, messageList }) => {
--     // messages was AI SDK v5 ModelMessage format
+-     // messages was AI SDK v5+ ModelMessage format
 -     console.log(messages[0].content);
 +     // messages is now MastraDBMessage format
-+     // Use messageList to get AI SDK v5 format if needed:
++     // Use messageList to get AI SDK v5+ format if needed:
 +     const aiSdkMessages = messageList.get.all.aiV5.model();
 
       return { toolChoice: 'auto' };
     },
   });
+```
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from `agent.stream()` and `agent.generate()`. Use the `memory` option instead, which provides a cleaner API for memory configuration.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+```diff
+  await agent.stream('Hello', {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.stream('Hello', {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
 ```

@@ -82,10 +82,13 @@ In addition to the internal exporters, Mastra supports integration with popular 
 
 - **[Arize](/docs/v1/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/v1/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Datadog](/docs/v1/observability/tracing/exporters/datadog)** - Sends traces to Datadog APM via OTLP for full-stack observability with AI tracing
+- **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
+- **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
 
 ## Bridges
 
@@ -494,6 +497,61 @@ const result = await agent.generate({
 - **Priority levels**: `"priority-high"`, `"priority-low"`
 - **Experiments**: `"experiment-v1"`, `"control-group"`, `"treatment-a"`
 
+### Hiding Sensitive Input/Output
+
+When processing sensitive data, you may want to prevent input and output values from being logged to your observability platforms. Use `hideInput` and `hideOutput` in `tracingOptions` to exclude this data from all spans in a trace:
+
+```ts
+// Hide input data (e.g., user credentials, PII)
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Process this sensitive data" }],
+  tracingOptions: {
+    hideInput: true, // Input will be hidden from all spans
+  },
+});
+
+// Hide output data (e.g., generated secrets, confidential results)
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Generate API keys" }],
+  tracingOptions: {
+    hideOutput: true, // Output will be hidden from all spans
+  },
+});
+
+// Hide both input and output
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Handle confidential request" }],
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+  },
+});
+```
+
+#### How It Works
+
+- **Trace-wide effect**: When set on the root span, these options apply to all child spans in the trace (tool calls, model generations, etc.)
+- **Export-time filtering**: The data is still available internally during execution but is excluded when spans are exported to observability platforms
+- **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
+
+```ts
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Sensitive operation" }],
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+    tags: ["sensitive-operation", "pii-handling"],
+    metadata: { operationType: "credential-processing" },
+  },
+});
+```
+
+:::tip
+
+For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+
+:::
+
 #### Child Spans and Metadata Extraction
 
 When creating child spans within tools or workflow steps, you can pass the `requestContext` parameter to enable metadata extraction:
@@ -873,7 +931,7 @@ Mastra automatically creates spans for:
 - [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
-- [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
+- [MLflow](/docs/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Bridges

@@ -39,6 +39,12 @@ export interface MongoDBVectorConfig {
   dbName: string;
   /** Optional MongoDB client options */
   options?: MongoClientOptions;
+  /**
+   * Path to the field that stores vector embeddings.
+   * Supports nested paths using dot notation (e.g., 'text.contentEmbedding').
+   * @default 'embedding'
+   */
+  embeddingFieldPath?: string;
 }
 
 export interface MongoDBIndexReadyParams {
@@ -60,7 +66,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private client: MongoClient;
   private db: Db;
   private collections: Map<string, Collection<MongoDBDocument>>;
-  private readonly embeddingFieldName = 'embedding';
+  private readonly embeddingFieldName: string;
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
   private collectionForValidation: Collection<MongoDBDocument> | null = null;
@@ -70,7 +76,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ id, uri, dbName, options }: MongoDBVectorConfig) {
+  constructor({ id, uri, dbName, options, embeddingFieldPath }: MongoDBVectorConfig) {
     super({ id });
 
     if (!uri) {
@@ -87,6 +93,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.client = client;
     this.db = this.client.db(dbName);
     this.collections = new Map();
+    this.embeddingFieldName = embeddingFieldPath ?? 'embedding';
   }
 
   // Public methods
