@@ -83,6 +83,47 @@ async function listScorersFromSystem({
     }
   }
 
+  // Also fetch stored agents and their scorer assignments
+  try {
+    const storedAgentsResult = await mastra.listStoredAgents({ perPage: false });
+    if (storedAgentsResult?.agents) {
+      for (const agent of storedAgentsResult.agents) {
+        const scorers =
+          (await agent.listScorers({
+            requestContext,
+          })) || {};
+
+        if (Object.keys(scorers).length > 0) {
+          for (const [_scorerId, scorer] of Object.entries(scorers)) {
+            const scorerId = scorer.scorer.id;
+            if (scorersMap.has(scorerId)) {
+              // Add this stored agent to the existing scorer's associations
+              const existingEntry = scorersMap.get(scorerId)!;
+              if (!existingEntry.agentIds.includes(agent.id)) {
+                existingEntry.agentIds.push(agent.id);
+              }
+              if (!existingEntry.agentNames.includes(agent.name)) {
+                existingEntry.agentNames.push(agent.name);
+              }
+            } else {
+              scorersMap.set(scorerId, {
+                workflowIds: [],
+                ...scorer,
+                agentNames: [agent.name],
+                agentIds: [agent.id],
+                isRegistered: false,
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (storageError) {
+    // Storage not configured - log and continue
+    const logger = mastra.getLogger();
+    logger.debug('Failed to fetch stored agents for scorer associations', { error: storageError });
+  }
+
   const registeredScorers = await mastra.listScorers();
   for (const [_scorerId, scorer] of Object.entries(registeredScorers || {})) {
     const scorerId = scorer.id;

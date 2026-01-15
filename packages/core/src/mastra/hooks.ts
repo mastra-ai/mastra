@@ -131,11 +131,31 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
-    const scorers = await mastra.getAgentById(entityId).listScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.id === scorerId) {
-        scorerToUse = scorer;
-        break;
+    // Try code-defined agents first
+    try {
+      const agent = mastra.getAgentById(entityId);
+      const scorers = await agent.listScorers();
+      for (const [_, scorer] of Object.entries(scorers)) {
+        if (scorer.scorer.id === scorerId) {
+          scorerToUse = scorer;
+          break;
+        }
+      }
+    } catch {
+      // Agent not found in code-defined agents, try stored agents
+      try {
+        const storedAgent = await mastra.getStoredAgentById(entityId);
+        if (storedAgent) {
+          const scorers = await storedAgent.listScorers();
+          for (const [_, scorer] of Object.entries(scorers)) {
+            if (scorer.scorer.id === scorerId) {
+              scorerToUse = scorer;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Stored agent lookup failed, continue to fallback
       }
     }
   } else if (entityType === 'WORKFLOW') {
@@ -148,10 +168,20 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
     }
   }
 
-  // Fallback to mastra-registered scorer
+  // Fallback to mastra-registered scorer or stored scorer
   if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorerById(scorerId);
-    scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
+    try {
+      const mastraRegisteredScorer = mastra.getScorerById(scorerId);
+      scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
+    } catch {
+      // Not found in registered scorers, try stored scorers
+      try {
+        const storedScorer = await mastra.resolveStoredScorer(scorerId);
+        scorerToUse = storedScorer ? { scorer: storedScorer } : undefined;
+      } catch {
+        // Stored scorer lookup failed
+      }
+    }
   }
 
   return scorerToUse;

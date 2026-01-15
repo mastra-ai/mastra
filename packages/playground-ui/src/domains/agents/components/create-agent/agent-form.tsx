@@ -165,8 +165,8 @@ export function AgentForm({
     if (!scorers) return [];
     return Object.entries(scorers).map(([id, scorer]) => ({
       id,
-      name: (scorer as { name?: string }).name || id,
-      description: (scorer as { description?: string }).description || '',
+      name: (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id,
+      description: (scorer as { scorer?: { config?: { description?: string } } }).scorer?.config?.description || '',
     }));
   }, [scorers]);
 

@@ -839,7 +839,7 @@ export class Mastra<
       if (options?.raw) {
         return version.snapshot;
       }
-      return this.#createAgentFromStoredConfig(version.snapshot);
+      return await this.#createAgentFromStoredConfig(version.snapshot);
     }
 
     if (options?.versionNumber !== undefined) {
@@ -851,7 +851,7 @@ export class Mastra<
       if (options?.raw) {
         return version.snapshot;
       }
-      return this.#createAgentFromStoredConfig(version.snapshot);
+      return await this.#createAgentFromStoredConfig(version.snapshot);
     }
 
     // Default behavior: get the current agent config with version resolution
@@ -865,7 +865,7 @@ export class Mastra<
       return storedAgent;
     }
 
-    return this.#createAgentFromStoredConfig(storedAgent);
+    return await this.#createAgentFromStoredConfig(storedAgent);
   }
 
   /**
@@ -982,8 +982,8 @@ export class Mastra<
       return result;
     }
 
-    // Transform stored configs into Agent instances
-    const agents = result.agents.map(storedAgent => this.#createAgentFromStoredConfig(storedAgent));
+    // Transform stored configs into Agent instances (async to support stored scorers)
+    const agents = await Promise.all(result.agents.map(storedAgent => this.#createAgentFromStoredConfig(storedAgent)));
 
     return {
       agents,
@@ -1247,7 +1247,7 @@ export class Mastra<
    * Creates an Agent instance from a stored agent configuration.
    * @private
    */
-  #createAgentFromStoredConfig(storedAgent: StorageAgentType): Agent {
+  async #createAgentFromStoredConfig(storedAgent: StorageAgentType): Promise<Agent> {
     // Build model config from stored data
     // The model field stores { provider, name, ...otherConfig }
     const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
@@ -1284,8 +1284,8 @@ export class Mastra<
     // Resolve memory from the stored memory reference
     const memory = this.#resolveStoredMemory(storedAgent.memory);
 
-    // Resolve scorers from the stored scorer references
-    const scorers = this.#resolveStoredScorers(storedAgent.scorers);
+    // Resolve scorers from the stored scorer references (async to support stored scorers)
+    const scorers = await this.#resolveStoredScorers(storedAgent.scorers);
 
     // Create the agent instance
     const agent = new Agent({
@@ -1433,9 +1433,10 @@ export class Mastra<
 
   /**
    * Resolves scorer references from stored configuration to actual scorer instances.
+   * Supports both code-defined and stored scorers from the database.
    * @private
    */
-  #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
+  async #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): Promise<MastraScorers | undefined> {
     if (!storedScorers) {
       return undefined;
     }
@@ -1443,7 +1444,7 @@ export class Mastra<
     const resolvedScorers: MastraScorers = {};
 
     for (const [scorerKey, scorerConfig] of Object.entries(storedScorers)) {
-      // Try to find the scorer in registered scorers by key
+      // Try to find the scorer in registered scorers by key first
       try {
         const scorer = this.getScorer(scorerKey as keyof TScorers);
         resolvedScorers[scorerKey] = {
@@ -1451,7 +1452,7 @@ export class Mastra<
           sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
         };
       } catch {
-        // Try by ID
+        // Try by ID in registered scorers
         try {
           const scorer = this.getScorerById(scorerKey);
           resolvedScorers[scorerKey] = {
@@ -1459,7 +1460,20 @@ export class Mastra<
             sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
           };
         } catch {
-          this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+          // Try to resolve from stored scorers in the database
+          try {
+            const scorer = await this.resolveStoredScorer(scorerKey);
+            if (scorer) {
+              resolvedScorers[scorerKey] = {
+                scorer,
+                sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
+              };
+            } else {
+              this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+            }
+          } catch {
+            this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+          }
         }
       }
     }
