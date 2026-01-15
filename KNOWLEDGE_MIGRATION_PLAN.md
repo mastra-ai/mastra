@@ -2,7 +2,7 @@
 
 This document outlines the migration of Knowledge functionality into the unified Workspace primitive in `@mastra/core/workspace`.
 
-**Status**: In Progress
+**Status**: Implementation Complete (Tests Pending)
 
 ---
 
@@ -256,42 +256,48 @@ interface SearchResult {
 
 ## Implementation Tasks
 
-### Phase 1: Copy Core Search Files
+### Phase 1: Copy Core Search Files ✅
 
 - [x] Analysis complete
-- [ ] Create `packages/core/src/workspace/bm25.ts`
-  - Copy from `packages/skills/src/bm25.ts`
-  - Update imports (use @mastra/core/artifacts for LineRange)
-  - Keep all functionality: tokenize, BM25Index, serialize/deserialize
-- [ ] Create `packages/core/src/workspace/search-engine.ts`
-  - Copy from `packages/skills/src/search-engine.ts`
-  - Update imports to use local bm25.ts
-  - Keep all functionality: BM25, vector, hybrid search
+- [x] Create `packages/core/src/workspace/bm25.ts`
+  - Copied from `packages/skills/src/bm25.ts`
+  - Updated imports (use @mastra/core/artifacts for LineRange)
+  - Kept all functionality: tokenize, BM25Index, serialize/deserialize
+- [x] Create `packages/core/src/workspace/search-engine.ts`
+  - Copied from `packages/skills/src/search-engine.ts`
+  - Updated imports to use local bm25.ts
+  - Kept all functionality: BM25, vector, hybrid search
 
-### Phase 2: Integrate Search into Workspace
+### Phase 2: Integrate Search into Workspace ✅
 
-- [ ] Update `packages/core/src/workspace/workspace.ts`
-  - Add search configuration to WorkspaceConfig
-  - Add SearchEngine as private member
-  - Add search methods: index(), indexMany(), unindex(), search()
-  - Add rebuildIndex() for auto-indexing
-  - Add capability getters: canBM25, canVector, canHybrid
+- [x] Update `packages/core/src/workspace/workspace.ts`
+  - Added search configuration to WorkspaceConfig
+  - Added SearchEngine as private member
+  - Added search methods: index(), indexMany(), unindex(), search()
+  - Added rebuildIndex() for auto-indexing
+  - Added capability getters: canBM25, canVector, canHybrid
 
-### Phase 3: Update Exports
+### Phase 3: Update Exports ✅
 
-- [ ] Update `packages/core/src/workspace/index.ts`
+- [x] Update `packages/core/src/workspace/index.ts`
   - Export SearchEngine and types
   - Export BM25Index and types (for advanced use)
   - Export search-related types
 
-### Phase 4: Auto-indexing
+### Phase 4: Auto-indexing ✅
 
-- [ ] Implement autoIndexPaths in Workspace.init()
-  - Read files from specified paths
-  - Index content in SearchEngine
-  - Store serialized BM25 index in workspace state
+- [x] Implement autoIndexPaths in Workspace.init()
+  - Reads files from specified paths
+  - Indexes content in SearchEngine
+  - Calls rebuildIndex() which handles recursive file reading
 
-### Phase 5: Integration Tests
+### Phase 5: Workspace Tools ✅
+
+- [x] Add `workspace_search` tool for agent auto-injection
+- [x] Add `workspace_index` tool for agent auto-injection
+- [x] Update WORKSPACE_TOOL_NAMES with SEARCH and INDEX
+
+### Phase 6: Integration Tests
 
 - [ ] Test BM25 search
 - [ ] Test vector search (with mock vector store)
