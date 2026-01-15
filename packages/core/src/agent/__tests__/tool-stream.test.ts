@@ -2,7 +2,6 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
-import type { AIV5FullStreamPart } from '../../stream/aisdk/v5/output';
 import type { ChunkType } from '../../stream/types';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
@@ -91,23 +90,6 @@ describe('Writable Stream from Tool', () => {
     }
 
     expect(chunks.find(chunk => chunk.type === 'tool-output')).toBeDefined();
-
-    const aiSdkParts: AIV5FullStreamPart[] = [];
-
-    const aiSdkStream = await electionAgent.stream('Call the election-tool and tell me what it says.', {
-      format: 'aisdk',
-    });
-
-    for await (const chunk of aiSdkStream.fullStream) {
-      aiSdkParts.push(chunk);
-    }
-
-    // our types are broken, we do output these tool-output types when a tool writes
-    // but adding this to the ai sdk output stream part types breaks 100 other types
-    // so cast as any
-    const toolOutputChunk = aiSdkParts.find((chunk: any) => chunk.type === 'tool-output');
-
-    expect(toolOutputChunk).toBeDefined();
   });
 
   it('should not create duplicate assistant messages when data-* parts are emitted with memory', async () => {

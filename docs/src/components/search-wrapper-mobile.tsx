@@ -5,7 +5,7 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { useState } from "react";
-import { CustomSearchWithoutAI } from "./custom-search";
+import { CustomSearch } from "./custom-search";
 import { Button } from "./ui/button";
 
 export function getSearchPlaceholder(locale = "en") {
@@ -97,7 +97,7 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
               <div className="w-full">
                 {isAgentMode ? null : (
                   <div className="p-2.5">
-                    <CustomSearchWithoutAI
+                    <CustomSearch
                       searchOptions={searchOptions}
                       closeModal={close}
                     />

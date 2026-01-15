@@ -1,4 +1,4 @@
-import { SideDialog } from '@/components/ui/elements';
+import { SideDialog } from '@/ds/components/SideDialog';
 import { SpanRecord } from '@mastra/core/storage';
 import { AlertTriangleIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
@@ -23,7 +23,7 @@ export function SpanDetails({ span }: SpanDetailsProps) {
             <AlertTriangleIcon className="text-yellow-200 mt-0.5 flex-shrink-0" size={20} />
             <div className="flex-1">
               <h4 className="font-semibold text-yellow-200 mb-1 text-sm">Token Limit Exceeded</h4>
-              <p className="text-sm text-mastra-el-3 whitespace-pre-line">{getTokenLimitMessage(span)}</p>
+              <p className="text-sm text-neutral3 whitespace-pre-line">{getTokenLimitMessage(span)}</p>
             </div>
           </div>
         </div>

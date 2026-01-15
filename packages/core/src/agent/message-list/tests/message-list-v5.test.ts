@@ -942,8 +942,8 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to stream
-      // with format: 'aisdk' containing file parts with URLs
+      // This mimics what happens when messages containing file parts with URLs
+      // are converted to AI SDK v5 format
       const v2Message: MastraDBMessage = {
         id: 'test-msg-1',
         role: 'user',
@@ -982,7 +982,7 @@ describe('MessageList V5 Support', () => {
         expect(v2FilePart.data).not.toContain('data:image/png;base64,https://');
       }
 
-      // Get V5 UI messages (used by AI SDK when format: 'aisdk')
+      // Get V5 UI messages (used for AI SDK v5 output)
       const v5UIMessages = messageList.get.all.aiV5.ui();
       const v5FilePart = v5UIMessages[0].parts.find(p => p.type === 'file');
 

@@ -184,7 +184,7 @@ export default function Scorer() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] w-full px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
             <PageHeader
               title={scorer?.scorer?.config?.name || 'loading'}
               description={scorer?.scorer?.config?.description || 'loading'}
