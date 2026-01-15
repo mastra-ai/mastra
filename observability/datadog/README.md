@@ -117,11 +117,11 @@ When using bundlers, mark `dd-trace` and native modules as external:
 export default {
   bundler: {
     externals: [
-      "dd-trace",
-      "@datadog/native-metrics",
-      "@datadog/native-appsec",
-      "@datadog/native-iast-taint-tracking",
-      "@datadog/pprof",
+      'dd-trace',
+      '@datadog/native-metrics',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/pprof',
     ],
   },
 };
