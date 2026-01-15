@@ -64,7 +64,7 @@ export function TimelineTimingCol({
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[25rem] rounded-md bg-[#222] p-[.5rem] px-[1rem] pr-[1.5rem] text-[.75rem] text-neutral5 text-center border border-border1"
+          className="z-[100] w-auto max-w-[25rem] rounded-md bg-surface4 p-[.5rem] px-[1rem] pr-[1.5rem] text-[.75rem] text-neutral5 text-center border border-border1"
           sideOffset={5}
           side="top"
         >

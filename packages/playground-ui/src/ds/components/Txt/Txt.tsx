@@ -1,7 +1,7 @@
-import clsx from 'clsx';
 import React from 'react';
 
 import { FontSizes } from '../../tokens';
+import { cn } from '@/lib/utils';
 
 export interface TxtProps extends React.HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label';
@@ -25,5 +25,5 @@ const fonts = {
 };
 
 export const Txt = ({ as: Root = 'p', className, variant = 'ui-md', font, ...props }: TxtProps) => {
-  return <Root className={clsx(variants[variant], font && fonts[font], className)} {...props} />;
+  return <Root className={cn(variants[variant], font && fonts[font], className)} {...props} />;
 };

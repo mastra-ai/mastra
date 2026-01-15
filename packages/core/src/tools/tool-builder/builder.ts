@@ -148,10 +148,11 @@ export class CoreToolBuilder extends MastraBase {
   };
 
   // For provider-defined tools, we need to include all required properties
+  // AI SDK v5 uses type: 'provider-defined', AI SDK v6 uses type: 'provider'
   private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
-      tool.type === 'provider-defined' &&
+      (tool.type === 'provider-defined' || tool.type === 'provider') &&
       'id' in tool &&
       typeof tool.id === 'string' &&
       tool.id.includes('.')

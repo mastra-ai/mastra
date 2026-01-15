@@ -72,7 +72,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
           </Button>
         </form>
 
-        <hr className="my-2 border-sm border-border1" />
+        <hr className="my-2 border border-border1" />
 
         <div className="space-y-2">
           <Txt variant="ui-md" className="text-neutral3">
@@ -80,7 +80,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
           </Txt>
           <button
             onClick={addFilInputAttachment}
-            className="w-full h-40 border-sm border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
+            className="w-full h-40 border border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
           >
             <CloudUpload className="size-12" />
             <Txt variant="header-md">Add a local file</Txt>
