@@ -163,7 +163,7 @@ export class CloudExporter extends BaseExporter {
     }, this.config.maxBatchWaitMs);
   }
 
-  private async flush(): Promise<void> {
+  private async flushBuffer(): Promise<void> {
     // Clear timer since we're flushing
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -233,6 +233,25 @@ export class CloudExporter extends BaseExporter {
     this.buffer.totalSize = 0;
   }
 
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    // Skip if disabled
+    if (this.isDisabled) {
+      return;
+    }
+
+    if (this.buffer.totalSize > 0) {
+      this.logger.debug('Flushing buffered events', {
+        bufferedEvents: this.buffer.totalSize,
+      });
+      await this.flushBuffer();
+    }
+  }
+
   async shutdown(): Promise<void> {
     // Skip if disabled
     if (this.isDisabled) {
@@ -246,28 +265,23 @@ export class CloudExporter extends BaseExporter {
     }
 
     // Flush any remaining events
-    if (this.buffer.totalSize > 0) {
-      this.logger.info('Flushing remaining events on shutdown', {
-        remainingEvents: this.buffer.totalSize,
-      });
-      try {
-        await this.flush();
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
-            domain: ErrorDomain.MASTRA_OBSERVABILITY,
-            category: ErrorCategory.USER,
-            details: {
-              remainingEvents: this.buffer.totalSize,
-            },
+    try {
+      await this.flush();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.USER,
+          details: {
+            remainingEvents: this.buffer.totalSize,
           },
-          error,
-        );
+        },
+        error,
+      );
 
-        this.logger.trackException(mastraError);
-        this.logger.error('Failed to flush remaining events during shutdown', mastraError);
-      }
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to flush remaining events during shutdown', mastraError);
     }
 
     this.logger.info('CloudExporter shutdown complete');

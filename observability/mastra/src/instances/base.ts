@@ -545,6 +545,38 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
+   * Force flush any buffered/queued spans from all exporters and the bridge
+   * without shutting down the observability instance.
+   *
+   * This is useful in serverless environments (like Vercel's fluid compute) where
+   * you need to ensure all spans are exported before the runtime instance is
+   * terminated, while keeping the observability system active for future requests.
+   */
+  async flush(): Promise<void> {
+    this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
+
+    // Flush all exporters and bridge
+    const flushPromises = [...this.exporters.map(e => e.flush())];
+
+    // Add bridge flush if present
+    if (this.config.bridge) {
+      flushPromises.push(this.config.bridge.flush());
+    }
+
+    const results = await Promise.allSettled(flushPromises);
+
+    // Log any errors but don't throw
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const targetName = index < this.exporters.length ? this.exporters[index]?.name : 'bridge';
+        this.logger.error(`[Observability] Flush error [target=${targetName}]`, result.reason);
+      }
+    });
+
+    this.logger.debug(`[Observability] Flush completed [name=${this.name}]`);
+  }
+
+  /**
    * Shutdown Observability and clean up resources
    */
   async shutdown(): Promise<void> {

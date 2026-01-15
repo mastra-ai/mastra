@@ -157,6 +157,19 @@ export abstract class BaseExporter implements ObservabilityExporter {
   }): Promise<void>;
 
   /**
+   * Force flush any buffered/queued spans without shutting down the exporter.
+   *
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the exporter active for future requests.
+   *
+   * Default implementation is a no-op. Override to add flush logic.
+   */
+  async flush(): Promise<void> {
+    this.logger.debug(`${this.name} flush called (no-op in base class)`);
+  }
+
+  /**
    * Shutdown the exporter and clean up resources
    *
    * Default implementation just logs. Override to add custom cleanup.

@@ -646,6 +646,18 @@ export interface ObservabilityInstance {
   rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
 
   /**
+   * Force flush any buffered/queued spans from all exporters and the bridge
+   * without shutting down the observability instance.
+   *
+   * This is useful in serverless environments (like Vercel's fluid compute) where
+   * you need to ensure all spans are exported before the runtime instance is
+   * terminated, while keeping the observability system active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future tracing.
+   */
+  flush(): Promise<void>;
+
+  /**
    * Shutdown tracing and clean up resources
    */
   shutdown(): Promise<void>;
@@ -1103,6 +1115,16 @@ export interface ObservabilityExporter {
     metadata?: Record<string, any>;
   }): Promise<void>;
 
+  /**
+   * Force flush any buffered/queued spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the exporter active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future exports.
+   */
+  flush(): Promise<void>;
+
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
@@ -1158,6 +1180,16 @@ export interface ObservabilityBridge {
    * @returns Span identifiers (spanId, traceId, parentSpanId) from bridge, or undefined if creation fails
    */
   createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
+
+  /**
+   * Force flush any buffered/queued spans without shutting down the bridge.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the bridge active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future exports.
+   */
+  flush(): Promise<void>;
 
   /** Shutdown bridge and cleanup resources */
   shutdown(): Promise<void>;
