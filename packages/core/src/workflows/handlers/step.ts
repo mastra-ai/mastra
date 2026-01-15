@@ -255,11 +255,21 @@ export async function executeStep(
         requestContextUpdate: null,
       };
 
+      // For nested workflow steps, pass raw mastra - the nested workflow will
+      // register it on its own engine and wrap it fresh for its own steps.
+      // For regular steps, wrap mastra with current step span for proper tracing.
+      const isNestedWorkflow = step.component === 'WORKFLOW';
+      const mastraForStep = engine.mastra
+        ? isNestedWorkflow
+          ? engine.mastra
+          : wrapMastra(engine.mastra, { currentSpan: stepSpan })
+        : undefined;
+
       const output = await runStep({
         runId,
         resourceId,
         workflowId,
-        mastra: engine.mastra ? wrapMastra(engine.mastra, { currentSpan: stepSpan }) : undefined,
+        mastra: mastraForStep,
         requestContext,
         inputData,
         state: executionContext.state,
