@@ -163,6 +163,12 @@ export class LangfuseExporter extends TrackingExporter<
 
       const updatePayload = this.buildSpanPayload(span, false, traceData);
 
+      // Submit scores from span.scores to Langfuse
+      // Scores are queued after span creation, so they'll be batched together.
+      if (span.scores?.length) {
+        this.submitScoresFromSpan(span);
+      }
+
       // use update for both update & end, so that we can use the
       // end time we set when ending the span.
       langfuseSpan.update(updatePayload);
@@ -174,13 +180,7 @@ export class LangfuseExporter extends TrackingExporter<
     const langfuseSpan = traceData.getSpan({ spanId: span.id });
     // use update for both update & end, so that we can use the
     // end time we set when ending the span.
-    langfuseSpan.update(this.buildSpanPayload(span, false, traceData));
-
-    // Submit scores from span.scores to Langfuse
-    // Scores are queued after span creation, so they'll be batched together.
-    if (span.scores?.length) {
-      this.submitScoresFromSpan(span);
-    }
+    langfuseSpan?.update(this.buildSpanPayload(span, false, traceData));
 
     if (span.isRootSpan) {
       const langfuseRoot = traceData.getRoot();
@@ -352,10 +352,10 @@ export class LangfuseExporter extends TrackingExporter<
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void> {
-    if (!this.client) return;
+    if (!this.#client) return;
 
     try {
-      await this.client.score({
+      await this.#client.score({
         id: `${traceId}-${scorerName}`,
         traceId,
         observationId: spanId,
@@ -380,11 +380,11 @@ export class LangfuseExporter extends TrackingExporter<
    * Called during SPAN_UPDATED events when scores are attached to spans.
    */
   private submitScoresFromSpan(span: AnyExportedSpan): void {
-    if (!this.client || !span.scores?.length) return;
+    if (!this.#client || !span.scores?.length) return;
 
     for (const score of span.scores) {
       try {
-        this.client.score({
+        this.#client.score({
           id: `${span.traceId}-${span.id}-${score.scorerId}`,
           traceId: span.traceId,
           observationId: span.id,
