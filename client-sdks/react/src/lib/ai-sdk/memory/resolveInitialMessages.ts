@@ -28,7 +28,7 @@ interface ToolResultContent {
 }
 
 interface FinalResult {
-  result?: unknown;
+  result?: any;
   text?: string;
   messages?: NestedMessage[];
 }
@@ -77,14 +77,14 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           const primitiveType = json.primitiveType || '';
           const primitiveId = json.primitiveId || '';
           const finalResult = json.finalResult;
-          const nestedMessages = finalResult?.messages || [];
+          const messages = finalResult?.messages || [];
 
           // Build child messages from nested messages
           const childMessages: ChildMessage[] = [];
 
           // Build a map of toolCallId -> toolResult for efficient lookup
           const toolResultMap = new Map<string, ToolResultContent>();
-          for (const msg of nestedMessages) {
+          for (const msg of messages) {
             if (Array.isArray(msg.content)) {
               for (const part of msg.content) {
                 if (typeof part === 'object' && part.type === 'tool-result') {
@@ -95,28 +95,21 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           }
 
           // Extract tool calls from messages and match them with their results
-          for (const msg of nestedMessages) {
+          for (const msg of messages) {
             if (msg.type === 'tool-call' && Array.isArray(msg.content)) {
               // Process each tool call in this message
               for (const part of msg.content) {
                 if (typeof part === 'object' && part.type === 'tool-call') {
                   const toolCallContent = part as ToolCallContent;
                   const toolResult = toolResultMap.get(toolCallContent.toolCallId);
-                  const isWorkflow = Boolean(
-                    toolResult?.result?.result &&
-                    typeof toolResult.result.result === 'object' &&
-                    toolResult.result.result !== null &&
-                    'steps' in toolResult.result.result,
-                  );
+                  const isWorkflow = Boolean(toolResult?.result?.result?.steps);
 
                   childMessages.push({
                     type: 'tool' as const,
                     toolCallId: toolCallContent.toolCallId,
                     toolName: toolCallContent.toolName,
                     args: toolCallContent.args,
-                    toolOutput: isWorkflow
-                      ? (toolResult?.result?.result as Record<string, unknown>)
-                      : toolResult?.result,
+                    toolOutput: isWorkflow ? toolResult?.result?.result : toolResult?.result,
                   });
                 }
               }
@@ -171,7 +164,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
 
           return nextMessage;
         }
-      } catch {
+      } catch (error) {
         // If parsing fails, return the original message
         return message;
       }
@@ -180,7 +173,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
     const extendedMessage = message as ExtendedMastraUIMessage;
 
     // Convert pendingToolApprovals from DB format to stream format
-    const pendingToolApprovals = extendedMessage.metadata?.pendingToolApprovals as Record<string, unknown> | undefined;
+    const pendingToolApprovals = extendedMessage.metadata?.pendingToolApprovals as Record<string, any> | undefined;
     if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
       return {
         ...message,
@@ -193,7 +186,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
     }
 
     // Convert suspendedTools from DB format to stream format
-    const suspendedTools = extendedMessage.metadata?.suspendedTools as Record<string, unknown> | undefined;
+    const suspendedTools = extendedMessage.metadata?.suspendedTools as Record<string, any> | undefined;
     if (suspendedTools && typeof suspendedTools === 'object') {
       return {
         ...message,
