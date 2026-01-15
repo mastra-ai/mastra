@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import { getOrCreateSpan, SpanType, EntityType } from '@mastra/core/observability';
-import type { SpanCache, AnyExportedSpan } from '@mastra/core/observability';
+import type { AnyExportedSpan } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
@@ -250,16 +250,6 @@ export class InngestWorkflow<
         const mastra = this.#mastra;
         const tracingPolicy = this.options.tracingPolicy;
 
-        // Create span cache for this workflow run
-        // This stores ExportedSpan data that can be used to rebuild spans for lifecycle operations
-        const spanCacheMap = new Map<string, AnyExportedSpan>();
-        const spanCache: SpanCache = {
-          set: (traceId, spanId, data) => spanCacheMap.set(`${traceId}:${spanId}`, data),
-          get: (traceId, spanId) => spanCacheMap.get(`${traceId}:${spanId}`),
-          delete: (traceId, spanId) => spanCacheMap.delete(`${traceId}:${spanId}`),
-          clear: () => spanCacheMap.clear(),
-        };
-
         // Create the workflow root span durably - exports SPAN_STARTED immediately on first execution
         // On replay, returns memoized ExportedSpan data without re-creating the span
         const workflowSpanData = await step.run(`workflow.${this.id}.span.start`, async () => {
@@ -284,11 +274,6 @@ export class InngestWorkflow<
           return span?.exportSpan();
         });
 
-        // Cache the workflow span data (works for both first run and replay)
-        if (workflowSpanData) {
-          spanCache.set(workflowSpanData.traceId, workflowSpanData.id, workflowSpanData);
-        }
-
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
@@ -311,8 +296,7 @@ export class InngestWorkflow<
             abortController: new AbortController(),
             // For Inngest, we don't pass workflowSpan - step spans use tracingIds instead
             workflowSpan: undefined,
-            // Pass span cache and tracing IDs for durable span operations
-            spanCache,
+            // Pass tracing IDs for durable span operations
             tracingIds: workflowSpanData
               ? {
                   traceId: workflowSpanData.traceId,

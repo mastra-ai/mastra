@@ -285,7 +285,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
     // Default: end span directly (no durability)
     params.span?.end(params.endOptions as any);
@@ -306,7 +305,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       error: Error;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
     // Default: error span directly (no durability)
     params.span?.error(params.errorOptions as any);
@@ -351,7 +349,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
     // Default: end span directly (no durability)
     params.span?.end(params.endOptions as any);
@@ -372,7 +369,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       error: Error;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
     // Default: error span directly (no durability)
     params.span?.error(params.errorOptions as any);
@@ -634,8 +630,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
-    /** Span cache for durable span operations (Inngest) */
-    spanCache?: import('../observability').SpanCache;
     /** Trace IDs for creating child spans in durable execution */
     tracingIds?: {
       traceId: string;
@@ -707,8 +701,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         retryConfig: { attempts, delay },
         format: params.format,
         state: lastState ?? initialState,
-        // Span cache and tracing IDs for durable span operations (Inngest)
-        spanCache: params.spanCache,
+        // Tracing IDs for durable span operations (Inngest)
         tracingIds: params.tracingIds,
       };
       lastExecutionContext = executionContext;

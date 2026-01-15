@@ -129,14 +129,12 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     await engine.endChildSpan({
       span: sleepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.end`,
-      executionContext,
     });
   } catch (e) {
     await engine.errorChildSpan({
       span: sleepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.error`,
       errorOptions: { error: e as Error },
-      executionContext,
     });
     throw e;
   }
@@ -260,7 +258,6 @@ export async function executeSleepUntil(
     await engine.endChildSpan({
       span: sleepUntilSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end.nodate`,
-      executionContext,
     });
     return;
   }
@@ -270,14 +267,12 @@ export async function executeSleepUntil(
     await engine.endChildSpan({
       span: sleepUntilSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end`,
-      executionContext,
     });
   } catch (e) {
     await engine.errorChildSpan({
       span: sleepUntilSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.error`,
       errorOptions: { error: e as Error },
-      executionContext,
     });
     throw e;
   }

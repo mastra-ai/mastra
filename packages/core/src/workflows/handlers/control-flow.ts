@@ -159,7 +159,6 @@ export async function executeParallel(
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
           tracingIds: executionContext.tracingIds,
-          spanCache: executionContext.spanCache,
         },
         tracingContext: {
           currentSpan: parallelSpan,
@@ -214,14 +213,12 @@ export async function executeParallel(
       span: parallelSpan,
       operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.error`,
       errorOptions: { error: execResults.error },
-      executionContext,
     });
   } else {
     await engine.endChildSpan({
       span: parallelSpan,
       operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.end`,
       endOptions: { output: execResults.output || execResults },
-      executionContext,
     });
   }
 
@@ -367,7 +364,6 @@ export async function executeConditional(
                 result: result !== null,
               },
             },
-            executionContext,
           });
 
           return result;
@@ -394,7 +390,6 @@ export async function executeConditional(
                 result: false,
               },
             },
-            executionContext,
           });
 
           return null;
@@ -460,7 +455,6 @@ export async function executeConditional(
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
           tracingIds: executionContext.tracingIds,
-          spanCache: executionContext.spanCache,
         },
         tracingContext: {
           currentSpan: conditionalSpan,
@@ -518,14 +512,12 @@ export async function executeConditional(
       span: conditionalSpan,
       operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.error`,
       errorOptions: { error: execResults.error },
-      executionContext,
     });
   } else {
     await engine.endChildSpan({
       span: conditionalSpan,
       operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.end`,
       endOptions: { output: execResults.output || execResults },
-      executionContext,
     });
   }
 
@@ -662,7 +654,6 @@ export async function executeLoop(
             totalIterations: iteration,
           },
         },
-        executionContext,
       });
       return result;
     }
@@ -728,7 +719,6 @@ export async function executeLoop(
       endOptions: {
         output: isTrue,
       },
-      executionContext,
     });
 
     iteration++;
@@ -743,7 +733,6 @@ export async function executeLoop(
         totalIterations: iteration,
       },
     },
-    executionContext,
   });
 
   return result;
@@ -1032,7 +1021,6 @@ export async function executeForeach(
     endOptions: {
       output: results,
     },
-    executionContext,
   });
 
   return {

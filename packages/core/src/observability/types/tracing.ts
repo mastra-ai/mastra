@@ -597,21 +597,6 @@ export type AnySpan = Span<keyof SpanTypeMap>;
  */
 export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
 
-/**
- * Cache for storing exported span data during durable workflow execution.
- * Used by Inngest engine to track spans across multiple durable operations.
- */
-export interface SpanCache {
-  /** Store exported span data */
-  set(traceId: string, spanId: string, data: AnyExportedSpan): void;
-  /** Retrieve exported span data */
-  get(traceId: string, spanId: string): AnyExportedSpan | undefined;
-  /** Remove span data from cache */
-  delete(traceId: string, spanId: string): void;
-  /** Clear all cached spans */
-  clear(): void;
-}
-
 // ============================================================================
 // Tracing Interfaces
 // ============================================================================

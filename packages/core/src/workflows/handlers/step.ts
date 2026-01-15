@@ -198,6 +198,35 @@ export async function executeStep(
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
     if (workflowResult !== null) {
+      // End the step span with the nested workflow result
+      if (stepSpan) {
+        if (workflowResult.status === 'failed') {
+          await engine.errorStepSpan({
+            span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
+            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            errorOptions: {
+              error:
+                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+              attributes: { status: 'failed' },
+            },
+          });
+        } else {
+          // For success, suspended, paused, tripwire - end the span normally
+          // Only 'success' has .output, others may have suspendOutput or nothing
+          const output =
+            workflowResult.status === 'success' ? workflowResult.output : (workflowResult as any).suspendOutput;
+
+          await engine.endStepSpan({
+            span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
+            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            endOptions: {
+              output,
+              attributes: { status: workflowResult.status },
+            },
+          });
+        }
+      }
+
       const stepResult = { ...stepInfo, ...workflowResult } as StepResult<any, any, any, any>;
       return {
         result: stepResult,
@@ -464,7 +493,6 @@ export async function executeStep(
           status: execResults.status,
         },
       },
-      executionContext,
     });
   }
 

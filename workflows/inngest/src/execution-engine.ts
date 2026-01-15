@@ -271,11 +271,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       return span?.exportSpan();
     });
 
-    // Cache the span data (works for both first run and replay)
-    if (exportedSpan && executionContext.spanCache) {
-      executionContext.spanCache.set(exportedSpan.traceId, exportedSpan.id, exportedSpan);
-    }
-
     // Return a rebuilt span that can have .end()/.error() called later
     if (exportedSpan) {
       const observability = this.mastra?.observability?.getSelectedInstance({});
@@ -295,18 +290,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
-    const { span, operationId, endOptions, executionContext } = params;
+    const { span, operationId, endOptions } = params;
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
       span.end(endOptions);
-
-      // Clean up cache
-      if (span.traceId && span.id) {
-        executionContext.spanCache?.delete(span.traceId, span.id);
-      }
     });
   }
 
@@ -320,18 +309,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       error: Error;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
-    const { span, operationId, errorOptions, executionContext } = params;
+    const { span, operationId, errorOptions } = params;
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
       span.error(errorOptions);
-
-      // Clean up cache
-      if (span.traceId && span.id) {
-        executionContext.spanCache?.delete(span.traceId, span.id);
-      }
     });
   }
 
@@ -371,11 +354,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       return span?.exportSpan();
     });
 
-    // Cache the span data (works for both first run and replay)
-    if (exportedSpan && executionContext.spanCache) {
-      executionContext.spanCache.set(exportedSpan.traceId, exportedSpan.id, exportedSpan);
-    }
-
     // Return a rebuilt span that can have .end()/.error() called later
     if (exportedSpan) {
       const observability = this.mastra?.observability?.getSelectedInstance({});
@@ -395,18 +373,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
-    const { span, operationId, endOptions, executionContext } = params;
+    const { span, operationId, endOptions } = params;
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
       span.end(endOptions);
-
-      // Clean up cache
-      if (span.traceId && span.id) {
-        executionContext.spanCache?.delete(span.traceId, span.id);
-      }
     });
   }
 
@@ -420,18 +392,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       error: Error;
       attributes?: Record<string, unknown>;
     };
-    executionContext: ExecutionContext;
   }): Promise<void> {
-    const { span, operationId, errorOptions, executionContext } = params;
+    const { span, operationId, errorOptions } = params;
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
       span.error(errorOptions);
-
-      // Clean up cache
-      if (span.traceId && span.id) {
-        executionContext.spanCache?.delete(span.traceId, span.id);
-      }
     });
   }
 
