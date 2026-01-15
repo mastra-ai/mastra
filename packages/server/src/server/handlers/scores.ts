@@ -99,6 +99,40 @@ async function listScorersFromSystem({
     }
   }
 
+  // Also fetch and include stored scorers
+  try {
+    const storedScorersResult = await mastra.listStoredScorers();
+    if (storedScorersResult?.scorers) {
+      for (const storedScorer of storedScorersResult.scorers) {
+        try {
+          // Resolve stored scorer to MastraScorer
+          const resolvedScorer = await mastra.resolveStoredScorer(storedScorer.id);
+          if (resolvedScorer) {
+            const scorerId = resolvedScorer.id;
+            // Don't overwrite code-defined scorers with same ID
+            if (!scorersMap.has(scorerId)) {
+              scorersMap.set(scorerId, {
+                scorer: resolvedScorer,
+                agentIds: [],
+                agentNames: [],
+                workflowIds: [],
+                isRegistered: true,
+              });
+            }
+          }
+        } catch (scorerError) {
+          // Log but continue with other scorers
+          const logger = mastra.getLogger();
+          logger.warn('Failed to resolve stored scorer', { scorerId: storedScorer.id, error: scorerError });
+        }
+      }
+    }
+  } catch (storageError) {
+    // Storage not configured or doesn't support scorers - log and ignore
+    const logger = mastra.getLogger();
+    logger.debug('Failed to fetch stored scorers', { error: storageError });
+  }
+
   return Object.fromEntries(scorersMap.entries());
 }
 
