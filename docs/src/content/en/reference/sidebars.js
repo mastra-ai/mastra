@@ -394,6 +394,11 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/datadog",
+                  label: "DatadogExporter",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/laminar",
                   label: "LaminarExporter",
                 },
