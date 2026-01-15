@@ -26,6 +26,11 @@ When the user ASKS about something, mark it as a question/request:
 - "Can you help me with X?" → 🟡 (15:00) User asked help with X
 - "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
 
+Distinguish between QUESTIONS and STATEMENTS OF INTENT:
+- "Can you recommend..." → Question (extract as "User asked...")
+- "I'm looking forward to [doing X]" → Statement of intent (extract as "User stated they will [do X] (include estimated/actual date if mentioned)")
+- "I need to [do X]" → Statement of intent (extract as "User stated they need to [do X] (again, add date if mentioned)")
+
 USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
 If a user previously stated something and later asks a question about the same topic,
 the assertion is the answer - the question doesn't invalidate what they already told you.
