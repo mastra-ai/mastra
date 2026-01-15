@@ -20,7 +20,13 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type {
+  MastraStorage,
+  WorkflowRuns,
+  StorageAgentType,
+  StorageScorerConfig,
+  StorageMemoryConfig,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -743,6 +749,8 @@ export class Mastra<
    * @param id - The unique identifier of the stored agent
    * @param options - Options for the query
    * @param options.raw - If true, returns raw stored data instead of Agent instance
+   * @param options.versionId - If provided, fetches this specific version's snapshot
+   * @param options.versionNumber - If provided, fetches this version number's snapshot
    *
    * @throws {MastraError} When storage is not configured or doesn't support agents
    *
@@ -764,11 +772,26 @@ export class Mastra<
    * if (rawConfig) {
    *   console.log(rawConfig.instructions);
    * }
+   *
+   * // Get a specific version by versionId
+   * const versionedAgent = await mastra.getStoredAgentById('my-agent-id', { versionId: 'version-ulid' });
+   *
+   * // Get a specific version by version number
+   * const v2Agent = await mastra.getStoredAgentById('my-agent-id', { versionNumber: 2 });
    * ```
    */
-  public async getStoredAgentById(id: string, options?: { raw?: false }): Promise<Agent | null>;
-  public async getStoredAgentById(id: string, options: { raw: true }): Promise<StorageAgentType | null>;
-  public async getStoredAgentById(id: string, options?: { raw?: boolean }): Promise<Agent | StorageAgentType | null> {
+  public async getStoredAgentById(
+    id: string,
+    options?: { raw?: false; versionId?: string; versionNumber?: number },
+  ): Promise<Agent | null>;
+  public async getStoredAgentById(
+    id: string,
+    options: { raw: true; versionId?: string; versionNumber?: number },
+  ): Promise<StorageAgentType | null>;
+  public async getStoredAgentById(
+    id: string,
+    options?: { raw?: boolean; versionId?: string; versionNumber?: number },
+  ): Promise<Agent | StorageAgentType | null> {
     const storage = this.#storage;
 
     if (!storage) {
@@ -796,7 +819,41 @@ export class Mastra<
       throw error;
     }
 
-    const storedAgent = await agentsStore.getAgentById({ id });
+    // Handle version resolution
+    if (options?.versionId && options?.versionNumber !== undefined) {
+      this.#logger?.warn(`Both versionId and versionNumber provided for agent "${id}". Using versionId.`);
+    }
+
+    if (options?.versionId) {
+      // Fetch the specific version by its ID
+      const version = await agentsStore.getVersion(options.versionId);
+      if (!version) {
+        return null;
+      }
+      // Verify the version belongs to the requested agent
+      if (version.agentId !== id) {
+        return null;
+      }
+      if (options?.raw) {
+        return version.snapshot;
+      }
+      return this.#createAgentFromStoredConfig(version.snapshot);
+    }
+
+    if (options?.versionNumber !== undefined) {
+      // Fetch the specific version by agent ID and version number
+      const version = await agentsStore.getVersionByNumber(id, options.versionNumber);
+      if (!version) {
+        return null;
+      }
+      if (options?.raw) {
+        return version.snapshot;
+      }
+      return this.#createAgentFromStoredConfig(version.snapshot);
+    }
+
+    // Default behavior: get the current agent config with version resolution
+    const storedAgent = await agentsStore.getAgentByIdResolved({ id });
 
     if (!storedAgent) {
       return null;
@@ -912,7 +969,8 @@ export class Mastra<
       throw error;
     }
 
-    const result = await agentsStore.listAgents({
+    // Use listAgentsResolved to get version-resolved configs
+    const result = await agentsStore.listAgentsResolved({
       page: args?.page,
       perPage: args?.perPage,
       orderBy: args?.orderBy,
@@ -966,6 +1024,9 @@ export class Mastra<
     // Resolve sub-agents from the stored agent references
     const agents = this.#resolveStoredAgents(storedAgent.agents);
 
+    // Integration IDs are used directly - tools will be loaded from storage at runtime
+    const integrations = storedAgent.integrations;
+
     // Resolve memory from the stored memory reference
     const memory = this.#resolveStoredMemory(storedAgent.memory);
 
@@ -982,9 +1043,12 @@ export class Mastra<
       tools,
       workflows,
       agents,
+      integrations,
       memory,
       scorers,
       defaultOptions: storedAgent.defaultOptions,
+      source: 'stored',
+      activeVersionId: storedAgent.activeVersionId,
     });
 
     // Register the agent with Mastra
@@ -1090,20 +1154,22 @@ export class Mastra<
    * Resolves memory reference from stored configuration to actual memory instance.
    * @private
    */
-  #resolveStoredMemory(storedMemory?: string): MastraMemory | undefined {
-    if (!storedMemory) {
+  #resolveStoredMemory(storedMemory?: StorageMemoryConfig): MastraMemory | undefined {
+    if (!storedMemory?.id) {
       return undefined;
     }
 
+    const memoryId = storedMemory.id;
+
     // Try by key first
     try {
-      return this.getMemory(storedMemory as keyof TMemory);
+      return this.getMemory(memoryId as keyof TMemory);
     } catch {
       // Try by id
       try {
-        return this.getMemoryById(storedMemory);
+        return this.getMemoryById(memoryId);
       } catch {
-        this.#logger?.warn(`Memory "${storedMemory}" referenced in stored agent but not registered in Mastra`);
+        this.#logger?.warn(`Memory "${memoryId}" referenced in stored agent but not registered in Mastra`);
       }
     }
 

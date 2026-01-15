@@ -124,3 +124,19 @@ export const useCloneThread = () => {
     },
   });
 };
+
+/**
+ * Hook to list all registered memory configurations from Mastra.
+ * Returns the list of memory configs that can be assigned to agents.
+ */
+export const useMemoryConfigs = () => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['memory', 'configs', requestContext],
+    queryFn: () => client.listMemoryConfigs(requestContext),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  });
+};

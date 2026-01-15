@@ -3,6 +3,7 @@ import { Cell, EntryCell } from '@/ds/components/Table';
 import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 import { ColumnDef, Row } from '@tanstack/react-table';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { Database } from 'lucide-react';
 
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
@@ -18,13 +19,26 @@ export type AgentTableColumn = {
 
 const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   const { Link, paths } = useLinkComponent();
+  const isStored = row.original.source === 'stored';
 
   return (
     <EntryCell
       name={
-        <Link className="w-full space-y-0" href={paths.agentLink(row.original.id)}>
-          {row.original.name}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link className="w-full space-y-0" href={paths.agentLink(row.original.id)}>
+            {row.original.name}
+          </Link>
+          {isStored && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Database className="w-4 h-4 text-muted-foreground" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Stored agent - can be edited</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       }
       description={extractPrompt(row.original.instructions)}
     />

@@ -117,6 +117,7 @@ describe('Agent Handlers', () => {
           defaultGenerateOptionsLegacy: {},
           defaultStreamOptionsLegacy: {},
           modelList: undefined,
+          source: 'code',
         },
         'test-multi-model-agent': {
           id: 'test-multi-model-agent',
@@ -134,23 +135,27 @@ describe('Agent Handlers', () => {
           defaultOptions: {},
           defaultGenerateOptionsLegacy: {},
           defaultStreamOptionsLegacy: {},
+          source: 'code',
           modelList: [
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
             },
           ],
@@ -398,6 +403,8 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        source: 'code',
+        activeVersionId: undefined,
       });
     });
 
@@ -613,6 +620,8 @@ describe('Agent Handlers', () => {
           agentId: 'test-agent',
           instructions: 'You are a helpful assistant.',
           comment: 'Make it more specific about tone',
+          // Provide a model to bypass the findConnectedModel check which requires API keys
+          model: { provider: 'openai', modelId: 'gpt-4o' },
         });
 
         expect(result).toEqual({

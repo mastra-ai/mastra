@@ -198,10 +198,14 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
   }
 
-  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+  enhanceInstructions(
+    instructions: string,
+    comment: string,
+    model?: { provider: string; modelId: string },
+  ): Promise<{ explanation: string; new_prompt: string }> {
     return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
-      body: { instructions, comment },
+      body: { instructions, comment, model },
     });
   }
 

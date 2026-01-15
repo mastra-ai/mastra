@@ -458,6 +458,48 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           model: { provider: 'openai', name: 'gpt-4o' },
         },
       });
+
+      // Create test versions for version routes
+      // Version 1 - the active version
+      await agents.createVersion({
+        id: 'test-version',
+        agentId: 'test-stored-agent',
+        versionNumber: 1,
+        snapshot: {
+          id: 'test-stored-agent',
+          name: 'Test Stored Agent',
+          description: 'A test stored agent for integration tests',
+          instructions: 'Test instructions for stored agent',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        changedFields: ['name'],
+      });
+
+      // Version 2 - a non-active version that can be deleted and used for comparison
+      await agents.createVersion({
+        id: 'test-version-2',
+        agentId: 'test-stored-agent',
+        versionNumber: 2,
+        snapshot: {
+          id: 'test-stored-agent',
+          name: 'Test Stored Agent v2',
+          description: 'Updated description',
+          instructions: 'Updated instructions for stored agent',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        changedFields: ['name', 'description', 'instructions'],
+      });
+
+      // Update the agent to have activeVersionId pointing to version 1
+      // so version 2 can be deleted for testing
+      await agents.updateAgent({
+        id: 'test-stored-agent',
+        activeVersionId: 'test-version',
+      });
     }
 
     // Add test thread and messages to Mastra's storage for memory routes without agentId

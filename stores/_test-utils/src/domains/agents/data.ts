@@ -64,7 +64,7 @@ export const createFullSampleAgent = ({
   agents: ['helper-agent'],
   inputProcessors: [{ type: 'sanitize', config: { stripHtml: true } }],
   outputProcessors: [{ type: 'format', config: { style: 'markdown' } }],
-  memory: 'thread-memory',
+  memory: { id: 'thread-memory' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
   },

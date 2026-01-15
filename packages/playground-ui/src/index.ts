@@ -6,6 +6,7 @@ export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
+export * from './domains/integrations/index';
 export * from './ds/components/Threads';
 export * from './types';
 

@@ -339,8 +339,14 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
                 details: { key },
               });
             }
-            conditions.push(`json_extract(metadata, '$.${key}') = ?`);
-            queryArgs.push(typeof value === 'string' ? value : JSON.stringify(value));
+            // Use CAST for text comparison to match sql-builder.ts pattern
+            if (typeof value === 'string') {
+              conditions.push(`CAST(json_extract(metadata, '$.${key}') AS TEXT) = ?`);
+              queryArgs.push(value);
+            } else {
+              conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+              queryArgs.push(JSON.stringify(value));
+            }
           }
         }
 
