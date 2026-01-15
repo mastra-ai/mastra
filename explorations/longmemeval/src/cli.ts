@@ -1219,6 +1219,7 @@ program
   .option('--improve-question <text>', 'Improved question text (use with --improve)')
   .option('--improve-answer <text>', 'Improved answer text (use with --improve)')
   .option('--improve-note <text>', 'Improvement note (use with --improve)')
+  .option('--clear-improved', 'Clear all improved fields (use with --improve)')
   .action(async (runId, options) => {
     try {
       const command = new InvestigateCommand({
@@ -1254,6 +1255,7 @@ program
         improveQuestion: options.improveQuestion,
         improveAnswer: options.improveAnswer,
         improveNote: options.improveNote,
+        clearImproved: options.clearImproved,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);

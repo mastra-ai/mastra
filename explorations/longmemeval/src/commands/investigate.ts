@@ -67,6 +67,7 @@ export interface InvestigateOptions {
   improveQuestion?: string; // Improved question text
   improveAnswer?: string;   // Improved answer text
   improveNote?: string;     // Improvement note
+  clearImproved?: boolean;  // Clear all improved fields (use with --improve)
   // Check for duplicate observations
   checkDuplicates?: boolean; // Check for duplicate thread blocks in observations
   // Baseline check - comprehensive data quality check
@@ -272,7 +273,7 @@ export class InvestigateCommand {
 
     // Improve question/answer in dataset
     if (options.improve) {
-      await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote);
+      await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote, options.clearImproved);
       return;
     }
 
@@ -883,8 +884,8 @@ export class InvestigateCommand {
       }
     }
 
-    // Save dataset
-    await writeFile(datasetPath, JSON.stringify(dataset, null, 2));
+    // Save dataset with 4-space indentation
+    await writeFile(datasetPath, JSON.stringify(dataset, null, 4));
 
     // Save progress
     const progressPath = join(this.investigationsDir, latestInv, 'progress.json');
@@ -1951,9 +1952,10 @@ export class InvestigateCommand {
     improvedQuestion?: string,
     improvedAnswer?: string,
     improvementNote?: string,
+    clearImproved?: boolean,
   ): Promise<void> {
-    if (!improvedQuestion && !improvedAnswer && !improvementNote) {
-      console.log('❌ At least one of --improve-question, --improve-answer, or --improve-note is required');
+    if (!clearImproved && !improvedQuestion && !improvedAnswer && !improvementNote) {
+      console.log('❌ At least one of --improve-question, --improve-answer, --improve-note, or --clear-improved is required');
       return;
     }
 
@@ -1986,23 +1988,39 @@ export class InvestigateCommand {
     // Show what's being updated
     console.log('\n📋 Changes:');
     
-    if (improvedQuestion) {
-      console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
-      question.improved_question = improvedQuestion;
-    }
-    
-    if (improvedAnswer) {
-      console.log(`   improved_answer: ${question.improved_answer || '(not set)'} → ${improvedAnswer}`);
-      question.improved_answer = improvedAnswer;
-    }
-    
-    if (improvementNote) {
-      console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
-      question.improvement_note = improvementNote;
+    if (clearImproved) {
+      // Clear all improved fields
+      if (question.improved_question) {
+        console.log(`   improved_question: ${question.improved_question} → (cleared)`);
+        delete question.improved_question;
+      }
+      if (question.improved_answer) {
+        console.log(`   improved_answer: ${question.improved_answer.substring(0, 50)}... → (cleared)`);
+        delete question.improved_answer;
+      }
+      if (question.improvement_note) {
+        console.log(`   improvement_note: ${question.improvement_note} → (cleared)`);
+        delete question.improvement_note;
+      }
+    } else {
+      if (improvedQuestion) {
+        console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
+        question.improved_question = improvedQuestion;
+      }
+      
+      if (improvedAnswer) {
+        console.log(`   improved_answer: ${question.improved_answer || '(not set)'} → ${improvedAnswer}`);
+        question.improved_answer = improvedAnswer;
+      }
+      
+      if (improvementNote) {
+        console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
+        question.improvement_note = improvementNote;
+      }
     }
 
-    // Save dataset
-    await writeFile(datasetPath, JSON.stringify(dataset, null, 2));
+    // Save dataset with 4-space indentation
+    await writeFile(datasetPath, JSON.stringify(dataset, null, 4));
     
     console.log('\n✅ Dataset updated!');
     console.log('   Run `pnpm run sync-improved-om-qa` to sync to prepared data');
