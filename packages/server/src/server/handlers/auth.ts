@@ -163,22 +163,26 @@ export const GET_SSO_LOGIN_ROUTE = createRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, redirect_uri } = ctx as any;
+      const { mastra, redirect_uri, request } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
         throw new HTTPException(404, { message: 'SSO not configured' });
       }
 
-      // Generate state for CSRF protection
-      const state = crypto.randomUUID();
+      // Build OAuth callback URI (always /api/auth/sso/callback)
+      const requestUrl = new URL(request.url);
+      const oauthCallbackUri = `${requestUrl.origin}/api/auth/sso/callback`;
 
-      // Default redirect URI to current origin
-      const redirectUri = redirect_uri || '/api/auth/sso/callback';
+      // Encode the post-login redirect in state (where user goes after auth completes)
+      // State format: uuid|postLoginRedirect
+      const stateId = crypto.randomUUID();
+      const postLoginRedirect = redirect_uri || '/';
+      const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
-      const url = auth.getLoginUrl(redirectUri, state);
+      const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
 
-      return { url };
+      return { url: loginUrl };
     } catch (error) {
       return handleError(error, 'Error initiating SSO login');
     }
@@ -192,34 +196,36 @@ export const GET_SSO_LOGIN_ROUTE = createRoute({
 export const GET_SSO_CALLBACK_ROUTE = createRoute({
   method: 'GET',
   path: '/api/auth/sso/callback',
-  responseType: 'json',
+  responseType: 'datastream-response',
   queryParamSchema: ssoCallbackQuerySchema,
-  responseSchema: ssoCallbackResponseSchema,
   summary: 'Handle SSO callback',
-  description: 'Handles the OAuth callback, exchanges code for session, and returns user info.',
+  description: 'Handles the OAuth callback, exchanges code for session, and redirects to the app.',
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, code, state, request } = ctx as any;
     const auditService = getAuditService(mastra);
 
+    // Extract post-login redirect from state (format: uuid|encodedRedirect)
+    let redirectTo = '/';
+    let stateId = state || '';
+    if (state && state.includes('|')) {
+      const [id, encodedRedirect] = state.split('|', 2);
+      stateId = id;
+      try {
+        redirectTo = decodeURIComponent(encodedRedirect);
+      } catch {
+        redirectTo = '/';
+      }
+    }
+
     try {
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
-        throw new HTTPException(404, { message: 'SSO not configured' });
+        return Response.redirect(redirectTo + '?error=sso_not_configured', 302);
       }
 
-      // TODO: Validate state against stored value for CSRF protection
-
-      const result = (await auth.handleCallback(code, state || '')) as SSOCallbackResult<EEUser>;
-
-      // If session provider is available, create session headers
-      let redirectTo = '/';
-      if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders') && result.tokens) {
-        // The session headers would be set by middleware or response
-        // For now, just return success
-      }
-
+      const result = (await auth.handleCallback(code, stateId)) as SSOCallbackResult<EEUser>;
       const user = result.user as EEUser;
 
       // Log successful SSO login
@@ -230,16 +236,28 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
         metadata: { email: user.email },
       });
 
-      return {
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          avatarUrl: user.avatarUrl,
-        },
-        redirectTo,
-      };
+      // Build response headers (session cookies, etc.)
+      const headers = new Headers();
+      headers.set('Location', redirectTo);
+
+      // If session provider is available, create session and add cookies
+      if (implementsInterface<ISessionProvider>(auth, 'createSession') && result.tokens) {
+        // Create a session with the tokens as metadata
+        const session = await auth.createSession(user.id, {
+          accessToken: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          expiresAt: result.tokens.expiresAt,
+        });
+        const sessionHeaders = auth.getSessionHeaders(session);
+        for (const [key, value] of Object.entries(sessionHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers,
+      });
     } catch (error) {
       // Log failed SSO callback
       await auditService.log('auth', {
@@ -254,7 +272,9 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
         metadata: { error: error instanceof Error ? error.message : 'Unknown error' },
       });
 
-      return handleError(error, 'Error handling SSO callback');
+      // Redirect with error
+      const errorMessage = encodeURIComponent(error instanceof Error ? error.message : 'Unknown error');
+      return Response.redirect(redirectTo + `?error=${errorMessage}`, 302);
     }
   },
 });
