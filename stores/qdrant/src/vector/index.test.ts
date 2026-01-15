@@ -643,4 +643,6 @@ createVectorTestSuite({
     // Qdrant indexes immediately
     await new Promise(resolve => setTimeout(resolve, 100));
   },
+  supportsRegex: false,
+  supportsContains: false,
 });

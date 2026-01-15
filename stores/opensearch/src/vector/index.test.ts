@@ -122,4 +122,6 @@ createVectorTestSuite({
     // OpenSearch indexes immediately with refresh: true
     await new Promise(resolve => setTimeout(resolve, 100));
   },
+  supportsRegex: false,
+  supportsContains: false,
 });

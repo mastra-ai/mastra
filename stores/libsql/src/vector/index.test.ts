@@ -23,4 +23,6 @@ createVectorTestSuite({
   testDomains: {
     largeBatch: false,
   },
+  supportsRegex: false,
+  supportsContains: false,
 });
