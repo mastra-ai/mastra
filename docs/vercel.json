@@ -574,6 +574,11 @@
       "source": "/reference/v1/workflows/workflow-methods/waitForEvent",
       "destination": "/docs/v1/workflows/suspend-and-resume",
       "permanent": true
+    },
+    {
+      "source": "/reference/v1/memory/query",
+      "destination": "/reference/v1/memory/recall",
+      "permanent": true
     }
   ]
 }

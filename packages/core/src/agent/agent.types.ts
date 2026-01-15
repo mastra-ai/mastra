@@ -162,11 +162,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext;
 
-  /** @deprecated Use memory.resource instead. Identifier for the resource/user */
-  resourceId?: string;
-  /** @deprecated Use memory.thread instead. Thread identifier for conversation continuity */
-  threadId?: string;
-
   /** Maximum number of steps to run */
   maxSteps?: number;
 
