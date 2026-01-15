@@ -323,8 +323,7 @@ export function WorkflowTrigger({
 
         {hasWorkflowActivePaths && (
           <>
-            <hr className="border-border1 border my-5" />
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 pt-5 border-t border-border1">
               <Txt variant="ui-xs" className="text-neutral3">
                 Status
               </Txt>
