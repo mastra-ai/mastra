@@ -122,8 +122,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public name: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelFallbacks;
-  #originalModel: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelFallbacks;
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -1112,7 +1112,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async resolveModelFallbacks(
-    modelConfig: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelFallbacks,
+    modelConfig: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks,
     requestContext: RequestContext,
   ): Promise<MastraModelConfig | ModelFallbacks> {
     // If it's a dynamic function, resolve it

@@ -136,7 +136,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * The language model used by the agent. Can be provided statically or resolved at runtime.
    * Supports DynamicArgument for both single models and model fallback arrays.
    */
-  model: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelWithRetries[];
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]>;
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0
