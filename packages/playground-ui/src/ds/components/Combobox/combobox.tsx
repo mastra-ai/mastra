@@ -1,8 +1,9 @@
-import { Button as DSButton, ButtonProps as DSButtonProps } from '@/ds/components/Button/Button';
+import { Button as DSButton } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
+import { type FormElementSize } from '@/ds/primitives/form-element';
 
 export type ComboboxOption = {
   label: string;
@@ -18,7 +19,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: DSButtonProps['variant'];
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  size?: FormElementSize;
 };
 
 export function Combobox({
@@ -31,6 +33,7 @@ export function Combobox({
   className,
   disabled = false,
   variant = 'default',
+  size = 'md',
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -121,10 +124,11 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           variant={variant}
+          size={size}
           className={cn('w-full justify-between', className)}
           disabled={disabled}
         >
-          <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
+          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </DSButton>
       </PopoverTrigger>
