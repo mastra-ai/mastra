@@ -408,125 +408,130 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
       });
     });
 
-    describe('Empty Logical Operator Conditions', () => {
-      const emptyLogicalTestIndex = `empty_logical_test_${Date.now()}`;
+    // Only create this describe block if at least one empty logical operator test will run
+    // Skip entirely for stores that don't support any of these features
+    const hasEmptyLogicalTests = supportsEmptyLogicalOperators || (supportsNotOperator && supportsEmptyNot);
+    if (hasEmptyLogicalTests) {
+      describe('Empty Logical Operator Conditions', () => {
+        const emptyLogicalTestIndex = `empty_logical_test_${Date.now()}`;
 
-      beforeAll(async () => {
-        await createIndex(emptyLogicalTestIndex);
-        await waitForIndexing(emptyLogicalTestIndex);
+        beforeAll(async () => {
+          await createIndex(emptyLogicalTestIndex);
+          await waitForIndexing(emptyLogicalTestIndex);
 
-        // Insert test vectors
-        await config.vector.upsert({
-          indexName: emptyLogicalTestIndex,
-          vectors: [createVector(1), createVector(2), createVector(3)],
-          metadata: [
-            { category: 'A', value: 1 },
-            { category: 'B', value: 2 },
-            { category: 'C', value: 3 },
-          ],
+          // Insert test vectors
+          await config.vector.upsert({
+            indexName: emptyLogicalTestIndex,
+            vectors: [createVector(1), createVector(2), createVector(3)],
+            metadata: [
+              { category: 'A', value: 1 },
+              { category: 'B', value: 2 },
+              { category: 'C', value: 3 },
+            ],
+          });
+          await waitForIndexing(emptyLogicalTestIndex);
         });
-        await waitForIndexing(emptyLogicalTestIndex);
-      });
 
-      afterAll(async () => {
-        try {
-          await deleteIndex(emptyLogicalTestIndex);
-        } catch {
-          // Ignore cleanup errors
+        afterAll(async () => {
+          try {
+            await deleteIndex(emptyLogicalTestIndex);
+          } catch {
+            // Ignore cleanup errors
+          }
+        });
+
+        // Empty $and and $or tests - only run for stores that support them
+        // Some stores throw validation errors on empty logical operators
+        if (supportsEmptyLogicalOperators) {
+          it('should handle empty $and conditions', async () => {
+            // Empty $and should match all documents (no conditions to fail)
+            const results = await config.vector.query({
+              indexName: emptyLogicalTestIndex,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { $and: [] },
+            });
+
+            expect(results.length).toBe(3);
+          });
+
+          it('should handle empty $or conditions', async () => {
+            // Empty $or should match no documents (no conditions to satisfy)
+            const results = await config.vector.query({
+              indexName: emptyLogicalTestIndex,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { $or: [] },
+            });
+
+            // Most implementations treat empty $or as matching nothing
+            expect(results.length).toBe(0);
+          });
+        }
+
+        if (supportsNorOperator && supportsEmptyLogicalOperators) {
+          it('should handle empty $nor conditions', async () => {
+            // Empty $nor should match all documents (nothing to exclude)
+            const results = await config.vector.query({
+              indexName: emptyLogicalTestIndex,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { $nor: [] },
+            });
+
+            expect(results.length).toBe(3);
+          });
+        }
+
+        // Empty $not: Most stores using the core filter translator will throw an error.
+        // Only run this test for stores that explicitly support empty $not (supportsEmptyNot: true).
+        if (supportsNotOperator && supportsEmptyNot) {
+          it('should handle empty $not conditions', async () => {
+            const results = await config.vector.query({
+              indexName: emptyLogicalTestIndex,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: { $not: {} },
+            });
+            // Empty $not should match all documents for stores that allow it
+            expect(results.length).toBe(3);
+          });
+        }
+
+        // This test uses empty $and, so only run for stores that support it
+        if (supportsEmptyLogicalOperators) {
+          it('should handle multiple empty logical operators combined', async () => {
+            const results = await config.vector.query({
+              indexName: emptyLogicalTestIndex,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: {
+                $and: [],
+                category: 'A',
+              },
+            });
+            // Empty $and with additional filter should apply the additional filter
+            expect(results.length).toBe(1);
+            expect(results[0]?.metadata?.category).toBe('A');
+          });
+        }
+
+        // This test uses empty $or, so only run for stores that support it
+        if (supportsEmptyLogicalOperators) {
+          it('should handle nested empty logical operators', async () => {
+            const results = await config.vector.query({
+              indexName: emptyLogicalTestIndex,
+              queryVector: createUnitVector(0),
+              topK: 10,
+              filter: {
+                $and: [{ $or: [] }],
+              },
+            });
+            // Empty $or inside $and should result in no matches
+            expect(results.length).toBe(0);
+          });
         }
       });
-
-      // Empty $and and $or tests - only run for stores that support them
-      // Some stores throw validation errors on empty logical operators
-      if (supportsEmptyLogicalOperators) {
-        it('should handle empty $and conditions', async () => {
-          // Empty $and should match all documents (no conditions to fail)
-          const results = await config.vector.query({
-            indexName: emptyLogicalTestIndex,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: { $and: [] },
-          });
-
-          expect(results.length).toBe(3);
-        });
-
-        it('should handle empty $or conditions', async () => {
-          // Empty $or should match no documents (no conditions to satisfy)
-          const results = await config.vector.query({
-            indexName: emptyLogicalTestIndex,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: { $or: [] },
-          });
-
-          // Most implementations treat empty $or as matching nothing
-          expect(results.length).toBe(0);
-        });
-      }
-
-      if (supportsNorOperator && supportsEmptyLogicalOperators) {
-        it('should handle empty $nor conditions', async () => {
-          // Empty $nor should match all documents (nothing to exclude)
-          const results = await config.vector.query({
-            indexName: emptyLogicalTestIndex,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: { $nor: [] },
-          });
-
-          expect(results.length).toBe(3);
-        });
-      }
-
-      // Empty $not: Most stores using the core filter translator will throw an error.
-      // Only run this test for stores that explicitly support empty $not (supportsEmptyNot: true).
-      if (supportsNotOperator && supportsEmptyNot) {
-        it('should handle empty $not conditions', async () => {
-          const results = await config.vector.query({
-            indexName: emptyLogicalTestIndex,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: { $not: {} },
-          });
-          // Empty $not should match all documents for stores that allow it
-          expect(results.length).toBe(3);
-        });
-      }
-
-      // This test uses empty $and, so only run for stores that support it
-      if (supportsEmptyLogicalOperators) {
-        it('should handle multiple empty logical operators combined', async () => {
-          const results = await config.vector.query({
-            indexName: emptyLogicalTestIndex,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: {
-              $and: [],
-              category: 'A',
-            },
-          });
-          // Empty $and with additional filter should apply the additional filter
-          expect(results.length).toBe(1);
-          expect(results[0]?.metadata?.category).toBe('A');
-        });
-      }
-
-      // This test uses empty $or, so only run for stores that support it
-      if (supportsEmptyLogicalOperators) {
-        it('should handle nested empty logical operators', async () => {
-          const results = await config.vector.query({
-            indexName: emptyLogicalTestIndex,
-            queryVector: createUnitVector(0),
-            topK: 10,
-            filter: {
-              $and: [{ $or: [] }],
-            },
-          });
-          // Empty $or inside $and should result in no matches
-          expect(results.length).toBe(0);
-        });
-      }
-    });
+    } // end hasEmptyLogicalTests
   });
 }
