@@ -107,7 +107,7 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-type ModelWithRetries = {
+export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
   maxRetries?: number; //defaults to 0

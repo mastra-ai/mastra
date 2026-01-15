@@ -74,6 +74,7 @@ import type {
   DynamicAgentInstructions,
   AgentMethodType,
   StructuredOutputOptions,
+  ModelWithRetries,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -121,8 +122,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public name: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks> | ModelFallbacks;
-  #originalModel: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks> | ModelFallbacks;
+  model: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -211,8 +212,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       })) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
-      this.model = config.model as DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks>;
-      this.#originalModel = config.model as DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks>;
+      this.model = config.model;
+      this.#originalModel = config.model;
     }
 
     this.maxRetries = config.maxRetries ?? 0;
@@ -1106,11 +1107,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   /**
    * Resolves model configuration that may be a dynamic function returning a single model or array of models.
-   * Supports DynamicArgument for both MastraModelConfig and ModelFallbacks.
+   * Supports DynamicArgument for both MastraModelConfig and ModelWithRetries[].
+   * Normalizes ModelWithRetries[] to ModelFallbacks by filling in defaults.
    * @internal
    */
   private async resolveModelFallbacks(
-    modelConfig: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks> | ModelFallbacks,
+    modelConfig: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelFallbacks,
     requestContext: RequestContext,
   ): Promise<MastraModelConfig | ModelFallbacks> {
     // If it's a dynamic function, resolve it
@@ -1131,7 +1133,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return resolved;
     }
 
-    // Already resolved (static config or array)
+    // Already resolved - if it's a static array, normalize it
+    if (Array.isArray(modelConfig)) {
+      return modelConfig.map(m => ({
+        id: m.id ?? randomUUID(),
+        model: m.model as DynamicArgument<MastraModelConfig>,
+        maxRetries: m.maxRetries ?? 0,
+        enabled: m.enabled ?? true,
+      })) as ModelFallbacks;
+    }
+
+    // Static single model config
     return modelConfig;
   }
 
@@ -1247,7 +1259,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return;
     }
 
-    this.model = this.model.sort((a, b) => {
+    // After constructor normalization, arrays are always ModelFallbacks with required id
+    const modelArray = this.model as ModelFallbacks;
+    this.model = modelArray.sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
       return aIndex - bIndex;
@@ -1271,13 +1285,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return;
     }
 
-    const modelToUpdate = this.model.find(m => m.id === id);
+    // After constructor normalization, arrays are always ModelFallbacks with required id
+    const modelArray = this.model as ModelFallbacks;
+    const modelToUpdate = modelArray.find(m => m.id === id);
     if (!modelToUpdate) {
       this.logger.warn(`[Agents:${this.name}] model ${id} not found`);
       return;
     }
 
-    this.model = this.model.map(mdl => {
+    this.model = modelArray.map(mdl => {
       if (mdl.id === id) {
         return {
           ...mdl,
