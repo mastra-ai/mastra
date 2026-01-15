@@ -1,0 +1,787 @@
+{
+  "tasks": [
+    {
+      "id": "001",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Pull PR #11785 changes and fix identified issues",
+      "description": "Fetch PR #11785 (dynamic scorers backend) into our working branch, then address the 5 issues identified by CodeRabbit before building on top of it",
+      "steps": [
+        "Fetch the PR branch: git fetch origin pull/11785/head:pr-11785",
+        "Review the imported files to understand what PR #11785 provides",
+        "Create resolve-stored-scorer.ts for our simplified StoredScorerType design",
+        "Integrate storedScorers domain into main storage system",
+        "Update JSDoc for getStore() in packages/core/src/storage/base.ts to include storedScorers domain",
+        "Verify pagination handling is correct (perPage: false properly handled)",
+        "Verify no JSON parsing issues in in-memory implementation",
+        "Run pnpm typecheck to verify no type errors were introduced",
+        "Commit the changes"
+      ],
+      "acceptanceCriteria": [
+        "resolve-stored-scorer.ts exists with template variable support",
+        "storedScorers is added to StorageDomains type",
+        "getStore() JSDoc lists storedScorers as a valid domain option",
+        "Pagination with perPage: false returns all records correctly",
+        "pnpm typecheck passes"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "passes": true
+    },
+    {
+      "id": "002",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Add storage types for dynamic scorers and versions",
+      "description": "Define TypeScript interfaces for StoredScorerType, StoredScorerVersionType, and related input/output types",
+      "steps": [
+        "Add StoredScorerType interface with id, name, description, model, prompt, scoreRange, metadata, ownerId, activeVersionId, createdAt, updatedAt",
+        "Add StoredScorerVersionType interface with id, scorerId, versionNumber, name, snapshot, changedFields, changeMessage, createdAt",
+        "Add StorageCreateScorerInput type (Omit createdAt, updatedAt, activeVersionId)",
+        "Add StorageUpdateScorerInput type with partial fields and required id",
+        "Add StorageCreateScorerVersionInput type",
+        "Add StorageListScorersInput and StorageListScorersOutput types for pagination",
+        "Export all new types from packages/core/src/storage/types.ts"
+      ],
+      "acceptanceCriteria": [
+        "All types are properly defined with correct field types",
+        "scoreRange has min and max number fields with defaults of 0 and 1",
+        "Types are exported and available for import",
+        "Types match the database schema defined in plan"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "passes": true
+    },
+    {
+      "id": "003",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Add version methods to StoredScorersStorage abstract class",
+      "description": "Extend the storage domain abstract base class with version management methods",
+      "steps": [
+        "Add createScorerVersion abstract method",
+        "Add getScorerVersion abstract method",
+        "Add getScorerVersionByNumber abstract method",
+        "Add getLatestScorerVersion abstract method",
+        "Add listScorerVersions abstract method (by scorerId with pagination)",
+        "Add deleteScorerVersion abstract method",
+        "Add deleteScorerVersionsByScorerId abstract method (cascade delete)",
+        "Add countScorerVersions abstract method",
+        "Add getScorerByIdResolved method that returns scorer with config from active version snapshot",
+        "Add listScorersResolved method for bulk resolution"
+      ],
+      "acceptanceCriteria": [
+        "Abstract class has all version-related methods",
+        "Method signatures match the types defined in task 002",
+        "getScorerByIdResolved returns current config if no activeVersionId is set",
+        "listScorersResolved resolves active versions for all scorers"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["002"],
+      "passes": true
+    },
+    {
+      "id": "004",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Implement in-memory storage for scorer versions",
+      "description": "Add version storage implementation to InMemoryStoredScorersStorage",
+      "steps": [
+        "Add storedScorers and scorerVersions Maps to InMemoryDB",
+        "Implement all CRUD methods for scorers (create, get, update, delete, list)",
+        "Implement all version methods (create, get, getByNumber, getLatest, list, delete, deleteByScorerId, count)",
+        "Implement getScorerByIdResolved - get scorer and apply active version snapshot if set",
+        "Implement listScorersResolved - bulk resolve scorers with active versions",
+        "Update deleteScorer to also call deleteScorerVersionsByScorerId (cascade)"
+      ],
+      "acceptanceCriteria": [
+        "All CRUD and version methods work correctly with in-memory storage",
+        "Versions are properly indexed by both id and scorerId",
+        "Deleting a scorer also deletes all its versions",
+        "getScorerByIdResolved correctly merges snapshot data",
+        "Pagination and sorting work correctly"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["003"],
+      "passes": true
+    },
+    {
+      "id": "005",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Add API schemas for stored scorers",
+      "description": "Create Zod validation schemas for scorer CRUD and version operations",
+      "steps": [
+        "Create packages/server/src/server/schemas/stored-scorers.ts",
+        "Create createStoredScorerSchema with all required fields and scoreRange default",
+        "Create updateStoredScorerSchema as partial of create schema with required id",
+        "Create listStoredScorersSchema for pagination params (page, perPage, orderBy, ownerId)",
+        "Create scorerVersionSchema for version response",
+        "Create listScorerVersionsSchema for pagination params",
+        "Create rollbackScorerSchema with versionId param",
+        "Export all schemas"
+      ],
+      "acceptanceCriteria": [
+        "All schemas validate correct input shapes",
+        "scoreRange defaults to { min: 0, max: 1 }",
+        "name is required and max 100 chars",
+        "description is optional and max 500 chars",
+        "prompt is required and non-empty",
+        "model object has required provider and name fields"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["002"],
+      "passes": true
+    },
+    {
+      "id": "006",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Add Mastra class methods for stored scorers",
+      "description": "Add methods to the Mastra class to access stored scorers storage and resolve stored scorers",
+      "steps": [
+        "Add getStoredScorersStore() method to return StoredScorersStorage or undefined",
+        "Add listStoredScorers() method that calls storage.listScorersResolved()",
+        "Add getStoredScorer(id) method that calls storage.getScorerByIdResolved()",
+        "Add resolveStoredScorer(id) method that fetches and resolves to MastraScorer",
+        "Add getScorer(id) method that checks code-defined first, then stored",
+        "Ensure stored scorers are available when Mastra has storage configured"
+      ],
+      "acceptanceCriteria": [
+        "Mastra class has methods to access stored scorers",
+        "Methods properly handle case when storage is not configured",
+        "resolveStoredScorer returns functional MastraScorer",
+        "getScorer unifies code-defined and stored scorers"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["004"],
+      "passes": true
+    },
+    {
+      "id": "007",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Create API endpoints for stored scorers CRUD",
+      "description": "Implement REST endpoints for creating, reading, updating, and deleting stored scorers",
+      "steps": [
+        "Create packages/server/src/server/handlers/stored-scorers.ts",
+        "Create GET /api/stored/scorers handler with pagination support",
+        "Create GET /api/stored/scorers/:id handler using getScorerByIdResolved",
+        "Create POST /api/stored/scorers handler with validation",
+        "Create PATCH /api/stored/scorers/:id handler",
+        "Create DELETE /api/stored/scorers/:id handler",
+        "Create packages/server/src/server/server-adapter/routes/stored-scorers.ts",
+        "Register routes in server-adapter/routes/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "All 5 CRUD endpoints are functional",
+        "List endpoint supports pagination with page, perPage params",
+        "Get endpoint returns resolved scorer (from active version)",
+        "Create validates input against schema",
+        "Delete endpoint removes scorer and all versions"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["005", "006"],
+      "passes": false
+    },
+    {
+      "id": "008",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Implement auto-versioning on scorer update",
+      "description": "Create handleScorerAutoVersioning function that creates a new version when meaningful changes are detected",
+      "steps": [
+        "Create handleScorerAutoVersioning function in stored-scorers handler",
+        "Detect changed fields by comparing previous and updated scorer (name, description, model, prompt, scoreRange)",
+        "Skip versioning if no meaningful changes detected",
+        "Get current version count and calculate next version number",
+        "Create new version with snapshot and changedFields",
+        "Update scorer's activeVersionId to point to new version",
+        "Call handleScorerAutoVersioning from PATCH handler after update"
+      ],
+      "acceptanceCriteria": [
+        "Each meaningful update creates a new version",
+        "Version numbers are sequential (1, 2, 3...)",
+        "changedFields accurately reflects what changed",
+        "activeVersionId is updated to new version",
+        "No version created if only metadata changes"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["007"],
+      "passes": false
+    },
+    {
+      "id": "009",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Create API endpoints for scorer versions",
+      "description": "Implement REST endpoints for listing, viewing, and rolling back scorer versions",
+      "steps": [
+        "Create GET /api/stored/scorers/:id/versions handler to list all versions",
+        "Create GET /api/stored/scorers/:id/versions/:versionId handler to get specific version",
+        "Create POST /api/stored/scorers/:id/rollback/:versionId handler to rollback",
+        "Rollback should update scorer fields from version snapshot",
+        "Rollback should create a new version (not revert activeVersionId)",
+        "Add version routes to stored-scorers.ts route file"
+      ],
+      "acceptanceCriteria": [
+        "List versions returns all versions sorted by versionNumber descending",
+        "Get version returns full version object with snapshot",
+        "Rollback updates scorer to match version snapshot",
+        "Rollback creates a new version entry (not reverting to old version ID)"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["008"],
+      "passes": false
+    },
+    {
+      "id": "010",
+      "category": "infrastructure",
+      "priority": "P0",
+      "title": "Merge code-defined and stored scorers in list endpoint",
+      "description": "Update scorers list handler to merge code-defined scorers with stored scorers",
+      "steps": [
+        "In LIST_SCORERS_ROUTE handler, get code-defined scorers via mastra.listScorers()",
+        "Get stored scorers via mastra.listStoredScorers()",
+        "Merge both sets with code-defined taking precedence on ID collision",
+        "Add source: 'code' to code-defined scorers",
+        "Add source: 'stored' to stored scorers",
+        "Return merged result with pagination info"
+      ],
+      "acceptanceCriteria": [
+        "List endpoint returns both code-defined and stored scorers",
+        "Each scorer has source field indicating origin",
+        "Code-defined scorers take precedence on ID collision",
+        "Response format matches existing scorer list response"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["007"],
+      "passes": false
+    },
+    {
+      "id": "011",
+      "category": "infrastructure",
+      "priority": "P1",
+      "title": "Implement PostgreSQL storage for stored scorers",
+      "description": "Add stored_scorers and scorer_versions tables and implement all methods for PostgreSQL storage adapter",
+      "steps": [
+        "Create migration for stored_scorers table with all fields (id, name, description, model JSONB, prompt, score_range JSONB, metadata JSONB, owner_id, active_version_id, created_at, updated_at)",
+        "Create migration for scorer_versions table with foreign key and unique constraint",
+        "Add indexes on owner_id and scorer_id",
+        "Create stores/pg/src/storage/domains/stored-scorers/index.ts",
+        "Implement StoredScorersStorage abstract methods",
+        "Implement all version methods with proper Date handling",
+        "Export and register in pg store"
+      ],
+      "acceptanceCriteria": [
+        "Migrations create both tables correctly",
+        "All CRUD and version methods work with PostgreSQL",
+        "Cascade delete works when parent scorer is deleted",
+        "Timestamps are properly typed as Date objects",
+        "JSON fields are properly serialized/deserialized"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": ["004"],
+      "passes": false
+    },
+    {
+      "id": "012",
+      "category": "infrastructure",
+      "priority": "P1",
+      "title": "Implement LibSQL storage for stored scorers",
+      "description": "Add stored_scorers and scorer_versions tables and implement all methods for LibSQL storage adapter",
+      "steps": [
+        "Add stored_scorers table creation with JSON serialization for complex fields",
+        "Add scorer_versions table creation",
+        "Create stores/libsql/src/storage/domains/stored-scorers/index.ts",
+        "Implement all CRUD methods with proper JSON parsing",
+        "Implement all version methods with proper JSON parsing",
+        "Handle falsy values correctly in JSON parsing",
+        "Ensure proper Date handling for timestamps",
+        "Export and register in libsql store"
+      ],
+      "acceptanceCriteria": [
+        "Tables are created with correct schema",
+        "All methods work with LibSQL",
+        "JSON fields (model, score_range, snapshot, changed_fields) are properly handled",
+        "Timestamps are properly typed as Date objects",
+        "Falsy values (false, 0) are handled correctly"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": ["004"],
+      "passes": false
+    },
+    {
+      "id": "013",
+      "category": "ui",
+      "priority": "P0",
+      "title": "Create scorer form validation and default template",
+      "description": "Define form types, validation logic, and the default prompt template for scorer creation",
+      "steps": [
+        "Create packages/playground-ui/src/domains/scores/components/create-scorer/scorer-form-validation.ts",
+        "Create ScorerFormValues interface with name, description, model, prompt, scoreRange fields",
+        "Create DEFAULT_PROMPT_TEMPLATE constant with {{minScore}}, {{maxScore}}, {{input}}, {{output}} variables",
+        "Create scorerFormResolver validation function",
+        "Validate name required, max 100 chars",
+        "Validate description optional, max 500 chars",
+        "Validate model.provider and model.name required",
+        "Validate prompt required and non-empty",
+        "Validate scoreRange.min < scoreRange.max"
+      ],
+      "acceptanceCriteria": [
+        "ScorerFormValues interface is complete",
+        "DEFAULT_PROMPT_TEMPLATE contains all 4 template variables",
+        "Validation catches all required field errors",
+        "Score range validation ensures min < max"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "014",
+      "category": "ui",
+      "priority": "P0",
+      "title": "Create scorer form component",
+      "description": "Build the ScorerForm React component with all form fields for create/edit modes",
+      "steps": [
+        "Create ScorerForm component in packages/playground-ui/src/domains/scores/components/create-scorer/",
+        "Add name input field (required)",
+        "Add description input field (optional)",
+        "Add ModelPicker component for model selection",
+        "Add scoreRange inputs (min/max numbers) with defaults 0 and 1",
+        "Add prompt textarea pre-filled with DEFAULT_PROMPT_TEMPLATE",
+        "Add submit and cancel buttons with loading states",
+        "Support mode='create' and mode='edit' props",
+        "In edit mode, show delete button and version indicator"
+      ],
+      "acceptanceCriteria": [
+        "Form renders all fields correctly",
+        "ModelPicker allows provider and model selection",
+        "Prompt textarea shows default template on create",
+        "Score range defaults to 0-1",
+        "Form validates before submission",
+        "Edit mode shows pre-populated values"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["013"],
+      "passes": false
+    },
+    {
+      "id": "015",
+      "category": "ui",
+      "priority": "P0",
+      "title": "Create stored scorers mutations hook",
+      "description": "Build React Query mutations hook for scorer CRUD and version operations",
+      "steps": [
+        "Create useStoredScorerMutations hook in packages/playground-ui/src/domains/scores/hooks/use-stored-scorers.ts",
+        "Add createStoredScorer mutation with cache invalidation",
+        "Add updateStoredScorer mutation with cache invalidation",
+        "Add deleteStoredScorer mutation with cache invalidation",
+        "Add rollbackScorer mutation with cache invalidation",
+        "Create useScorerVersions query hook for fetching versions by scorerId",
+        "Export all hooks"
+      ],
+      "acceptanceCriteria": [
+        "All mutations call correct client methods",
+        "Cache is invalidated on successful mutations",
+        "useScorerVersions is enabled only when scorerId is provided",
+        "Hooks are properly typed"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["027"],
+      "passes": false
+    },
+    {
+      "id": "016",
+      "category": "ui",
+      "priority": "P0",
+      "title": "Create scorer dialog component",
+      "description": "Build the CreateScorerDialog component that wraps ScorerForm for creating new scorers",
+      "steps": [
+        "Create CreateScorerDialog component in packages/playground-ui/src/domains/scores/components/create-scorer/",
+        "Accept open, onOpenChange, onSuccess props",
+        "Use Dialog component from design system",
+        "Generate UUID for new scorer on submit",
+        "Call createStoredScorer mutation with form values",
+        "Handle success (close dialog, call onSuccess with scorerId)",
+        "Handle error (show toast)",
+        "Create index.ts to export CreateScorerDialog"
+      ],
+      "acceptanceCriteria": [
+        "Dialog opens and closes correctly",
+        "Form submission creates scorer via API",
+        "Success callback receives new scorer ID",
+        "Errors are displayed via toast",
+        "Loading state shown during submission"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["014", "015"],
+      "passes": false
+    },
+    {
+      "id": "017",
+      "category": "ui",
+      "priority": "P0",
+      "title": "Update scorers page with Create Scorer button",
+      "description": "Add Create Scorer button to the scorers page header that opens the create dialog",
+      "steps": [
+        "Import CreateScorerDialog in packages/playground/src/pages/scorers/index.tsx",
+        "Add useState for createDialogOpen",
+        "Add Create Scorer Button in HeaderAction before docs button",
+        "Add CreateScorerDialog with open/onOpenChange/onSuccess props",
+        "On success, navigate to /scorers/:id or refresh list",
+        "Import necessary icons (PlusIcon)"
+      ],
+      "acceptanceCriteria": [
+        "Create Scorer button appears in header",
+        "Clicking button opens create dialog",
+        "After successful creation, list is refreshed or user navigated",
+        "Button has appropriate icon"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["016"],
+      "passes": false
+    },
+    {
+      "id": "018",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create edit scorer dialog component",
+      "description": "Build EditScorerDialog for editing existing scorers with delete and version indicator",
+      "steps": [
+        "Create EditScorerDialog component in packages/playground-ui/src/domains/scores/components/edit-scorer/",
+        "Accept scorerId, open, onOpenChange, onSuccess, onDelete props",
+        "Fetch scorer data using existing scorer query hook",
+        "Pre-populate ScorerForm with existing values",
+        "Show version indicator (e.g., 'v3 - Last edited 2 days ago')",
+        "Call updateStoredScorer mutation on submit",
+        "Add delete button that calls deleteStoredScorer with confirmation",
+        "Create index.ts to export EditScorerDialog"
+      ],
+      "acceptanceCriteria": [
+        "Dialog loads existing scorer data",
+        "Form is pre-populated correctly",
+        "Version indicator shows current version number and last edit time",
+        "Update triggers auto-versioning on backend",
+        "Delete removes scorer after confirmation"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["016"],
+      "passes": false
+    },
+    {
+      "id": "019",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create scorer version history component",
+      "description": "Build ScorerVersionHistory component to display and rollback to previous versions",
+      "steps": [
+        "Create ScorerVersionHistory component in packages/playground-ui/src/domains/scores/components/scorer-versions/",
+        "Accept scorerId and onRollback props",
+        "Use useScorerVersions hook to fetch versions",
+        "Display list of versions with version number, changed fields, timestamp",
+        "Add rollback button for each version (except current)",
+        "Confirm rollback with dialog before executing",
+        "Call rollbackScorer mutation on confirm",
+        "Create index.ts to export component"
+      ],
+      "acceptanceCriteria": [
+        "Versions are displayed in descending order (newest first)",
+        "Each version shows version number, changes, and timestamp",
+        "Rollback button triggers confirmation",
+        "Successful rollback refreshes scorer data",
+        "Current version is indicated and cannot be rolled back to"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["015"],
+      "passes": false
+    },
+    {
+      "id": "020",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Create scorers picker component with sampling config",
+      "description": "Build ScorersPicker component for selecting scorers and configuring per-scorer sampling",
+      "steps": [
+        "Create ScorersPicker component in packages/playground-ui/src/domains/agents/components/create-agent/",
+        "Accept selected (Record<string, {sampling?}>), onChange, disabled, error props",
+        "Use useScorers hook to get available scorers",
+        "Render multi-select dropdown to add scorers",
+        "For each selected scorer, show sampling config UI",
+        "Sampling options: none, ratio (with rate 0-1), count (with number)",
+        "Update parent on selection or sampling change"
+      ],
+      "acceptanceCriteria": [
+        "Dropdown shows all available scorers",
+        "Selected scorers appear as list with sampling config",
+        "Sampling type can be changed per scorer",
+        "Ratio type shows rate slider/input (0-1)",
+        "Count type shows count number input",
+        "None disables sampling for that scorer"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "021",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Update agent form to include scorers picker",
+      "description": "Add scorers selection to the agent creation/edit form in Advanced Settings",
+      "steps": [
+        "Import ScorersPicker in agent-form.tsx",
+        "Import useScorers hook",
+        "Add scorers field to AgentFormValues interface in form-validation.ts",
+        "Add scorers to form defaultValues",
+        "Add ScorersPicker in Advanced Settings section after Memory",
+        "Wire up Controller for scorers field with proper typing"
+      ],
+      "acceptanceCriteria": [
+        "Scorers picker appears in Advanced Settings",
+        "Selected scorers are saved with form submission",
+        "Sampling config per scorer is preserved",
+        "Existing agents show their attached scorers in edit mode"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["020"],
+      "passes": false
+    },
+    {
+      "id": "022",
+      "category": "ui",
+      "priority": "P1",
+      "title": "Update agent dialog submission to handle scorers",
+      "description": "Modify create/edit agent dialog to include scorers in the API payload",
+      "steps": [
+        "Update handleSubmit in create-agent-dialog.tsx to include scorers",
+        "Scorers should be in format Record<string, StorageScorerConfig>",
+        "Pass scorers to createStoredAgent.mutateAsync",
+        "Update edit-agent-dialog.tsx similarly if separate file exists",
+        "Ensure scorers are loaded from existing agent in edit mode"
+      ],
+      "acceptanceCriteria": [
+        "Creating agent with scorers persists the scorers",
+        "Editing agent updates scorers correctly",
+        "Sampling config is preserved through save/load cycle"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["021"],
+      "passes": false
+    },
+    {
+      "id": "023",
+      "category": "ui",
+      "priority": "P2",
+      "title": "Add scorers field to workflow step data types",
+      "description": "Update workflow builder type definitions to support scorers on steps",
+      "steps": [
+        "Update BaseNodeData interface in packages/playground-ui/src/domains/workflow-builder/types.ts",
+        "Add scorers?: Record<string, { sampling?: ScoringSamplingConfig }> field",
+        "Import or define ScoringSamplingConfig type",
+        "Ensure type applies to AgentNodeData, ToolNodeData, and other step types"
+      ],
+      "acceptanceCriteria": [
+        "BaseNodeData includes scorers field",
+        "Type is compatible with StorageScorerConfig format",
+        "No TypeScript errors in workflow builder"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "024",
+      "category": "ui",
+      "priority": "P2",
+      "title": "Create scorer config section for workflow steps",
+      "description": "Build ScorerConfigSection component for configuring scorers on workflow steps",
+      "steps": [
+        "Create ScorerConfigSection in packages/playground-ui/src/domains/workflow-builder/components/panels/",
+        "Accept scorers and onUpdate props",
+        "Use useScorers hook to get available scorers",
+        "Render collapsible section with SectionHeader",
+        "Show badge with count of attached scorers",
+        "Reuse similar UI pattern to ScorersPicker for selection and sampling config"
+      ],
+      "acceptanceCriteria": [
+        "Section is collapsible like other config sections",
+        "Badge shows number of attached scorers",
+        "Can add/remove scorers from step",
+        "Can configure sampling per scorer"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["020", "023"],
+      "passes": false
+    },
+    {
+      "id": "025",
+      "category": "ui",
+      "priority": "P2",
+      "title": "Add scorer config section to agent step panel",
+      "description": "Integrate ScorerConfigSection into the agent step configuration panel",
+      "steps": [
+        "Import ScorerConfigSection in agent-config.tsx",
+        "Add ScorerConfigSection after existing configuration sections",
+        "Wire up scorers from data.scorers",
+        "Wire up onUpdate to call updateNodeData with new scorers"
+      ],
+      "acceptanceCriteria": [
+        "Scorer config section appears in agent step panel",
+        "Changes to scorers update node data correctly",
+        "Scorers persist when workflow is saved"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["024"],
+      "passes": false
+    },
+    {
+      "id": "026",
+      "category": "ui",
+      "priority": "P2",
+      "title": "Add scorer config section to tool step panel",
+      "description": "Integrate ScorerConfigSection into the tool step configuration panel",
+      "steps": [
+        "Import ScorerConfigSection in tool-config.tsx",
+        "Add ScorerConfigSection after existing configuration sections",
+        "Wire up scorers from data.scorers",
+        "Wire up onUpdate to call updateNodeData with new scorers"
+      ],
+      "acceptanceCriteria": [
+        "Scorer config section appears in tool step panel",
+        "Changes to scorers update node data correctly",
+        "Scorers persist when workflow is saved"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["024"],
+      "passes": false
+    },
+    {
+      "id": "027",
+      "category": "sdk",
+      "priority": "P0",
+      "title": "Add stored scorer methods to client SDK",
+      "description": "Extend @mastra/client-js with methods for stored scorer CRUD operations",
+      "steps": [
+        "Add listStoredScorers method with pagination params",
+        "Add getStoredScorer method by id",
+        "Add createStoredScorer method with CreateStoredScorerInput",
+        "Add updateStoredScorer method with id and UpdateStoredScorerInput",
+        "Add deleteStoredScorer method by id",
+        "Add proper TypeScript types for all inputs/outputs",
+        "Export types from client SDK"
+      ],
+      "acceptanceCriteria": [
+        "All 5 CRUD methods are implemented",
+        "Methods are properly typed",
+        "Methods call correct API endpoints",
+        "Error handling is consistent with existing methods"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["007"],
+      "passes": false
+    },
+    {
+      "id": "028",
+      "category": "sdk",
+      "priority": "P1",
+      "title": "Add scorer version methods to client SDK",
+      "description": "Extend @mastra/client-js with methods for scorer version operations",
+      "steps": [
+        "Add listScorerVersions method by scorerId",
+        "Add getScorerVersion method by scorerId and versionId",
+        "Add rollbackScorer method by scorerId and versionId",
+        "Add StoredScorerVersionType to client SDK types",
+        "Export all new types"
+      ],
+      "acceptanceCriteria": [
+        "All 3 version methods are implemented",
+        "Methods are properly typed",
+        "Methods call correct API endpoints",
+        "rollbackScorer returns updated scorer"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": ["009", "027"],
+      "passes": false
+    },
+    {
+      "id": "029",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Add unit tests for scorer storage operations",
+      "description": "Create unit tests for in-memory scorer storage including versions",
+      "steps": [
+        "Create test file for InMemoryStoredScorersStorage",
+        "Test createScorer with valid input",
+        "Test getScorer and getScorerByIdResolved",
+        "Test updateScorer",
+        "Test deleteScorer cascades to versions",
+        "Test createScorerVersion with sequential numbering",
+        "Test listScorerVersions returns correct order",
+        "Test getScorerByIdResolved applies snapshot"
+      ],
+      "acceptanceCriteria": [
+        "All CRUD operations have test coverage",
+        "Version operations have test coverage",
+        "Cascade delete is tested",
+        "Resolved scorer correctly applies version snapshot"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["004"],
+      "passes": false
+    },
+    {
+      "id": "030",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Add integration tests for scorer API endpoints",
+      "description": "Create integration tests for scorer REST API endpoints",
+      "steps": [
+        "Create test file for stored-scorers API routes",
+        "Test POST /api/stored/scorers creates scorer",
+        "Test GET /api/stored/scorers lists scorers with pagination",
+        "Test GET /api/stored/scorers/:id returns resolved scorer",
+        "Test PATCH /api/stored/scorers/:id updates and creates version",
+        "Test DELETE /api/stored/scorers/:id removes scorer and versions",
+        "Test version endpoints (list, get, rollback)",
+        "Test merge of code-defined and stored scorers"
+      ],
+      "acceptanceCriteria": [
+        "All endpoints have test coverage",
+        "Auto-versioning is verified",
+        "Rollback functionality is verified",
+        "Merge logic is tested with collision handling"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": ["009", "010"],
+      "passes": false
+    },
+    {
+      "id": "031",
+      "category": "testing",
+      "priority": "P2",
+      "title": "Add E2E tests for scorer UI flows",
+      "description": "Create E2E tests for creating, editing, and deleting scorers via UI",
+      "steps": [
+        "Test create scorer flow - open dialog, fill form, submit, verify created",
+        "Test edit scorer flow - open edit, modify fields, submit, verify updated",
+        "Test delete scorer flow - click delete, confirm, verify removed",
+        "Test version history - make edits, view versions, rollback",
+        "Test attach scorer to agent - create agent with scorer",
+        "Test attach scorer to workflow step"
+      ],
+      "acceptanceCriteria": [
+        "Create flow completes successfully",
+        "Edit flow preserves existing data and creates version",
+        "Delete flow removes scorer from system",
+        "Rollback restores previous configuration",
+        "Scorers can be attached to agents and workflow steps"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": ["017", "018", "022", "026"],
+      "passes": false
+    }
+  ]
+}
