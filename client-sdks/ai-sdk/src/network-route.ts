@@ -200,15 +200,7 @@ export function networkRoute<OUTPUT = undefined>({
         params: {
           ...params,
           requestContext: effectiveRequestContext,
-      const uiMessageStream = await handleNetworkStream<UIMessage, OUTPUT>({
-        mastra,
-        agentId: agentToUse,
-        params: {
-          ...params,
-          requestContext: effectiveRequestContext,
-        },
-        defaultOptions,
-      });
+        } as any,
         defaultOptions,
       });
 
