@@ -345,8 +345,8 @@ export default function Template() {
           </Crumb>
         </Breadcrumb>
       </Header>
-      <div className={cn('w-full lg:px-[3rem] h-full overflow-y-scroll')}>
-        <div className="p-[1.5rem] w-full max-w-[80rem] mx-auto grid gap-y-[1rem]">
+      <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
+        <div className="p-6 w-full max-w-[80rem] mx-auto grid gap-y-4">
           <TemplateInfo
             isLoading={isLoadingTemplate}
             title={template?.title}

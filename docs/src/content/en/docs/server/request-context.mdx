@@ -67,7 +67,7 @@ await run.resume({
 await weatherTool.execute(
   { location: "London" },
   { requestContext },
-});
+);
 ```
 
 ### Setting values based on request headers
@@ -232,5 +232,4 @@ for (const [key, value] of ctx.entries()) {
 
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
-- [Tool Request Context](../mcp/overview#using-requestcontext)
 - [Server Middleware](/docs/v1/server/middleware)
