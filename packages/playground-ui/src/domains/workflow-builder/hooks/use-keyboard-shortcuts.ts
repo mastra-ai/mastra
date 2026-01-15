@@ -13,7 +13,7 @@ export interface KeyboardShortcut {
   shift?: boolean;
   alt?: boolean;
   description: string;
-  category: 'navigation' | 'editing' | 'selection' | 'view' | 'general';
+  category: 'navigation' | 'editing' | 'selection' | 'view' | 'general' | 'canvas';
   action: () => void;
 }
 
@@ -29,34 +29,28 @@ export interface ShortcutConfig {
 // ============================================================================
 
 export const SHORTCUT_DEFINITIONS: ShortcutConfig[] = [
-  // General
-  { id: 'save', keys: 'Ctrl/Cmd + S', description: 'Save workflow', category: 'general' },
-  { id: 'command-palette', keys: 'Ctrl/Cmd + K', description: 'Open command palette', category: 'general' },
-  { id: 'help', keys: '?', description: 'Show keyboard shortcuts', category: 'general' },
+  // Selection
+  { id: 'click-select', keys: 'Click', description: 'Select node', category: 'selection' },
+  { id: 'multi-select', keys: 'Shift + Click', description: 'Multi-select', category: 'selection' },
+  { id: 'select-all', keys: 'Ctrl/Cmd + A', description: 'Select all', category: 'selection' },
+  { id: 'deselect', keys: 'Escape', description: 'Clear selection', category: 'selection' },
 
   // Editing
-  { id: 'undo', keys: 'Ctrl/Cmd + Z', description: 'Undo last action', category: 'editing' },
-  { id: 'redo', keys: 'Ctrl/Cmd + Shift + Z', description: 'Redo last action', category: 'editing' },
-  { id: 'copy', keys: 'Ctrl/Cmd + C', description: 'Copy selected nodes', category: 'editing' },
-  { id: 'paste', keys: 'Ctrl/Cmd + V', description: 'Paste copied nodes', category: 'editing' },
-  { id: 'delete', keys: 'Delete / Backspace', description: 'Delete selected nodes', category: 'editing' },
-  { id: 'duplicate', keys: 'Ctrl/Cmd + D', description: 'Duplicate selected node', category: 'editing' },
-  { id: 'quick-add', keys: 'Tab', description: 'Quick add node after selected', category: 'editing' },
-
-  // Selection
-  { id: 'select-all', keys: 'Ctrl/Cmd + A', description: 'Select all nodes', category: 'selection' },
-  { id: 'multi-select', keys: 'Shift + Click', description: 'Add/remove from selection', category: 'selection' },
-  { id: 'deselect', keys: 'Escape', description: 'Deselect all', category: 'selection' },
-
-  // View
-  { id: 'zoom-in', keys: 'Ctrl/Cmd + +', description: 'Zoom in', category: 'view' },
-  { id: 'zoom-out', keys: 'Ctrl/Cmd + -', description: 'Zoom out', category: 'view' },
-  { id: 'zoom-fit', keys: 'Ctrl/Cmd + 0', description: 'Fit view to content', category: 'view' },
-  { id: 'zoom-100', keys: 'Ctrl/Cmd + 1', description: 'Zoom to 100%', category: 'view' },
+  { id: 'delete', keys: 'Delete / Backspace', description: 'Delete selected', category: 'editing' },
+  { id: 'copy', keys: 'Ctrl/Cmd + C', description: 'Copy selected', category: 'editing' },
+  { id: 'paste', keys: 'Ctrl/Cmd + V', description: 'Paste', category: 'editing' },
+  { id: 'undo', keys: 'Ctrl/Cmd + Z', description: 'Undo', category: 'editing' },
+  { id: 'redo', keys: 'Ctrl/Cmd + Shift + Z', description: 'Redo', category: 'editing' },
 
   // Navigation
-  { id: 'pan', keys: 'Space + Drag', description: 'Pan canvas', category: 'navigation' },
-  { id: 'sidebar-search', keys: 'Ctrl/Cmd + F', description: 'Focus sidebar search', category: 'navigation' },
+  { id: 'quick-add', keys: 'Tab', description: 'Quick add after selected node', category: 'navigation' },
+  { id: 'command-palette', keys: 'Ctrl/Cmd + K', description: 'Command palette', category: 'navigation' },
+  { id: 'help', keys: '?', description: 'Show this help', category: 'navigation' },
+
+  // Canvas
+  { id: 'scroll-zoom', keys: 'Scroll', description: 'Zoom', category: 'canvas' },
+  { id: 'drag-pan', keys: 'Drag', description: 'Pan canvas', category: 'canvas' },
+  { id: 'drag-select', keys: 'Drag selection', description: 'Box select', category: 'canvas' },
 ];
 
 // ============================================================================
