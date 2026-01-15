@@ -13,9 +13,9 @@ const meta: Meta<typeof Input> = {
       control: { type: 'select' },
       options: ['default', 'filled', 'unstyled'],
     },
-    customSize: {
+    size: {
       control: { type: 'select' },
-      options: ['default', 'sm', 'lg'],
+      options: ['sm', 'md', 'lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -54,14 +54,14 @@ export const Unstyled: Story = {
 export const Small: Story = {
   args: {
     placeholder: 'Small input',
-    customSize: 'sm',
+    size: 'sm',
   },
 };
 
 export const Large: Story = {
   args: {
     placeholder: 'Large input',
-    customSize: 'lg',
+    size: 'lg',
   },
 };
 
@@ -113,9 +113,9 @@ export const AllVariants: Story = {
 export const AllSizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-64">
-      <Input customSize="sm" placeholder="Small" />
-      <Input customSize="default" placeholder="Default" />
-      <Input customSize="lg" placeholder="Large" />
+      <Input size="sm" placeholder="Small" />
+      <Input size="md" placeholder="Medium" />
+      <Input size="lg" placeholder="Large" />
     </div>
   ),
 };

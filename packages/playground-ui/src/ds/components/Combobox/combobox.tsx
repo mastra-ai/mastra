@@ -1,8 +1,9 @@
-import { Button as DSButton, ButtonProps as DSButtonProps } from '@/ds/components/Button/Button';
+import { Button as DSButton } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
+import { type FormElementSize } from '@/ds/primitives/form-element';
 
 export type ComboboxOption = {
   label: string;
@@ -18,8 +19,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: DSButtonProps['variant'];
-  size?: DSButtonProps['size'];
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  size?: FormElementSize;
 };
 
 export function Combobox({
