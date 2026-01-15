@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/ds/components/Dialog';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { AgentForm } from './agent-form';
 import { DeleteAgentConfirm } from './delete-agent-confirm';
 import { useStoredAgent, useStoredAgentMutations } from '../../hooks/use-stored-agents';
@@ -30,7 +30,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
       tools: values.tools,
       workflows: values.workflows,
       agents: values.agents,
-      memory: values.memory,
+      memory: values.memory ? { id: values.memory } : undefined,
     });
     onOpenChange(false);
     onSuccess?.();
@@ -48,6 +48,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
   };
 
   // Transform agent data to form values format
+  // Note: agent.memory from API is { id: string } but form expects just string
   const initialValues: Partial<AgentFormValues> | undefined = agent
     ? {
         name: agent.name,
@@ -57,7 +58,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         tools: agent.tools,
         workflows: agent.workflows,
         agents: agent.agents,
-        memory: agent.memory,
+        memory: (agent.memory as { id?: string } | undefined)?.id,
       }
     : undefined;
 

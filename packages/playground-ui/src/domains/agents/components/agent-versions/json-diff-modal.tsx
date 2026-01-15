@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { FileDiff } from '@pierre/diffs/react';
 import { parseDiffFromFile } from '@pierre/diffs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/ds/components/Dialog';
 import type { FileContents } from '@pierre/diffs';
 
 interface JsonDiffModalProps {

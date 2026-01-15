@@ -6,10 +6,10 @@ import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
 import { Badge } from '@/ds/components/Badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import Spinner from '@/components/ui/spinner';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 
 import { useAgents } from '../../hooks/use-agents';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { toast } from '@/lib/toast';
 
 import { AgentForm } from './agent-form';
@@ -28,7 +28,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
         tools: values.tools,
         workflows: values.workflows,
         agents: values.agents,
-        memory: values.memory,
+        memory: values.memory ? { id: values.memory } : undefined,
       });
       onOpenChange(false);
       onSuccess?.(agentId);

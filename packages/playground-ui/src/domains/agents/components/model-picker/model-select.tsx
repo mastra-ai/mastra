@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/ds/components/Input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useFilteredModels, ModelInfo } from './use-model-picker';
 
 export interface ModelSelectProps {

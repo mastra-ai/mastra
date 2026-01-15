@@ -597,7 +597,7 @@ export interface StoredAgentResponse {
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: { id: string };
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   ownerId?: string;
@@ -645,7 +645,7 @@ export interface CreateStoredAgentParams {
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: { id: string };
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   ownerId?: string;
@@ -665,7 +665,7 @@ export interface UpdateStoredAgentParams {
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: { id: string };
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   ownerId?: string;

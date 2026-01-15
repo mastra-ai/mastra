@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/lib/utils';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { Button } from '@/ds/components/Button';

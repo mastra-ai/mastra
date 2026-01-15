@@ -2,7 +2,7 @@ import { Badge } from '@/ds/components/Badge/Badge';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { CheckIcon } from '@/ds/icons/CheckIcon';
 import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Loader2 } from 'lucide-react';
 
 import type { ProviderStatus } from '../types';

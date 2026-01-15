@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Check, GitCompare, RotateCcw, Trash2 } from 'lucide-react';
 import type { AgentVersionResponse } from '@mastra/client-js';
 import { useAgentVersions, useActivateAgentVersion, useDeleteAgentVersion } from '../../hooks/use-agent-versions';

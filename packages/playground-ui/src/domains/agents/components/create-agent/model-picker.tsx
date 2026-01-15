@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { Alert, AlertDescription } from '@/ds/components/Alert';
 import { cleanProviderId } from '../agent-metadata/utils';
 import { Provider } from '@mastra/client-js';

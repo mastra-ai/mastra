@@ -5,11 +5,11 @@ import { useId } from 'react';
 import { ChevronsUpDown, Search, X } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Checkbox } from '@/ds/components/Checkbox';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Label } from '@/ds/components/Label';
 import { cn } from '@/lib/utils';
 
 export interface MultiSelectPickerProps<T> {
