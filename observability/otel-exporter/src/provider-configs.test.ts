@@ -77,31 +77,25 @@ describe('Provider Configurations', () => {
   });
 
   describe('Laminar', () => {
-    it('should configure Laminar with team ID', () => {
+    it('should configure Laminar', () => {
       const config = resolveProviderConfig({
         laminar: {
           apiKey: 'test-key',
-          teamId: 'test-team',
         },
       });
 
       expect(config?.endpoint).toBe('https://api.lmnr.ai/v1/traces');
       expect(config?.headers['Authorization']).toBe('Bearer test-key');
-      expect(config?.headers['x-laminar-team-id']).toBe('test-team');
       expect(config?.protocol).toBe('http/protobuf');
     });
 
-    it('should require both apiKey and teamId', () => {
+    it('should require apiKey', () => {
       // Clear env var to ensure config validation fails
       const originalApiKey = process.env.LMNR_PROJECT_API_KEY;
       delete process.env.LMNR_PROJECT_API_KEY;
-
       try {
         const config = resolveProviderConfig({
-          laminar: {
-            // apiKey missing
-            teamId: 'test-team',
-          },
+          laminar: {},
         });
 
         expect(config).toBeNull();
