@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent/message-list';
+import { MessageList, resolveNetworkMessages } from '@mastra/core/agent/message-list';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 
 /**
@@ -43,7 +43,9 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
  * ```
  */
 export function toAISdkV5Messages(messages: MessageListInput) {
-  return new MessageList().add(messages, `memory`).get.all.aiV5.ui();
+  const converted = new MessageList().add(messages, `memory`).get.all.aiV5.ui();
+  // Transform network messages from raw JSON to displayable dynamic-tool parts
+  return resolveNetworkMessages(converted);
 }
 
 /**

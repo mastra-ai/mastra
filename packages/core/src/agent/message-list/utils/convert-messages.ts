@@ -5,6 +5,231 @@ import type { MastraDBMessage, UIMessageWithMetadata, MessageListInput } from '.
 
 import { MessageList } from '../index';
 
+// Type definitions for parsing network execution data
+interface NetworkToolCallContent {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+interface NetworkToolResultContent {
+  type: string;
+  toolCallId: string;
+  toolName: string;
+  result?: {
+    result?: Record<string, unknown>;
+  };
+}
+
+interface NetworkNestedMessage {
+  role: string;
+  id: string;
+  createdAt: string;
+  type: string;
+  content?: string | (NetworkToolCallContent | NetworkToolResultContent)[];
+}
+
+interface NetworkFinalResult {
+  result?: unknown;
+  text?: string;
+  messages?: NetworkNestedMessage[];
+}
+
+interface NetworkExecutionData {
+  isNetwork: boolean;
+  selectionReason?: string;
+  primitiveType?: string;
+  primitiveId?: string;
+  input?: string;
+  finalResult?: NetworkFinalResult;
+  messages?: NetworkNestedMessage[];
+}
+
+interface NetworkChildMessage {
+  type: 'tool' | 'text';
+  toolCallId?: string;
+  toolName?: string;
+  args?: Record<string, unknown>;
+  toolOutput?: Record<string, unknown>;
+  content?: string;
+}
+
+/**
+ * Transforms network execution messages from raw JSON format to displayable UI parts.
+ *
+ * Agent Network stores routing metadata as JSON text in message content. This function
+ * detects such messages and transforms them into proper `dynamic-tool` parts that can
+ * be rendered in the UI.
+ *
+ * Also handles conversion of pendingToolApprovals and suspendedTools from DB format
+ * to stream format for proper rendering.
+ *
+ * @param messages - Array of UI messages that may contain network execution data
+ * @returns Transformed messages with network JSON converted to dynamic-tool parts
+ *
+ * @example
+ * ```typescript
+ * import { resolveNetworkMessages } from '@mastra/core/agent';
+ *
+ * // Messages from database may contain raw network JSON
+ * const storedMessages = await memory.recall({ threadId });
+ * const displayableMessages = resolveNetworkMessages(storedMessages);
+ * ```
+ */
+export function resolveNetworkMessages<T extends AIV5.UIMessage>(messages: T[]): T[] {
+  const messagesLength = messages.length;
+  return messages.map((message, index) => {
+    // Check if message contains network execution data
+    const networkPart = (message.parts || []).find(
+      (part): part is { type: 'text'; text: string } =>
+        typeof part === 'object' &&
+        part !== null &&
+        'type' in part &&
+        part.type === 'text' &&
+        'text' in part &&
+        typeof part.text === 'string' &&
+        part.text.includes('"isNetwork":true'),
+    );
+
+    if (networkPart && networkPart.type === 'text') {
+      try {
+        const json: NetworkExecutionData = JSON.parse(networkPart.text);
+
+        if (json.isNetwork === true) {
+          // Extract network execution data
+          const selectionReason = json.selectionReason || '';
+          const primitiveType = json.primitiveType || '';
+          const primitiveId = json.primitiveId || '';
+          const finalResult = json.finalResult;
+          const nestedMessages = finalResult?.messages || [];
+
+          // Build child messages from nested messages
+          const childMessages: NetworkChildMessage[] = [];
+
+          // Build a map of toolCallId -> toolResult for efficient lookup
+          const toolResultMap = new Map<string, NetworkToolResultContent>();
+          for (const msg of nestedMessages) {
+            if (Array.isArray(msg.content)) {
+              for (const part of msg.content) {
+                if (typeof part === 'object' && part.type === 'tool-result') {
+                  toolResultMap.set(part.toolCallId, part as NetworkToolResultContent);
+                }
+              }
+            }
+          }
+
+          // Extract tool calls from messages and match them with their results
+          for (const msg of nestedMessages) {
+            if (msg.type === 'tool-call' && Array.isArray(msg.content)) {
+              // Process each tool call in this message
+              for (const part of msg.content) {
+                if (typeof part === 'object' && part.type === 'tool-call') {
+                  const toolCallContent = part as NetworkToolCallContent;
+                  const toolResult = toolResultMap.get(toolCallContent.toolCallId);
+                  const isWorkflow = Boolean(
+                    toolResult?.result?.result &&
+                    typeof toolResult.result.result === 'object' &&
+                    toolResult.result.result !== null &&
+                    'steps' in toolResult.result.result,
+                  );
+
+                  childMessages.push({
+                    type: 'tool' as const,
+                    toolCallId: toolCallContent.toolCallId,
+                    toolName: toolCallContent.toolName,
+                    args: toolCallContent.args,
+                    toolOutput: isWorkflow
+                      ? (toolResult?.result?.result as Record<string, unknown>)
+                      : toolResult?.result,
+                  });
+                }
+              }
+            }
+          }
+
+          // Add the final text result if available
+          if (finalResult && finalResult.text) {
+            childMessages.push({
+              type: 'text' as const,
+              content: finalResult.text,
+            });
+          }
+
+          // Build the result object
+          const result =
+            primitiveType === 'tool'
+              ? finalResult?.result
+              : {
+                  childMessages: childMessages,
+                  result: finalResult?.text || '',
+                };
+
+          // Return the transformed message with dynamic-tool part
+          return {
+            role: 'assistant' as const,
+            parts: [
+              {
+                type: 'dynamic-tool',
+                toolCallId: primitiveId,
+                toolName: primitiveId,
+                state: 'output-available',
+                input: json.input,
+                output: result,
+              },
+            ],
+            id: message.id,
+            metadata: {
+              ...(((message as Record<string, unknown>).metadata as Record<string, unknown>) || {}),
+              mode: 'network' as const,
+              selectionReason: selectionReason,
+              agentInput: json.input,
+              hasMoreMessages: index < messagesLength - 1,
+              from:
+                primitiveType === 'agent'
+                  ? ('AGENT' as const)
+                  : primitiveType === 'tool'
+                    ? ('TOOL' as const)
+                    : ('WORKFLOW' as const),
+            },
+          } as T;
+        }
+      } catch {
+        // If parsing fails, return the original message
+        return message;
+      }
+    }
+
+    // Handle pendingToolApprovals conversion from DB format to stream format
+    const pendingToolApprovals = (message as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
+    if (pendingToolApprovals?.pendingToolApprovals && typeof pendingToolApprovals.pendingToolApprovals === 'object') {
+      return {
+        ...message,
+        metadata: {
+          ...pendingToolApprovals,
+          mode: 'stream' as const,
+          requireApprovalMetadata: pendingToolApprovals.pendingToolApprovals,
+        },
+      } as T;
+    }
+
+    // Handle suspendedTools conversion from DB format to stream format
+    if (pendingToolApprovals?.suspendedTools && typeof pendingToolApprovals.suspendedTools === 'object') {
+      return {
+        ...message,
+        metadata: {
+          ...pendingToolApprovals,
+          mode: 'stream' as const,
+          suspendedTools: pendingToolApprovals.suspendedTools,
+        },
+      } as T;
+    }
+
+    // Return original message if no transformation needed
+    return message;
+  });
+}
+
 /**
  * Available output formats for message conversion.
  *

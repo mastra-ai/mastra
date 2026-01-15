@@ -20,7 +20,7 @@ export type {
 export type { AIV5Type, AIV4Type, CoreMessageV4, UIMessageV4 } from './types';
 
 // Utility exports
-export { convertMessages } from './utils/convert-messages';
+export { convertMessages, resolveNetworkMessages } from './utils/convert-messages';
 export type { OutputFormat } from './utils/convert-messages';
 
 // Conversion exports
