@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
-import type { CreateIntegrationParams, UpdateIntegrationParams } from '@mastra/client-js';
+import type { CreateIntegrationParams, UpdateIntegrationParams, ValidateMCPParams } from '@mastra/client-js';
 
 /**
  * Hook to manage integration mutations (create, update, delete, refresh).
@@ -101,10 +101,33 @@ export const useIntegrationMutations = (integrationId?: string) => {
     },
   });
 
+  const validateMCPMutation = useMutation({
+    mutationFn: (params: ValidateMCPParams) => client.validateMCPConnection(params),
+  });
+
+  const deleteToolMutation = useMutation({
+    mutationFn: ({ toolId }: { toolId: string }) => {
+      if (!integrationId) throw new Error('integrationId is required for deleteTool');
+      return client.deleteIntegrationTool(integrationId, toolId);
+    },
+    onSuccess: () => {
+      // Invalidate integrations list
+      queryClient.invalidateQueries({ queryKey: ['integrations'] });
+      // Invalidate specific integration details
+      if (integrationId) {
+        queryClient.invalidateQueries({ queryKey: ['integration', integrationId] });
+      }
+      // Invalidate tools list as the tool is no longer available
+      queryClient.invalidateQueries({ queryKey: ['tools'] });
+    },
+  });
+
   return {
     createIntegration: createMutation,
     updateIntegration: updateMutation,
     deleteIntegration: deleteMutation,
     refreshTools: refreshMutation,
+    validateMCPConnection: validateMCPMutation,
+    deleteTool: deleteToolMutation,
   };
 };

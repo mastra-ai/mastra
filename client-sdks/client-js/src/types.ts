@@ -165,6 +165,16 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  /** Tool name */
+  name?: string;
+  /** Source of the tool - 'code' for code-defined tools, integration name for integration tools */
+  source?: string;
+  /** Provider name for integration tools */
+  provider?: string;
+  /** Toolkit slug for integration tools */
+  toolkit?: string;
+  /** Integration ID for integration tools */
+  integrationId?: string;
 }
 
 export interface ListWorkflowRunsParams {
@@ -790,7 +800,24 @@ export interface GetSystemPackagesResponse {
 /**
  * Integration provider type
  */
-export type IntegrationProvider = 'composio' | 'arcade';
+export type IntegrationProvider = 'composio' | 'arcade' | 'mcp';
+
+/**
+ * MCP-specific integration metadata
+ */
+export interface MCPIntegrationMetadata {
+  /** MCP server URL (HTTP/SSE endpoint) */
+  url: string;
+  /** Optional authentication headers */
+  headers?: Record<string, string>;
+  /** Transport type hint */
+  transport?: 'http' | 'sse';
+  /** Server info cached after successful connection */
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+}
 
 /**
  * Integration configuration
@@ -806,6 +833,10 @@ export interface IntegrationConfig {
   ownerId?: string;
   createdAt: string;
   updatedAt: string;
+  /** Actual count of cached tools for this integration */
+  toolCount?: number;
+  /** Names of toolkits in this integration (e.g., ["hackernews"]) */
+  toolkitNames?: string[];
 }
 
 // ============================================================================
@@ -1067,6 +1098,18 @@ export interface ListProviderToolsParams {
   search?: string;
   limit?: number;
   cursor?: string;
+  // MCP HTTP transport parameters
+  /** MCP server URL (required for MCP HTTP transport) */
+  url?: string;
+  /** MCP server auth headers as JSON string (for MCP HTTP transport) */
+  headers?: string;
+  // MCP Stdio transport parameters
+  /** Command to execute (required for MCP Stdio transport) */
+  command?: string;
+  /** Arguments as JSON array string (for MCP Stdio transport) */
+  args?: string;
+  /** Environment variables as JSON object string (for MCP Stdio transport) */
+  env?: string;
 }
 
 /**
@@ -1085,6 +1128,44 @@ export interface RefreshIntegrationResponse {
   success: boolean;
   message: string;
   toolsUpdated: number;
+}
+
+/**
+ * Parameters for validating MCP connection
+ *
+ * Supports two transport types:
+ * - HTTP: Remote MCP servers accessed via URL
+ * - Stdio: Local MCP servers spawned as subprocesses
+ */
+export interface ValidateMCPParams {
+  /** Transport type: 'http' for remote servers, 'stdio' for local subprocess */
+  transport: 'http' | 'stdio';
+
+  // HTTP transport config (when transport === 'http')
+  /** MCP server URL (HTTP/SSE endpoint) - required for HTTP transport */
+  url?: string;
+  /** Optional authentication headers for HTTP transport */
+  headers?: Record<string, string>;
+
+  // Stdio transport config (when transport === 'stdio')
+  /** Command to execute (e.g., 'npx', 'node', 'python') - required for stdio transport */
+  command?: string;
+  /** Arguments to pass to the command */
+  args?: string[];
+  /** Environment variables for the subprocess */
+  env?: Record<string, string>;
+}
+
+/**
+ * Response for MCP validation
+ */
+export interface ValidateMCPResponse {
+  /** Whether the connection is valid */
+  valid: boolean;
+  /** Number of tools available on the server */
+  toolCount: number;
+  /** Error message if validation failed */
+  error?: string;
 }
 
 /**

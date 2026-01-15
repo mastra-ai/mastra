@@ -8,12 +8,14 @@ import {
   LIST_PROVIDER_TOOLKITS_ROUTE,
   LIST_PROVIDER_TOOLS_ROUTE,
   REFRESH_INTEGRATION_TOOLS_ROUTE,
+  VALIDATE_MCP_ROUTE,
+  DELETE_CACHED_TOOL_ROUTE,
 } from '../../handlers/integrations';
 import type { ServerRoute } from '.';
 
 /**
  * Routes for dynamic tool integration management.
- * These routes provide API access to configure external tool providers (Composio, Arcade.dev)
+ * These routes provide API access to configure external tool providers (Composio, Arcade.dev, MCP)
  * and manage cached tool definitions from those providers.
  */
 export const INTEGRATIONS_ROUTES: ServerRoute<any, any, any>[] = [
@@ -23,6 +25,7 @@ export const INTEGRATIONS_ROUTES: ServerRoute<any, any, any>[] = [
   // to prevent "providers" from being matched as an integrationId
   // ============================================================================
   GET_PROVIDERS_ROUTE,
+  VALIDATE_MCP_ROUTE, // MCP validation route (before :provider routes)
   LIST_PROVIDER_TOOLKITS_ROUTE,
   LIST_PROVIDER_TOOLS_ROUTE,
 
@@ -36,7 +39,8 @@ export const INTEGRATIONS_ROUTES: ServerRoute<any, any, any>[] = [
   DELETE_INTEGRATION_ROUTE,
 
   // ============================================================================
-  // Tool Refresh Routes
+  // Tool Management Routes
   // ============================================================================
   REFRESH_INTEGRATION_TOOLS_ROUTE,
+  DELETE_CACHED_TOOL_ROUTE,
 ];

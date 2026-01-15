@@ -21,7 +21,8 @@ export default defineConfig({
   },
   sourcemap: true,
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
-  external: ['typescript'],
+  // The `@mastra/mcp` package is optional peer dependency for MCP tool provider
+  external: ['typescript', '@mastra/mcp'],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

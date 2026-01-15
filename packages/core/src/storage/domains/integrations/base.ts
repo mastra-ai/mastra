@@ -151,6 +151,12 @@ export abstract class IntegrationsStorage extends StorageDomain {
   abstract deleteCachedToolsByIntegration({ integrationId }: { integrationId: string }): Promise<void>;
 
   /**
+   * Deletes a single cached tool by its unique identifier.
+   * @param id - The unique identifier of the cached tool to delete
+   */
+  abstract deleteCachedTool({ id }: { id: string }): Promise<void>;
+
+  /**
    * Updates the cached timestamp for tools belonging to an integration.
    * This can be used to track when tools were last synced.
    * @param integrationId - The integration ID

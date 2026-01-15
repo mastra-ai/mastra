@@ -65,12 +65,29 @@ interface ProviderCardProps {
 }
 
 function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
-  const isClickable = provider.connected && onSelect;
+  const isMCP = provider.provider === 'mcp';
+  // MCP is always clickable (user enters URL), others need to be connected
+  const isClickable = (isMCP || provider.connected) && onSelect;
 
   const handleClick = () => {
     if (isClickable) {
       onSelect(provider.provider);
     }
+  };
+
+  // Get badge for provider
+  const getBadge = () => {
+    if (isMCP) {
+      return <Badge variant="default">Enter URL</Badge>;
+    }
+    if (provider.connected) {
+      return (
+        <Badge variant="success" icon={<CheckIcon />}>
+          Connected
+        </Badge>
+      );
+    }
+    return <Badge variant="default">Not Connected</Badge>;
   };
 
   const card = (
@@ -80,7 +97,7 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
         'border-border1 bg-surface3',
         isClickable && 'cursor-pointer hover:border-border2 hover:bg-surface4',
         isSelected && 'border-accent1 bg-surface4',
-        !provider.connected && 'opacity-60 cursor-not-allowed',
+        !isClickable && 'opacity-60 cursor-not-allowed',
       )}
       onClick={handleClick}
       role={isClickable ? 'button' : undefined}
@@ -101,13 +118,7 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
           <Txt variant="ui-lg" className="text-icon6">
             {provider.name}
           </Txt>
-          {provider.connected ? (
-            <Badge variant="success" icon={<CheckIcon />}>
-              Connected
-            </Badge>
-          ) : (
-            <Badge variant="default">Not Connected</Badge>
-          )}
+          {getBadge()}
         </div>
 
         <Txt variant="ui-sm" className="text-icon3">
@@ -117,7 +128,8 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
     </div>
   );
 
-  if (!provider.connected) {
+  // Show tooltip for disconnected non-MCP providers
+  if (!provider.connected && !isMCP) {
     return (
       <TooltipProvider>
         <Tooltip>

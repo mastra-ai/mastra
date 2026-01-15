@@ -620,4 +620,23 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
       );
     }
   }
+
+  async deleteCachedTool({ id }: { id: string }): Promise<void> {
+    try {
+      await this.#db.delete({
+        tableName: TABLE_CACHED_TOOLS,
+        keys: { id },
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'DELETE_CACHED_TOOL', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { toolId: id },
+        },
+        error,
+      );
+    }
+  }
 }

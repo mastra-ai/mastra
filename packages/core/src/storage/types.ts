@@ -368,7 +368,7 @@ export type StorageListAgentsOutput = PaginationInfo & {
 /**
  * Integration provider type for external tool platforms.
  */
-export type IntegrationProvider = 'composio' | 'arcade';
+export type IntegrationProvider = 'composio' | 'arcade' | 'mcp';
 
 /**
  * Stored integration configuration type.

@@ -389,6 +389,17 @@ export async function executeArcadeTool(params: ExecuteArcadeToolParams): Promis
 }
 
 /**
+ * Options for MCP tool execution
+ * MCP tools require server URL and optional headers from integration metadata
+ */
+export interface MCPToolExecutionOptions {
+  /** MCP server URL (required) */
+  url: string;
+  /** Optional authentication headers */
+  headers?: Record<string, string>;
+}
+
+/**
  * Execute a tool from any supported provider
  *
  * @param provider - The integration provider type
@@ -417,6 +428,8 @@ export async function executeTool(
     userId?: string;
     toolVersion?: string;
     apiKey?: string;
+    /** MCP-specific options (required for MCP provider) */
+    mcp?: MCPToolExecutionOptions;
   },
 ): Promise<ToolExecutionResult> {
   switch (provider) {
@@ -437,6 +450,26 @@ export async function executeTool(
         toolVersion: options?.toolVersion,
         apiKey: options?.apiKey,
       });
+
+    case 'mcp':
+      // MCP tool execution requires the @mastra/mcp package which is not available in core.
+      // Use executeMCPTool from @mastra/server/handlers/mcp-tool-provider instead.
+      if (!options?.mcp?.url) {
+        return {
+          success: false,
+          error: {
+            message: 'MCP tool execution requires url in options.mcp. Use executeMCPTool from @mastra/server for MCP tool execution.',
+            code: 'MCP_CONFIG_REQUIRED',
+          },
+        };
+      }
+      return {
+        success: false,
+        error: {
+          message: 'MCP tool execution is handled by @mastra/server. Import executeMCPTool from @mastra/server/handlers/mcp-tool-provider.',
+          code: 'USE_SERVER_PACKAGE',
+        },
+      };
 
     default:
       return {

@@ -16,6 +16,8 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
+import { executeMCPTool } from './mcp-tool-provider';
+import type { MCPIntegrationMetadata } from '@mastra/core/integrations';
 
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
@@ -90,7 +92,9 @@ export const LIST_TOOLS_ROUTE = createRoute({
                 source: integrationName,
                 provider: cachedTool.provider,
                 toolkit: cachedTool.toolkitSlug,
+                toolSlug: cachedTool.toolSlug, // The tool slug for matching with available tools
                 integrationId: cachedTool.integrationId,
+                cachedToolId: cachedTool.id, // The database ID for the cached tool (needed for deletion)
               };
             }
           }
@@ -231,11 +235,51 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
               const cachedTool = cachedToolsResult.tools?.find((t: any) => t.toolSlug === toolSlug);
 
               if (cachedTool) {
-                // Execute via provider API using executeTool from @mastra/core
-                const { executeTool } = await import('@mastra/core/integrations');
                 const { data } = bodyParams;
-
                 validateBody({ data });
+
+                // Handle MCP tools specially - need to get integration metadata for transport config
+                if (cachedTool.provider === 'mcp') {
+                  // Get the integration to access metadata
+                  const integration = await integrationsStore.getIntegrationById({ id: cachedTool.integrationId });
+                  if (!integration) {
+                    throw new HTTPException(404, { message: 'Integration not found for MCP tool' });
+                  }
+
+                  const mcpMetadata = integration.metadata as MCPIntegrationMetadata | undefined;
+                  if (!mcpMetadata) {
+                    throw new HTTPException(400, { message: 'MCP integration metadata not found' });
+                  }
+
+                  // Execute MCP tool with the appropriate transport config
+                  const result = await executeMCPTool({
+                    transport: mcpMetadata.transport || (mcpMetadata.url ? 'http' : 'stdio'),
+                    // HTTP transport
+                    url: mcpMetadata.url,
+                    headers: mcpMetadata.headers,
+                    // Stdio transport
+                    command: mcpMetadata.command,
+                    args: mcpMetadata.args,
+                    env: mcpMetadata.env,
+                    // Tool execution params
+                    toolSlug: cachedTool.toolSlug,
+                    input: (data || {}) as Record<string, unknown>,
+                  });
+
+                  if (!result.success) {
+                    const errorDetails = result.error?.details
+                      ? ` Details: ${typeof result.error.details === 'string' ? result.error.details : JSON.stringify(result.error.details)}`
+                      : '';
+                    throw new HTTPException(500, {
+                      message: `${result.error?.message || 'MCP tool execution failed'}${errorDetails}`,
+                    });
+                  }
+
+                  return result.output;
+                }
+
+                // Execute via provider API using executeTool from @mastra/core for non-MCP providers
+                const { executeTool } = await import('@mastra/core/integrations');
 
                 const result = await executeTool(
                   cachedTool.provider,

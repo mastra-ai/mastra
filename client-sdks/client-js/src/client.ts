@@ -69,6 +69,8 @@ import type {
   UpdateIntegrationParams,
   DeleteIntegrationResponse,
   RefreshIntegrationResponse,
+  ValidateMCPParams,
+  ValidateMCPResponse,
   ListWorkflowDefinitionsParams,
   ListWorkflowDefinitionsResponse,
   CreateWorkflowDefinitionInput,
@@ -958,6 +960,23 @@ export class MastraClient extends BaseResource {
     if (params?.cursor) {
       searchParams.set('cursor', params.cursor);
     }
+    // MCP HTTP transport parameters
+    if (params?.url) {
+      searchParams.set('url', params.url);
+    }
+    if (params?.headers) {
+      searchParams.set('headers', params.headers);
+    }
+    // MCP Stdio transport parameters
+    if (params?.command) {
+      searchParams.set('command', params.command);
+    }
+    if (params?.args) {
+      searchParams.set('args', params.args);
+    }
+    if (params?.env) {
+      searchParams.set('env', params.env);
+    }
 
     const queryString = searchParams.toString();
     return this.request(`/api/integrations/${provider}/tools${queryString ? `?${queryString}` : ''}`);
@@ -1052,6 +1071,30 @@ export class MastraClient extends BaseResource {
   public refreshIntegrationTools(integrationId: string): Promise<RefreshIntegrationResponse> {
     return this.request(`/api/integrations/${integrationId}/refresh`, {
       method: 'POST',
+    });
+  }
+
+  /**
+   * Deletes a single cached tool from an integration
+   * @param integrationId - ID of the integration the tool belongs to
+   * @param toolId - ID of the cached tool to delete
+   * @returns Promise containing success status
+   */
+  public deleteIntegrationTool(integrationId: string, toolId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/integrations/${integrationId}/tools/${toolId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Validates connection to an MCP server
+   * @param params - Transport config (HTTP with URL or Stdio with command)
+   * @returns Promise containing validation result with tool count
+   */
+  public validateMCPConnection(params: ValidateMCPParams): Promise<ValidateMCPResponse> {
+    return this.request('/api/integrations/mcp/validate', {
+      method: 'POST',
+      body: params,
     });
   }
 }

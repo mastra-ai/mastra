@@ -345,6 +345,12 @@ export class InMemoryIntegrationsStorage extends IntegrationsStorage {
     }
   }
 
+  async deleteCachedTool({ id }: { id: string }): Promise<void> {
+    this.logger.debug(`InMemoryIntegrationsStorage: deleteCachedTool called for ${id}`);
+    // Idempotent delete - no-op if tool doesn't exist
+    this.db.cachedTools.delete(id);
+  }
+
   // ==========================================================================
   // Private Helper Methods
   // ==========================================================================

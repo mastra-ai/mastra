@@ -9,7 +9,40 @@
 /**
  * Supported integration provider types
  */
-export type IntegrationProviderType = 'composio' | 'arcade';
+export type IntegrationProviderType = 'composio' | 'arcade' | 'mcp';
+
+/**
+ * MCP-specific integration metadata
+ *
+ * Stored in StorageIntegrationConfig.metadata for MCP integrations.
+ * Supports two transport types:
+ * - HTTP/SSE: Remote MCP servers accessed via URL
+ * - Stdio: Local MCP servers spawned as subprocesses
+ */
+export interface MCPIntegrationMetadata {
+  /** Transport type: 'http' for remote servers, 'stdio' for local subprocess */
+  transport: 'http' | 'stdio';
+
+  // HTTP transport config (when transport === 'http')
+  /** MCP server URL (HTTP/SSE endpoint) - required for HTTP transport */
+  url?: string;
+  /** Optional authentication headers for HTTP transport */
+  headers?: Record<string, string>;
+
+  // Stdio transport config (when transport === 'stdio')
+  /** Command to execute (e.g., 'npx', 'node', 'python') - required for stdio transport */
+  command?: string;
+  /** Arguments to pass to the command */
+  args?: string[];
+  /** Environment variables for the subprocess */
+  env?: Record<string, string>;
+
+  /** Server info cached after successful connection */
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+}
 
 /**
  * Provider connection status information

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { X, Plus, AlertCircle, AlertTriangle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
 import { useTestRunnerStore } from '../../store/test-runner-store';
 import { QuickAddPopover } from '../quick-add-popover';

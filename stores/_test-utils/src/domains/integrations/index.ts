@@ -617,5 +617,46 @@ export function createIntegrationsTests({ storage }: { storage: MastraStorage })
         });
       });
     });
+
+    describe('deleteCachedTool', () => {
+      it('should delete a single cached tool by ID', async () => {
+        const integration = createSampleIntegration();
+        await integrationsStorage.createIntegration({ integration });
+
+        const tools = createSampleCachedTools(integration.id, 3);
+        await integrationsStorage.cacheTools({ tools });
+
+        // Verify tools exist
+        const beforeDelete = await integrationsStorage.listCachedTools({
+          page: 0,
+          perPage: 10,
+          integrationId: integration.id,
+        });
+        expect(beforeDelete.tools).toHaveLength(3);
+
+        // Delete just one tool
+        await integrationsStorage.deleteCachedTool({ id: tools[0]!.id });
+
+        // Verify only one tool is deleted
+        const afterDelete = await integrationsStorage.listCachedTools({
+          page: 0,
+          perPage: 10,
+          integrationId: integration.id,
+        });
+        expect(afterDelete.tools).toHaveLength(2);
+
+        // Verify the specific tool is deleted
+        const deletedTool = await integrationsStorage.getCachedTool({ id: tools[0]!.id });
+        expect(deletedTool).toBeNull();
+
+        // Verify other tools still exist
+        const remainingTool = await integrationsStorage.getCachedTool({ id: tools[1]!.id });
+        expect(remainingTool).toBeDefined();
+      });
+
+      it('should not throw when deleting non-existent tool', async () => {
+        await expect(integrationsStorage.deleteCachedTool({ id: 'non-existent-tool' })).resolves.not.toThrow();
+      });
+    });
   });
 }

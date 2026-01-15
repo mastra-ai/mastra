@@ -8,6 +8,7 @@
 import type { IntegrationProviderType, ProviderStatus, ToolProvider } from './types';
 import { ArcadeProvider } from './arcade';
 import { ComposioProvider } from './composio';
+import { MCPPlaceholderProvider } from './mcp';
 
 /**
  * Registry of available tool providers
@@ -19,6 +20,7 @@ class ProviderRegistry {
     // Register default providers
     this.register('composio', new ComposioProvider());
     this.register('arcade', new ArcadeProvider());
+    this.register('mcp', new MCPPlaceholderProvider());
   }
 
   /**
