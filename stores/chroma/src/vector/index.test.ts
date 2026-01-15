@@ -575,6 +575,11 @@ createVectorTestSuite({
     // Chroma may need a short wait for indexing
     await new Promise(resolve => setTimeout(resolve, 2000));
   },
+  testDomains: {
+    // Skip filterOps - ChromaDB only supports primitive metadata types (string, number, boolean)
+    // and doesn't support array values like tags: ['sale'] used in filter operator tests
+    filterOps: false,
+  },
 });
 
 // ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)

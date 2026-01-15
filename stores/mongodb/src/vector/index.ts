@@ -349,7 +349,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         index: indexNameInternal,
         queryVector: queryVector,
         path: this.embeddingFieldName,
-        numCandidates: 100,
+        numCandidates: Math.max(100, topK),
         limit: topK,
       };
 
