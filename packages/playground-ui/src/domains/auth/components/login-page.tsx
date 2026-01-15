@@ -71,8 +71,9 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
   const hasSSO = login.type === 'sso' || login.type === 'both';
   const hasCredentials = login.type === 'credentials' || login.type === 'both';
   const sso = login.sso as SSOConfig | undefined;
+  const signUpEnabled = login.signUpEnabled !== false; // defaults to true
 
-  const isSignIn = mode === 'signin';
+  const isSignIn = mode === 'signin' || !signUpEnabled; // force signin mode if signup disabled
   const isPending = isSignIn ? isLoginPending : isSignUpPending;
   const error = isSignIn ? loginError : signUpError;
 
@@ -184,14 +185,16 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
                   : 'Create account'}
             </Button>
 
-            <div className="text-center text-sm">
-              <span className="text-neutral3">
-                {isSignIn ? "Don't have an account? " : 'Already have an account? '}
-              </span>
-              <button type="button" onClick={toggleMode} className="text-neutral6 hover:underline">
-                {isSignIn ? 'Sign up' : 'Sign in'}
-              </button>
-            </div>
+            {signUpEnabled && (
+              <div className="text-center text-sm">
+                <span className="text-neutral3">
+                  {isSignIn ? "Don't have an account? " : 'Already have an account? '}
+                </span>
+                <button type="button" onClick={toggleMode} className="text-neutral6 hover:underline">
+                  {isSignIn ? 'Sign up' : 'Sign in'}
+                </button>
+              </div>
+            )}
           </form>
         )}
 

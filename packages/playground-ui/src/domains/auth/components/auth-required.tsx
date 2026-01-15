@@ -87,14 +87,15 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
           <p className="max-w-sm text-neutral3">You need to sign in to access this page.</p>
         </div>
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
-        {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') && (
-          <div className="text-sm">
-            <span className="text-neutral3">{"Don't have an account? "}</span>
-            <button type="button" onClick={handleSignUp} className="text-neutral6 hover:underline">
-              Sign up
-            </button>
-          </div>
-        )}
+        {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
+          capabilities.login.signUpEnabled !== false && (
+            <div className="text-sm">
+              <span className="text-neutral3">{"Don't have an account? "}</span>
+              <button type="button" onClick={handleSignUp} className="text-neutral6 hover:underline">
+                Sign up
+              </button>
+            </div>
+          )}
       </div>
     </div>
   );

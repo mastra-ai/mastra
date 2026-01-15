@@ -37,6 +37,13 @@ interface MastraAuthBetterAuthOptions extends MastraAuthProviderOptions<BetterAu
    * This should be the result of calling `betterAuth({ ... })`.
    */
   auth: Auth;
+
+  /**
+   * Whether to allow new user registration via sign-up.
+   * Set to false to disable public registration.
+   * @default true
+   */
+  signUpEnabled?: boolean;
 }
 
 /**
@@ -81,6 +88,7 @@ export class MastraAuthBetterAuth
   implements IUserProvider<EEUser>, ICredentialsProvider<EEUser>
 {
   protected auth: Auth;
+  protected signUpEnabledConfig: boolean;
 
   constructor(options: MastraAuthBetterAuthOptions) {
     super({ name: options?.name ?? 'better-auth' });
@@ -92,8 +100,17 @@ export class MastraAuthBetterAuth
     }
 
     this.auth = options.auth;
+    this.signUpEnabledConfig = options.signUpEnabled ?? true;
 
     this.registerOptions(options);
+  }
+
+  /**
+   * Check if sign-up is enabled.
+   * Implements ICredentialsProvider.isSignUpEnabled.
+   */
+  isSignUpEnabled(): boolean {
+    return this.signUpEnabledConfig;
   }
 
   // ============================================
