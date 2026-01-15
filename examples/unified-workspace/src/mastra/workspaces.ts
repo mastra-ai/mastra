@@ -3,21 +3,24 @@ import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 /**
- * Resolve a path that works from both project root and src/mastra/public/
+ * Resolve a path that works from both project root and .mastra/public/
+ *
+ * When running via `mastra dev`, the cwd is .mastra/public (2 levels deep).
+ * When running demo scripts directly, cwd is the project root.
  */
 function resolvePath(relativePath: string): string {
   const cwd = process.cwd();
 
-  // Try project root first (for demo scripts)
+  // Try project root first (for demo scripts run from project root)
   const fromRoot = resolve(cwd, relativePath);
   if (existsSync(fromRoot)) {
     return fromRoot;
   }
 
-  // Try from src/mastra/public/ (for mastra dev - 3 levels up)
-  const fromOutput = resolve(cwd, '../../../', relativePath);
-  if (existsSync(fromOutput)) {
-    return fromOutput;
+  // Try from .mastra/public/ (for mastra dev - 2 levels up)
+  const fromMastraPublic = resolve(cwd, '../../', relativePath);
+  if (existsSync(fromMastraPublic)) {
+    return fromMastraPublic;
   }
 
   // Fallback to project root path
