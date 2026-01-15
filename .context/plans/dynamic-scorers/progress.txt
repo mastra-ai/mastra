@@ -214,3 +214,67 @@ Next steps:
 - Task 009: Create API endpoints for scorer versions
 
 Status: VERIFIED AND COMPLETE
+
+
+Task 007 - Create API endpoints for stored scorers CRUD - COMPLETED
+===================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive REST API endpoints for stored scorers CRUD operations
+- Followed the exact same patterns as stored-agents handlers for consistency
+- Implemented all 5 CRUD endpoints with proper validation and error handling
+- Registered routes in the main SERVER_ROUTES array
+- All endpoints use getScorerByIdResolved for version-aware data retrieval
+
+Files created:
+- packages/server/src/server/handlers/stored-scorers.ts (242 lines)
+- packages/server/src/server/server-adapter/routes/stored-scorers.ts (23 lines)
+
+Files modified:
+- packages/server/src/server/server-adapter/routes/index.ts (added STORED_SCORERS_ROUTES import and registration)
+
+API Endpoints implemented:
+1. GET /api/stored/scorers - List all stored scorers with pagination
+   - Supports page, perPage, orderBy, ownerId, metadata filters
+   - Returns paginated list with hasMore flag
+
+2. GET /api/stored/scorers/:scorerId - Get single scorer by ID
+   - Uses getScorerByIdResolved for version-aware retrieval
+   - Returns 404 if scorer not found
+
+3. POST /api/stored/scorers - Create new scorer
+   - Validates all required fields via Zod schema
+   - Checks for duplicate IDs before creation
+   - Returns 409 if scorer with same ID exists
+
+4. PATCH /api/stored/scorers/:scorerId - Update existing scorer
+   - Partial update with all fields optional
+   - Verifies scorer exists before update
+   - Note: Auto-versioning will be added in task 008
+
+5. DELETE /api/stored/scorers/:scorerId - Delete scorer
+   - Verifies scorer exists before deletion
+   - Returns success message on completion
+   - Cascades to delete all versions (handled by storage layer)
+
+Key implementation details:
+- All handlers follow try/catch pattern with handleError utility
+- Storage domain accessed via mastra.getStorage().getStore('storedScorers')
+- Proper HTTP status codes (404, 409, 500) for different error scenarios
+- Path parameter is 'scorerId' (not 'storedScorerId') per schema definition
+- Storage methods called with wrapped parameters: { id: string }, { scorer: ... }
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build (server package): PASSED
+- All 5 CRUD endpoints compile without errors
+
+Next steps:
+- Task 008: Implement auto-versioning on scorer update
+- Task 009: Create API endpoints for scorer versions
+- Task 010: Merge code-defined and stored scorers in list endpoint
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED

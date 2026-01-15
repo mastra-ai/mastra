@@ -16,6 +16,7 @@ import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
+import { STORED_SCORERS_ROUTES } from './stored-scorers';
 import type { MastraStreamReturn } from './stream-types';
 import { WORKFLOW_DEFINITIONS_ROUTES } from './workflow-definitions';
 import { WORKFLOW_DEFINITION_VERSIONS_ROUTES } from './workflow-definition-versions';
@@ -104,6 +105,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...STORED_SCORERS_ROUTES,
   ...INTEGRATIONS_ROUTES,
   ...AGENT_VERSIONS_ROUTES,
   ...WORKFLOW_DEFINITION_VERSIONS_ROUTES, // Version routes first to avoid path collisions
