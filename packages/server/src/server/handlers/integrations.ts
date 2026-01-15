@@ -21,13 +21,23 @@ import {
   validateMCPBodySchema,
   validateMCPResponseSchema,
   deleteCachedToolResponseSchema,
+  smitheryServerPathParams,
+  smitheryServersQuerySchema,
+  smitheryServersResponseSchema,
+  smitheryServerDetailsResponseSchema,
 } from '../schemas/integrations';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
 
 import type { IntegrationProvider } from '@mastra/core/storage';
-import { getProvider, listProviders, type MCPIntegrationMetadata } from '@mastra/core/integrations';
+import {
+  getProvider,
+  listProviders,
+  SmitheryProvider,
+  type MCPIntegrationMetadata,
+  type SmitheryIntegrationMetadata,
+} from '@mastra/core/integrations';
 import { createMCPProvider } from './mcp-tool-provider';
 
 // ============================================================================
@@ -162,13 +172,13 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Integrations storage domain is not available' });
       }
 
-      // Handle MCP provider differently
-      if (provider === 'mcp') {
-        // MCP requires either URL (http) or command (stdio) in metadata
-        const mcpMetadata = metadata as MCPIntegrationMetadata | undefined;
+      // Handle MCP and Smithery providers similarly (both use MCP connection)
+      if (provider === 'mcp' || provider === 'smithery') {
+        // MCP/Smithery requires either URL (http) or command (stdio) in metadata
+        const mcpMetadata = metadata as MCPIntegrationMetadata | SmitheryIntegrationMetadata | undefined;
         if (!mcpMetadata) {
           throw new HTTPException(400, {
-            message: 'MCP provider requires metadata with transport configuration',
+            message: `${provider === 'smithery' ? 'Smithery' : 'MCP'} provider requires metadata with transport configuration`,
           });
         }
 
@@ -177,17 +187,17 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
 
         if (isHttpTransport && !mcpMetadata.url) {
           throw new HTTPException(400, {
-            message: 'MCP HTTP transport requires a URL in metadata',
+            message: `${provider === 'smithery' ? 'Smithery' : 'MCP'} HTTP transport requires a URL in metadata`,
           });
         }
         if (isStdioTransport && !mcpMetadata.command) {
           throw new HTTPException(400, {
-            message: 'MCP Stdio transport requires a command in metadata',
+            message: `${provider === 'smithery' ? 'Smithery' : 'MCP'} Stdio transport requires a command in metadata`,
           });
         }
         if (!isHttpTransport && !isStdioTransport) {
           throw new HTTPException(400, {
-            message: 'MCP provider requires either URL (http) or command (stdio) in metadata',
+            message: `${provider === 'smithery' ? 'Smithery' : 'MCP'} provider requires either URL (http) or command (stdio) in metadata`,
           });
         }
 
@@ -221,7 +231,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
             name,
             provider,
             enabled: enabled ?? true,
-            selectedToolkits: ['mcp-server'], // MCP uses a single virtual toolkit
+            selectedToolkits: ['mcp-server'], // MCP/Smithery uses a single virtual toolkit
             metadata,
             ownerId,
           },
@@ -239,7 +249,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
           const cachedTools = toolsToCache.map(tool => ({
             id: crypto.randomUUID(),
             integrationId: integration.id,
-            provider: 'mcp' as IntegrationProvider,
+            provider: provider as IntegrationProvider, // Use actual provider (mcp or smithery)
             toolkitSlug: 'mcp-server',
             toolSlug: tool.slug,
             name: tool.name,
@@ -254,7 +264,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
             await integrationsStore.cacheTools({ tools: cachedTools });
           }
         } catch (toolError) {
-          console.error(`Error caching tools for MCP integration ${integration.id}:`, toolError);
+          console.error(`Error caching tools for ${provider} integration ${integration.id}:`, toolError);
         } finally {
           await mcpProvider.disconnect();
         }
@@ -406,7 +416,7 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
       if (selectedToolkits || selectedTools) {
         try {
           // Handle MCP provider differently
-          if (updatedIntegration.provider === 'mcp') {
+          if (updatedIntegration.provider === 'mcp' || updatedIntegration.provider === 'smithery') {
             // Use existing metadata since the update request doesn't include connection info
             const mcpMetadata = existing.metadata as MCPIntegrationMetadata | undefined;
             if (!mcpMetadata) {
@@ -631,10 +641,22 @@ export const LIST_PROVIDER_TOOLKITS_ROUTE = createRoute({
   handler: async ({ provider, search, category, limit, cursor }) => {
     try {
       // Validate provider type
-      if (provider !== 'composio' && provider !== 'arcade' && provider !== 'mcp') {
+      if (provider !== 'composio' && provider !== 'arcade' && provider !== 'mcp' && provider !== 'smithery') {
         throw new HTTPException(400, {
-          message: `Invalid provider: ${provider}. Must be 'composio', 'arcade', or 'mcp'.`,
+          message: `Invalid provider: ${provider}. Must be 'composio', 'arcade', 'mcp', or 'smithery'.`,
         });
+      }
+
+      // Smithery - list servers as toolkits
+      if (provider === 'smithery') {
+        const smitheryProvider = new SmitheryProvider();
+        const response = await smitheryProvider.listToolkits({
+          search,
+          category,
+          limit,
+          cursor,
+        });
+        return response;
       }
 
       // MCP doesn't have toolkits - return placeholder
@@ -692,14 +714,15 @@ export const LIST_PROVIDER_TOOLS_ROUTE = createRoute({
   handler: async ({ provider, toolkitSlug, toolkitSlugs, search, limit, cursor, url, headers, command, args, env }) => {
     try {
       // Validate provider type
-      if (provider !== 'composio' && provider !== 'arcade' && provider !== 'mcp') {
+      if (provider !== 'composio' && provider !== 'arcade' && provider !== 'mcp' && provider !== 'smithery') {
         throw new HTTPException(400, {
-          message: `Invalid provider: ${provider}. Must be 'composio', 'arcade', or 'mcp'.`,
+          message: `Invalid provider: ${provider}. Must be 'composio', 'arcade', 'mcp', or 'smithery'.`,
         });
       }
 
-      // Handle MCP provider - requires URL (http) or command (stdio)
-      if (provider === 'mcp') {
+      // Handle MCP and Smithery providers - both require URL (http) or command (stdio)
+      // Smithery integrations use MCP under the hood with connection details from Smithery registry
+      if (provider === 'mcp' || provider === 'smithery') {
         const isHttpTransport = !!url;
         const isStdioTransport = !!command;
 
@@ -845,7 +868,7 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
       await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
 
       // Handle MCP provider differently
-      if (integration.provider === 'mcp') {
+      if (integration.provider === 'mcp' || integration.provider === 'smithery') {
         const mcpMetadata = integration.metadata as MCPIntegrationMetadata | undefined;
         if (!mcpMetadata) {
           throw new HTTPException(400, {
@@ -1073,6 +1096,75 @@ export const DELETE_CACHED_TOOL_ROUTE = createRoute({
       return { success: true, message: `Tool ${toolId} deleted successfully` };
     } catch (error) {
       return handleError(error, 'Error deleting cached tool');
+    }
+  },
+});
+
+// ============================================================================
+// Smithery Registry Routes
+// ============================================================================
+
+/**
+ * GET /api/integrations/smithery/servers - Search Smithery registry for MCP servers
+ */
+export const LIST_SMITHERY_SERVERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/integrations/smithery/servers',
+  responseType: 'json',
+  queryParamSchema: smitheryServersQuerySchema,
+  responseSchema: smitheryServersResponseSchema,
+  summary: 'Search Smithery servers',
+  description: 'Search the Smithery registry for MCP servers',
+  tags: ['Integrations', 'Smithery'],
+  handler: async ({ q, page, pageSize }) => {
+    try {
+      const smitheryProvider = new SmitheryProvider();
+      const response = await smitheryProvider.searchServers({
+        query: q,
+        page,
+        pageSize,
+      });
+      return response;
+    } catch (error) {
+      return handleError(error, 'Error searching Smithery servers');
+    }
+  },
+});
+
+/**
+ * GET /api/integrations/smithery/servers/:qualifiedName - Get Smithery server details
+ */
+export const GET_SMITHERY_SERVER_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/integrations/smithery/servers/:qualifiedName',
+  responseType: 'json',
+  pathParamSchema: smitheryServerPathParams,
+  responseSchema: smitheryServerDetailsResponseSchema,
+  summary: 'Get Smithery server details',
+  description: 'Get detailed information about a specific MCP server from Smithery, including connection details',
+  tags: ['Integrations', 'Smithery'],
+  handler: async ({ qualifiedName }) => {
+    try {
+      const smitheryProvider = new SmitheryProvider();
+
+      // Get server info
+      const server = await smitheryProvider.getServer(qualifiedName);
+
+      // Get connection details
+      let connection;
+      try {
+        connection = await smitheryProvider.getServerConnection(qualifiedName);
+      } catch {
+        // Connection info may not be available for all servers
+        connection = undefined;
+      }
+
+      return {
+        ...server,
+        connection,
+      };
+    } catch (error) {
+      return handleError(error, `Error getting Smithery server ${qualifiedName}`);
     }
   },
 });

@@ -12,10 +12,11 @@ import { ProviderList } from './provider-list';
 import { ToolkitBrowser } from './toolkit-browser';
 import { ToolSelector } from './tool-selector';
 import { MCPConnectionInput } from './mcp-connection-input';
+import { SmitheryBrowser } from './smithery-browser';
 import type { MCPConnectionConfig } from './mcp-connection-input';
 import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations } from '../hooks';
 import type { IntegrationProvider } from '../types';
-import type { ValidateMCPResponse } from '@mastra/client-js';
+import type { ValidateMCPResponse, SmitheryServer, SmitheryServerConnection } from '@mastra/client-js';
 
 /**
  * Props for the AddToolsDialog component.
@@ -62,8 +63,14 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const [mcpToolCount, setMcpToolCount] = useState(0);
   const [mcpValidationError, setMcpValidationError] = useState<string | undefined>();
 
-  // Determine if we're in MCP mode
+  // Smithery-specific state
+  const [smitheryServer, setSmitheryServer] = useState<SmitheryServer | null>(null);
+  const [smitheryConnection, setSmitheryConnection] = useState<SmitheryServerConnection | null>(null);
+  const [smitheryValidated, setSmitheryValidated] = useState(false);
+
+  // Determine if we're in MCP or Smithery mode
   const isMCPProvider = selectedProvider === 'mcp';
+  const isSmitheryProvider = selectedProvider === 'smithery';
 
   // Data fetching
   const { data: providersResponse, isLoading: isLoadingProviders } = useProviders();
@@ -77,16 +84,38 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     params: {},
     enabled: !!selectedProvider && !isMCPProvider && step === 2,
   });
-  // Build MCP params for tools query
-  const mcpToolsParams = mcpConfig
-    ? mcpConfig.transport === 'http'
-      ? { url: mcpConfig.url, headers: mcpConfig.headers ? JSON.stringify(mcpConfig.headers) : undefined }
-      : {
-          command: mcpConfig.command,
-          args: mcpConfig.args ? JSON.stringify(mcpConfig.args) : undefined,
-          env: mcpConfig.env ? JSON.stringify(mcpConfig.env) : undefined,
-        }
-    : undefined;
+  // Build MCP/Smithery params for tools query
+  const getMCPToolsParams = () => {
+    // For direct MCP
+    if (mcpConfig) {
+      return mcpConfig.transport === 'http'
+        ? { url: mcpConfig.url, headers: mcpConfig.headers ? JSON.stringify(mcpConfig.headers) : undefined }
+        : {
+            command: mcpConfig.command,
+            args: mcpConfig.args ? JSON.stringify(mcpConfig.args) : undefined,
+            env: mcpConfig.env ? JSON.stringify(mcpConfig.env) : undefined,
+          };
+    }
+    // For Smithery, use the connection from Smithery server
+    if (smitheryConnection) {
+      return smitheryConnection.type === 'http'
+        ? { url: smitheryConnection.url }
+        : {
+            command: smitheryConnection.command,
+            args: smitheryConnection.args ? JSON.stringify(smitheryConnection.args) : undefined,
+            env: smitheryConnection.env ? JSON.stringify(smitheryConnection.env) : undefined,
+          };
+    }
+    return undefined;
+  };
+
+  const mcpToolsParams = getMCPToolsParams();
+
+  // Determine which provider to use for tools fetch (smithery uses mcp under the hood)
+  const toolsProvider = isSmitheryProvider ? 'mcp' : (selectedProvider || '');
+  const isMCPLike = isMCPProvider || isSmitheryProvider;
+  const isMCPLikeValidated = isMCPProvider ? mcpValidated : smitheryValidated;
+  const hasMCPLikeConfig = isMCPProvider ? !!mcpConfig : !!smitheryConnection;
 
   const {
     data: toolsData,
@@ -94,12 +123,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     fetchNextPage: fetchNextToolsPage,
     hasNextPage: hasNextToolsPage,
     isFetchingNextPage: isFetchingNextToolsPage,
-  } = useProviderTools(selectedProvider || '', {
-    params: isMCPProvider
+  } = useProviderTools(toolsProvider, {
+    params: isMCPLike
       ? mcpToolsParams
       : { toolkitSlugs: Array.from(selectedToolkits).join(',') },
-    // For MCP, also require mcpConfig to be set before enabling
-    enabled: !!selectedProvider && (isMCPProvider ? mcpValidated && !!mcpConfig && step === 3 : selectedToolkits.size > 0 && step === 3),
+    // For MCP/Smithery, require config to be set before enabling
+    enabled: !!selectedProvider && (isMCPLike ? isMCPLikeValidated && hasMCPLikeConfig && step === 3 : selectedToolkits.size > 0 && step === 3),
   });
 
   // Mutations
@@ -119,6 +148,37 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       .filter(tool => tool.slug && !deselectedTools.has(tool.slug))
       .map(tool => tool.slug)
   );
+
+  // Smithery server selection handler
+  const handleSmitheryServerSelect = async (server: SmitheryServer, connection?: SmitheryServerConnection) => {
+    setSmitheryServer(server);
+    setSmitheryConnection(connection || null);
+
+    if (connection) {
+      // Validate the MCP connection from Smithery
+      const validationParams = connection.type === 'http'
+        ? { transport: 'http' as const, url: connection.url! }
+        : { transport: 'stdio' as const, command: connection.command!, args: connection.args, env: connection.env };
+
+      try {
+        const result = await validateMCPConnection.mutateAsync(validationParams) as ValidateMCPResponse;
+        if (result.valid) {
+          setSmitheryValidated(true);
+          setMcpToolCount(result.toolCount);
+        } else {
+          toast.error(`Failed to connect to MCP server: ${result.error || 'Unknown error'}`);
+          setSmitheryValidated(false);
+        }
+      } catch (error) {
+        toast.error(`Failed to connect to MCP server: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setSmitheryValidated(false);
+      }
+    } else {
+      // No connection info from Smithery - user will need to configure manually
+      toast.error('Connection details not available for this server. Please try a different server or use MCP directly.');
+      setSmitheryValidated(false);
+    }
+  };
 
   // MCP validation handler
   const handleMCPValidate = async (config: MCPConnectionConfig) => {
@@ -154,21 +214,40 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
           setStep(3);
         }
         // If not validated, user needs to connect first - don't navigate
+      } else if (isSmitheryProvider) {
+        // For Smithery, step 2 is the server browser
+        setStep(2);
       } else {
         setStep(2);
       }
-    } else if (step === 2 && selectedToolkits.size > 0) {
-      setStep(3);
+    } else if (step === 2) {
+      if (isSmitheryProvider && smitheryValidated) {
+        // Smithery: server selected and validated, go to tools
+        setSelectedToolkits(new Set(['mcp-server']));
+        setStep(3);
+      } else if (selectedToolkits.size > 0) {
+        setStep(3);
+      }
     }
   };
 
   const handleBack = () => {
     if (step === 2) {
       setStep(1);
+      // Reset Smithery state when going back from server browser
+      if (isSmitheryProvider) {
+        setSmitheryServer(null);
+        setSmitheryConnection(null);
+        setSmitheryValidated(false);
+      }
     } else if (step === 3) {
       if (isMCPProvider) {
         // For MCP, go back to step 1 (URL input)
         setStep(1);
+      } else if (isSmitheryProvider) {
+        // For Smithery, go back to step 2 (server browser)
+        setStep(2);
+        setSmitheryValidated(false);
       } else {
         setStep(2);
       }
@@ -186,6 +265,10 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     setMcpValidated(false);
     setMcpToolCount(0);
     setMcpValidationError(undefined);
+    // Reset Smithery state
+    setSmitheryServer(null);
+    setSmitheryConnection(null);
+    setSmitheryValidated(false);
     onOpenChange(false);
   };
 
@@ -199,7 +282,10 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
 
       // Generate integration name based on provider and config
       let integrationName: string;
-      if (isMCPProvider && mcpConfig) {
+      if (isSmitheryProvider && smitheryServer) {
+        // Use Smithery server display name
+        integrationName = smitheryServer.displayName;
+      } else if (isMCPProvider && mcpConfig) {
         // Use custom name if provided, otherwise generate from connection info
         if (mcpConfig.name) {
           integrationName = mcpConfig.name;
@@ -226,9 +312,27 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       const toolkitsArray = Array.from(selectedToolkits).filter((slug): slug is string => Boolean(slug));
       const toolsArray = Array.from(selectedTools).filter((slug): slug is string => Boolean(slug));
 
-      // Build MCP metadata based on transport type
-      const mcpMetadata = isMCPProvider && mcpConfig
-        ? mcpConfig.transport === 'http'
+      // Build metadata based on provider type
+      let integrationMetadata: Record<string, unknown> | undefined;
+
+      if (isSmitheryProvider && smitheryServer && smitheryConnection) {
+        // Smithery integration with MCP connection details
+        integrationMetadata = {
+          smitheryQualifiedName: smitheryServer.qualifiedName,
+          smitheryDisplayName: smitheryServer.displayName,
+          verified: smitheryServer.verified,
+          transport: smitheryConnection.type,
+          ...(smitheryConnection.type === 'http'
+            ? { url: smitheryConnection.url }
+            : {
+                command: smitheryConnection.command,
+                args: smitheryConnection.args,
+                env: smitheryConnection.env,
+              }),
+        };
+      } else if (isMCPProvider && mcpConfig) {
+        // Direct MCP integration
+        integrationMetadata = mcpConfig.transport === 'http'
           ? {
               transport: 'http' as const,
               url: mcpConfig.url,
@@ -239,8 +343,8 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
               command: mcpConfig.command,
               args: mcpConfig.args,
               env: mcpConfig.env,
-            }
-        : undefined;
+            };
+      }
 
       await createIntegration.mutateAsync({
         id: integrationId,
@@ -249,11 +353,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
         enabled: true,
         selectedToolkits: toolkitsArray,
         selectedTools: toolsArray,
-        // Include MCP metadata if this is an MCP integration
-        ...(mcpMetadata && { metadata: mcpMetadata }),
+        // Include metadata if this is an MCP/Smithery integration
+        ...(integrationMetadata && { metadata: integrationMetadata }),
       });
 
-      toast.success(`Successfully added ${selectedTools.size} tools from ${isMCPProvider ? 'MCP server' : selectedProvider}`);
+      const providerLabel = isSmitheryProvider ? 'Smithery server' : (isMCPProvider ? 'MCP server' : selectedProvider);
+      toast.success(`Successfully added ${selectedTools.size} tools from ${providerLabel}`);
       handleCancel(); // Reset and close
       onSuccess?.(integrationId);
     } catch (error) {
@@ -271,6 +376,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       setMcpValidated(false);
       setMcpToolCount(0);
       setMcpValidationError(undefined);
+    }
+    // Reset Smithery state when changing provider
+    if (provider !== 'smithery') {
+      setSmitheryServer(null);
+      setSmitheryConnection(null);
+      setSmitheryValidated(false);
     }
   };
 
@@ -294,7 +405,7 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const canGoNext = step === 1
     ? (isMCPProvider ? mcpValidated : !!selectedProvider)
     : step === 2
-    ? selectedToolkits.size > 0
+    ? (isSmitheryProvider ? smitheryValidated : selectedToolkits.size > 0)
     : false;
   const isLastStep = step === 3;
 
@@ -306,7 +417,12 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
       }
       return 'Select an integration provider';
     }
-    if (step === 2) return `Select toolkits from ${selectedProvider}`;
+    if (step === 2) {
+      if (isSmitheryProvider) {
+        return 'Browse and select an MCP server from Smithery';
+      }
+      return `Select toolkits from ${selectedProvider}`;
+    }
     return 'Review and customize tool selection';
   };
 
@@ -320,14 +436,14 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
           </Txt>
         </DialogHeader>
 
-        {/* Step indicator - MCP has 2 steps (provider/URL, tools), others have 3 (provider, toolkits, tools) */}
+        {/* Step indicator - MCP has 2 steps (provider/URL, tools), Smithery has 3 (provider, server browser, tools), others have 3 (provider, toolkits, tools) */}
         <div className="flex items-center gap-2 pb-4">
           <div
             className={`flex-1 h-1 rounded-full ${
               step >= 1 ? 'bg-accent1' : 'bg-surface3'
             }`}
           />
-          {!isMCPProvider && (
+          {(!isMCPProvider || isSmitheryProvider) && (
             <div
               className={`flex-1 h-1 rounded-full ${
                 step >= 2 ? 'bg-accent1' : 'bg-surface3'
@@ -389,7 +505,28 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
             </div>
           )}
 
-          {step === 2 && selectedProvider && !isMCPProvider && (
+          {step === 2 && selectedProvider && isSmitheryProvider && (
+            <div className="space-y-4">
+              <SmitheryBrowser
+                selectedServer={smitheryServer?.qualifiedName}
+                onServerSelect={handleSmitheryServerSelect}
+              />
+
+              {smitheryValidated && smitheryServer && (
+                <div className="bg-surface3 rounded-lg p-4 space-y-2">
+                  <Txt variant="ui-sm" className="text-icon6 font-medium">
+                    Server Connected
+                  </Txt>
+                  <Txt variant="ui-sm" className="text-icon3">
+                    Found {mcpToolCount} tool{mcpToolCount === 1 ? '' : 's'} available on {smitheryServer.displayName}.
+                    Click Next to review and select tools.
+                  </Txt>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 2 && selectedProvider && !isMCPProvider && !isSmitheryProvider && (
             <ToolkitBrowser
               toolkits={toolkits}
               isLoading={isLoadingToolkits}
@@ -422,9 +559,14 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
           </div>
 
           <div className="flex items-center gap-2">
-            {step === 2 && selectedToolkits.size > 0 && (
+            {step === 2 && !isSmitheryProvider && selectedToolkits.size > 0 && (
               <Txt variant="ui-sm" className="text-icon6">
                 {selectedToolkits.size} toolkit{selectedToolkits.size === 1 ? '' : 's'} selected
+              </Txt>
+            )}
+            {step === 2 && isSmitheryProvider && smitheryValidated && smitheryServer && (
+              <Txt variant="ui-sm" className="text-icon6">
+                {smitheryServer.displayName} selected
               </Txt>
             )}
             {step === 3 && (

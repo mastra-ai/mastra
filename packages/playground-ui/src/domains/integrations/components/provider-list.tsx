@@ -66,8 +66,9 @@ interface ProviderCardProps {
 
 function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
   const isMCP = provider.provider === 'mcp';
-  // MCP is always clickable (user enters URL), others need to be connected
-  const isClickable = (isMCP || provider.connected) && onSelect;
+  const isSmithery = provider.provider === 'smithery';
+  // MCP and Smithery are always clickable (dynamic connection), others need to be connected
+  const isClickable = (isMCP || isSmithery || provider.connected) && onSelect;
 
   const handleClick = () => {
     if (isClickable) {
@@ -79,6 +80,9 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
   const getBadge = () => {
     if (isMCP) {
       return <Badge variant="default">Enter URL</Badge>;
+    }
+    if (isSmithery) {
+      return <Badge variant="default">Browse Registry</Badge>;
     }
     if (provider.connected) {
       return (
@@ -128,8 +132,8 @@ function ProviderCard({ provider, isSelected, onSelect }: ProviderCardProps) {
     </div>
   );
 
-  // Show tooltip for disconnected non-MCP providers
-  if (!provider.connected && !isMCP) {
+  // Show tooltip for disconnected non-MCP/Smithery providers
+  if (!provider.connected && !isMCP && !isSmithery) {
     return (
       <TooltipProvider>
         <Tooltip>

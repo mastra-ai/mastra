@@ -212,6 +212,8 @@ function EditIntegrationDialog({ integration, open, onOpenChange, onUpdated }: E
   const [isSavingName, setIsSavingName] = useState(false);
 
   const isMCP = integration.provider === 'mcp';
+  const isSmithery = integration.provider === 'smithery';
+  const isMCPLike = isMCP || isSmithery; // Both use MCP connection under the hood
 
   // Filter tools that belong to this integration (currently added)
   const integrationTools: IntegrationToolItem[] = Object.entries(tools)
@@ -235,9 +237,9 @@ function EditIntegrationDialog({ integration, open, onOpenChange, onUpdated }: E
   // Set of tool slugs already added
   const addedToolSlugs = new Set(integrationTools.map(t => t.toolSlug).filter(Boolean));
 
-  // Build MCP params from stored metadata
+  // Build MCP params from stored metadata (works for both MCP and Smithery integrations)
   const mcpMetadata = integration.metadata as Record<string, unknown> | undefined;
-  const mcpToolsParams = isMCP && mcpMetadata
+  const mcpToolsParams = isMCPLike && mcpMetadata
     ? mcpMetadata.url
       ? {
           url: mcpMetadata.url as string,
@@ -250,12 +252,14 @@ function EditIntegrationDialog({ integration, open, onOpenChange, onUpdated }: E
         }
     : undefined;
 
-  // Fetch available tools - for MCP use stored connection params, for others use toolkit slugs
+  // Fetch available tools - for MCP/Smithery use stored connection params (via mcp provider), for others use toolkit slugs
+  // Note: Smithery integrations use 'mcp' as the provider for fetching tools since they connect to MCP servers
+  const toolsProvider = isMCPLike ? 'mcp' : integration.provider;
   const { data: availableToolsData, isLoading: isLoadingAvailableTools } = useProviderTools(
-    integration.provider,
+    toolsProvider,
     {
-      params: isMCP ? mcpToolsParams : { toolkitSlugs: toolkitSlugs.join(',') },
-      enabled: isAddingTools && (isMCP ? !!mcpToolsParams : toolkitSlugs.length > 0),
+      params: isMCPLike ? mcpToolsParams : { toolkitSlugs: toolkitSlugs.join(',') },
+      enabled: isAddingTools && (isMCPLike ? !!mcpToolsParams : toolkitSlugs.length > 0),
     }
   );
 
@@ -417,7 +421,7 @@ function EditIntegrationDialog({ integration, open, onOpenChange, onUpdated }: E
             </div>
           </DialogTitle>
           <DialogDescription>
-            {integrationTools.length} tool{integrationTools.length === 1 ? '' : 's'} added from this {isMCP ? 'MCP server' : 'toolkit'}.
+            {integrationTools.length} tool{integrationTools.length === 1 ? '' : 's'} added from this {isMCPLike ? 'server' : 'toolkit'}.
           </DialogDescription>
         </DialogHeader>
 
@@ -514,7 +518,7 @@ function EditIntegrationDialog({ integration, open, onOpenChange, onUpdated }: E
                     <Wrench className="h-6 w-6" />
                   </div>
                   <Txt variant="ui-md" className="block mb-1">No tools added</Txt>
-                  <Txt variant="ui-sm">Click "Add Tools" to select tools from this {isMCP ? 'MCP server' : 'toolkit'}.</Txt>
+                  <Txt variant="ui-sm">Click "Add Tools" to select tools from this {isMCPLike ? 'server' : 'toolkit'}.</Txt>
                 </div>
               ) : (
                 <div className="flex-1 overflow-y-auto space-y-1 pr-2">

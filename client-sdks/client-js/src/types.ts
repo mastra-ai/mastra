@@ -806,7 +806,7 @@ export interface GetSystemPackagesResponse {
 /**
  * Integration provider type
  */
-export type IntegrationProvider = 'composio' | 'arcade' | 'mcp';
+export type IntegrationProvider = 'composio' | 'arcade' | 'mcp' | 'smithery';
 
 /**
  * MCP-specific integration metadata
@@ -1189,4 +1189,113 @@ export interface CompareWorkflowDefinitionVersionsResponse {
   version1: WorkflowDefinitionVersionResponse;
   version2: WorkflowDefinitionVersionResponse;
   changedFields: string[];
+}
+
+// ============================================================================
+// Smithery Registry Types
+// ============================================================================
+
+/**
+ * Smithery server from the registry
+ */
+export interface SmitheryServer {
+  /** Unique qualified name (e.g., "@anthropics/mcp-server-filesystem") */
+  qualifiedName: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Server description */
+  description?: string;
+  /** Icon URL */
+  iconUrl?: string;
+  /** Whether the server is verified */
+  verified?: boolean;
+  /** Usage count */
+  useCount?: number;
+  /** Whether this is a remote (HTTP) server */
+  remote?: boolean;
+  /** Repository URL */
+  homepage?: string;
+  /** Security information */
+  security?: {
+    scanPassed?: boolean;
+  };
+}
+
+/**
+ * Smithery server connection details
+ */
+export interface SmitheryServerConnection {
+  /** Transport type */
+  type: 'http' | 'stdio';
+
+  // HTTP transport
+  url?: string;
+  configSchema?: Record<string, unknown>;
+
+  // Stdio transport
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+/**
+ * Parameters for searching Smithery servers
+ */
+export interface SearchSmitheryServersParams {
+  /** Search query */
+  q?: string;
+  /** Page number (1-indexed) */
+  page?: number;
+  /** Results per page */
+  pageSize?: number;
+}
+
+/**
+ * Response for searching Smithery servers
+ */
+export interface SearchSmitheryServersResponse {
+  servers: SmitheryServer[];
+  pagination: {
+    currentPage: number;
+    pageSize: number;
+    totalPages: number;
+    totalCount: number;
+  };
+}
+
+/**
+ * Response for getting Smithery server details
+ */
+export interface GetSmitheryServerResponse extends SmitheryServer {
+  connection?: SmitheryServerConnection;
+}
+
+/**
+ * Smithery-specific integration metadata
+ */
+export interface SmitheryIntegrationMetadata {
+  /** Smithery server qualified name */
+  smitheryQualifiedName: string;
+  /** Display name from Smithery registry */
+  smitheryDisplayName?: string;
+  /** Whether the server is verified on Smithery */
+  verified?: boolean;
+
+  /** MCP connection details */
+  transport: 'http' | 'stdio';
+
+  // HTTP transport config
+  url?: string;
+  headers?: Record<string, string>;
+
+  // Stdio transport config
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+
+  /** Server info cached after successful connection */
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
 }

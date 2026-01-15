@@ -75,6 +75,9 @@ import type {
   ListWorkflowDefinitionsResponse,
   CreateWorkflowDefinitionInput,
   WorkflowDefinitionResponse,
+  SearchSmitheryServersParams,
+  SearchSmitheryServersResponse,
+  GetSmitheryServerResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -1096,5 +1099,40 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  // ============================================================================
+  // Smithery Registry
+  // ============================================================================
+
+  /**
+   * Search for MCP servers in the Smithery registry
+   * @param params - Search parameters including query, page, and pageSize
+   * @returns Promise containing list of servers and pagination info
+   */
+  public searchSmitheryServers(params?: SearchSmitheryServersParams): Promise<SearchSmitheryServersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.q) {
+      searchParams.set('q', params.q);
+    }
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.pageSize !== undefined) {
+      searchParams.set('pageSize', String(params.pageSize));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations/smithery/servers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get detailed information about a specific Smithery server
+   * @param qualifiedName - The server's qualified name (e.g., "@anthropics/mcp-server-filesystem")
+   * @returns Promise containing server details including connection information
+   */
+  public getSmitheryServer(qualifiedName: string): Promise<GetSmitheryServerResponse> {
+    return this.request(`/api/integrations/smithery/servers/${encodeURIComponent(qualifiedName)}`);
   }
 }

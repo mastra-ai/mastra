@@ -93,7 +93,7 @@ export function IntegrationCard({ integration, onDeleted, onEdit }: IntegrationC
                 {displayName}
               </Txt>
               <Badge variant="default" className="flex-shrink-0 text-xs">
-                {integration.provider === 'mcp' ? 'MCP' : integration.provider.charAt(0).toUpperCase() + integration.provider.slice(1)}
+                {integration.provider === 'mcp' ? 'MCP' : integration.provider === 'smithery' ? 'Smithery' : integration.provider.charAt(0).toUpperCase() + integration.provider.slice(1)}
               </Badge>
             </div>
           </div>

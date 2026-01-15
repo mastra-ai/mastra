@@ -45,7 +45,7 @@ const integrationOrderBySchema = z.object({
 export const listIntegrationsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: integrationOrderBySchema.optional(),
   ownerId: z.string().optional().describe('Filter integrations by owner identifier'),
-  provider: z.enum(['composio', 'arcade', 'mcp']).optional().describe('Filter by provider type'),
+  provider: z.enum(['composio', 'arcade', 'mcp', 'smithery']).optional().describe('Filter by provider type'),
   enabled: z.coerce.boolean().optional().describe('Filter by enabled status'),
 });
 
@@ -117,7 +117,7 @@ export const validateMCPResponseSchema = z.object({
  */
 const integrationBaseSchema = z.object({
   name: z.string().describe('Display name for the integration'),
-  provider: z.enum(['composio', 'arcade', 'mcp']).describe('Integration provider type'),
+  provider: z.enum(['composio', 'arcade', 'mcp', 'smithery']).describe('Integration provider type'),
   enabled: z.boolean().optional().default(true).describe('Whether the integration is active'),
   selectedToolkits: z.array(z.string()).describe('Array of toolkit slugs to expose'),
   selectedTools: z.array(z.string()).optional().describe('Array of specific tool slugs (for granular control)'),
@@ -154,7 +154,7 @@ export const refreshIntegrationBodySchema = z.object({}).optional();
  */
 export const integrationSchema = z.object({
   id: z.string(),
-  provider: z.enum(['composio', 'arcade', 'mcp']),
+  provider: z.enum(['composio', 'arcade', 'mcp', 'smithery']),
   name: z.string(),
   enabled: z.boolean(),
   selectedToolkits: z.array(z.string()),
@@ -173,7 +173,7 @@ export const integrationSchema = z.object({
 export const cachedToolSchema = z.object({
   id: z.string(),
   integrationId: z.string(),
-  provider: z.enum(['composio', 'arcade', 'mcp']),
+  provider: z.enum(['composio', 'arcade', 'mcp', 'smithery']),
   toolkitSlug: z.string(),
   toolSlug: z.string(),
   name: z.string(),
@@ -189,7 +189,7 @@ export const cachedToolSchema = z.object({
  * Provider status schema
  */
 export const providerStatusSchema = z.object({
-  provider: z.enum(['composio', 'arcade', 'mcp']),
+  provider: z.enum(['composio', 'arcade', 'mcp', 'smithery']),
   connected: z.boolean(),
   name: z.string(),
   description: z.string(),
@@ -292,4 +292,77 @@ export const refreshIntegrationResponseSchema = z.object({
 export const deleteCachedToolResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
+});
+
+// ============================================================================
+// Smithery Registry Schemas
+// ============================================================================
+
+/**
+ * Path parameter for Smithery server qualified name
+ */
+export const smitheryServerPathParams = z.object({
+  qualifiedName: z.string().describe('Smithery server qualified name (e.g., @anthropics/mcp-server-filesystem)'),
+});
+
+/**
+ * GET /api/integrations/smithery/servers - Search Smithery servers
+ */
+export const smitheryServersQuerySchema = z.object({
+  q: z.string().optional().describe('Search query'),
+  page: z.coerce.number().optional().default(1).describe('Page number (1-indexed)'),
+  pageSize: z.coerce.number().optional().default(20).describe('Results per page'),
+});
+
+/**
+ * Smithery server schema
+ */
+export const smitheryServerSchema = z.object({
+  qualifiedName: z.string(),
+  displayName: z.string(),
+  description: z.string().optional(),
+  iconUrl: z.string().optional(),
+  verified: z.boolean().optional(),
+  useCount: z.number().optional(),
+  remote: z.boolean().optional(),
+  homepage: z.string().optional(),
+  security: z
+    .object({
+      scanPassed: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Smithery server connection schema
+ */
+export const smitheryServerConnectionSchema = z.object({
+  type: z.enum(['http', 'stdio']),
+  // HTTP transport
+  url: z.string().optional(),
+  configSchema: z.record(z.string(), z.unknown()).optional(),
+  // Stdio transport
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+});
+
+/**
+ * Response for GET /api/integrations/smithery/servers
+ */
+export const smitheryServersResponseSchema = z.object({
+  servers: z.array(smitheryServerSchema),
+  pagination: z.object({
+    currentPage: z.number(),
+    pageSize: z.number(),
+    totalPages: z.number(),
+    totalCount: z.number(),
+  }),
+});
+
+/**
+ * Response for GET /api/integrations/smithery/servers/:qualifiedName
+ */
+export const smitheryServerDetailsResponseSchema = smitheryServerSchema.extend({
+  connection: smitheryServerConnectionSchema.optional(),
 });

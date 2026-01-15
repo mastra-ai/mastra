@@ -9,7 +9,7 @@
 /**
  * Supported integration provider types
  */
-export type IntegrationProviderType = 'composio' | 'arcade' | 'mcp';
+export type IntegrationProviderType = 'composio' | 'arcade' | 'mcp' | 'smithery';
 
 /**
  * MCP-specific integration metadata
@@ -42,6 +42,82 @@ export interface MCPIntegrationMetadata {
     name?: string;
     version?: string;
   };
+}
+
+/**
+ * Smithery-specific integration metadata
+ *
+ * Stored in StorageIntegrationConfig.metadata for Smithery integrations.
+ * Contains the Smithery server identifier plus MCP connection details.
+ */
+export interface SmitheryIntegrationMetadata {
+  /** Smithery server qualified name (e.g., "@anthropics/mcp-server-filesystem") */
+  smitheryQualifiedName: string;
+  /** Display name from Smithery registry */
+  smitheryDisplayName?: string;
+  /** Whether the server is verified on Smithery */
+  verified?: boolean;
+
+  /** MCP connection details (derived from Smithery server info) */
+  transport: 'http' | 'stdio';
+
+  // HTTP transport config
+  url?: string;
+  headers?: Record<string, string>;
+
+  // Stdio transport config
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+
+  /** Server info cached after successful connection */
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+}
+
+/**
+ * Smithery server information from the registry API
+ */
+export interface SmitheryServer {
+  /** Unique qualified name (e.g., "@anthropics/mcp-server-filesystem") */
+  qualifiedName: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Server description */
+  description?: string;
+  /** Icon URL */
+  iconUrl?: string;
+  /** Whether the server is verified */
+  verified?: boolean;
+  /** Usage count */
+  useCount?: number;
+  /** Whether this is a remote (HTTP) server */
+  remote?: boolean;
+  /** Repository URL */
+  homepage?: string;
+  /** Security information */
+  security?: {
+    scanPassed?: boolean;
+  };
+}
+
+/**
+ * Smithery server connection details
+ */
+export interface SmitheryServerConnection {
+  /** Transport type */
+  type: 'http' | 'stdio';
+
+  // HTTP transport
+  url?: string;
+  configSchema?: Record<string, unknown>;
+
+  // Stdio transport
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
 }
 
 /**

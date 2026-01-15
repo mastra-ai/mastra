@@ -9,6 +9,7 @@ import type { IntegrationProviderType, ProviderStatus, ToolProvider } from './ty
 import { ArcadeProvider } from './arcade';
 import { ComposioProvider } from './composio';
 import { MCPPlaceholderProvider } from './mcp';
+import { SmitheryPlaceholderProvider } from './smithery';
 
 /**
  * Registry of available tool providers
@@ -21,6 +22,7 @@ class ProviderRegistry {
     this.register('composio', new ComposioProvider());
     this.register('arcade', new ArcadeProvider());
     this.register('mcp', new MCPPlaceholderProvider());
+    this.register('smithery', new SmitheryPlaceholderProvider());
   }
 
   /**
