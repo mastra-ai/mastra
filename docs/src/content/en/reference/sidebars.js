@@ -417,6 +417,11 @@ const sidebars = {
                   id: "observability/tracing/exporters/posthog",
                   label: "PostHogExporter",
                 },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/sentry",
+                  label: "SentryExporter",
+                },
               ],
             },
             {
