@@ -340,7 +340,16 @@ createVectorTestSuite({
       console.error(`Error deleting index ${indexName}:`, error);
     }
   },
-  waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 5000)),
+  waitForIndexing: async (indexName?: string) => {
+    // Use waitForIndexReady to poll until vectors are searchable
+    // Since index is already created, this should return quickly if ready
+    // Falls back to a short wait if no indexName provided
+    if (indexName) {
+      await mongodbVector.waitForIndexReady({ indexName, timeoutMs: 30000, checkIntervalMs: 1000 });
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  },
   supportsContains: false,
   // MongoDB limitations:
   // - $not at top level doesn't work (MongoDB requires $not inside a field filter)
