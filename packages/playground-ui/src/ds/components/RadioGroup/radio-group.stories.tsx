@@ -79,21 +79,21 @@ export const WithDescriptions: Story = {
         <RadioGroupItem value="startup" id="startup" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="startup">Startup</Label>
-          <p className="text-xs text-icon3">Best for small teams just getting started</p>
+          <p className="text-xs text-neutral3">Best for small teams just getting started</p>
         </div>
       </div>
       <div className="flex items-start space-x-2">
         <RadioGroupItem value="business" id="business" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="business">Business</Label>
-          <p className="text-xs text-icon3">For growing companies with advanced needs</p>
+          <p className="text-xs text-neutral3">For growing companies with advanced needs</p>
         </div>
       </div>
       <div className="flex items-start space-x-2">
         <RadioGroupItem value="enterprise" id="enterprise" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="enterprise">Enterprise</Label>
-          <p className="text-xs text-icon3">For large organizations requiring customization</p>
+          <p className="text-xs text-neutral3">For large organizations requiring customization</p>
         </div>
       </div>
     </RadioGroup>

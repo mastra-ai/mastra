@@ -1,15 +1,29 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import { cn } from '@/lib/utils';
+import {
+  formElementSizes,
+  formElementFocusWithin,
+  formElementRadius,
+  type FormElementSize,
+} from '@/ds/primitives/form-element';
 
 export type SearchbarProps = {
   onSearch: (search: string) => void;
   label: string;
   placeholder: string;
   debounceMs?: number;
+  size?: FormElementSize;
 };
 
-export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: SearchbarProps) => {
+const searchbarSizeClasses = {
+  sm: formElementSizes.sm,
+  md: formElementSizes.md,
+  lg: formElementSizes.lg,
+};
+
+export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size = 'md' }: SearchbarProps) => {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -46,8 +60,15 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: Se
   };
 
   return (
-    <div className="focus-within:outline focus-within:outline-accent1 -outline-offset-2 border-sm border-icon-3 flex h-8 w-full items-center gap-2 overflow-hidden rounded-lg pl-2 pr-1">
-      <SearchIcon className="text-icon3 h-4 w-4" />
+    <div
+      className={cn(
+        'border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
+        formElementRadius,
+        formElementFocusWithin,
+        searchbarSizeClasses[size],
+      )}
+    >
+      <SearchIcon className="text-neutral3 h-4 w-4" />
 
       <div className="flex-1">
         <label htmlFor={id} className="sr-only">
@@ -58,7 +79,10 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: Se
           id={id}
           type="text"
           placeholder={placeholder}
-          className="bg-surface2 text-ui-md placeholder:text-icon-3 block h-8 w-full px-2 outline-none"
+          className={cn(
+            'bg-surface2 text-ui-md placeholder:text-icon-3 block w-full px-2 outline-none',
+            searchbarSizeClasses[size],
+          )}
           name={id}
           ref={inputRef}
           onChange={handleChange}
@@ -69,5 +93,5 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300 }: Se
 };
 
 export const SearchbarWrapper = ({ children }: { children: React.ReactNode }) => {
-  return <div className="px-4 py-2 border-b-sm border-border1">{children}</div>;
+  return <div className="px-3 py-2.5 border-b border-border1">{children}</div>;
 };

@@ -6,7 +6,15 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
 import { usePackageUpdates, type PackageUpdateInfo } from '../hooks/use-package-updates';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { SelectField } from '@/ds/components/FormFields';
 
@@ -71,7 +79,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
             </Txt>
           </div>
           <div className="flex items-center gap-2">
-            <Txt as="span" variant="ui-sm" className="text-icon3 font-mono">
+            <Txt as="span" variant="ui-sm" className="text-neutral3 font-mono">
               {mainVersion}
             </Txt>
             {isLoadingUpdates && <Spinner className="w-3 h-3" color="currentColor" />}
@@ -110,7 +118,7 @@ function CountBadge({ count, variant }: { count: number; variant: 'warning' | 'e
   return (
     <span
       className={cn(
-        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold text-black',
+        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-ui-xs font-bold text-black',
         variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
       )}
     >
@@ -164,134 +172,137 @@ const PackagesModalContent = ({
   });
 
   return (
-    <DialogContent className="bg-surface1 border-border1 max-w-2xl">
+    <DialogContent className="max-w-2xl">
       <DialogHeader>
-        <DialogTitle className="text-text1">Installed Mastra Packages</DialogTitle>
+        <DialogTitle>Installed Mastra Packages</DialogTitle>
+        <DialogDescription>View and update installed Mastra packages</DialogDescription>
       </DialogHeader>
 
-      {/* Status summary */}
-      <div className="text-sm text-icon3 py-2">
-        {isLoadingUpdates ? (
-          <span className="text-icon3">Checking for updates...</span>
-        ) : !hasUpdates ? (
-          <span className="text-accent1">✓ All packages are up to date</span>
-        ) : (
-          <div className="flex items-center gap-3">
-            {outdatedCount > 0 && (
-              <span className="flex items-center gap-1.5">
-                <StatusBadge value={outdatedCount} variant="warning" />
-                <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
-              </span>
-            )}
-            {deprecatedCount > 0 && (
-              <span className="flex items-center gap-1.5">
-                <StatusBadge value={deprecatedCount} variant="error" />
-                <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
-              </span>
-            )}
+      <DialogBody>
+        {/* Status summary */}
+        <div className="text-sm text-neutral3 py-2">
+          {isLoadingUpdates ? (
+            <span className="text-neutral3">Checking for updates...</span>
+          ) : !hasUpdates ? (
+            <span className="text-accent1">✓ All packages are up to date</span>
+          ) : (
+            <div className="flex items-center gap-3">
+              {outdatedCount > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <StatusBadge value={outdatedCount} variant="warning" />
+                  <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
+                </span>
+              )}
+              {deprecatedCount > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <StatusBadge value={deprecatedCount} variant="error" />
+                  <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Package list */}
+        <div className="max-h-64 overflow-y-auto border border-border1 rounded-md">
+          <div className="grid grid-cols-[1fr_auto_auto] text-sm">
+            {packages.map((pkg, index) => (
+              <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
+                <div className="py-2 px-3 font-mono text-text1 truncate min-w-0">
+                  <a
+                    href={`https://www.npmjs.com/package/${pkg.name}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-accent1 hover:underline inline-flex items-center gap-1 group"
+                  >
+                    {pkg.name}
+                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                </div>
+                <div className="py-2 px-3 font-mono text-neutral3 flex items-center gap-1.5">
+                  {pkg.isOutdated || pkg.isDeprecated ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className={cn(
+                            'cursor-help',
+                            pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
+                          )}
+                        >
+                          {pkg.version}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {pkg.isDeprecated
+                          ? pkg.deprecationMessage || 'This version is deprecated'
+                          : 'Newer version available'}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span>{pkg.version}</span>
+                  )}
+                </div>
+                <div className="py-2 px-3 font-mono text-neutral3 flex items-center">
+                  {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
+                    <>
+                      <MoveRight className="w-4 h-4 mx-2 text-neutral3" />
+                      <span className="text-accent1">{pkg.latestVersion}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Copy current versions button - always visible */}
+        <button
+          onClick={handleCopyAll}
+          className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-neutral3 hover:text-neutral1 transition-colors"
+        >
+          {isCopiedAll ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
+          <Txt as="span" variant="ui-sm">
+            {isCopiedAll ? 'Copied!' : 'Copy current versions'}
+          </Txt>
+        </button>
+
+        {/* Update command section */}
+        {hasUpdates && updateCommand && (
+          <div className="space-y-3 pt-2 border-t border-border1">
+            <div className="flex items-center gap-2 text-sm text-neutral3 pt-3">
+              <Info className="w-4 h-4" />
+              <span>Use the command below to update your packages</span>
+            </div>
+
+            <div className="flex gap-2 items-center">
+              <SelectField
+                value={packageManager}
+                onValueChange={value => onPackageManagerChange(value as PackageManager)}
+                options={[
+                  { label: 'pnpm', value: 'pnpm' },
+                  { label: 'npm', value: 'npm' },
+                  { label: 'yarn', value: 'yarn' },
+                  { label: 'bun', value: 'bun' },
+                ]}
+              />
+
+              <pre className="flex-1 text-sm text-neutral3 bg-surface2 rounded-md px-3 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
+                {updateCommand}
+              </pre>
+            </div>
+
+            <button
+              onClick={handleCopyCommand}
+              className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-neutral3 hover:text-neutral1 transition-colors"
+            >
+              {isCopiedCommand ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
+              <Txt as="span" variant="ui-sm">
+                {isCopiedCommand ? 'Copied!' : 'Copy command'}
+              </Txt>
+            </button>
           </div>
         )}
-      </div>
-
-      {/* Package list */}
-      <div className="max-h-64 overflow-y-auto border border-border1 rounded-md">
-        <div className="grid grid-cols-[1fr_auto_auto] text-sm">
-          {packages.map((pkg, index) => (
-            <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
-              <div className="py-2 px-3 font-mono text-text1 truncate min-w-0">
-                <a
-                  href={`https://www.npmjs.com/package/${pkg.name}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-accent1 hover:underline inline-flex items-center gap-1 group"
-                >
-                  {pkg.name}
-                  <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </a>
-              </div>
-              <div className="py-2 px-3 font-mono text-icon3 flex items-center gap-1.5">
-                {pkg.isOutdated || pkg.isDeprecated ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        className={cn(
-                          'cursor-help',
-                          pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
-                        )}
-                      >
-                        {pkg.version}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {pkg.isDeprecated
-                        ? pkg.deprecationMessage || 'This version is deprecated'
-                        : 'Newer version available'}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <span>{pkg.version}</span>
-                )}
-              </div>
-              <div className="py-2 px-3 font-mono text-icon3 flex items-center">
-                {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
-                  <>
-                    <MoveRight className="w-4 h-4 mx-2 text-icon3" />
-                    <span className="text-accent1">{pkg.latestVersion}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Copy current versions button - always visible */}
-      <button
-        onClick={handleCopyAll}
-        className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-icon3 hover:text-icon1 transition-colors"
-      >
-        {isCopiedAll ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
-        <Txt as="span" variant="ui-sm">
-          {isCopiedAll ? 'Copied!' : 'Copy current versions'}
-        </Txt>
-      </button>
-
-      {/* Update command section */}
-      {hasUpdates && updateCommand && (
-        <div className="space-y-3 pt-2 border-t border-border1">
-          <div className="flex items-center gap-2 text-sm text-icon3 pt-3">
-            <Info className="w-4 h-4" />
-            <span>Use the command below to update your packages</span>
-          </div>
-
-          <div className="flex gap-2 items-center">
-            <SelectField
-              value={packageManager}
-              onValueChange={value => onPackageManagerChange(value as PackageManager)}
-              options={[
-                { label: 'pnpm', value: 'pnpm' },
-                { label: 'npm', value: 'npm' },
-                { label: 'yarn', value: 'yarn' },
-                { label: 'bun', value: 'bun' },
-              ]}
-            />
-
-            <pre className="flex-1 text-sm text-icon3 bg-surface2 rounded-md px-3 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
-              {updateCommand}
-            </pre>
-          </div>
-
-          <button
-            onClick={handleCopyCommand}
-            className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-icon3 hover:text-icon1 transition-colors"
-          >
-            {isCopiedCommand ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
-            <Txt as="span" variant="ui-sm">
-              {isCopiedCommand ? 'Copied!' : 'Copy command'}
-            </Txt>
-          </button>
-        </div>
-      )}
+      </DialogBody>
     </DialogContent>
   );
 };

@@ -1,7 +1,7 @@
 import { useNavbarMobileSidebar } from "@docusaurus/theme-common/internal";
 import { translate } from "@docusaurus/Translate";
 import { Button } from "@site/src/components/ui/button";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import { type ReactNode } from "react";
 
 export default function MobileSidebarToggle(): ReactNode {
@@ -18,7 +18,7 @@ export default function MobileSidebarToggle(): ReactNode {
       })}
       type="button"
       aria-expanded={shown}
-      className="grid rounded-full w-8  h-8 p-2 shrink-0 place-items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--mastra-green-accent) min-[996px]:hidden"
+      className="grid rounded-full w-8  h-8 p-2 shrink-0 place-items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--mastra-green-accent) lg:hidden"
     >
       <span className="sr-only">Open main menu</span>
       <HamburgerDefault />

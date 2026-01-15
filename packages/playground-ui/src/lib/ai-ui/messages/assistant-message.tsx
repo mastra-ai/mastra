@@ -40,7 +40,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
 
   return (
     <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
-      <div className="text-icon6 text-ui-lg leading-ui-lg">
+      <div className="text-neutral6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,
@@ -89,7 +89,7 @@ const AssistantActionBar = () => {
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy" className="bg-transparent text-icon3 hover:text-icon6">
+        <TooltipIconButton tooltip="Copy" className="bg-transparent text-neutral3 hover:text-neutral6">
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>

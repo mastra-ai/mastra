@@ -43,7 +43,7 @@ export function Notification({
   return (
     <div
       className={cn(
-        'grid grid-cols-[1fr_auto] gap-[0.5rem] rounded-lg bg-white/5 p-[1.5rem] py-[1rem] text-[0.875rem] text-icon3 items-center',
+        'grid grid-cols-[1fr_auto] gap-2 rounded-lg bg-white/5 p-6 py-4 text-ui-md text-neutral3 items-center',
         {
           'bg-red-900/10 border border-red-900': type === 'error',
         },
@@ -52,8 +52,8 @@ export function Notification({
     >
       <div
         className={cn(
-          'flex gap-[0.5rem] items-start',
-          '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:translate-y-[0.2em]',
+          'flex gap-2 items-start',
+          '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:translate-y-0.5',
           {
             '[&>svg]:text-red-400': type === 'error',
           },

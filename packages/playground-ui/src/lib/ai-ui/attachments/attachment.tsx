@@ -73,7 +73,7 @@ const AttachmentThumbnail = () => {
           <Tooltip>
             <AttachmentPrimitive.Root>
               <TooltipTrigger asChild>
-                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border-sm border-border1 ">
+                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border border-border1 ">
                   {isImage ? (
                     <ImageEntry src={actualSrc ?? ''} />
                   ) : document?.contentType === 'application/pdf' ? (
@@ -101,7 +101,7 @@ const AttachmentRemove = () => {
     <AttachmentPrimitive.Remove asChild>
       <TooltipIconButton
         tooltip="Remove file"
-        className="absolute -right-3 -top-3 text-icon3 hover:text-icon6 rounded-full bg-surface1 hover:bg-surface2 rounded-full p-1"
+        className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 rounded-full bg-surface1 hover:bg-surface2 rounded-full p-1"
         side="top"
       >
         <Icon>

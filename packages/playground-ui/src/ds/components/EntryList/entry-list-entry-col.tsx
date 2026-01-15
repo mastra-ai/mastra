@@ -8,7 +8,7 @@ export type EntryListEntryTextColProps = {
 
 export function EntryListEntryTextCol({ children, isLoading }: EntryListEntryTextColProps) {
   return (
-    <div className="text-icon4 text-[0.875rem] truncate ">
+    <div className="text-neutral4 text-ui-md truncate ">
       {isLoading ? (
         <div className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"></div>
       ) : (
@@ -33,7 +33,7 @@ export function EntryListEntryStatusCol({ status }: EntryListEntryStatusColProps
           })}
         ></div>
       ) : (
-        <div className="text-icon2 text-[0.75rem] leading-none">-</div>
+        <div className="text-neutral2 text-ui-sm leading-none">-</div>
       )}
       <VisuallyHidden>Status: {status ? status : 'not provided'}</VisuallyHidden>
     </div>

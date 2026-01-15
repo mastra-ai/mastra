@@ -21,21 +21,21 @@ export function CodeDisplay({
     <div className={`rounded-md border ${className}`} style={{ height }}>
       <ScrollArea className="h-full">
         <div className="p-2 cursor-pointer hover:bg-surface4/50 transition-colors group relative" onClick={onCopy}>
-          <pre className="text-[10px] whitespace-pre-wrap font-mono">{content}</pre>
+          <pre className="text-ui-xs whitespace-pre-wrap font-mono">{content}</pre>
           {isDraft && (
             <div className="mt-1.5">
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">
+              <span className="text-ui-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">
                 Draft - Save changes to apply
               </span>
             </div>
           )}
           {isCopied && (
-            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
               Copied!
             </span>
           )}
           {onCopy && (
-            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-surface4 text-icon4 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface4 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
               Click to copy
             </span>
           )}

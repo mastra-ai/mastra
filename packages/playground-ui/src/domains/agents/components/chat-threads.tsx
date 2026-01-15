@@ -44,7 +44,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
           </ThreadItem>
 
           {threads.length === 0 && (
-            <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5">
+            <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">
               Your conversations will appear here once you start chatting!
             </Txt>
           )}
@@ -132,10 +132,10 @@ function ThreadTitle({ title, id }: { title?: string; id?: string }) {
   }
 
   if (isDefaultThreadName(title)) {
-    return <span className="text-icon3">Thread {id ? id.substring(id.length - 5) : null}</span>;
+    return <span className="text-neutral3">Thread {id ? id.substring(id.length - 5) : null}</span>;
   }
 
-  return <span className="truncate max-w-[14rem] text-icon3">{title}</span>;
+  return <span className="truncate max-w-[14rem] text-neutral3">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

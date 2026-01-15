@@ -6,6 +6,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@radix-ui/react-dialog";
+import { Search as SearchIcon } from "lucide-react";
 import { CustomSearch } from "@site/src/components/custom-search";
 import { Button } from "@site/src/components/ui/button";
 import { useEffect, useState } from "react";
@@ -82,27 +83,26 @@ export default function SearchContainer({ locale }: { locale: string }) {
           onClick={open}
           size="sm"
           variant="ghost"
-          className="md:flex hidden w-[200px]  items-center pr-[0.38rem] text-sm font-normal justify-between gap-6 cursor-pointer border-[0.5px] bg-(--mastra-surface-4) border-(--border)  text-(--mastra-icons-3)"
+          className="w-9 lg:w-46 xl:w-64 items-center text-sm font-normal gap-2 cursor-pointer border-[0.5px] border-transparent lg:bg-(--mastra-surface-4) lg:border-(--border)"
         >
-          <span className="text-sm">Search docs...</span>
-          <Shortcut shortcut="K" />
+          <SearchIcon className="text-(--mastra-icons-1)" />
+          <span className="text-sm hidden lg:block text-(--mastra-icons-2)">
+            Search documentation
+          </span>
+          <div className="ml-auto hidden xl:block">
+            <Shortcut shortcut="K" />
+          </div>
         </Button>
       </DialogTrigger>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/40" />
-        <DialogContent className="dialog-panel z-260 fixed left-1/2 top-[100px] -translate-x-1/2">
-          <div className="flex relative top-1/2 justify-center items-start p-4 min-h-full">
-            <div className="ring ring-neutral-200 dark:ring-(--border) shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) h-fit w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
-              <DialogTitle className="sr-only">Search docs...</DialogTitle>
-              <div className="w-full">
-                <CustomSearch
-                  searchOptions={searchOptions}
-                  closeModal={close}
-                />
-              </div>
+        <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/40 backdrop-blur-[2px]">
+          <DialogContent className="dialog-panel p-6 z-260 relative my-8 lg:my-[15vh] mx-auto max-w-2xl">
+            <DialogTitle className="sr-only">Search documentation</DialogTitle>
+            <div className="w-full shadow-2xl duration-150 ease-out dark:border-(--border) h-fit mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
+              <CustomSearch searchOptions={searchOptions} closeModal={close} />
             </div>
-          </div>
-        </DialogContent>
+          </DialogContent>
+        </DialogOverlay>
       </DialogPortal>
     </Dialog>
   );
@@ -111,17 +111,14 @@ export default function SearchContainer({ locale }: { locale: string }) {
 export function AskAI() {
   const { toggle } = useChatbotSidebar();
 
-  useHotkeys("meta+i", () => toggle());
-
   return (
     <Button
       onClick={toggle}
       size="sm"
-      variant="ghost"
-      className="md:flex hidden w-fit items-center pr-[0.38rem] text-sm font-normal justify-between gap-6 cursor-pointer border-[0.5px] bg-(--mastra-surface-4) border-(--border)  text-(--mastra-icons-3)"
+      variant="outline"
+      className="rounded-lg shadow-none dark:bg-(--mastra-surface-4) border-[0.5px] border-(--border) text-(--mastra-text-secondary) hover:bg-(--mastra-surface-2) hover:text-(--mastra-text-primary)"
     >
       <span className="text-sm">Ask AI</span>
-      <Shortcut shortcut="I" />
     </Button>
   );
 }

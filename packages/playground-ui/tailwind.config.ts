@@ -1,16 +1,6 @@
 import type { Config } from 'tailwindcss';
 import defaultFont from 'tailwindcss/defaultTheme';
-import {
-  FontSizes,
-  LineHeights,
-  IconColors,
-  BorderColors,
-  Colors,
-  BorderRadius,
-  BorderWidth,
-  Spacings,
-  Sizes,
-} from './src/ds/tokens';
+import { FontSizes, LineHeights, BorderColors, Colors, BorderRadius, Spacings, Sizes } from './src/ds/tokens';
 import animate from 'tailwindcss-animate';
 import assistantUi from '@assistant-ui/react-ui/tailwindcss';
 import containerQueries from '@tailwindcss/container-queries';
@@ -26,6 +16,7 @@ export default {
         '2xl': '1400px',
       },
     },
+    spacing: Spacings,
     extend: {
       screens: {
         '3xl': '1900px',
@@ -39,18 +30,6 @@ export default {
       },
       borderRadius: {
         ...BorderRadius,
-      },
-      borderWidth: {
-        ...BorderWidth,
-      },
-      padding: {
-        ...Spacings,
-      },
-      margin: {
-        ...Spacings,
-      },
-      gap: {
-        ...Spacings,
       },
       height: {
         ...Sizes,
@@ -66,7 +45,6 @@ export default {
       },
       colors: {
         ...Colors,
-        ...IconColors,
         ...BorderColors,
       },
       fontFamily: {

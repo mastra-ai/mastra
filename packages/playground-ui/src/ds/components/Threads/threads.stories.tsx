@@ -20,17 +20,17 @@ export const Default: Story = {
         <ThreadList>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5">New conversation</span>
+              <span className="text-neutral5">New conversation</span>
             </ThreadLink>
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5">Help with code review</span>
+              <span className="text-neutral5">Help with code review</span>
             </ThreadLink>
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5">API integration question</span>
+              <span className="text-neutral5">API integration question</span>
             </ThreadLink>
           </ThreadItem>
         </ThreadList>
@@ -46,17 +46,17 @@ export const WithActiveThread: Story = {
         <ThreadList>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5">Previous chat</span>
+              <span className="text-neutral5">Previous chat</span>
             </ThreadLink>
           </ThreadItem>
           <ThreadItem isActive>
             <ThreadLink href="#">
-              <span className="text-icon5">Current conversation</span>
+              <span className="text-neutral5">Current conversation</span>
             </ThreadLink>
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5">Another chat</span>
+              <span className="text-neutral5">Another chat</span>
             </ThreadLink>
           </ThreadItem>
         </ThreadList>
@@ -72,19 +72,19 @@ export const WithDeleteButtons: Story = {
         <ThreadList>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">Debugging session</span>
+              <span className="text-neutral5 truncate">Debugging session</span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete thread 1')} />
           </ThreadItem>
           <ThreadItem isActive>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">Feature discussion</span>
+              <span className="text-neutral5 truncate">Feature discussion</span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete thread 2')} />
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">Code review feedback</span>
+              <span className="text-neutral5 truncate">Code review feedback</span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete thread 3')} />
           </ThreadItem>
@@ -101,7 +101,7 @@ export const LongThreadNames: Story = {
         <ThreadList>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">
+              <span className="text-neutral5 truncate">
                 This is a very long thread name that should be truncated when displayed
               </span>
             </ThreadLink>
@@ -109,7 +109,9 @@ export const LongThreadNames: Story = {
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">Another extremely long conversation title that exceeds width</span>
+              <span className="text-neutral5 truncate">
+                Another extremely long conversation title that exceeds width
+              </span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete')} />
           </ThreadItem>
@@ -137,7 +139,7 @@ export const ManyThreads: Story = {
           {Array.from({ length: 10 }, (_, i) => (
             <ThreadItem key={i} isActive={i === 2}>
               <ThreadLink href="#">
-                <span className="text-icon5">Conversation {i + 1}</span>
+                <span className="text-neutral5">Conversation {i + 1}</span>
               </ThreadLink>
               <ThreadDeleteButton onClick={() => console.log(`Delete thread ${i + 1}`)} />
             </ThreadItem>
@@ -155,22 +157,22 @@ export const WithTimestamps: Story = {
         <ThreadList>
           <ThreadItem isActive>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">Current discussion</span>
-              <span className="text-xs text-icon3">Just now</span>
+              <span className="text-neutral5 truncate">Current discussion</span>
+              <span className="text-xs text-neutral3">Just now</span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete')} />
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">API design review</span>
-              <span className="text-xs text-icon3">2 hours ago</span>
+              <span className="text-neutral5 truncate">API design review</span>
+              <span className="text-xs text-neutral3">2 hours ago</span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete')} />
           </ThreadItem>
           <ThreadItem>
             <ThreadLink href="#">
-              <span className="text-icon5 truncate">Bug investigation</span>
-              <span className="text-xs text-icon3">Yesterday</span>
+              <span className="text-neutral5 truncate">Bug investigation</span>
+              <span className="text-xs text-neutral3">Yesterday</span>
             </ThreadLink>
             <ThreadDeleteButton onClick={() => console.log('Delete')} />
           </ThreadItem>

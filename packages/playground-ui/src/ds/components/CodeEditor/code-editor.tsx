@@ -3,8 +3,8 @@ import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
-import clsx from 'clsx';
 import { HTMLAttributes, useMemo } from 'react';
+import { cn } from '@/lib/utils';
 
 import type { Extension } from '@codemirror/state';
 
@@ -51,7 +51,7 @@ export const CodeEditor = ({ data, value, onChange, showCopyButton = true, class
   const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
   return (
-    <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
+    <div className={cn('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
       {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
       <CodeMirror
         value={formattedCode}
