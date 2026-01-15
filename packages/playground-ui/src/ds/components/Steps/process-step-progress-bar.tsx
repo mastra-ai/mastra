@@ -23,7 +23,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
             >
               <div
                 className={cn(
-                  'w-[2rem] h-[2rem] rounded-full flex items-center justify-center self-center absolute right-0 translate-x-[50%] bg-surface3 z-10 text-neutral3 font-bold text-[0.75rem]',
+                  'w-[2rem] h-[2rem] rounded-full flex items-center justify-center self-center absolute right-0 translate-x-[50%] bg-surface3 z-10 text-neutral3 font-bold text-ui-sm',
                   {
                     'border border-gray-500 border-dashed': step.status === 'pending',
                     '[&>svg]:text-surface4 [&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem]': step.status !== 'running',

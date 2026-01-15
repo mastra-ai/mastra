@@ -73,7 +73,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       <div className="text-center">
         <h3 className="text-lg font-semibold text-neutral5">{getPhaseMessage()}</h3>
         {streamResult?.runId && (
-          <div className="mt-[0.5rem] text-[0.75rem] text-neutral3">Run ID: {streamResult.runId}</div>
+          <div className="mt-[0.5rem] text-ui-sm text-neutral3">Run ID: {streamResult.runId}</div>
         )}
       </div>
 
@@ -88,7 +88,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-neutral5 p-[1.5rem] flex items-center gap-[.75rem] text-[0.875rem] bg-red-500/10',
+            'rounded-lg text-neutral5 p-[1.5rem] flex items-center gap-[.75rem] text-ui-md bg-red-500/10',
             '[&>svg]:w-[1.5rem] [&>svg]:h-[1.5rem] [&>svg]:opacity-70 [&>svg]:text-red-500',
           )}
         >

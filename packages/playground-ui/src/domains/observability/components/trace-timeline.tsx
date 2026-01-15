@@ -33,7 +33,7 @@ export function TraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center text-[0.875rem] gap-[1rem] bg-surface3/50 rounded-md p-[1.5rem] justify-center text-neutral3',
+            'flex items-center text-ui-md gap-[1rem] bg-surface3/50 rounded-md p-[1.5rem] justify-center text-neutral3',
             '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
           )}
         >

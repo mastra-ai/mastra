@@ -22,10 +22,10 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
       })}
     >
       <div className="grid grid-cols-[auto_1fr] gap-[.5rem]">
-        <span className="text-[0.875rem] text-neutral5 min-w-[1.5rem] flex justify-end">{position}.</span>
+        <span className="text-ui-md text-neutral5 min-w-[1.5rem] flex justify-end">{position}.</span>
         <div>
-          <h4 className="text-[0.875rem] text-neutral5">{formatStepTitle(stepId)}</h4>
-          {step.description && <p className="text-[0.875rem] -mt-[0.125rem]">{step.description}</p>}
+          <h4 className="text-ui-md text-neutral5">{formatStepTitle(stepId)}</h4>
+          {step.description && <p className="text-ui-md -mt-[0.125rem]">{step.description}</p>}
         </div>
       </div>
       <div

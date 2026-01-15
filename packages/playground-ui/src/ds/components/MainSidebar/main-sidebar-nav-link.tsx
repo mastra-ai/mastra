@@ -37,7 +37,7 @@ export function MainSidebarNavLink({
     <li
       className={cn(
         'flex ',
-        '[&>a]:flex [&>a]:items-center [&>a]:min-h-[2rem] [&>a]:gap-[10px] [&>a]:text-[0.8125rem] [&>a]:text-neutral3 [&>a]:py-[6px] [&>a]:px-[0.75rem] [&>a]:w-full [&>a]:rounded-lg [&>a]:justify-center',
+        '[&>a]:flex [&>a]:items-center [&>a]:min-h-[2rem] [&>a]:gap-[10px] [&>a]:text-ui-sm [&>a]:text-neutral3 [&>a]:py-[6px] [&>a]:px-[0.75rem] [&>a]:w-full [&>a]:rounded-lg [&>a]:justify-center',
         '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3/60',
         '[&>a:hover]:bg-surface4 [&>a:hover]:text-neutral5 [&>a:hover_svg]:text-neutral3',
         {
