@@ -20,6 +20,7 @@ import {
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
+  agentExecutionLegacyBodySchema,
   generateResponseSchema,
   streamResponseSchema,
   providersResponseSchema,
@@ -567,7 +568,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   path: '/api/agents/:agentId/generate-legacy',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: generateResponseSchema,
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
@@ -609,7 +610,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   path: '/api/agents/:agentId/stream-legacy',
   responseType: 'datastream-response' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
@@ -840,7 +841,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema.extend({ thread: z.string().optional() }),
+  bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
@@ -857,11 +858,6 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       const streamResult = await agent.network(messages, {
         ...params,
-        memory: {
-          thread: params.thread ?? params.threadId ?? '',
-          resource: params.resourceId ?? '',
-          options: params.memory?.options ?? {},
-        },
       });
 
       return streamResult;

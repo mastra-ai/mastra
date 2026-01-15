@@ -383,3 +383,35 @@ If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
     },
   });
 ```
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from `agent.stream()` and `agent.generate()`. Use the `memory` option instead, which provides a cleaner API for memory configuration.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+```diff
+  await agent.stream('Hello', {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.stream('Hello', {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```

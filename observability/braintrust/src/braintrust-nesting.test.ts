@@ -167,10 +167,11 @@ describe('BraintrustExporter - Non-External Case', () => {
     // Get the Braintrust span from the exporter's internal state
     const traceData = exporter._getTraceData(mastraRoot.traceId);
 
-    const braintrustSpan = traceData.getSpan({ spanId: mastraRoot.id });
-    expect(braintrustSpan).toBeDefined();
+    // getSpan() returns BraintrustSpanData, access .span for the underlying Braintrust Span
+    const spanData = traceData.getSpan({ spanId: mastraRoot.id });
+    expect(spanData).toBeDefined();
 
-    const internals = getSpanInternals(braintrustSpan!);
+    const internals = getSpanInternals(spanData!.span);
 
     // Root span should have rootSpanId = its own spanId
     expect(internals.rootSpanId).toBe(internals.spanId);
@@ -221,10 +222,11 @@ describe('BraintrustExporter - Non-External Case', () => {
     });
 
     // Get Braintrust spans from exporter
+    // getSpan() returns BraintrustSpanData, access .span for the underlying Braintrust Span
     const traceData = exporter._getTraceData(mastraRoot.traceId);
-    const rootBt = traceData.getSpan({ spanId: 'root-span' });
-    const llmBt = traceData.getSpan({ spanId: 'llm-span' });
-    const toolBt = traceData.getSpan({ spanId: 'tool-span' });
+    const rootBt = traceData.getSpan({ spanId: 'root-span' })!.span;
+    const llmBt = traceData.getSpan({ spanId: 'llm-span' })!.span;
+    const toolBt = traceData.getSpan({ spanId: 'tool-span' })!.span;
 
     const root = getSpanInternals(rootBt);
     const llm = getSpanInternals(llmBt);
@@ -279,11 +281,12 @@ describe('BraintrustExporter - Non-External Case', () => {
       });
     }
 
+    // getSpan() returns BraintrustSpanData, access .span for the underlying Braintrust Span
     const traceData = exporter._getTraceData(traceId);
-    const l1 = getSpanInternals(traceData.getSpan({ spanId: 'l1' }));
-    const l2 = getSpanInternals(traceData.getSpan({ spanId: 'l2' }));
-    const l3 = getSpanInternals(traceData.getSpan({ spanId: 'l3' }));
-    const l4 = getSpanInternals(traceData.getSpan({ spanId: 'l4' }));
+    const l1 = getSpanInternals(traceData.getSpan({ spanId: 'l1' })!.span);
+    const l2 = getSpanInternals(traceData.getSpan({ spanId: 'l2' })!.span);
+    const l3 = getSpanInternals(traceData.getSpan({ spanId: 'l3' })!.span);
+    const l4 = getSpanInternals(traceData.getSpan({ spanId: 'l4' })!.span);
 
     // All share rootSpanId
     expect(l1.rootSpanId).toBe(l1.spanId);
@@ -353,12 +356,13 @@ describe('BraintrustExporter - External Case', () => {
     });
 
     // Get Braintrust spans
+    // getSpan() returns BraintrustSpanData, access .span for the underlying Braintrust Span
     const traceData = exporter._getTraceData(mastraRoot.traceId);
-    const rootBt = traceData.getSpan({ spanId: 'mastra-root' });
-    const childBt = traceData.getSpan({ spanId: 'mastra-child' });
+    const rootBtData = traceData.getSpan({ spanId: 'mastra-root' });
+    const childBtData = traceData.getSpan({ spanId: 'mastra-child' });
 
-    const root = getSpanInternals(rootBt);
-    const child = getSpanInternals(childBt);
+    const root = getSpanInternals(rootBtData!.span);
+    const child = getSpanInternals(childBtData!.span);
 
     // Both should have external span as their root
     expect(root.rootSpanId).toBe(externalInternals.spanId);
@@ -370,8 +374,8 @@ describe('BraintrustExporter - External Case', () => {
     expect(child.spanParents).toEqual([root.spanId]);
 
     // Cleanup
-    childBt!.end();
-    rootBt!.end();
+    childBtData!.span.end();
+    rootBtData!.span.end();
     externalSpan.end();
   });
 });
