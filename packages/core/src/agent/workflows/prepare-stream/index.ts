@@ -123,7 +123,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
   return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
-    outputSchema: z.instanceof(MastraModelOutput<OUTPUT | undefined>),
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {

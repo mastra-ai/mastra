@@ -525,7 +525,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   const initialSystemMessages = messageList.getAllSystemMessages();
 
   return createStep({
-    id: 'llm-execution',
+    id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
@@ -896,7 +896,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           output: {
             text,
             toolCalls: [],
-            usage: usage ?? inputData.output?.usage,
+            usage: usage ?? inputData.output.usage,
             steps: [],
           },
           messages: {
@@ -1119,7 +1119,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         output: {
           text,
           toolCalls: shouldRetry ? [] : toolCalls, // Clear tool calls on retry
-          tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),

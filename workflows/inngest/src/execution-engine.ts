@@ -149,15 +149,32 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
   /**
    * Wrap durable operations in Inngest step.run() for durability.
-   * If retryConfig is provided, throws RetryAfterError INSIDE step.run() to trigger
-   * Inngest's step-level retry mechanism (not function-level retry).
+   *
+   * IMPORTANT: Errors are wrapped with a cause structure before throwing.
+   * This is necessary because Inngest's error serialization (serialize-error-cjs)
+   * only captures standard Error properties (message, name, stack, code, cause).
+   * Custom properties like statusCode, responseHeaders from AI SDK errors would
+   * be lost. By putting our serialized error (via getErrorFromUnknown with toJSON())
+   * in the cause property, we ensure custom properties survive serialization.
+   * The cause property is in serialize-error-cjs's allowlist, and when the cause
+   * object is finally JSON.stringify'd, our error's toJSON() is called.
    */
   async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
     return this.inngestStep.run(operationId, async () => {
       try {
         return await operationFn();
       } catch (e) {
-        throw e;
+        const errorInstance = getErrorFromUnknown(e, {
+          serializeStack: false,
+          fallbackMessage: 'Unknown step execution error',
+        });
+        throw new Error(errorInstance.message, {
+          cause: {
+            status: 'failed',
+            error: errorInstance,
+            endedAt: Date.now(),
+          },
+        });
       }
     }) as Promise<T>;
   }

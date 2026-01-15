@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown";
 import { Button } from "./ui/button";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 
 const docsTabs = [
   {

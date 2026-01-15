@@ -92,14 +92,22 @@ describe('Provider Configurations', () => {
     });
 
     it('should require both apiKey and teamId', () => {
-      const config = resolveProviderConfig({
-        laminar: {
-          // apiKey missing
-          teamId: 'test-team',
-        },
-      });
+      // Clear env var to ensure config validation fails
+      const originalApiKey = process.env.LMNR_PROJECT_API_KEY;
+      delete process.env.LMNR_PROJECT_API_KEY;
 
-      expect(config).toBeNull();
+      try {
+        const config = resolveProviderConfig({
+          laminar: {
+            // apiKey missing
+            teamId: 'test-team',
+          },
+        });
+
+        expect(config).toBeNull();
+      } finally {
+        if (originalApiKey !== undefined) process.env.LMNR_PROJECT_API_KEY = originalApiKey;
+      }
     });
   });
 
