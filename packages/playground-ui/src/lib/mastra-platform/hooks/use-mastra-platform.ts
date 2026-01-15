@@ -1,6 +1,6 @@
 declare global {
   interface Window {
-    MASTRA_PLATFORM_ENDPOINT: string;
+    MASTRA_CLOUD_API_ENDPOINT: string;
   }
 }
 
@@ -8,7 +8,7 @@ declare global {
  * Not a hook per se, but will become when we add more features to the platform.
  */
 export const useMastraPlatform = () => {
-  const mastraPlatformEndpoint = window.MASTRA_PLATFORM_ENDPOINT;
+  const mastraPlatformEndpoint = window.MASTRA_CLOUD_API_ENDPOINT;
   const isMastraPlatform = Boolean(mastraPlatformEndpoint);
 
   return { isMastraPlatform, mastraPlatformEndpoint };
