@@ -325,4 +325,6 @@ createVectorTestSuite({
   },
   waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 100)),
   supportsRegex: false,
+  supportsElemMatch: false,
+  supportsSize: false,
 });

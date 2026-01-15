@@ -118,4 +118,6 @@ createVectorTestSuite({
   },
   supportsRegex: false,
   supportsContains: false,
+  supportsNorOperator: false,
+  supportsElemMatch: false,
 });
