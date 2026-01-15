@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import {
   PlayCircle,
   Bot,
@@ -16,6 +16,8 @@ import {
   ChevronRight,
   Database,
   PanelRightClose,
+  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { TriggerConfig } from './panels/trigger-config';
@@ -35,6 +37,7 @@ import { ErrorBoundary } from './error-boundary';
 import { cn } from '@/lib/utils';
 import type { BuilderNodeType, BuilderNode } from '../types';
 import { useSelectedNodeDataContext } from '../hooks/use-data-context';
+import { getIssuesForNode, hasErrorsForNode, hasWarningsForNode, type ValidationIssue } from '../utils/validate';
 
 /**
  * Error boundary wrapper for config panel components.
@@ -45,6 +48,72 @@ function ConfigPanelErrorBoundary({ children, nodeType }: { children: ReactNode;
     <ErrorBoundary minimal context={`${nodeType} config`} className="m-0">
       {children}
     </ErrorBoundary>
+  );
+}
+
+/**
+ * Collapsible section showing validation issues for the selected node.
+ */
+function NodeValidationIssues({ issues }: { issues: ValidationIssue[] }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  const errors = issues.filter(i => i.severity === 'error');
+  const warnings = issues.filter(i => i.severity === 'warning');
+
+  if (issues.length === 0) return null;
+
+  return (
+    <div className="border-t border-border1">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors"
+      >
+        {errors.length > 0 ? (
+          <AlertCircle className="w-4 h-4 text-red-500" />
+        ) : (
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+        )}
+        <span className="text-xs font-medium text-icon5 flex-1 text-left">Issues</span>
+        <span className={cn('text-[10px]', errors.length > 0 ? 'text-red-500' : 'text-amber-500')}>
+          {errors.length > 0 && `${errors.length} error${errors.length !== 1 ? 's' : ''}`}
+          {errors.length > 0 && warnings.length > 0 && ', '}
+          {warnings.length > 0 && `${warnings.length} warning${warnings.length !== 1 ? 's' : ''}`}
+        </span>
+        {isExpanded ? <ChevronDown className="w-4 h-4 text-icon3" /> : <ChevronRight className="w-4 h-4 text-icon3" />}
+      </button>
+
+      {isExpanded && (
+        <div className="px-4 pb-3 space-y-2">
+          {issues.map((issue, index) => (
+            <div
+              key={index}
+              className={cn(
+                'p-2 rounded-md text-xs',
+                issue.severity === 'error'
+                  ? 'bg-red-500/10 border border-red-500/20'
+                  : 'bg-amber-500/10 border border-amber-500/20',
+              )}
+            >
+              <div className="flex items-start gap-2">
+                {issue.severity === 'error' ? (
+                  <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={cn('font-medium', issue.severity === 'error' ? 'text-red-400' : 'text-amber-400')}>
+                    {issue.message}
+                  </p>
+                  {issue.field && <p className="text-icon3 mt-0.5">Field: {issue.field}</p>}
+                  {issue.suggestion && <p className="text-icon4 mt-1">{issue.suggestion}</p>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -123,9 +192,16 @@ const DATA_CONSUMER_TYPES: BuilderNodeType[] = [
 export function PropertiesPanel({ className, onCollapse }: PropertiesPanelProps) {
   const selectedNodeId = useWorkflowBuilderStore(state => state.selectedNodeId);
   const nodes = useWorkflowBuilderStore(state => state.nodes);
+  const validationResult = useWorkflowBuilderStore(state => state.validationResult);
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const [showDataPreview, setShowDataPreview] = useState(true);
   const dataContext = useSelectedNodeDataContext();
+
+  // Get validation issues for the selected node
+  const nodeIssues = useMemo(() => {
+    if (!selectedNode || !validationResult) return [];
+    return getIssuesForNode(validationResult, selectedNode.id);
+  }, [selectedNode, validationResult]);
 
   if (!selectedNode) {
     return (
@@ -175,6 +251,9 @@ export function PropertiesPanel({ className, onCollapse }: PropertiesPanelProps)
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
+        {/* Validation Issues Section (shown if node has issues) */}
+        <NodeValidationIssues issues={nodeIssues} />
+
         {/* Node-specific config with error boundary */}
         <div className="p-4">
           <NodeConfigRenderer node={selectedNode} />

@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { X, Plus, AlertCircle, AlertTriangle, Check } from 'lucide-react';
+import { X, Plus, AlertCircle, AlertTriangle, Check, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useWorkflowBuilderStore } from '../../store/workflow-builder-store';
-import { useTestRunnerStore } from '../../store/test-runner-store';
+import { useTestRunnerStore, type StepStatus } from '../../store/test-runner-store';
 import { QuickAddPopover } from '../quick-add-popover';
 import { StepStatusOverlay } from './step-status-overlay';
 import { NodeComment } from './node-comment';
@@ -55,7 +55,9 @@ export function BaseNode({
   // Test runner state
   const currentRun = useTestRunnerStore(state => state.currentRun);
   const isTestRunning = useTestRunnerStore(state => state.isRunning);
-  const hasStepResult = currentRun?.steps[id] !== undefined;
+  const stepResult = currentRun?.steps[id];
+  const hasStepResult = stepResult !== undefined;
+  const stepStatus: StepStatus | undefined = stepResult?.status;
 
   // Compute validation state for this node
   const nodeValidation = useMemo(() => {
@@ -99,9 +101,17 @@ export function BaseNode({
           // Multi-select state - cyan highlight
           isInMultiSelect && 'ring-2 ring-cyan-500/40 border-cyan-500',
           accentColor && 'border-l-4',
-          // Validation error/warning styles
-          nodeValidation.hasErrors && 'border-red-500 ring-2 ring-red-500/20',
-          nodeValidation.hasWarnings && !nodeValidation.hasErrors && 'border-amber-500 ring-2 ring-amber-500/20',
+          // Validation error/warning styles (only when not executing)
+          !stepStatus && nodeValidation.hasErrors && 'border-red-500 ring-2 ring-red-500/20',
+          !stepStatus &&
+            nodeValidation.hasWarnings &&
+            !nodeValidation.hasErrors &&
+            'border-amber-500 ring-2 ring-amber-500/20',
+          // Execution state styles - takes priority
+          stepStatus === 'running' && 'border-blue-500 ring-2 ring-blue-500/40 animate-pulse',
+          stepStatus === 'completed' && 'border-green-500 ring-2 ring-green-500/30',
+          stepStatus === 'failed' && 'border-red-500 ring-2 ring-red-500/30',
+          stepStatus === 'suspended' && 'border-amber-500 ring-2 ring-amber-500/30',
         )}
         style={accentColor ? { borderLeftColor: accentColor } : undefined}
       >
@@ -115,8 +125,49 @@ export function BaseNode({
               : ''}
         </span>
 
-        {/* Multi-select indicator - top left */}
-        {isInMultiSelect && !nodeValidation.hasErrors && !nodeValidation.hasWarnings && (
+        {/* Execution status indicator - top left (takes priority over multi-select) */}
+        {stepStatus === 'running' && (
+          <div
+            className={cn(
+              'absolute -top-2 -left-2 z-10',
+              'w-5 h-5 rounded-full',
+              'bg-blue-500 flex items-center justify-center',
+              'shadow-md shadow-blue-500/50',
+            )}
+            aria-hidden="true"
+          >
+            <Loader2 className="w-3 h-3 text-white animate-spin" />
+          </div>
+        )}
+        {stepStatus === 'completed' && (
+          <div
+            className={cn(
+              'absolute -top-2 -left-2 z-10',
+              'w-5 h-5 rounded-full',
+              'bg-green-500 flex items-center justify-center',
+              'animate-in fade-in zoom-in duration-150',
+            )}
+            aria-hidden="true"
+          >
+            <CheckCircle className="w-3 h-3 text-white" />
+          </div>
+        )}
+        {stepStatus === 'failed' && (
+          <div
+            className={cn(
+              'absolute -top-2 -left-2 z-10',
+              'w-5 h-5 rounded-full',
+              'bg-red-500 flex items-center justify-center',
+              'animate-in fade-in zoom-in duration-150',
+            )}
+            aria-hidden="true"
+          >
+            <XCircle className="w-3 h-3 text-white" />
+          </div>
+        )}
+
+        {/* Multi-select indicator - top left (only when not executing) */}
+        {!stepStatus && isInMultiSelect && !nodeValidation.hasErrors && !nodeValidation.hasWarnings && (
           <div
             className={cn(
               'absolute -top-2 -left-2 z-10',
@@ -130,24 +181,49 @@ export function BaseNode({
           </div>
         )}
 
-        {/* Validation indicator - top left */}
-        {(nodeValidation.hasErrors || nodeValidation.hasWarnings) && (
-          <div
-            className={cn(
-              'absolute -top-2 -left-2 z-10',
-              'w-5 h-5 rounded-full',
-              'flex items-center justify-center',
-              nodeValidation.hasErrors ? 'bg-red-500' : 'bg-amber-500',
-            )}
-            title={nodeValidation.issues.map(i => i.message).join('\n')}
-            aria-hidden="true"
-          >
-            {nodeValidation.hasErrors ? (
-              <AlertCircle className="w-3 h-3 text-white" />
-            ) : (
-              <AlertTriangle className="w-3 h-3 text-white" />
-            )}
-          </div>
+        {/* Validation indicator - top left with tooltip (only when not executing) */}
+        {!stepStatus && (nodeValidation.hasErrors || nodeValidation.hasWarnings) && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={cn(
+                    'absolute -top-2 -left-2 z-10',
+                    'w-5 h-5 rounded-full cursor-pointer',
+                    'flex items-center justify-center',
+                    nodeValidation.hasErrors ? 'bg-red-500' : 'bg-amber-500',
+                  )}
+                  aria-hidden="true"
+                >
+                  {nodeValidation.hasErrors ? (
+                    <AlertCircle className="w-3 h-3 text-white" />
+                  ) : (
+                    <AlertTriangle className="w-3 h-3 text-white" />
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[280px]">
+                <div className="space-y-1">
+                  <p
+                    className={cn('text-xs font-medium', nodeValidation.hasErrors ? 'text-red-400' : 'text-amber-400')}
+                  >
+                    {nodeValidation.issues.length} {nodeValidation.hasErrors ? 'error' : 'warning'}
+                    {nodeValidation.issues.length !== 1 ? 's' : ''}
+                  </p>
+                  <ul className="text-xs space-y-0.5">
+                    {nodeValidation.issues.slice(0, 3).map((issue, i) => (
+                      <li key={i} className="text-icon4">
+                        {issue.message}
+                      </li>
+                    ))}
+                    {nodeValidation.issues.length > 3 && (
+                      <li className="text-icon3">...and {nodeValidation.issues.length - 3} more</li>
+                    )}
+                  </ul>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Delete button - visible on hover (hidden during test run) */}

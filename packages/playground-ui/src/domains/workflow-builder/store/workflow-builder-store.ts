@@ -41,6 +41,21 @@ import { serializeGraph } from '../utils/serialize';
 const MAX_HISTORY = 50;
 
 // ============================================================================
+// Execution State Types
+// ============================================================================
+
+export type ExecutionStepStatus = 'pending' | 'running' | 'success' | 'error';
+
+export interface ExecutionStepResult {
+  status: ExecutionStepStatus;
+  result?: unknown;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+}
+
+// ============================================================================
 // State Interface
 // ============================================================================
 
@@ -52,6 +67,10 @@ interface WorkflowBuilderState {
   // Selection (supports both single and multi-select)
   selectedNodeId: string | null;
   selectedNodeIds: Set<string>;
+
+  // Execution state (for real-time visualization)
+  executingStepId: string | null;
+  stepResults: Record<string, ExecutionStepResult>;
 
   // Clipboard for copy/paste
   clipboard: {
@@ -132,6 +151,11 @@ interface WorkflowBuilderState {
   // Actions: Validation
   runValidation: () => void;
   clearValidation: () => void;
+
+  // Actions: Execution state (for real-time visualization)
+  setExecutingStep: (stepId: string | null) => void;
+  setStepResult: (stepId: string, result: ExecutionStepResult) => void;
+  clearExecutionState: () => void;
 }
 
 // ============================================================================
@@ -144,6 +168,8 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
   edges: [],
   selectedNodeId: null,
   selectedNodeIds: new Set<string>(),
+  executingStepId: null,
+  stepResults: {},
   clipboard: null,
   quickAddTargetNodeId: null,
   workflowId: null,
@@ -615,6 +641,9 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
       nodes: [],
       edges: [],
       selectedNodeId: null,
+      selectedNodeIds: new Set<string>(),
+      executingStepId: null,
+      stepResults: {},
       quickAddTargetNodeId: null,
       workflowId: null,
       workflowName: '',
@@ -771,6 +800,30 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
   clearValidation: () => {
     set({ validationResult: null });
   },
+
+  // ========================================================================
+  // Execution State (for real-time visualization)
+  // ========================================================================
+
+  setExecutingStep: (stepId: string | null) => {
+    set({ executingStepId: stepId });
+  },
+
+  setStepResult: (stepId: string, result: ExecutionStepResult) => {
+    set(state => ({
+      stepResults: {
+        ...state.stepResults,
+        [stepId]: result,
+      },
+    }));
+  },
+
+  clearExecutionState: () => {
+    set({
+      executingStepId: null,
+      stepResults: {},
+    });
+  },
 }));
 
 // ============================================================================
@@ -795,3 +848,10 @@ export const selectCanRedo = (state: WorkflowBuilderState) => state.historyIndex
 export const selectValidationResult = (state: WorkflowBuilderState) => state.validationResult;
 export const selectIsValid = (state: WorkflowBuilderState) => state.validationResult?.isValid ?? true;
 export const selectDeserializationError = (state: WorkflowBuilderState) => state.deserializationError;
+
+// Execution state selectors
+export const selectExecutingStepId = (state: WorkflowBuilderState) => state.executingStepId;
+export const selectStepResults = (state: WorkflowBuilderState) => state.stepResults;
+export const selectStepResult = (stepId: string) => (state: WorkflowBuilderState) => state.stepResults[stepId];
+export const selectIsStepExecuting = (stepId: string) => (state: WorkflowBuilderState) =>
+  state.executingStepId === stepId;
