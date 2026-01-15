@@ -521,7 +521,7 @@ describe('Mastra Stored Agents', () => {
         tools: ['missing-tool'],
         workflows: ['missing-workflow'],
         agents: ['missing-agent'],
-        memory: 'missing-memory',
+        memory: { id: 'missing-memory' },
         scorers: { 'missing-scorer': {} },
       };
 
