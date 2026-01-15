@@ -9,11 +9,7 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type {
-  AgentExecutionOptions,
-  AgentExecutionOptionsBase,
-  SerializableStructuredOutputOptions,
-} from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -33,7 +29,6 @@ import type {
   UpdateModelInModelListParams,
   ReorderModelListParams,
   NetworkStreamParams,
-  StreamParamsBase,
   StreamParamsBaseWithoutMessages,
 } from '../types';
 
@@ -102,12 +97,9 @@ async function executeToolCallAndRespond<OUTPUT>({
             ],
           },
         ] as MessageListInput;
+        console.log('updatedMessages', updatedMessages);
 
-        // @ts-ignore
-        return respondFn({
-          ...params,
-          messages: updatedMessages,
-        });
+        return respondFn(updatedMessages, params);
       }
     }
   }
@@ -327,8 +319,8 @@ export class Agent extends BaseResource {
   ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     const params = {
-      messages: messages,
       ...options,
+      messages: messages,
     } as StreamParams<OUTPUT>;
     const processedParams = {
       ...params,
