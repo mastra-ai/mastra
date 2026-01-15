@@ -194,19 +194,40 @@ If `skillsPaths` is set but not in `autoIndexPaths`, skills are readable but not
 
 ## Additional Decisions
 
-### 6. Skills Interface
+### 6. Skills Interface ✅
 
 **Question**: Does `MastraSkills` interface stay in `core/skills` or move?
 
-**Decision**: TBD - needs more thought.
+**Decision**: Option C - `WorkspaceSkills` interface accessed via `workspace.skills`.
 
-The SKILL.md spec defines a structure (references/, scripts/, assets/). Having an interface equipped to deal with that structure still makes sense, but it could:
+- `MastraSkills` becomes `WorkspaceSkills` interface
+- Accessed via nested accessor: `workspace.skills.list()`, `workspace.skills.get()`, etc.
+- Skills are NOT directly exposed on agents or Mastra instance
+- Skills are accessed through workspace: `agent.workspace.skills` or `mastra.workspace.skills`
 
-- A) Stay as `MastraSkills` interface in `core/skills`
-- B) Become skill types/helpers inside `core/workspace` (no separate `core/skills`)
-- C) Be a new `WorkspaceSkills` interface on Workspace
+```typescript
+interface WorkspaceSkills {
+  list(): Promise<SkillMetadata[]>;
+  get(name: string): Promise<Skill | null>;
+  has(name: string): Promise<boolean>;
+  search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
 
-**Consideration**: Skills have a defined spec structure. Even if skills live in workspace, the interface for interacting with them (parsing SKILL.md, getting references, etc.) may warrant its own type definitions.
+  create(input: CreateSkillInput): Promise<Skill>;
+  update(name: string, input: UpdateSkillInput): Promise<Skill>;
+  delete(name: string): Promise<void>;
+
+  getReference(skillName: string, path: string): Promise<string | null>;
+  getScript(skillName: string, path: string): Promise<string | null>;
+  getAsset(skillName: string, path: string): Promise<Buffer | null>;
+}
+
+// Usage
+const skills = await workspace.skills.list();
+const skill = await workspace.skills.get('brand-guidelines');
+const results = await workspace.skills.search('brand colors');
+```
+
+This keeps skills as a coherent subsystem while living within workspace.
 
 ### 7. @mastra/skills Package Fate
 
@@ -336,27 +357,6 @@ const agent = new Agent({
   processors: [new SkillsProcessor({ workspace })],
 });
 ```
-
----
-
-## Open Items for Discussion
-
-### Skills Interface Design
-
-The `MastraSkills` interface currently defines:
-
-- `list()`, `get()`, `has()`, `search()`
-- `create()`, `update()`, `delete()`
-- `getReference()`, `getScript()`, `getAsset()`
-- `refresh()`, `getInputProcessors()`
-
-Options for Workspace integration:
-
-1. **Flat methods on Workspace**: `workspace.listSkills()`, `workspace.getSkill()`, etc.
-2. **Nested accessor**: `workspace.skills.list()`, `workspace.skills.get()`, etc.
-3. **Separate interface**: Keep `MastraSkills` interface, Workspace implements it
-
-**Recommendation**: Option 1 (flat methods) for simplicity. Skills are a workspace feature, not a separate subsystem.
 
 ---
 
