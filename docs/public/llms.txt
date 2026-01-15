@@ -169,7 +169,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 70+ AI providers and 1822+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 70+ AI providers and 1828+ models through Mastra's model router.
 - [Abacus | Models | Mastra](https://mastra.ai/en/models/providers/abacus): Use Abacus models with Mastra. 52 models available.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
@@ -190,7 +190,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 2 models available.
 - [FastRouter | Models | Mastra](https://mastra.ai/en/models/providers/fastrouter): Use FastRouter models with Mastra. 14 models available.
 - [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 16 models available.
-- [Firmware | Models | Mastra](https://mastra.ai/en/models/providers/firmware): Use Firmware models with Mastra. 16 models available.
+- [Firmware | Models | Mastra](https://mastra.ai/en/models/providers/firmware): Use Firmware models with Mastra. 18 models available.
 - [Friendli | Models | Mastra](https://mastra.ai/en/models/providers/friendli): Use Friendli models with Mastra. 11 models available.
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
 - [Vertex](https://mastra.ai/en/models/providers/google-vertex): Use Vertex models via the AI SDK.
@@ -221,8 +221,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 66 models available.
 - [Ollama Cloud | Models | Mastra](https://mastra.ai/en/models/providers/ollama-cloud): Use Ollama Cloud models with Mastra. 12 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
-- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 39 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 26 models available.
+- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 40 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 27 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 3 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 115 models available.
