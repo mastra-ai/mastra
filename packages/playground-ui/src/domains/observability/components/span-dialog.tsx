@@ -1,4 +1,6 @@
-import { SideDialog, type KeyValueListItemData, TextAndIcon, getShortId } from '@/components/ui/elements';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { type KeyValueListItemData } from '@/ds/components/KeyValueList';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { SpanRecord } from '@mastra/core/storage';
 import type { ListScoresResponse } from '@mastra/core/evals';

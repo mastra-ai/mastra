@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: Handle PR review comments on the current branch's pull request
 ---
 
