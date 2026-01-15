@@ -29,6 +29,10 @@ import {
   arcadeAuthorizeResponseSchema,
   arcadeAuthStatusQuerySchema,
   arcadeAuthStatusResponseSchema,
+  composioAuthorizeBodySchema,
+  composioAuthorizeResponseSchema,
+  composioAuthStatusQuerySchema,
+  composioAuthStatusResponseSchema,
 } from '../schemas/integrations';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
@@ -40,6 +44,7 @@ import {
   listProviders,
   SmitheryProvider,
   ArcadeProvider,
+  ComposioProvider,
   type MCPIntegrationMetadata,
   type SmitheryIntegrationMetadata,
 } from '@mastra/core/integrations';
@@ -329,8 +334,32 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
             ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
             : toolsResponse.tools;
 
+          // For Composio, fetch full tool details to get complete input schemas
+          // The listTools API may not return full schemas
+          const toolsWithFullDetails = await Promise.all(
+            toolsToCache.map(async tool => {
+              // If inputSchema is empty or minimal, fetch full details
+              const hasFullSchema =
+                tool.inputSchema &&
+                typeof tool.inputSchema === 'object' &&
+                'properties' in tool.inputSchema &&
+                Object.keys((tool.inputSchema as any).properties || {}).length > 0;
+
+              if (!hasFullSchema && provider === 'composio' && 'getTool' in toolProvider) {
+                try {
+                  const fullTool = await (toolProvider as any).getTool(tool.slug);
+                  return { ...tool, ...fullTool, toolkit: tool.toolkit || toolkit };
+                } catch (err) {
+                  console.warn(`Failed to fetch full details for tool ${tool.slug}:`, err);
+                  return tool;
+                }
+              }
+              return tool;
+            }),
+          );
+
           // Convert to cached tool format - use the toolkit we fetched from as the toolkitSlug
-          const cachedTools = toolsToCache.map(tool => ({
+          const cachedTools = toolsWithFullDetails.map(tool => ({
             id: crypto.randomUUID(),
             integrationId: integration.id,
             provider,
@@ -529,7 +558,29 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
                 ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
                 : toolsResponse.tools;
 
-              const cachedTools = toolsToCache.map(tool => ({
+              // For Composio, fetch full tool details to get complete input schemas
+              const toolsWithFullDetails = await Promise.all(
+                toolsToCache.map(async tool => {
+                  const hasFullSchema =
+                    tool.inputSchema &&
+                    typeof tool.inputSchema === 'object' &&
+                    'properties' in tool.inputSchema &&
+                    Object.keys((tool.inputSchema as any).properties || {}).length > 0;
+
+                  if (!hasFullSchema && updatedIntegration.provider === 'composio' && 'getTool' in toolProvider) {
+                    try {
+                      const fullTool = await (toolProvider as any).getTool(tool.slug);
+                      return { ...tool, ...fullTool, toolkit: tool.toolkit || toolkit };
+                    } catch (err) {
+                      console.warn(`Failed to fetch full details for tool ${tool.slug}:`, err);
+                      return tool;
+                    }
+                  }
+                  return tool;
+                }),
+              );
+
+              const cachedTools = toolsWithFullDetails.map(tool => ({
                 id: crypto.randomUUID(),
                 integrationId: updatedIntegration.id,
                 provider: updatedIntegration.provider,
@@ -979,7 +1030,29 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
             ? toolsResponse.tools.filter(tool => existingToolSlugs.has(tool.slug))
             : toolsResponse.tools;
 
-        const cachedTools = toolsToCache.map(tool => ({
+        // For Composio, fetch full tool details to get complete input schemas
+        const toolsWithFullDetails = await Promise.all(
+          toolsToCache.map(async tool => {
+            const hasFullSchema =
+              tool.inputSchema &&
+              typeof tool.inputSchema === 'object' &&
+              'properties' in tool.inputSchema &&
+              Object.keys((tool.inputSchema as any).properties || {}).length > 0;
+
+            if (!hasFullSchema && integration.provider === 'composio' && 'getTool' in toolProvider) {
+              try {
+                const fullTool = await (toolProvider as any).getTool(tool.slug);
+                return { ...tool, ...fullTool, toolkit: tool.toolkit || toolkit };
+              } catch (err) {
+                console.warn(`Failed to fetch full details for tool ${tool.slug}:`, err);
+                return tool;
+              }
+            }
+            return tool;
+          }),
+        );
+
+        const cachedTools = toolsWithFullDetails.map(tool => ({
           id: crypto.randomUUID(),
           integrationId: integration.id,
           provider: integration.provider,
@@ -1247,6 +1320,56 @@ export const ARCADE_AUTH_STATUS_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error checking Arcade authorization status');
+    }
+  },
+});
+
+// ============================================================================
+// Composio Authorization Routes
+// ============================================================================
+
+/**
+ * POST /api/integrations/composio/authorize - Initiate authorization for a Composio toolkit
+ */
+export const COMPOSIO_AUTHORIZE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/integrations/composio/authorize',
+  responseType: 'json',
+  bodySchema: composioAuthorizeBodySchema,
+  responseSchema: composioAuthorizeResponseSchema,
+  summary: 'Authorize Composio toolkit',
+  description: 'Initiate OAuth authorization for a Composio toolkit that requires authentication',
+  tags: ['Integrations', 'Composio'],
+  handler: async ({ toolkitSlug, userId, callbackUrl }) => {
+    try {
+      const composioProvider = new ComposioProvider();
+      const response = await composioProvider.authorize(toolkitSlug, userId, callbackUrl);
+      return response;
+    } catch (error) {
+      return handleError(error, 'Error initiating Composio authorization');
+    }
+  },
+});
+
+/**
+ * GET /api/integrations/composio/auth/status - Check authorization status
+ */
+export const COMPOSIO_AUTH_STATUS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/integrations/composio/auth/status',
+  responseType: 'json',
+  queryParamSchema: composioAuthStatusQuerySchema,
+  responseSchema: composioAuthStatusResponseSchema,
+  summary: 'Check Composio auth status',
+  description: 'Check the status of a pending Composio authorization',
+  tags: ['Integrations', 'Composio'],
+  handler: async ({ authorizationId }) => {
+    try {
+      const composioProvider = new ComposioProvider();
+      const response = await composioProvider.checkAuthorizationStatus(authorizationId);
+      return response;
+    } catch (error) {
+      return handleError(error, 'Error checking Composio authorization status');
     }
   },
 });

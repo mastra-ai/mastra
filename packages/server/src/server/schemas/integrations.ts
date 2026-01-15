@@ -419,3 +419,40 @@ export const arcadeAuthStatusResponseSchema = z.object({
   status: z.enum(['pending', 'completed', 'failed']).describe('Current authorization status'),
   completed: z.boolean().describe('Whether authorization is complete'),
 });
+
+// ============================================================================
+// Composio Authorization Schemas
+// ============================================================================
+
+/**
+ * Body schema for POST /api/integrations/composio/authorize
+ */
+export const composioAuthorizeBodySchema = z.object({
+  toolkitSlug: z.string().describe('Toolkit slug (e.g., "gmail", "github")'),
+  userId: z.string().describe('User ID for the authorization context'),
+  callbackUrl: z.string().optional().describe('Optional callback URL after authorization'),
+});
+
+/**
+ * Response schema for POST /api/integrations/composio/authorize
+ */
+export const composioAuthorizeResponseSchema = z.object({
+  status: z.enum(['pending', 'completed']).describe('Authorization status'),
+  authorizationId: z.string().optional().describe('Connected account ID for tracking'),
+  authorizationUrl: z.string().optional().describe('URL for user to complete authorization'),
+});
+
+/**
+ * Query schema for GET /api/integrations/composio/auth/status
+ */
+export const composioAuthStatusQuerySchema = z.object({
+  authorizationId: z.string().describe('Connected account ID to check'),
+});
+
+/**
+ * Response schema for GET /api/integrations/composio/auth/status
+ */
+export const composioAuthStatusResponseSchema = z.object({
+  status: z.enum(['pending', 'completed', 'failed']).describe('Current authorization status'),
+  completed: z.boolean().describe('Whether authorization is complete'),
+});

@@ -15,7 +15,7 @@ import { ToolSelector } from './tool-selector';
 import { MCPConnectionInput } from './mcp-connection-input';
 import { SmitheryBrowser } from './smithery-browser';
 import type { MCPConnectionConfig } from './mcp-connection-input';
-import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations, useOAuthCallback, useArcadeAuth } from '../hooks';
+import { useProviders, useProviderToolkits, useProviderTools, useIntegrationMutations, useOAuthCallback, useArcadeAuth, useComposioAuth } from '../hooks';
 import { SmitheryBrowserOAuthProvider, storePendingOAuthState } from '../lib/smithery-oauth-provider';
 import type { IntegrationProvider, ProviderToolkit } from '../types';
 import type { ValidateMCPResponse, SmitheryServer, SmitheryServerConnection } from '@mastra/client-js';
@@ -80,6 +80,10 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const [arcadeAuthPending, setArcadeAuthPending] = useState(false);
   const [showArcadeSecretsWarning, setShowArcadeSecretsWarning] = useState(false);
 
+  // Composio-specific state for auth
+  const [composioToolkitsRequiringOAuth, setComposioToolkitsRequiringOAuth] = useState<ProviderToolkit[]>([]);
+  const [composioAuthPending, setComposioAuthPending] = useState(false);
+
   // Arcade auth hook
   const {
     authState: arcadeAuthState,
@@ -103,12 +107,37 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     },
   });
 
+  // Composio auth hook
+  const {
+    authState: composioAuthState,
+    authorize: composioAuthorize,
+    reset: resetComposioAuth,
+    isAuthorizing: isComposioAuthorizing,
+  } = useComposioAuth({
+    onSuccess: () => {
+      toast.success('Successfully authorized');
+      // After successful auth, move to step 3
+      const names = toolkits
+        .filter(t => selectedToolkits.has(t.slug))
+        .map(t => t.name);
+      setSelectedToolkitNames(names);
+      setComposioAuthPending(false);
+      setStep(3);
+    },
+    onError: (_error) => {
+      // Don't hide the overlay - let the user see the error in the UI
+      // The overlay's failed state has Cancel/Retry buttons
+    },
+  });
+
   // OAuth callback handling
   const { isReturningFromOAuth, authorizationCode, serverUrl: pendingServerUrl, clearOAuthState } = useOAuthCallback();
 
-  // Determine if we're in MCP or Smithery mode
+  // Determine provider type
   const isMCPProvider = selectedProvider === 'mcp';
   const isSmitheryProvider = selectedProvider === 'smithery';
+  const isArcadeProvider = selectedProvider === 'arcade';
+  const isComposioProvider = selectedProvider === 'composio';
 
   // Data fetching
   const { data: providersResponse, isLoading: isLoadingProviders } = useProviders();
@@ -178,7 +207,19 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const providers = providersResponse?.providers || [];
 
   // Flatten paginated data
-  const toolkits = toolkitsData?.pages.flatMap(page => page.toolkits) || [];
+  const rawToolkits = toolkitsData?.pages.flatMap(page => page.toolkits) || [];
+
+  // For Composio, filter to only show toolkits that have Composio-managed auth or no auth required
+  // This ensures we only show toolkits where the OAuth flow will actually work
+  const toolkits = isComposioProvider
+    ? rawToolkits.filter(toolkit => {
+        const composioManagedSchemes = toolkit.metadata?.composioManagedAuthSchemes as string[] | undefined;
+        const noAuth = toolkit.metadata?.noAuth as boolean | undefined;
+        // Show if no auth required OR has Composio-managed auth schemes
+        return noAuth === true || (composioManagedSchemes && composioManagedSchemes.length > 0);
+      })
+    : rawToolkits;
+
   const tools = toolsData?.pages.flatMap(page => page.tools) || [];
 
   // Calculate selected tools (all tools from selected toolkits minus deselected)
@@ -443,9 +484,6 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
     setMcpToolCount(result.toolCount);
   };
 
-  // Check if Arcade provider
-  const isArcadeProvider = selectedProvider === 'arcade';
-
   // Navigation handlers
   const handleNext = () => {
     if (step === 1 && selectedProvider) {
@@ -492,6 +530,28 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
               setArcadeAuthPending(true);
               // Start authorization for the first OAuth toolkit
               arcadeAuthorize(firstToolkit.slug);
+              return;
+            }
+          }
+        }
+
+        // For Composio, check if any selected toolkits require auth
+        if (isComposioProvider) {
+          const selectedToolkitsList = toolkits.filter(t => selectedToolkits.has(t.slug));
+
+          // Filter toolkits that need OAuth (have authType set and not noAuth)
+          const oauthToolkits = selectedToolkitsList.filter(
+            t => t.metadata?.authType === 'oauth' && !t.metadata?.noAuth
+          );
+
+          setComposioToolkitsRequiringOAuth(oauthToolkits);
+
+          // If there are OAuth toolkits, start auth flow
+          if (oauthToolkits.length > 0) {
+            const firstToolkit = oauthToolkits[0];
+            if (firstToolkit?.slug) {
+              setComposioAuthPending(true);
+              composioAuthorize(firstToolkit.slug);
               return;
             }
           }
@@ -628,6 +688,13 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
               args: mcpConfig.args,
               env: mcpConfig.env,
             };
+      } else if (isComposioProvider && composioAuthState.authorizationId) {
+        // Store the connected account ID and user ID for Composio tool execution
+        // Composio requires both entity_id (user_id) and connected_account_id
+        integrationMetadata = {
+          connectedAccountId: composioAuthState.authorizationId,
+          userId: 'default-user', // Same user ID used during OAuth
+        };
       }
 
       await createIntegration.mutateAsync({
@@ -691,7 +758,7 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
   const canGoNext = step === 1
     ? (isMCPProvider ? mcpValidated : !!selectedProvider)
     : step === 2
-    ? (isSmitheryProvider ? smitheryValidated : selectedToolkits.size > 0 && !arcadeAuthPending)
+    ? (isSmitheryProvider ? smitheryValidated : selectedToolkits.size > 0 && !arcadeAuthPending && !composioAuthPending)
     : false;
   const isLastStep = step === 3;
 
@@ -949,6 +1016,97 @@ export function AddToolsDialog({ open, onOpenChange, onSuccess }: AddToolsDialog
                           >
                             Try Again
                           </Button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {/* Composio authorization overlay */}
+              {composioAuthPending && (
+                <div className="absolute inset-0 bg-surface1/90 flex items-center justify-center z-10">
+                  <div className="bg-surface3 rounded-lg p-6 max-w-md text-center space-y-4 shadow-lg border border-border1">
+                    {isComposioAuthorizing ? (
+                      <>
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-accent1" />
+                        <div className="space-y-2">
+                          <Txt variant="ui-md" className="text-icon6 font-medium">
+                            Authorizing {composioToolkitsRequiringOAuth[0]?.name || 'toolkit'}
+                          </Txt>
+                          <Txt variant="ui-sm" className="text-icon3">
+                            {composioAuthState.authorizationUrl
+                              ? 'Complete authorization in the popup window...'
+                              : 'Initiating authorization...'}
+                          </Txt>
+                        </div>
+                        {composioAuthState.authorizationUrl && (
+                          <div className="pt-2">
+                            <Button
+                              variant="outline"
+                              size="md"
+                              onClick={() => window.open(composioAuthState.authorizationUrl, '_blank')}
+                            >
+                              Reopen Authorization Window
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : composioAuthState.status === 'failed' ? (
+                      <>
+                        <div className="h-8 w-8 mx-auto rounded-full bg-destructive1/10 flex items-center justify-center">
+                          <Txt variant="ui-lg" className="text-destructive1">✕</Txt>
+                        </div>
+                        <div className="space-y-2">
+                          <Txt variant="ui-md" className="text-icon6 font-medium">
+                            {composioAuthState.error?.includes('No Composio-managed auth config')
+                              ? 'Authentication Not Available'
+                              : 'Authorization Failed'}
+                          </Txt>
+                          {composioAuthState.error?.includes('No Composio-managed auth config') ? (
+                            <Txt variant="ui-sm" className="text-icon3">
+                              This toolkit ({composioToolkitsRequiringOAuth[0]?.name || 'selected'}) doesn't have Composio-managed authentication configured. You may need to{' '}
+                              <a
+                                href="https://app.composio.dev/your-apps"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-accent1 hover:underline"
+                              >
+                                set up custom OAuth credentials
+                              </a>
+                              {' '}in your Composio dashboard.
+                            </Txt>
+                          ) : (
+                            <Txt variant="ui-sm" className="text-destructive1">
+                              {composioAuthState.error || 'Unable to authorize. Please try again.'}
+                            </Txt>
+                          )}
+                        </div>
+                        <div className="flex gap-2 justify-center pt-2">
+                          <Button
+                            variant={composioAuthState.error?.includes('No Composio-managed auth config') ? 'default' : 'outline'}
+                            size="md"
+                            onClick={() => {
+                              setComposioAuthPending(false);
+                              resetComposioAuth();
+                            }}
+                          >
+                            {composioAuthState.error?.includes('No Composio-managed auth config') ? 'Go Back' : 'Cancel'}
+                          </Button>
+                          {!composioAuthState.error?.includes('No Composio-managed auth config') && (
+                            <Button
+                              variant="default"
+                              size="md"
+                              onClick={() => {
+                                const firstToolkit = composioToolkitsRequiringOAuth[0];
+                                if (firstToolkit?.slug) {
+                                  composioAuthorize(firstToolkit.slug);
+                                }
+                              }}
+                            >
+                              Try Again
+                            </Button>
+                          )}
                         </div>
                       </>
                     ) : null}

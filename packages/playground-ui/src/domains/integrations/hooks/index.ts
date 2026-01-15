@@ -7,3 +7,5 @@ export { useSmitheryServers, useSmitheryServer } from './use-smithery';
 export { useOAuthCallback } from './use-oauth-callback';
 export { useArcadeAuth, getToolNameForAuth } from './use-arcade-auth';
 export type { ArcadeAuthState, UseArcadeAuthOptions, UseArcadeAuthReturn } from './use-arcade-auth';
+export { useComposioAuth } from './use-composio-auth';
+export type { ComposioAuthState, UseComposioAuthOptions, UseComposioAuthReturn } from './use-composio-auth';

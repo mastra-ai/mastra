@@ -188,7 +188,8 @@ export async function executeComposioTool(params: ExecuteComposioToolParams): Pr
       requestBody.connected_account_id = connectedAccountId;
     }
     if (userId) {
-      requestBody.user_id = userId;
+      // Composio V3 uses entity_id for user identification
+      requestBody.entity_id = userId;
     }
 
     const response = await fetch(url, {
@@ -202,6 +203,14 @@ export async function executeComposioTool(params: ExecuteComposioToolParams): Pr
 
     if (!response.ok) {
       const errorText = await response.text();
+      // Log the full error for debugging
+      console.error('[Composio] Tool execution failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        toolSlug,
+        requestBody,
+      });
       return {
         success: false,
         error: {

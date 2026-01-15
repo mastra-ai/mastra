@@ -47,7 +47,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows';
+import { createWorkflow, createStep, isProcessor, jsonSchemaToZod } from '../workflows';
 import { executeTool } from '../integrations';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -2412,6 +2412,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Fetch cached tools for all integrations
     for (const integrationId of integrationIds || []) {
       try {
+        // Get the integration config to access metadata (e.g., connectedAccountId for Composio)
+        const integration = await integrationsStore.getIntegrationById({ id: integrationId });
+        const integrationMetadata = integration?.metadata as Record<string, unknown> | undefined;
+
         // List all cached tools for this integration
         const { tools: cachedTools } = await integrationsStore.listCachedTools({
           integrationId,
@@ -2435,16 +2439,25 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           }
 
           // Create a tool using the cached definition
-          // The schemas are stored as JSON and will be converted internally by createTool
+          // Convert the stored JSON Schema to Zod schema for proper validation and LLM hints
+          const hasInputSchema = cachedTool.inputSchema && Object.keys(cachedTool.inputSchema).length > 0;
+          const toolInputSchema = hasInputSchema ? jsonSchemaToZod(cachedTool.inputSchema) : z.object({}).passthrough();
+
+          // Debug log for tool schema
+          console.log(`[Agent:${this.name}] - Creating tool ${toolName}:`);
+          console.log(`  - hasInputSchema: ${hasInputSchema}`);
+          console.log(`  - cachedTool.inputSchema keys:`, Object.keys(cachedTool.inputSchema || {}));
+          if (hasInputSchema) {
+            console.log(
+              `  - cachedTool.inputSchema:`,
+              JSON.stringify(cachedTool.inputSchema, null, 2).substring(0, 500),
+            );
+          }
+
           const toolObj = createTool({
             id: toolName,
             description: cachedTool.description || `${cachedTool.name} from ${cachedTool.provider}`,
-            // Use the raw definition which contains the complete tool spec including schemas
-            // For now, use a simple schema until Task 015 implements proper conversion
-            // Note: z.object({}).passthrough() is used instead of z.record(z.unknown()) because
-            // OpenAI requires a "properties" field in object schemas. passthrough() accepts any
-            // additional properties while still having the required "properties": {} in JSON Schema.
-            inputSchema: z.object({}).passthrough().describe('Tool input parameters'),
+            inputSchema: toolInputSchema,
             outputSchema: z.unknown().describe('Tool output result'),
             mastra: this.#mastra,
             execute: async (inputData: Record<string, unknown>, context) => {
@@ -2457,8 +2470,28 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 integrationId,
               });
 
+              // Log input data and metadata for debugging
+              console.log(`[Agent:${this.name}] - Tool inputData:`, JSON.stringify(inputData, null, 2));
+              console.log(`[Agent:${this.name}] - Integration metadata:`, JSON.stringify(integrationMetadata, null, 2));
+
               try {
-                const result = await executeTool(cachedTool.provider, cachedTool.toolSlug, inputData);
+                // Pass metadata options for tool execution (e.g., connectedAccountId for Composio)
+                const executionOptions: {
+                  connectedAccountId?: string;
+                  userId?: string;
+                } = {};
+
+                // For Composio, pass the connected account ID and user ID from integration metadata
+                if (cachedTool.provider === 'composio') {
+                  if (integrationMetadata?.connectedAccountId) {
+                    executionOptions.connectedAccountId = integrationMetadata.connectedAccountId as string;
+                  }
+                  if (integrationMetadata?.userId) {
+                    executionOptions.userId = integrationMetadata.userId as string;
+                  }
+                }
+
+                const result = await executeTool(cachedTool.provider, cachedTool.toolSlug, inputData, executionOptions);
 
                 if (!result.success) {
                   throw new MastraError({

@@ -226,19 +226,34 @@ function buildObjectSchema(schema: Record<string, unknown>): ZodType {
 
   for (const [key, propSchema] of Object.entries(properties)) {
     let zodProp = jsonSchemaToZod(propSchema);
+
+    // Preserve the property description for LLM context
+    const propDescription = propSchema.description as string | undefined;
+    if (propDescription) {
+      zodProp = zodProp.describe(propDescription);
+    }
+
     if (!required.includes(key)) {
       zodProp = zodProp.optional();
     }
     shape[key] = zodProp;
   }
 
-  const zodSchema = z.object(shape);
+  let zodSchema: ZodType = z.object(shape);
 
   // Handle additionalProperties
   if (additionalProperties === false) {
-    return zodSchema.strict();
+    zodSchema = (zodSchema as z.ZodObject<any>).strict();
   } else if (additionalProperties !== undefined && additionalProperties !== true) {
-    return zodSchema.catchall(jsonSchemaToZod(additionalProperties as Record<string, unknown>));
+    zodSchema = (zodSchema as z.ZodObject<any>).catchall(
+      jsonSchemaToZod(additionalProperties as Record<string, unknown>),
+    );
+  }
+
+  // Preserve the schema-level description
+  const schemaDescription = schema.description as string | undefined;
+  if (schemaDescription) {
+    zodSchema = zodSchema.describe(schemaDescription);
   }
 
   return zodSchema;
