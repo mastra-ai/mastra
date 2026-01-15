@@ -359,7 +359,7 @@
       "gateway": "models.dev"
     },
     "abacus": {
-      "url": "https://routellm.abacus.ai/v1/chat/completions",
+      "url": "https://routellm.abacus.ai/v1",
       "apiKeyEnvVar": "ABACUS_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Abacus",
