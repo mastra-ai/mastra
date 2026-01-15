@@ -4060,6 +4060,8 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 - Natural language understanding tasks
 - Nuanced context evaluation
 
+**What “prompt object” means:** Instead of a function, the step is an object with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`). That object tells Mastra to run the judge LLM for the step and store the structured output in `results.<step>StepResult`.
+
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
 ### Initializing a Scorer
@@ -4085,6 +4087,49 @@ const glutenCheckerScorer = createScorer({
 ```
 
 The judge configuration is only needed if you plan to use prompt objects in any step. Individual steps can override this default configuration with their own judge settings.
+
+If all steps are function-based, the judge is never called and there is no judge output. To see LLM output, define at least one step as a prompt object and read the corresponding step result (for example, `results.analyzeStepResult`).
+
+#### Minimal judge example (prompt object)
+
+This example uses a prompt object in `analyze`, so the judge runs and its structured output is available as `results.analyzeStepResult`.
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import { z } from "zod";
+
+const quoteSourcesScorer = createScorer({
+  id: "quote-sources",
+  description: "Check if the response includes sources",
+  judge: {
+    model: "openai/gpt-4.1-nano",
+    instructions: "You are a strict evaluator.",
+  },
+})
+  .analyze({
+    description: "Detect whether sources are present",
+    outputSchema: z.object({
+      hasSources: z.boolean(),
+      sources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => `
+Does the response contain sources? Extract them as a list.
+
+Response:
+${run.output}
+`,
+  })
+  .generateScore(({ results }) => (results.analyzeStepResult.hasSources ? 1 : 0));
+
+// Run the scorer and inspect judge output
+const result = await quoteSourcesScorer.run({
+  input: "What is the capital of France?",
+  output: "Paris is the capital of France [1]. Source: [1] Wikipedia",
+});
+
+console.log(result.score);              // 1
+console.log(result.analyzeStepResult);  // { hasSources: true, sources: ["Wikipedia"] }
+```
 
 #### Agent Type for Agent Evaluation
 
@@ -4425,8 +4470,6 @@ Provides human-readable explanations for the score using another LLM call.
 
 The reason generation step creates explanations that help users understand why a particular score was assigned, using both the boolean result and the specific gluten sources identified by the analysis step.
 
-````
-
 ## High gluten-free example
 
 ```typescript title="src/example-high-gluten-free.ts"
@@ -4438,7 +4481,7 @@ const result = await glutenCheckerScorer.run({
 console.log('Score:', result.score);
 console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
 console.log('Reason:', result.reason);
-````
+```
 
 ### High gluten-free output
 
@@ -5415,6 +5458,13 @@ Integrate Mastra with SvelteKit
     logo={<svg width="32" height="32" viewBox="0 0 85 107" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M27.5893 91.1365C22.7555 86.7178 21.3443 77.4335 23.3583 70.7072C26.8503 74.948 31.6888 76.2914 36.7005 77.0497C44.4374 78.2199 52.0358 77.7822 59.2231 74.2459C60.0453 73.841 60.8052 73.3027 61.7036 72.7574C62.378 74.714 62.5535 76.6892 62.3179 78.6996C61.7452 83.5957 59.3086 87.3778 55.4332 90.2448C53.8835 91.3916 52.2437 92.4167 50.6432 93.4979C45.7262 96.8213 44.3959 100.718 46.2435 106.386C46.2874 106.525 46.3267 106.663 46.426 107C43.9155 105.876 42.0817 104.24 40.6844 102.089C39.2086 99.8193 38.5065 97.3081 38.4696 94.5909C38.4511 93.2686 38.4511 91.9345 38.2733 90.6309C37.8391 87.4527 36.3471 86.0297 33.5364 85.9478C30.6518 85.8636 28.37 87.6469 27.7649 90.4554C27.7187 90.6707 27.6517 90.8837 27.5847 91.1341L27.5893 91.1365Z" fill="currentColor"/><path d="M0 69.5866C0 69.5866 14.3139 62.6137 28.6678 62.6137L39.4901 29.1204C39.8953 27.5007 41.0783 26.3999 42.4139 26.3999C43.7495 26.3999 44.9325 27.5007 45.3377 29.1204L56.1601 62.6137C73.1601 62.6137 84.8278 69.5866 84.8278 69.5866C84.8278 69.5866 60.5145 3.35233 60.467 3.21944C59.7692 1.2612 58.5911 0 57.0029 0H27.8274C26.2392 0 25.1087 1.2612 24.3634 3.21944C24.3108 3.34983 0 69.5866 0 69.5866Z" fill="currentColor"/></svg>}
   >
     Add AI agents to your Astro site
+  </CardGridItem>
+  <CardGridItem
+    title="Nuxt"
+    href="/guides/v1/getting-started/nuxt"
+    logo={<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 512 512" fill="none"><path d="M281.44 397.667H438.32C443.326 397.667 448.118 395.908 452.453 393.427C456.789 390.946 461.258 387.831 463.76 383.533C466.262 379.236 468.002 374.36 468 369.399C467.998 364.437 466.266 359.563 463.76 355.268L357.76 172.947C355.258 168.65 352.201 165.534 347.867 163.053C343.532 160.573 337.325 158.813 332.32 158.813C327.315 158.813 322.521 160.573 318.187 163.053C313.852 165.534 310.795 168.65 308.293 172.947L281.44 219.587L227.733 129.13C225.229 124.834 222.176 120.307 217.84 117.827C213.504 115.346 208.713 115 203.707 115C198.701 115 193.909 115.346 189.573 117.827C185.238 120.307 180.771 124.834 178.267 129.13L46.8267 355.268C44.3208 359.563 44.0022 364.437 44 369.399C43.9978 374.36 44.3246 379.235 46.8267 383.533C49.3288 387.83 53.7979 390.946 58.1333 393.427C62.4688 395.908 67.2603 397.667 72.2667 397.667H171.2C210.401 397.667 238.934 380.082 258.827 346.787L306.88 263.4L332.32 219.587L410.053 352.44H306.88L281.44 397.667ZM169.787 352.44H100.533L203.707 174.36L256 263.4L221.361 323.784C208.151 345.387 193.089 352.44 169.787 352.44Z" fill="#00DC82"/></svg>}
+  >
+    Integrate Mastra with Nuxt
   </CardGridItem>
   <CardGridItem
     title="Express"
@@ -9029,6 +9079,113 @@ new DefaultExporter({
 
 
 ---
+title: "Laminar Exporter | Tracing | Observability"
+description: "Send traces to Laminar for LLM observability, evaluation, and analysis"
+packages:
+  - "@mastra/laminar"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Laminar Exporter
+[EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/laminar
+
+[Laminar](https://www.lmnr.ai/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/laminar@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Laminar Project**: Create/select a project in Laminar
+2. **Project API Key**: Copy from Laminar Project Settings
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=lmnr_...
+
+# Optional
+LMNR_BASE_URL=https://api.lmnr.ai
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+LAMINAR_TEAM_ID=...
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [new LaminarExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [
+          new LaminarExporter({
+            apiKey: process.env.LMNR_PROJECT_API_KEY!,
+            baseUrl: process.env.LMNR_BASE_URL, // Optional
+            endpoint: process.env.LAMINAR_ENDPOINT, // Optional
+            realtime: process.env.NODE_ENV === "development", // Optional
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Using Tags
+
+Tags help you categorize and filter traces in the Laminar dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Laminar Documentation](https://docs.lmnr.ai)
+
+
+
+---
 title: "Langfuse Exporter | Tracing | Observability"
 description: "Send traces to Langfuse for LLM observability and analytics"
 packages:
@@ -9653,6 +9810,12 @@ new OtelExporter({
 });
 ```
 
+:::tip Laminar-Native Exporter
+
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/v1/observability/tracing/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+
+:::
+
 ### Datadog
 
 [Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
@@ -10090,10 +10253,11 @@ In addition to the internal exporters, Mastra supports integration with popular 
 
 - **[Arize](/docs/v1/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/v1/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -26775,6 +26939,514 @@ When you're ready, read more about how Mastra integrates with AI SDK UI and Next
 
 - Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
 - Deploy your agent to [Vercel](/guides/v1/deployment/vercel-deployer)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+
+
+---
+title: "Nuxt | Frameworks"
+description: "Get started with Mastra and Nuxt"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Integrate Mastra in your Nuxt project
+[EN] Source: https://mastra.ai/en/guides/getting-started/nuxt
+
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Nuxt by importing and calling the agent directly from your server routes.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience with Vue.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new Nuxt app (optional)
+
+If you already have a Nuxt app, skip to the next step.
+
+Run the following command to [create a new Nuxt app](https://nuxt.com/docs/getting-started/installation):
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm create nuxt@latest mastra-nuxt -- --template minimal --packageManager npm --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm create nuxt@latest mastra-nuxt --template minimal --packageManager pnpm --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn create nuxt@latest mastra-nuxt --template minimal --packageManager yarn --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun create nuxt@latest mastra-nuxt --template minimal --packageManager bun --gitInit --modules
+```
+
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-nuxt`, but you can replace it with any name you want.
+
+## Initialize Mastra
+
+`cd` into your Nuxt project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+cd mastra-nuxt
+npx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+cd mastra-nuxt
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+cd mastra-nuxt
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+cd mastra-nuxt
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your Nuxt server routes in the next steps.
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+</Tabs>
+
+## Create a chat route
+
+Create `server/api/chat.ts`:
+
+```ts title="server/api/chat.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '../../src/mastra';
+
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
+
+export default defineEventHandler(async (event) => {
+  const method = event.method;
+
+  if (method === 'POST') {
+    const params = await readBody(event);
+    const stream = await handleChatStream({
+      mastra,
+      agentId: 'weather-agent',
+      params: {
+        ...params,
+        memory: {
+          ...params.memory,
+          thread: THREAD_ID,
+          resource: RESOURCE_ID,
+        }
+      }
+    });
+
+    return createUIMessageStreamResponse({ stream });
+  }
+
+  if (method === 'GET') {
+    const memory = await mastra.getAgentById('weather-agent').getMemory();
+    let response = null;
+
+    try {
+      response = await memory?.recall({
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      });
+    } catch {
+      console.log('No previous messages found.');
+    }
+
+    const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+    return uiMessages;
+  }
+});
+```
+
+The `POST` handler accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` handler fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Add the chat UI
+
+Replace the contents of `app/app.vue` with the following:
+
+```html title="app/app.vue"
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { Chat } from "@ai-sdk/vue";
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+const chat = new Chat({
+  transport: new DefaultChatTransport({
+    api: '/api/chat',
+  }),
+})
+
+const STATE_TO_LABEL_MAP: Record<string, string> = {
+  'input-streaming': 'Pending',
+  'input-available': 'Running',
+  'output-available': 'Completed',
+  'output-error': 'Error',
+  'output-denied': 'Denied',
+};
+
+const input = ref('');
+
+onMounted(async () => {
+  const res = await fetch('/api/chat');
+  const data = await res.json();
+  chat.messages = [...data];
+});
+
+function handleSubmit() {
+  if (!input.value.trim()) return;
+
+  chat.sendMessage({ text: input.value });
+  input.value = '';
+}
+</script>
+
+<template>
+  <div class="chat-container">
+    <div class="messages">
+      <div v-for="message in chat.messages" :key="message.id" class="message-wrapper">
+        <div
+          v-for="(part, i) in message.parts"
+          :key="`${message.id}-${i}`"
+        >
+          <div
+            v-if="part.type === 'text'"
+            :class="['message', message.role]"
+          >
+            <div class="message-content">
+              {{ part.text }}
+            </div>
+          </div>
+
+          <details
+            v-else-if="part.type?.startsWith('tool-')"
+            class="tool"
+          >
+            <summary class="tool-header">
+              {{ (part as ToolUIPart).type?.split('-').slice(1).join('-') }} -
+              {{ STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available'] }}
+            </summary>
+            <div class="tool-content">
+              <div class="tool-section">
+                <div class="tool-label">Parameters</div>
+                <pre><code>{{ JSON.stringify((part as ToolUIPart).input, null, 2) }}</code></pre>
+              </div>
+              <div class="tool-section">
+                <div class="tool-label">
+                  {{ (part as ToolUIPart).errorText ? 'Error' : 'Result' }}
+                </div>
+                <pre><code>{{ JSON.stringify((part as ToolUIPart).output, null, 2) }}</code></pre>
+                <div v-if="(part as ToolUIPart).errorText" class="tool-error">
+                  {{ (part as ToolUIPart).errorText }}
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <form class="input-form" @submit.prevent="handleSubmit">
+      <input
+        v-model="input"
+        type="text"
+        placeholder="Ask about the weather..."
+        :disabled="chat.status !== 'ready'"
+        class="chat-input"
+      />
+      <button type="submit" class="submit-button" :disabled="chat.status !== 'ready'">
+        Send
+      </button>
+    </form>
+  </div>
+</template>
+
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+*:not(dialog) {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    interpolate-size: allow-keywords;
+  }
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+p {
+  text-wrap: pretty;
+}
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
+.chat-container {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.message {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.message.user {
+  background-color: #3b82f6;
+  color: white;
+  margin-left: auto;
+  max-width: 60%;
+}
+
+.message.assistant {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  max-width: 80%;
+}
+
+.tool {
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.tool-header {
+  padding: 0.75rem 1rem;
+  background-color: #f9fafb;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.tool-content {
+  padding: 1rem;
+  border-top: 1px solid #d1d5db;
+}
+
+.tool-section {
+  margin-bottom: 1rem;
+}
+
+.tool-section:last-child {
+  margin-bottom: 0;
+}
+
+.tool-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.tool pre {
+  background-color: #f3f4f6;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+
+.tool-error {
+  color: #dc2626;
+  margin-top: 0.5rem;
+}
+
+.input-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 1rem;
+}
+
+.chat-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.chat-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.submit-button {
+  padding: 0.75rem 1.5rem;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.submit-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+</style>
+```
+
+This component connects [`Chat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using custom message styling and shows any tool invocations in a collapsible details element.
+
+## Test your agent
+
+1. Run your Nuxt app with `npm run dev`
+2. Open the chat at http://localhost:3000
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+
+## Next steps
+
+Congratulations on building your Mastra agent with Nuxt! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and Nuxt, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
 - Deploy your agent [anywhere](/docs/v1/deployment/overview)
 
 
@@ -72849,6 +73521,8 @@ Mastra provides a unified `createScorer` factory that allows you to define custo
 
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
+**Prompt object steps** are step configurations expressed as objects with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`). These steps invoke the judge LLM. **Function steps** are plain functions and never call the judge.
+
 ```typescript
 import { createScorer } from "@mastra/core/evals";
 
@@ -72935,6 +73609,10 @@ This function returns a scorer builder that you can chain step methods onto. See
     },
   ]}
 />
+
+The judge only runs for steps defined as **prompt objects** (`preprocess`, `analyze`, `generateScore`, `generateReason` in prompt mode). If you use function steps only, the judge is never called and there is no LLM output to inspect. In that case, any score/reason must be produced by your functions.
+
+When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult`, `analyzeStepResult`, or the value consumed by `calculateScore` in `generateScore`).
 
 ## Type Safety
 
@@ -80500,6 +81178,148 @@ const customExporter = new DefaultExporter({
 
 - [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
 - [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions
+
+
+---
+title: "Reference: LaminarExporter | Observability"
+description: Laminar exporter for Tracing
+packages:
+  - "@mastra/laminar"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LaminarExporter
+[EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/laminar
+
+Sends Tracing data to Laminar via OTLP/HTTP (protobuf).
+
+## Constructor
+
+```typescript
+new LaminarExporter(config?: LaminarExporterConfig)
+```
+
+## LaminarExporterConfig
+
+```typescript
+interface LaminarExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  endpoint?: string;
+  teamId?: string;
+  headers?: Record<string, string>;
+  realtime?: boolean;
+  disableBatch?: boolean;
+  batchSize?: number;
+  timeoutMillis?: number;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "baseUrl",
+      type: "string",
+      description: "Laminar base URL (used for trace exports + scoring). Falls back to LMNR_BASE_URL env var (default: https://api.lmnr.ai).",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "OTLP/HTTP traces endpoint (ends with /v1/traces). Falls back to LAMINAR_ENDPOINT env var (default: `${baseUrl}/v1/traces`).",
+      required: false,
+    },
+    {
+      name: "teamId",
+      type: "string",
+      description: "Optional backwards-compat header. Falls back to LAMINAR_TEAM_ID env var.",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "Additional headers to include in OTLP requests (merged with Authorization/team header).",
+      required: false,
+    },
+    {
+      name: "realtime",
+      type: "boolean",
+      description: "Flush after each span for immediate visibility (default: false).",
+      required: false,
+    },
+    {
+      name: "disableBatch",
+      type: "boolean",
+      description: "Disable batching (SimpleSpanProcessor). Default: false.",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "Max spans per batch (BatchSpanProcessor). Default: 512.",
+      required: false,
+    },
+    {
+      name: "timeoutMillis",
+      type: "number",
+      description: "OTLP export timeout in milliseconds. Default: 30000.",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to Laminar.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending data and shuts down the exporter.
+
+## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { LaminarExporter } from "@mastra/laminar";
+
+// Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT, LAMINAR_TEAM_ID
+const exporter = new LaminarExporter();
+```
+
+### Explicit Configuration
+
+```typescript
+import { LaminarExporter } from "@mastra/laminar";
+
+const exporter = new LaminarExporter({
+  apiKey: process.env.LMNR_PROJECT_API_KEY,
+  baseUrl: "https://api.lmnr.ai",
+  realtime: true,
+});
+```
+
 
 
 ---
