@@ -334,6 +334,39 @@ export function createBasicOperationsTest(config: VectorTestConfig) {
         expect(results[0]).toHaveProperty('id');
         expect(results[0]).toHaveProperty('score');
       });
+
+      it('should include vectors in results when includeVector is true', async () => {
+        const results = await config.vector.query({
+          indexName: queryTestIndex,
+          queryVector: createVector(1),
+          topK: 3,
+          includeVector: true,
+        });
+
+        // Should return results with vectors
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result).toHaveProperty('vector');
+          expect(Array.isArray(result.vector)).toBe(true);
+          expect(result.vector?.length).toBeGreaterThan(0);
+        });
+      });
+
+      it('should not include vectors in results when includeVector is false', async () => {
+        const results = await config.vector.query({
+          indexName: queryTestIndex,
+          queryVector: createVector(1),
+          topK: 3,
+          includeVector: false,
+        });
+
+        // Should return results without vectors
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          // Vector should be undefined or not present
+          expect(result.vector).toBeUndefined();
+        });
+      });
     });
   });
 }

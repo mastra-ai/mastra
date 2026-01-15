@@ -733,8 +733,10 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Search API Tests
   it('should search an index successfully', async () => {
     const results = await cloudVector.hybridSearch({
       indexName: testIndexName,
-      queryVector: [1.0, 0.0, 0.0],
-      topK: 2,
+      search: {
+        query_embedding: [1.0, 0.0, 0.0],
+        n_results: 2,
+      },
     });
 
     expect(results).toBeDefined();
@@ -744,5 +746,58 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Search API Tests
     expect(results[0]).toHaveProperty('id');
     expect(results[0]).toHaveProperty('score');
     expect(results[0]).toHaveProperty('metadata');
+  }, 10000);
+
+  it('should search with where clause for metadata filtering', async () => {
+    const results = await cloudVector.hybridSearch({
+      indexName: testIndexName,
+      search: {
+        query_embedding: [1.0, 0.0, 0.0],
+        n_results: 10,
+        where: { category: 'x' },
+      },
+    });
+
+    expect(results).toBeDefined();
+    expect(results.length).toBe(1);
+    expect(results[0]?.metadata?.category).toBe('x');
+  }, 10000);
+
+  it('should search with knn parameter for vector similarity', async () => {
+    const results = await cloudVector.hybridSearch({
+      indexName: testIndexName,
+      search: {
+        query_embedding: [1.0, 0.0, 0.0],
+        n_results: 3,
+        knn: {
+          embedding: [1.0, 0.0, 0.0],
+          n_neighbors: 2,
+        },
+      },
+    });
+
+    expect(results).toBeDefined();
+    expect(results.length).toBeGreaterThan(0);
+  }, 10000);
+
+  it('should search with combined where clause and knn parameters', async () => {
+    const results = await cloudVector.hybridSearch({
+      indexName: testIndexName,
+      search: {
+        query_embedding: [0.0, 1.0, 0.0],
+        n_results: 10,
+        where: { $or: [{ category: 'x' }, { category: 'y' }] },
+        knn: {
+          embedding: [0.0, 1.0, 0.0],
+          n_neighbors: 2,
+        },
+      },
+    });
+
+    expect(results).toBeDefined();
+    expect(results.length).toBeGreaterThan(0);
+    results.forEach(result => {
+      expect(['x', 'y']).toContain(result.metadata?.category);
+    });
   }, 10000);
 });
