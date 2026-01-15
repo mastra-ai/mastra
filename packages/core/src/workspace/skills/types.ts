@@ -5,7 +5,7 @@
  * @see https://github.com/anthropics/skills
  */
 
-import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../artifacts';
+import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../../artifacts';
 
 /**
  * Skill source types indicating where the skill comes from and its access level.

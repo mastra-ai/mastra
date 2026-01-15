@@ -57,8 +57,8 @@ import {
   type SearchResult,
   type IndexDocument,
 } from './search-engine';
-import type { WorkspaceSkills } from './skill-types';
-import { WorkspaceSkillsImpl } from './workspace-skills';
+import type { WorkspaceSkills } from './skills';
+import { WorkspaceSkillsImpl } from './skills';
 
 // =============================================================================
 // Workspace Scope

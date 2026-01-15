@@ -1,6 +1,15 @@
+/**
+ * Workspace Handler Schemas
+ *
+ * Zod schemas specific to workspace handlers including skills schemas.
+ */
+
 import z from 'zod';
 
-// Path parameter schemas
+// =============================================================================
+// Skills Path Parameter Schemas
+// =============================================================================
+
 export const skillNamePathParams = z.object({
   skillName: z.string().describe('Skill name identifier'),
 });
@@ -9,7 +18,10 @@ export const skillReferencePathParams = skillNamePathParams.extend({
   referencePath: z.string().describe('Reference file path (URL encoded)'),
 });
 
-// Query parameter schemas
+// =============================================================================
+// Skills Query Parameter Schemas
+// =============================================================================
+
 export const searchSkillsQuerySchema = z.object({
   query: z.string().describe('Search query text'),
   topK: z.coerce.number().optional().default(5).describe('Maximum number of results'),
@@ -18,7 +30,10 @@ export const searchSkillsQuerySchema = z.object({
   includeReferences: z.coerce.boolean().optional().default(true).describe('Include reference files in search'),
 });
 
-// Response schemas
+// =============================================================================
+// Skills Response Schemas
+// =============================================================================
+
 export const skillMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -45,7 +60,7 @@ export const skillSchema = skillMetadataSchema.extend({
 
 export const listSkillsResponseSchema = z.object({
   skills: z.array(skillMetadataSchema),
-  isSkillsConfigured: z.boolean().describe('Whether a Skills instance is registered with Mastra'),
+  isSkillsConfigured: z.boolean().describe('Whether skills are configured in the workspace'),
 });
 
 export const getSkillResponseSchema = skillSchema;

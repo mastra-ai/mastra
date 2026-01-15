@@ -1,40 +1,45 @@
+/**
+ * Workspace Skills Handlers
+ *
+ * Provides REST API for workspace skills operations.
+ * Skills are now accessed via workspace.skills instead of a standalone Skills class.
+ */
+
 import type { WorkspaceSkills } from '@mastra/core/workspace';
-import { HTTPException } from '../http-exception';
-import { agentSkillPathParams } from '../schemas/agents';
+import { HTTPException } from '../../http-exception';
+import { createRoute } from '../../server-adapter/routes/route-builder';
+import { handleError } from '../error';
 import {
   skillNamePathParams,
   skillReferencePathParams,
   searchSkillsQuerySchema,
   listSkillsResponseSchema,
   getSkillResponseSchema,
-  getAgentSkillResponseSchema,
   skillReferenceResponseSchema,
   listReferencesResponseSchema,
   searchSkillsResponseSchema,
-} from '../schemas/skills';
-import { createRoute } from '../server-adapter/routes/route-builder';
-import { handleError } from './error';
+} from './schemas';
 
 /**
  * Get the skills instance from Mastra's workspace.
- * Returns null if no workspace or skills are configured.
+ * Returns undefined if no workspace or skills are configured.
  */
 function getSkills(mastra: any): WorkspaceSkills | undefined {
   return mastra.getWorkspace?.()?.skills;
 }
 
-// ============================================================================
-// Route Definitions
-// ============================================================================
+// =============================================================================
+// Skills Routes (under /api/workspace/skills)
+// =============================================================================
 
-export const LIST_SKILLS_ROUTE = createRoute({
+export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/skills',
+  path: '/api/workspace/skills',
   responseType: 'json',
   responseSchema: listSkillsResponseSchema,
   summary: 'List all skills',
   description: 'Returns a list of all discovered skills with their metadata',
-  tags: ['Skills'],
+  tags: ['Workspace', 'Skills'],
   handler: async ({ mastra }) => {
     try {
       const skills = getSkills(mastra);
@@ -61,15 +66,15 @@ export const LIST_SKILLS_ROUTE = createRoute({
   },
 });
 
-export const GET_SKILL_ROUTE = createRoute({
+export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/skills/:skillName',
+  path: '/api/workspace/skills/:skillName',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   responseSchema: getSkillResponseSchema,
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
-  tags: ['Skills'],
+  tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, skillName }) => {
     try {
       if (!skillName) {
@@ -106,15 +111,15 @@ export const GET_SKILL_ROUTE = createRoute({
   },
 });
 
-export const LIST_SKILL_REFERENCES_ROUTE = createRoute({
+export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/skills/:skillName/references',
+  path: '/api/workspace/skills/:skillName/references',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   responseSchema: listReferencesResponseSchema,
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
-  tags: ['Skills'],
+  tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, skillName }) => {
     try {
       if (!skillName) {
@@ -143,15 +148,15 @@ export const LIST_SKILL_REFERENCES_ROUTE = createRoute({
   },
 });
 
-export const GET_SKILL_REFERENCE_ROUTE = createRoute({
+export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/skills/:skillName/references/:referencePath',
+  path: '/api/workspace/skills/:skillName/references/:referencePath',
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
   responseSchema: skillReferenceResponseSchema,
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
-  tags: ['Skills'],
+  tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, skillName, referencePath }) => {
     try {
       if (!skillName || !referencePath) {
@@ -182,15 +187,15 @@ export const GET_SKILL_REFERENCE_ROUTE = createRoute({
   },
 });
 
-export const SEARCH_SKILLS_ROUTE = createRoute({
+export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/skills/search',
+  path: '/api/workspace/skills/search',
   responseType: 'json',
   queryParamSchema: searchSkillsQuerySchema,
   responseSchema: searchSkillsResponseSchema,
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
-  tags: ['Skills'],
+  tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences }) => {
     try {
       if (!query) {
@@ -232,58 +237,13 @@ export const SEARCH_SKILLS_ROUTE = createRoute({
   },
 });
 
-// ============================================================================
-// Agent Skill Routes
-// ============================================================================
-
-export const GET_AGENT_SKILL_ROUTE = createRoute({
-  method: 'GET',
-  path: '/api/agents/:agentId/skills/:skillName',
-  responseType: 'json',
-  pathParamSchema: agentSkillPathParams,
-  responseSchema: getAgentSkillResponseSchema,
-  summary: 'Get agent skill',
-  description: 'Returns details for a specific skill available to the agent',
-  tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName }) => {
-    try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
-
-      if (!skillName) {
-        throw new HTTPException(400, { message: 'Skill name is required' });
-      }
-
-      // Get workspace from agent (may be agent-specific or inherited from Mastra)
-      const workspace = await agent.getWorkspace();
-      const skills = workspace?.skills;
-      if (!skills) {
-        throw new HTTPException(404, { message: 'No skills configured for this agent' });
-      }
-
-      const skill = await skills.get(skillName);
-      if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found for this agent` });
-      }
-
-      return {
-        name: skill.name,
-        description: skill.description,
-        license: skill.license,
-        compatibility: skill.compatibility,
-        metadata: skill.metadata,
-        allowedTools: skill.allowedTools,
-        path: skill.path,
-        instructions: skill.instructions,
-        source: skill.source,
-        references: skill.references,
-        scripts: skill.scripts,
-        assets: skill.assets,
-      };
-    } catch (error) {
-      return handleError(error, 'Error getting agent skill');
-    }
-  },
-});
+// Export all skills routes
+// IMPORTANT: Search route must come before the parameterized routes
+// to avoid /api/workspace/skills/search being matched as /api/workspace/skills/:skillName
+export const WORKSPACE_SKILLS_ROUTES = [
+  WORKSPACE_SEARCH_SKILLS_ROUTE,
+  WORKSPACE_LIST_SKILLS_ROUTE,
+  WORKSPACE_GET_SKILL_ROUTE,
+  WORKSPACE_LIST_SKILL_REFERENCES_ROUTE,
+  WORKSPACE_GET_SKILL_REFERENCE_ROUTE,
+];

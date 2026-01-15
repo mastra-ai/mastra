@@ -15,8 +15,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
-  Knowledge,
-  SkillResource,
+  Workspace,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -56,12 +55,6 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
-  ListKnowledgeNamespacesResponse,
-  CreateKnowledgeNamespaceParams,
-  KnowledgeNamespace,
-  ListSkillsResponse,
-  SearchSkillsParams,
-  SearchSkillsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -788,82 +781,14 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
-  // Knowledge
+  // Workspace
   // ============================================================================
 
   /**
-   * Lists all knowledge namespaces
-   * @returns Promise containing list of namespaces
+   * Gets the workspace resource for filesystem, search, and skills operations
+   * @returns Workspace instance
    */
-  public listKnowledgeNamespaces(): Promise<ListKnowledgeNamespacesResponse> {
-    return this.request('/api/knowledge/namespaces');
-  }
-
-  /**
-   * Creates a new knowledge namespace
-   * @param params - Namespace configuration
-   * @returns Promise containing the created namespace
-   */
-  public createKnowledgeNamespace(params: CreateKnowledgeNamespaceParams): Promise<KnowledgeNamespace> {
-    return this.request('/api/knowledge/namespaces', {
-      method: 'POST',
-      body: params,
-    });
-  }
-
-  /**
-   * Gets a knowledge namespace instance for further operations
-   * @param namespace - Namespace identifier
-   * @returns Knowledge instance
-   */
-  public getKnowledge(namespace: string): Knowledge {
-    return new Knowledge(this.options, namespace);
-  }
-
-  // ============================================================================
-  // Skills
-  // ============================================================================
-
-  /**
-   * Lists all discovered skills
-   * @returns Promise containing list of skills with metadata
-   */
-  public listSkills(): Promise<ListSkillsResponse> {
-    return this.request('/api/skills');
-  }
-
-  /**
-   * Searches across all skills content
-   * @param params - Search parameters
-   * @returns Promise containing search results
-   */
-  public searchSkills(params: SearchSkillsParams): Promise<SearchSkillsResponse> {
-    const searchParams = new URLSearchParams();
-
-    searchParams.set('query', params.query);
-
-    if (params.topK !== undefined) {
-      searchParams.set('topK', String(params.topK));
-    }
-    if (params.minScore !== undefined) {
-      searchParams.set('minScore', String(params.minScore));
-    }
-    if (params.skillNames && params.skillNames.length > 0) {
-      searchParams.set('skillNames', params.skillNames.join(','));
-    }
-    if (params.includeReferences !== undefined) {
-      searchParams.set('includeReferences', String(params.includeReferences));
-    }
-
-    return this.request(`/api/skills/search?${searchParams.toString()}`);
-  }
-
-  /**
-   * Gets a skill instance for further operations
-   * @param skillName - Skill name identifier
-   * @returns SkillResource instance
-   */
-  public getSkill(skillName: string): SkillResource {
-    return new SkillResource(this.options, skillName);
+  public getWorkspace(): Workspace {
+    return new Workspace(this.options);
   }
 }

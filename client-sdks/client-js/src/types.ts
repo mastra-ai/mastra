@@ -699,113 +699,107 @@ export interface GetSystemPackagesResponse {
 }
 
 // ============================================================================
-// Knowledge Types
+// Workspace Types
 // ============================================================================
 
 /**
- * Knowledge namespace metadata
+ * Workspace capabilities
  */
-export interface KnowledgeNamespace {
-  namespace: string;
-  description?: string;
-  artifactCount: number;
-  createdAt: string;
-  updatedAt: string;
-  hasBM25: boolean;
-  hasVector: boolean;
+export interface WorkspaceCapabilities {
+  hasFilesystem: boolean;
+  hasSandbox: boolean;
+  canBM25: boolean;
+  canVector: boolean;
+  canHybrid: boolean;
+  hasSkills: boolean;
 }
 
 /**
- * Response for listing knowledge namespaces
+ * Response for getting workspace info
  */
-export interface ListKnowledgeNamespacesResponse {
-  namespaces: KnowledgeNamespace[];
+export interface WorkspaceInfoResponse {
+  isWorkspaceConfigured: boolean;
+  id?: string;
+  name?: string;
+  status?: string;
+  capabilities?: WorkspaceCapabilities;
 }
 
 /**
- * Parameters for creating a knowledge namespace
+ * File entry in directory listing
  */
-export interface CreateKnowledgeNamespaceParams {
-  namespace: string;
-  description?: string;
-  enableBM25?: boolean;
-  vectorConfig?: {
-    vectorStoreName: string;
-    indexName: string;
-    embedderName?: string;
-  };
+export interface WorkspaceFileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
 }
 
 /**
- * Knowledge artifact metadata
+ * Response for reading a file
  */
-export interface KnowledgeArtifact {
-  key: string;
-  type: 'text' | 'file' | 'image';
+export interface WorkspaceFsReadResponse {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
   size?: number;
   mimeType?: string;
+}
+
+/**
+ * Response for writing a file
+ */
+export interface WorkspaceFsWriteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for listing files
+ */
+export interface WorkspaceFsListResponse {
+  path: string;
+  entries: WorkspaceFileEntry[];
+}
+
+/**
+ * Response for deleting a file
+ */
+export interface WorkspaceFsDeleteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for creating a directory
+ */
+export interface WorkspaceFsMkdirResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for getting file stats
+ */
+export interface WorkspaceFsStatResponse {
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
   createdAt?: string;
-  metadata?: Record<string, unknown>;
+  modifiedAt?: string;
+  mimeType?: string;
 }
 
 /**
- * Response for listing knowledge artifacts
+ * Workspace search result
  */
-export interface ListKnowledgeArtifactsResponse {
-  artifacts: KnowledgeArtifact[];
-  namespace: string;
-}
-
-/**
- * Parameters for listing knowledge artifacts
- */
-export interface ListKnowledgeArtifactsParams {
-  prefix?: string;
-}
-
-/**
- * Response for getting artifact content
- */
-export interface GetKnowledgeArtifactResponse {
-  key: string;
-  content: string;
-  type: 'text' | 'file' | 'image';
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Parameters for adding a text artifact
- */
-export interface AddKnowledgeArtifactParams {
-  key: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Response for adding an artifact
- */
-export interface AddKnowledgeArtifactResponse {
-  success: boolean;
-  key: string;
-}
-
-/**
- * Response for deleting an artifact
- */
-export interface DeleteKnowledgeArtifactResponse {
-  success: boolean;
-  key: string;
-}
-
-/**
- * Knowledge search result
- */
-export interface KnowledgeSearchResult {
-  key: string;
+export interface WorkspaceSearchResult {
+  id: string;
   content: string;
   score: number;
-  metadata?: Record<string, unknown>;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
   scoreDetails?: {
     vector?: number;
     bm25?: number;
@@ -813,32 +807,47 @@ export interface KnowledgeSearchResult {
 }
 
 /**
- * Parameters for searching knowledge
+ * Parameters for searching workspace content
  */
-export interface SearchKnowledgeParams {
+export interface WorkspaceSearchParams {
   query: string;
   topK?: number;
+  mode?: 'bm25' | 'vector' | 'hybrid';
   minScore?: number;
-  mode?: 'vector' | 'bm25' | 'hybrid';
-  vectorWeight?: number;
 }
 
 /**
- * Response for searching knowledge
+ * Response for searching workspace
  */
-export interface SearchKnowledgeResponse {
-  results: KnowledgeSearchResult[];
+export interface WorkspaceSearchResponse {
+  results: WorkspaceSearchResult[];
   query: string;
-  mode: 'vector' | 'bm25' | 'hybrid';
-  namespace: string;
+  mode: 'bm25' | 'vector' | 'hybrid';
 }
 
 /**
- * Response for deleting a namespace
+ * Parameters for indexing content
  */
-export interface DeleteKnowledgeNamespaceResponse {
+export interface WorkspaceIndexParams {
+  path: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for indexing content
+ */
+export interface WorkspaceIndexResponse {
   success: boolean;
-  namespace: string;
+  path: string;
+}
+
+/**
+ * Response for unindexing content
+ */
+export interface WorkspaceUnindexResponse {
+  success: boolean;
+  path: string;
 }
 
 // ============================================================================

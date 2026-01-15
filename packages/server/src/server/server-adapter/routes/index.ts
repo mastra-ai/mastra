@@ -7,20 +7,19 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
-import { KNOWLEDGE_ROUTES } from './knowledge';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
-import { SKILLS_ROUTES } from './skills';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
+import { WORKSPACE_ROUTES } from './workspace';
 
 /**
  * Server context fields that are available to route handlers.
@@ -99,8 +98,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
-  ...KNOWLEDGE_ROUTES,
-  ...SKILLS_ROUTES,
+  ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,

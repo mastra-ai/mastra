@@ -8,10 +8,10 @@
 
 import matter from 'gray-matter';
 
-import type { ContentSource } from '../artifacts';
+import type { ContentSource } from '../../artifacts';
 
-import type { SearchEngine } from './search-engine';
-import { parseAllowedTools, validateSkillMetadata } from './skill-schemas';
+import type { SearchEngine } from '../search-engine';
+import { parseAllowedTools, validateSkillMetadata } from './schemas';
 import type {
   Skill,
   SkillMetadata,
@@ -21,8 +21,8 @@ import type {
   UpdateSkillInput,
   WorkspaceSkills,
   SkillSource,
-} from './skill-types';
-import type { WorkspaceFilesystem } from './filesystem';
+} from './types';
+import type { WorkspaceFilesystem } from '../filesystem';
 
 // =============================================================================
 // Internal Types

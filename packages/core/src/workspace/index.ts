@@ -168,7 +168,7 @@ export {
 } from './bm25';
 
 // =============================================================================
-// Skills Types (for workspace.skills)
+// Skills (types, schemas, and implementation)
 // =============================================================================
 
 export type {
@@ -181,11 +181,7 @@ export type {
   CreateSkillInput,
   UpdateSkillInput,
   WorkspaceSkills,
-} from './skill-types';
-
-// =============================================================================
-// Skills Validation Schemas
-// =============================================================================
+} from './skills';
 
 export {
   SKILL_LIMITS,
@@ -201,10 +197,6 @@ export {
   type SkillMetadataInput,
   type SkillMetadataOutput,
   type SkillValidationResult,
-} from './skill-schemas';
-
-// =============================================================================
-// WorkspaceSkills Implementation
-// =============================================================================
-
-export { WorkspaceSkillsImpl, type WorkspaceSkillsImplConfig } from './workspace-skills';
+  WorkspaceSkillsImpl,
+  type WorkspaceSkillsImplConfig,
+} from './skills';

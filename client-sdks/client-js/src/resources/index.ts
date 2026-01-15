@@ -9,5 +9,4 @@ export * from './mcp-tool';
 export * from './agent-builder';
 export * from './observability';
 export * from './stored-agent';
-export * from './knowledge';
-export * from './skill';
+export * from './workspace';
