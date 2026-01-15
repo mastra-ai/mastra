@@ -97,7 +97,6 @@ async function executeToolCallAndRespond<OUTPUT>({
             ],
           },
         ] as MessageListInput;
-        console.log('updatedMessages', updatedMessages);
 
         return respondFn(updatedMessages, params);
       }
