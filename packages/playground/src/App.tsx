@@ -51,6 +51,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
+import { OAuthCallback } from './pages/oauth/callback';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -105,6 +106,9 @@ function App() {
         <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>
             <Routes>
+              {/* OAuth callback - standalone page without layout */}
+              <Route path="/oauth/callback" element={<OAuthCallback />} />
+
               {/* Workflow builder - full screen without layout */}
               <Route path="/workflows/:workflowId/edit" element={<WorkflowEdit />} />
 

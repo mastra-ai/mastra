@@ -3043,6 +3043,9 @@ importers:
       '@lukeed/uuid':
         specifier: ^2.0.1
         version: 2.0.1
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.20.1
+        version: 1.20.1
       '@pierre/diffs':
         specifier: ^1.0.4
         version: 1.0.5(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -3394,6 +3397,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@smithery/sdk':
+        specifier: ^4.0.1
+        version: 4.0.1(@modelcontextprotocol/sdk@1.20.1)(zod@3.25.76)
       hono:
         specifier: ^4.11.3
         version: 4.11.3
@@ -10914,6 +10920,12 @@ packages:
   '@sindresorhus/transliterate@1.6.0':
     resolution: {integrity: sha512-doH1gimEu3A46VX6aVxpHTeHrytJAG6HgdxntYnCFiIFHEM/ZGpG8KiZGBChchjQmG0XFIBL552kBTjVcMZXwQ==}
     engines: {node: '>=12'}
+
+  '@smithery/sdk@4.0.1':
+    resolution: {integrity: sha512-u5lZYSzXLP72AJuOro4WLfcmn9X8exE75zcl9CbUb5Ydi/uIiMUr3vu8qzZ6/hXYI51wpiclQ8J4OYEKKOtYGQ==}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': ^1.25.1
+      zod: ^4
 
   '@smithy/abort-controller@4.2.3':
     resolution: {integrity: sha512-xWL9Mf8b7tIFuAlpjKtRPnHrR8XVrwTj5NPYO/QwZPtc0SDLsPxb56V5tzi5yspSMytISHybifez+4jlrx0vkQ==}
@@ -25100,6 +25112,11 @@ snapshots:
     dependencies:
       escape-string-regexp: 5.0.0
 
+  '@smithery/sdk@4.0.1(@modelcontextprotocol/sdk@1.20.1)(zod@3.25.76)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.20.1
+      zod: 3.25.76
+
   '@smithy/abort-controller@4.2.3':
     dependencies:
       '@smithy/types': 4.8.0
@@ -26582,7 +26599,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.13.17)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+      vitest: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@1.21.7)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.13.17)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   '@vitest/utils@3.2.4':
     dependencies:

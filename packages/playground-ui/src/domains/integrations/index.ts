@@ -5,3 +5,4 @@
 export * from './components';
 export * from './hooks';
 export * from './types';
+export * from './lib/smithery-oauth-provider';

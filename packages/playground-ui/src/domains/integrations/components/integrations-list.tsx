@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Plug2, Trash2, Loader2, Wrench, Check, Search, Pencil, X } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
@@ -21,7 +21,7 @@ import { toast } from '@/lib/toast';
 
 import { IntegrationCard } from './integration-card';
 import { AddToolsDialog } from './add-tools-dialog';
-import { useIntegrations, useIntegrationMutations, useProviderTools } from '../hooks';
+import { useIntegrations, useIntegrationMutations, useProviderTools, useOAuthCallback } from '../hooks';
 import { useTools } from '../../tools/hooks';
 import type { IntegrationConfig } from '@mastra/client-js';
 
@@ -60,6 +60,16 @@ export function IntegrationsList({
 
   const [editingIntegration, setEditingIntegration] = useState<IntegrationConfig | null>(null);
   const { data, isLoading, refetch } = useIntegrations();
+
+  // Detect OAuth callback and auto-open dialog
+  const { isReturningFromOAuth } = useOAuthCallback();
+
+  useEffect(() => {
+    if (isReturningFromOAuth) {
+      // Auto-open the dialog when returning from OAuth
+      setIsAddDialogOpen(true);
+    }
+  }, [isReturningFromOAuth]);
 
   const integrations = data?.integrations || [];
   const hasIntegrations = integrations.length > 0;

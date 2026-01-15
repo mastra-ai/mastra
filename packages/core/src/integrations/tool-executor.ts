@@ -452,7 +452,9 @@ export async function executeTool(
       });
 
     case 'mcp':
-      // MCP tool execution requires the @mastra/mcp package which is not available in core.
+    case 'smithery':
+      // MCP/Smithery tool execution requires the @mastra/mcp package which is not available in core.
+      // Smithery servers are MCP servers under the hood.
       // Use executeMCPTool from @mastra/server/handlers/mcp-tool-provider instead.
       if (!options?.mcp?.url) {
         return {
