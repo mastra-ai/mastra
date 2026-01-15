@@ -1162,3 +1162,54 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 021 - Update agent form to include scorers picker - COMPLETED
+==================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Added scorers field to AgentFormValues interface in form-validation.ts
+- Added Zod schema validation for scorers (Record<string, ScorerConfig>)
+- Imported ScorersPicker component into agent-form.tsx
+- Imported useScorers hook for fetching available scorers
+- Added scorers to form defaultValues (empty object {})
+- Transformed scorers data into options format for ScorersPicker
+- Added ScorersPicker component in Advanced Settings section after Memory
+- Updated isLoading check to include scorersLoading
+
+Files modified:
+- packages/playground-ui/src/domains/agents/components/create-agent/form-validation.ts
+  * Added scoringSamplingConfigSchema, scorerConfigSchema
+  * Added scorers field to agentFormSchema as optional Record<string, ScorerConfig>
+  
+- packages/playground-ui/src/domains/agents/components/create-agent/agent-form.tsx
+  * Imported ScorersPicker component
+  * Imported useScorers hook
+  * Added scorers data fetching with useScorers()
+  * Added scorers to defaultValues initialization
+  * Created scorerOptions useMemo to transform scorers data
+  * Added ScorersPicker in Advanced Settings after Memory section
+  * Updated isLoading to include scorersLoading
+
+Key implementation details:
+- Scorers field is optional and defaults to empty object {}
+- ScorersPicker receives scorerOptions, selected value from form field
+- Disabled state tied to scorersLoading
+- No error prop passed (complex nested structure not easily displayed)
+- Follows exact same pattern as other pickers (tools, workflows, agents, memory)
+
+Verification:
+- cd packages/playground-ui && pnpm tsc --noEmit: PASSED (only pre-existing MCP SDK errors)
+- All acceptance criteria met:
+  ✓ Scorers picker appears in Advanced Settings section
+  ✓ Selected scorers with sampling config will be saved with form submission
+  ✓ Sampling config per scorer is preserved through form state
+  ✓ Existing agents will show their attached scorers in edit mode (via initialValues)
+
+Next steps:
+- Task 022: Update agent dialog submission to handle scorers (P1 priority, depends on task 021)
+- This will ensure scorers are actually sent to the API when creating/updating agents
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED

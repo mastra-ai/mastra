@@ -16,10 +16,12 @@ import { useAgents } from '../../hooks/use-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useMemoryConfigs } from '@/domains/memory/hooks';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 import { ModelPicker } from './model-picker';
 import { MultiSelectPicker } from './multi-select-picker';
 import { InstructionsEnhancer } from './instructions-enhancer';
+import { ScorersPicker } from './scorers-picker';
 import type { AgentFormValues } from './form-validation';
 
 // Simple validation resolver without zod to avoid version conflicts
@@ -84,6 +86,7 @@ export function AgentForm({
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const { data: agents, isLoading: agentsLoading } = useAgents();
   const { data: memoryConfigsData, isLoading: memoryConfigsLoading } = useMemoryConfigs();
+  const { data: scorers, isLoading: scorersLoading } = useScorers();
 
   // Form setup
   const {
@@ -102,6 +105,7 @@ export function AgentForm({
       workflows: initialValues?.workflows ?? [],
       agents: initialValues?.agents ?? [],
       memory: initialValues?.memory ?? '',
+      scorers: initialValues?.scorers ?? {},
     },
   });
 
@@ -156,11 +160,21 @@ export function AgentForm({
     }));
   }, [memoryConfigsData]);
 
+  // Transform scorers data
+  const scorerOptions = React.useMemo(() => {
+    if (!scorers) return [];
+    return Object.entries(scorers).map(([id, scorer]) => ({
+      id,
+      name: (scorer as { name?: string }).name || id,
+      description: (scorer as { description?: string }).description || '',
+    }));
+  }, [scorers]);
+
   const handleFormSubmit = async (values: AgentFormValues) => {
     await onSubmit(values);
   };
 
-  const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading;
+  const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading || scorersLoading;
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
@@ -341,6 +355,20 @@ export function AgentForm({
                   disabled={memoryConfigsLoading}
                   singleSelect={true}
                   error={errors.memory?.message}
+                />
+              )}
+            />
+
+            {/* Scorers */}
+            <Controller
+              name="scorers"
+              control={control}
+              render={({ field }) => (
+                <ScorersPicker
+                  selected={field.value || {}}
+                  onChange={field.onChange}
+                  options={scorerOptions}
+                  disabled={scorersLoading}
                 />
               )}
             />

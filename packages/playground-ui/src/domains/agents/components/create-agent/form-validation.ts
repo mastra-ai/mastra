@@ -2,6 +2,16 @@ import { z } from 'zod';
 import type { Provider } from '@mastra/client-js';
 import { cleanProviderId } from '../agent-metadata/utils';
 
+const scoringSamplingConfigSchema = z.object({
+  type: z.enum(['ratio', 'count']),
+  rate: z.number().optional(),
+  count: z.number().optional(),
+});
+
+const scorerConfigSchema = z.object({
+  sampling: scoringSamplingConfigSchema.optional(),
+});
+
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),
@@ -14,6 +24,7 @@ export const agentFormSchema = z.object({
   workflows: z.array(z.string()).optional(),
   agents: z.array(z.string()).optional(),
   memory: z.string().optional(),
+  scorers: z.record(z.string(), scorerConfigSchema).optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
