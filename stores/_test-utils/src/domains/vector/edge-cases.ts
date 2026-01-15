@@ -5,8 +5,6 @@ import { createUnitVector, createVector, VECTOR_DIMENSION } from './test-helpers
 export interface EdgeCasesOptions {
   /** Skip large batch operations (1000+ vectors). Useful for stores with slow batch inserts. */
   skipLargeBatch?: boolean;
-  /** Skip concurrent operations tests. Useful for stores that don't handle concurrent writes well. */
-  skipConcurrency?: boolean;
 }
 
 /**
@@ -197,107 +195,105 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
       });
     }
 
-    if (!options.skipConcurrency) {
-      describe('Concurrent Operations', () => {
-        const concurrentTestIndex = `concurrent_test_${Date.now()}`;
+    describe('Concurrent Operations', () => {
+      const concurrentTestIndex = `concurrent_test_${Date.now()}`;
 
-        beforeAll(async () => {
-          await createIndex(concurrentTestIndex);
-          await waitForIndexing(concurrentTestIndex);
-        });
+      beforeAll(async () => {
+        await createIndex(concurrentTestIndex);
+        await waitForIndexing(concurrentTestIndex);
+      });
 
-        afterAll(async () => {
-          try {
-            await deleteIndex(concurrentTestIndex);
-          } catch {
-            // Ignore cleanup errors
-          }
-        });
+      afterAll(async () => {
+        try {
+          await deleteIndex(concurrentTestIndex);
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
 
-        it('should handle concurrent upserts', async () => {
-          // Perform 10 concurrent upserts with different vectors
-          const upsertPromises = Array.from({ length: 10 }, (_, i) =>
-            config.vector.upsert({
-              indexName: concurrentTestIndex,
-              vectors: [createVector(i * 100)],
-              metadata: [{ concurrent: true, batch: i }],
-            }),
-          );
-
-          const results = await Promise.all(upsertPromises);
-
-          // All upserts should succeed
-          expect(results).toHaveLength(10);
-          results.forEach(ids => {
-            expect(ids).toHaveLength(1);
-          });
-
-          await waitForIndexing(concurrentTestIndex);
-
-          // Verify all vectors were inserted
-          const stats = await config.vector.describeIndex({ indexName: concurrentTestIndex });
-          expect(stats.count).toBe(10);
-        });
-
-        it('should handle concurrent queries', async () => {
-          // First, ensure we have some vectors
-          await config.vector.upsert({
+      it('should handle concurrent upserts', async () => {
+        // Perform 10 concurrent upserts with different vectors
+        const upsertPromises = Array.from({ length: 10 }, (_, i) =>
+          config.vector.upsert({
             indexName: concurrentTestIndex,
-            vectors: Array.from({ length: 5 }, (_, i) => createVector(i)),
-            metadata: Array.from({ length: 5 }, (_, i) => ({ test: 'concurrent-query', id: i })),
-          });
-          await waitForIndexing(concurrentTestIndex);
+            vectors: [createVector(i * 100)],
+            metadata: [{ concurrent: true, batch: i }],
+          }),
+        );
 
-          // Perform 10 concurrent queries
-          const queryPromises = Array.from({ length: 10 }, (_, i) =>
-            config.vector.query({
-              indexName: concurrentTestIndex,
-              queryVector: createVector(i),
-              topK: 5,
-            }),
-          );
+        const results = await Promise.all(upsertPromises);
 
-          const results = await Promise.all(queryPromises);
-
-          // All queries should succeed
-          expect(results).toHaveLength(10);
-          results.forEach(queryResults => {
-            expect(queryResults.length).toBeGreaterThan(0);
-          });
+        // All upserts should succeed
+        expect(results).toHaveLength(10);
+        results.forEach(ids => {
+          expect(ids).toHaveLength(1);
         });
 
-        it('should handle concurrent mixed operations', async () => {
-          // Mix of upserts, queries, and updates running concurrently
-          const operations = [
-            // Upserts
-            config.vector.upsert({
-              indexName: concurrentTestIndex,
-              vectors: [createVector(200)],
-              metadata: [{ op: 'upsert', id: 1 }],
-            }),
-            config.vector.upsert({
-              indexName: concurrentTestIndex,
-              vectors: [createVector(201)],
-              metadata: [{ op: 'upsert', id: 2 }],
-            }),
-            // Queries
-            config.vector.query({
-              indexName: concurrentTestIndex,
-              queryVector: createVector(100),
-              topK: 10,
-            }),
-            config.vector.query({
-              indexName: concurrentTestIndex,
-              queryVector: createVector(101),
-              topK: 10,
-            }),
-          ];
+        await waitForIndexing(concurrentTestIndex);
 
-          // All operations should complete without errors
-          await expect(Promise.all(operations)).resolves.toBeDefined();
+        // Verify all vectors were inserted
+        const stats = await config.vector.describeIndex({ indexName: concurrentTestIndex });
+        expect(stats.count).toBe(10);
+      });
+
+      it('should handle concurrent queries', async () => {
+        // First, ensure we have some vectors
+        await config.vector.upsert({
+          indexName: concurrentTestIndex,
+          vectors: Array.from({ length: 5 }, (_, i) => createVector(i)),
+          metadata: Array.from({ length: 5 }, (_, i) => ({ test: 'concurrent-query', id: i })),
+        });
+        await waitForIndexing(concurrentTestIndex);
+
+        // Perform 10 concurrent queries
+        const queryPromises = Array.from({ length: 10 }, (_, i) =>
+          config.vector.query({
+            indexName: concurrentTestIndex,
+            queryVector: createVector(i),
+            topK: 5,
+          }),
+        );
+
+        const results = await Promise.all(queryPromises);
+
+        // All queries should succeed
+        expect(results).toHaveLength(10);
+        results.forEach(queryResults => {
+          expect(queryResults.length).toBeGreaterThan(0);
         });
       });
-    }
+
+      it('should handle concurrent mixed operations', async () => {
+        // Mix of upserts, queries, and updates running concurrently
+        const operations = [
+          // Upserts
+          config.vector.upsert({
+            indexName: concurrentTestIndex,
+            vectors: [createVector(200)],
+            metadata: [{ op: 'upsert', id: 1 }],
+          }),
+          config.vector.upsert({
+            indexName: concurrentTestIndex,
+            vectors: [createVector(201)],
+            metadata: [{ op: 'upsert', id: 2 }],
+          }),
+          // Queries
+          config.vector.query({
+            indexName: concurrentTestIndex,
+            queryVector: createVector(100),
+            topK: 10,
+          }),
+          config.vector.query({
+            indexName: concurrentTestIndex,
+            queryVector: createVector(101),
+            topK: 10,
+          }),
+        ];
+
+        // All operations should complete without errors
+        await expect(Promise.all(operations)).resolves.toBeDefined();
+      });
+    });
 
     describe('Vector Normalization Edge Cases', () => {
       const normalizationTestIndex = `normalization_test_${Date.now()}`;

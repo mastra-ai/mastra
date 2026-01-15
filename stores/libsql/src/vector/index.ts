@@ -93,7 +93,10 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       } catch (error: any) {
         if (
           error.code === 'SQLITE_BUSY' ||
-          (error.message && error.message.toLowerCase().includes('database is locked'))
+          error.code === 'SQLITE_LOCKED' ||
+          error.code === 'SQLITE_LOCKED_SHAREDCACHE' ||
+          (error.message && error.message.toLowerCase().includes('database is locked')) ||
+          (error.message && error.message.toLowerCase().includes('database table is locked'))
         ) {
           attempts++;
           if (attempts >= this.maxRetries) {
