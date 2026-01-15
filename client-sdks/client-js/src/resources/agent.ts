@@ -14,7 +14,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraModelOutput, SchemaWithValidation } from '@mastra/core/stream';
+import type { MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';

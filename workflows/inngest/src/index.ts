@@ -274,7 +274,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
     z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
-  const { retries, scorers, ...agentOptions } = options ?? {};
+  const { retries, scorers, ...agentOptions } =
+    options ?? ({} as AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> });
 
   return {
     id: params.name as TStepId,

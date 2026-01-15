@@ -855,7 +855,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
-      const streamResult = await agent.network<unknown>(messages, {
+      const streamResult = await agent.network(messages, {
         ...params,
         memory: {
           thread: params.thread ?? params.threadId ?? '',
