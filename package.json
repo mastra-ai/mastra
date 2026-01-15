@@ -108,7 +108,8 @@
   "pnpm": {
     "overrides": {
       "client-js-e2e-tests-zod-v3>zod": "^3.24.0",
-      "client-js-e2e-tests-zod-v4>zod": "^4.3.5"
+      "client-js-e2e-tests-zod-v4>zod": "^4.3.5",
+      "better-auth": "^1.4.5"
     }
   },
   "license": "Apache-2.0",
