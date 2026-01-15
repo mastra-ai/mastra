@@ -107,19 +107,9 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-// This is used in place of DynamicArgument so that model router IDE autocomplete works.
-// Without this TS doesn't understand the function/string union type from DynamicArgument
-export type DynamicModel = ({
-  requestContext,
-  mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}) => Promise<MastraModelConfig | ModelWithRetries[]> | MastraModelConfig | ModelWithRetries[];
-
 type ModelWithRetries = {
   id?: string;
-  model: MastraModelConfig | DynamicModel;
+  model: DynamicArgument<MastraModelConfig>;
   maxRetries?: number; //defaults to 0
   enabled?: boolean; //defaults to true
 };
@@ -144,8 +134,9 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   instructions: DynamicAgentInstructions;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
+   * Supports DynamicArgument for both single models and model fallback arrays.
    */
-  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
+  model: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelWithRetries[]> | ModelWithRetries[];
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0

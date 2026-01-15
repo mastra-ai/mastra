@@ -73,7 +73,6 @@ import type {
   AgentInstructions,
   DynamicAgentInstructions,
   AgentMethodType,
-  DynamicModel,
   StructuredOutputOptions,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
@@ -122,8 +121,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   public name: string;
   #instructions: DynamicAgentInstructions;
   readonly #description?: string;
-  model: DynamicArgument<MastraModelConfig> | DynamicModel | ModelFallbacks;
-  #originalModel: DynamicArgument<MastraModelConfig> | DynamicModel | ModelFallbacks;
+  model: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks> | ModelFallbacks;
+  #originalModel: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
@@ -212,8 +211,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       })) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
-      this.model = config.model;
-      this.#originalModel = config.model;
+      this.model = config.model as DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks>;
+      this.#originalModel = config.model as DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks>;
     }
 
     this.maxRetries = config.maxRetries ?? 0;
@@ -1107,10 +1106,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
   /**
    * Resolves model configuration that may be a dynamic function returning a single model or array of models.
+   * Supports DynamicArgument for both MastraModelConfig and ModelFallbacks.
    * @internal
    */
   private async resolveModelFallbacks(
-    modelConfig: MastraModelConfig | DynamicModel | ModelFallbacks,
+    modelConfig: DynamicArgument<MastraModelConfig> | DynamicArgument<ModelFallbacks> | ModelFallbacks,
     requestContext: RequestContext,
   ): Promise<MastraModelConfig | ModelFallbacks> {
     // If it's a dynamic function, resolve it
