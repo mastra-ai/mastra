@@ -278,3 +278,49 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 008 - Implement auto-versioning on scorer update - COMPLETED
+===================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created scorer-versions.ts with helper functions for auto-versioning
+- Implemented handleScorerAutoVersioning following the exact pattern from agent-versions.ts
+- Added retry logic for race conditions via createVersionWithRetry
+- Integrated enforceRetentionLimit to cap versions at 50 (configurable)
+- Updated UPDATE_STORED_SCORER_ROUTE to call handleScorerAutoVersioning
+- All helper functions properly handle the StoredScorersStorage interface
+
+Files created:
+- packages/server/src/server/handlers/scorer-versions.ts (230 lines)
+
+Files modified:
+- packages/server/src/server/handlers/stored-scorers.ts (added import and auto-versioning call)
+
+Key features implemented:
+1. calculateChangedFields - Deep comparison excluding metadata timestamps
+2. generateVersionId - UUID generation for version IDs
+3. isVersionNumberConflictError - Detects unique constraint violations
+4. createVersionWithRetry - Handles race conditions with exponential backoff
+5. enforceRetentionLimit - Keeps only last 50 versions per scorer
+6. handleScorerAutoVersioning - Main orchestration function
+
+Auto-versioning flow:
+1. Compare existing and updated scorer snapshots
+2. Skip if no meaningful changes (only timestamps changed)
+3. Get latest version number with retry logic
+4. Create new version with incremented version number
+5. Update scorer's activeVersionId to new version
+6. Enforce retention limit by deleting oldest versions
+
+Verification:
+- pnpm tsc --noEmit (server package): PASSED
+- pnpm build:lib (server package): PASSED
+
+Next steps:
+- Task 009: Create API endpoints for scorer versions
+- Task 010: Merge code-defined and stored scorers in list endpoint
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED

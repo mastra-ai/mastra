@@ -13,6 +13,7 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
+import { handleScorerAutoVersioning } from './scorer-versions';
 
 // ============================================================================
 // Route Definitions
@@ -191,10 +192,11 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
         ownerId,
       });
 
-      // Note: Auto-versioning will be implemented in task 008
-      // For now, we just return the updated scorer
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a version if there are meaningful changes and updates activeVersionId
+      const { scorer } = await handleScorerAutoVersioning(scorersStore, scorerId, existing, updatedScorer);
 
-      return updatedScorer;
+      return scorer;
     } catch (error) {
       return handleError(error, 'Error updating stored scorer');
     }
