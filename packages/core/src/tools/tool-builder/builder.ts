@@ -402,7 +402,7 @@ export class CoreToolBuilder extends MastraBase {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
-              toolSpan?.end({ output: resumeValidation.error });
+              toolSpan?.end({ output: resumeValidation.error, attributes: { success: false } });
               return resumeValidation.error as any;
             }
           }
@@ -415,7 +415,7 @@ export class CoreToolBuilder extends MastraBase {
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
             logger?.warn(suspendValidation.error.message);
-            toolSpan?.end({ output: suspendValidation.error });
+            toolSpan?.end({ output: suspendValidation.error, attributes: { success: false } });
             return suspendValidation.error as any;
           }
         }
@@ -423,7 +423,7 @@ export class CoreToolBuilder extends MastraBase {
         // Skip validation if suspend was called without a result
         const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
         if (shouldSkipValidation) {
-          toolSpan?.end({ output: result });
+          toolSpan?.end({ output: result, attributes: { success: true } });
           return result;
         }
 
@@ -435,17 +435,17 @@ export class CoreToolBuilder extends MastraBase {
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
             logger?.warn(outputValidation.error.message);
-            toolSpan?.end({ output: outputValidation.error });
+            toolSpan?.end({ output: outputValidation.error, attributes: { success: false } });
             return outputValidation.error;
           }
           result = outputValidation.data;
         }
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)
-        toolSpan?.end({ output: result });
+        toolSpan?.end({ output: result, attributes: { success: true } });
         return result;
       } catch (error) {
-        toolSpan?.error({ error: error as Error });
+        toolSpan?.error({ error: error as Error, attributes: { success: false } });
         throw error;
       }
     };
