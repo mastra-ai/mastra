@@ -395,6 +395,11 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/laminar",
+                  label: "LaminarExporter",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/langfuse",
                   label: "LangfuseExporter",
                 },

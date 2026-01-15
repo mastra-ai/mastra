@@ -19,6 +19,7 @@ export type ComboboxProps = {
   className?: string;
   disabled?: boolean;
   variant?: DSButtonProps['variant'];
+  size?: DSButtonProps['size'];
 };
 
 export function Combobox({
@@ -31,6 +32,7 @@ export function Combobox({
   className,
   disabled = false,
   variant = 'default',
+  size = 'md',
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -121,10 +123,11 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           variant={variant}
+          size={size}
           className={cn('w-full justify-between', className)}
           disabled={disabled}
         >
-          <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
+          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </DSButton>
       </PopoverTrigger>

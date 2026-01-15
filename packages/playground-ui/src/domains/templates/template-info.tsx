@@ -30,7 +30,7 @@ export function TemplateInfo({
       <div className={cn('grid mt-[2rem] items-center')}>
         <div
           className={cn(
-            'text-[1.5rem] flex items-center gap-[0.75rem]',
+            'text-header-lg flex items-center gap-[0.75rem]',
             '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
             {
               '[&>svg]:opacity-20': isLoading,
@@ -50,7 +50,7 @@ export function TemplateInfo({
       <div className="grid lg:grid-cols-[1fr_1fr] gap-x-[6rem] ">
         <div className="grid">
           <p
-            className={cn('mb-[1rem] text-[0.875rem] text-neutral4 mt-[.5rem] leading-[1.75]', {
+            className={cn('mb-[1rem] text-ui-md text-neutral4 mt-[.5rem] leading-[1.75]', {
               'bg-surface4 rounded-lg ': isLoading,
             })}
           >
@@ -71,12 +71,12 @@ export function TemplateInfo({
               <div className="flex-1 space-y-[0.5rem]">
                 <div className="flex items-center gap-[0.5rem]">
                   <GitBranchIcon className="w-[1em] h-[1em] text-neutral4" />
-                  <span className="text-[0.875rem] font-medium text-neutral5">A new Git branch will be created</span>
+                  <span className="text-ui-md font-medium text-neutral5">A new Git branch will be created</span>
                 </div>
-                <div className="text-[0.8125rem] text-neutral4 space-y-[0.25rem]">
+                <div className="text-ui-sm text-neutral4 space-y-[0.25rem]">
                   <div>
                     <span className="font-medium">Branch name:</span>{' '}
-                    <code className="bg-surface3 px-[0.375rem] py-[0.125rem] rounded text-[0.75rem] font-mono">
+                    <code className="bg-surface3 px-[0.375rem] py-[0.125rem] rounded text-ui-sm font-mono">
                       {branchName}
                     </code>
                   </div>
@@ -93,7 +93,7 @@ export function TemplateInfo({
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-[.5rem] mt-auto text-neutral3 text-[0.875rem] hover:text-neutral5"
+              className="flex items-center gap-[.5rem] mt-auto text-neutral3 text-ui-md hover:text-neutral5"
             >
               <GithubIcon />
               {githubUrl?.split('/')?.pop()}
