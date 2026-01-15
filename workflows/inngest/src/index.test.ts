@@ -4465,15 +4465,18 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -4522,8 +4525,8 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps.step2.status).toBe('failed');
       expect(result.steps.step2.error).toBeInstanceOf(Error);
       expect((result.steps.step2.error as Error).message).toBe('Step failed');
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
     it('should retry a step with a custom retry config', async ctx => {
@@ -4534,15 +4537,18 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -4595,8 +4601,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
     });
 
     it('should retry a step with step retries option, overriding the workflow retry config', async ctx => {
@@ -4607,16 +4613,19 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 2,
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 2,
@@ -4670,8 +4679,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
     });
   });
 
@@ -10155,13 +10164,15 @@ describe('MastraInngestWorkflow', () => {
         finalValue: z.number(),
       });
 
+      const passthroughExecute = vi.fn().mockImplementation(async ({ inputData }) => {
+        return inputData;
+      });
+
       const passthroughStep = createStep({
         id: 'passthrough',
         inputSchema: counterInputSchema,
         outputSchema: counterInputSchema,
-        execute: vi.fn().mockImplementation(async ({ inputData }) => {
-          return inputData;
-        }),
+        execute: passthroughExecute,
       });
 
       const wfA = createWorkflow({
@@ -10253,7 +10264,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
         suspendPayload: {
@@ -10288,7 +10299,7 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(2);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(1);
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
     });
 
     it('should be able clone workflows as steps', async ctx => {

@@ -1,25 +1,32 @@
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { Inngest } from 'inngest';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterAll } from 'vitest';
 import { z } from 'zod';
 
 import { init, serve, createServe } from './index';
 
-// Mock the inngest framework-specific serve functions
-vi.mock('inngest/hono', () => ({
-  serve: vi.fn(() => () => Promise.resolve(new Response())),
-}));
+// Mock the inngest framework-specific serve functions using vi.hoisted to ensure
+// mocks are created before module imports capture the real functions
+const mocks = vi.hoisted(() => {
+  return {
+    honoServe: vi.fn(() => () => Promise.resolve(new Response())),
+    expressServe: vi.fn(() => () => {}),
+    fastifyServe: vi.fn(() => () => Promise.resolve()),
+  };
+});
 
-vi.mock('inngest/express', () => ({
-  serve: vi.fn(() => () => {}),
-}));
+vi.mock('inngest/hono', () => ({ serve: mocks.honoServe }));
+vi.mock('inngest/express', () => ({ serve: mocks.expressServe }));
+vi.mock('inngest/fastify', () => ({ serve: mocks.fastifyServe }));
 
-vi.mock('inngest/fastify', () => ({
-  serve: vi.fn(() => () => Promise.resolve()),
-}));
+const { honoServe, expressServe, fastifyServe } = mocks;
 
 describe('Multi-framework serve', () => {
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('Export availability', () => {
     it('should export serve (default Hono for backwards compatibility)', () => {
       expect(typeof serve).toBe('function');
@@ -65,8 +72,6 @@ describe('Multi-framework serve', () => {
     });
 
     it('should call inngest/hono serve with correct options', async () => {
-      const { serve: honoServe } = await import('inngest/hono');
-
       serve({ mastra, inngest });
 
       expect(honoServe).toHaveBeenCalledWith(
@@ -77,29 +82,25 @@ describe('Multi-framework serve', () => {
       );
 
       // Verify workflow functions were collected
-      const callArgs = vi.mocked(honoServe).mock.calls[0][0];
+      const callArgs = honoServe.mock.calls[0][0];
       expect(callArgs.functions.length).toBeGreaterThan(0);
     });
 
     it('should pass additional user functions', async () => {
-      const { serve: honoServe } = await import('inngest/hono');
-
       const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
 
       serve({ mastra, inngest, functions: [userFunction] });
 
-      const callArgs = vi.mocked(honoServe).mock.calls[0][0];
+      const callArgs = honoServe.mock.calls[0][0];
       expect(callArgs.functions).toContain(userFunction);
     });
 
     it('should pass registerOptions', async () => {
-      const { serve: honoServe } = await import('inngest/hono');
-
       const registerOptions = { servePath: '/custom/inngest' };
 
       serve({ mastra, inngest, registerOptions });
 
-      const callArgs = vi.mocked(honoServe).mock.calls[0][0];
+      const callArgs = honoServe.mock.calls[0][0];
       expect(callArgs.servePath).toBe('/custom/inngest');
     });
   });
