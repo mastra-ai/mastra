@@ -35,8 +35,8 @@ export function validateUpsertInput(
     });
   }
 
-  // Validate metadata length matches vectors length
-  if (metadata && metadata.length !== vectors.length) {
+  // Validate metadata length matches vectors length (skip if metadata is empty/not provided)
+  if (metadata && metadata.length > 0 && metadata.length !== vectors.length) {
     throw new MastraError({
       id: createVectorErrorId(storeName, 'UPSERT', 'METADATA_LENGTH_MISMATCH'),
       domain: ErrorDomain.MASTRA_VECTOR,
