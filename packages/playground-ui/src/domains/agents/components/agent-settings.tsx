@@ -14,8 +14,8 @@ import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
-import clsx from 'clsx';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { cn } from '@/lib/utils';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -30,9 +30,9 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
 
   const radio = (
     <div className="flex items-center gap-2">
-      <RadioGroupItem value="network" id="network" className="text-icon6" disabled={!isNetworkAvailable} />
+      <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={!isNetworkAvailable} />
       <Label
-        className={clsx('text-icon6 text-ui-md', !isNetworkAvailable && '!text-icon3 cursor-not-allowed')}
+        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && '!text-neutral3 cursor-not-allowed')}
         htmlFor="network"
       >
         Network
@@ -121,32 +121,32 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           >
             {!isSupportedModel && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
+                <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-neutral6" />
+                <Label className="text-neutral6 text-ui-md" htmlFor="generateLegacy">
                   Generate (Legacy)
                 </Label>
               </div>
             )}
             {isSupportedModel && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generate" id="generate" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="generate">
+                <RadioGroupItem value="generate" id="generate" className="text-neutral6" />
+                <Label className="text-neutral6 text-ui-md" htmlFor="generate">
                   Generate
                 </Label>
               </div>
             )}
             {!isSupportedModel && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
+                <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-neutral6" />
+                <Label className="text-neutral6 text-ui-md" htmlFor="streamLegacy">
                   Stream (Legacy)
                 </Label>
               </div>
             )}
             {isSupportedModel && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="stream" id="stream" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="stream">
+                <RadioGroupItem value="stream" id="stream" className="text-neutral6" />
+                <Label className="text-neutral6 text-ui-md" htmlFor="stream">
                   Stream
                 </Label>
               </div>
@@ -168,7 +168,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
 
         {hasSamplingRestriction &&
           (settings?.modelSettings?.temperature !== undefined || settings?.modelSettings?.topP !== undefined) && (
-            <div className="flex items-center gap-2 text-xs text-icon3 bg-surface3 rounded px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-neutral3 bg-surface3 rounded px-3 py-2">
               <Info className="w-3.5 h-3.5 flex-shrink-0" />
               <span>
                 {settings?.modelSettings?.temperature !== undefined
@@ -193,7 +193,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                   })
                 }
               />
-              <Txt as="p" variant="ui-sm" className="text-icon3">
+              <Txt as="p" variant="ui-sm" className="text-neutral3">
                 {settings?.modelSettings?.temperature ?? 'n/a'}
               </Txt>
             </div>
@@ -214,7 +214,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 step={0.1}
               />
 
-              <Txt as="p" variant="ui-sm" className="text-icon3">
+              <Txt as="p" variant="ui-sm" className="text-neutral3">
                 {settings?.modelSettings?.topP ?? 'n/a'}
               </Txt>
             </div>

@@ -14,7 +14,7 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children })
     <div className="">
       <div className="flex items-center">
         {hasLabel && (
-          <Txt as="h3" variant="ui-sm" className="text-icon3 flex items-center gap-1 pb-2">
+          <Txt as="h3" variant="ui-sm" className="text-neutral3 flex items-center gap-1 pb-2">
             <Icon size="sm">
               <Braces />
             </Icon>

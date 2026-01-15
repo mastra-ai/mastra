@@ -34,7 +34,7 @@ const ToolExecutor = ({
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-r-sm border-border1 w-[20rem]">
+      <div className="bg-surface2 border-r border-border1 w-[20rem]">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
         <div className="p-5 overflow-y-auto">
           <DynamicForm

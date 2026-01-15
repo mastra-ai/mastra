@@ -18,8 +18,8 @@ export const Reasoning = ({ text }: ReasoningMessagePart) => {
       </button>
 
       {!isCollapsed ? (
-        <div className="rounded-lg bg-surface4 p-2 border-sm border-border-1">
-          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-icon6">{text}</pre>
+        <div className="rounded-lg bg-surface4 p-2 border border-border-1">
+          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-neutral6">{text}</pre>
         </div>
       ) : null}
     </div>

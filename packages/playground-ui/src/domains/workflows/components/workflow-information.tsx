@@ -92,7 +92,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   }
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
       <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
         <div className="flex items-center gap-2 pt-2">
           <Tooltip>
@@ -118,7 +118,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         </div>
       </EntityHeader>
 
-      <div className="flex-1 overflow-auto border-t-sm border-border1 flex flex-col">
+      <div className="flex-1 overflow-auto border-t border-border1 flex flex-col">
         <Tabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
           <TabList>
             <Tab value="current-run">Current Run</Tab>

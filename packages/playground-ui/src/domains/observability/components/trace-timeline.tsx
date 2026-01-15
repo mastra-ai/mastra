@@ -33,7 +33,7 @@ export function TraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center text-[0.875rem] gap-[1rem] bg-surface3/50 rounded-md p-[1.5rem] justify-center text-icon3',
+            'flex items-center text-ui-md gap-4 bg-surface3/50 rounded-md p-6 justify-center text-neutral3',
             '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
           )}
         >
@@ -41,13 +41,10 @@ export function TraceTimeline({
         </div>
       ) : (
         <div
-          className={cn(
-            'grid items-start content-start gap-y-[2px] overflow-hidden grid-cols-[1fr_auto] xl:py-[1rem]',
-            {
-              'xl:grid-cols-[1fr_auto_auto]': !overallEndTime,
-              'xl:grid-cols-[2fr_auto_1fr]': overallEndTime,
-            },
-          )}
+          className={cn('grid items-start content-start gap-y-0.5 overflow-hidden grid-cols-[1fr_auto] xl:py-4', {
+            'xl:grid-cols-[1fr_auto_auto]': !overallEndTime,
+            'xl:grid-cols-[2fr_auto_1fr]': overallEndTime,
+          })}
         >
           {hierarchicalSpans?.map(span => (
             <TraceTimelineSpan

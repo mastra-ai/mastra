@@ -43,7 +43,7 @@ export const UserMessage = () => {
   return (
     <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
       {/* <UserActionBar /> */}
-      <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
+      <div className="max-w-[366px] px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts
           components={{
             File: p => {

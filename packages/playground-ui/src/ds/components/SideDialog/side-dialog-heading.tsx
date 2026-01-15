@@ -12,11 +12,11 @@ export function SideDialogHeading({ children, className, as = 'h1' }: SideDialog
   return (
     <HeadingTag
       className={cn(
-        'flex items-start text-icon4 text-[1.125rem] font-semibold gap-[.5rem]',
-        '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:mt-[.2em] [&>svg]:opacity-70',
+        'flex items-start text-neutral4 text-header-sm font-semibold gap-2',
+        '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:mt-0.5 [&>svg]:opacity-70',
         {
-          'text-[1.125rem]': as === 'h1',
-          'text-[1rem]': as === 'h2',
+          'text-header-sm': as === 'h1',
+          'text-ui-lg': as === 'h2',
         },
         className,
       )}

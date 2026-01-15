@@ -20,11 +20,11 @@ export interface HeaderListFormProps {
 export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      <Txt as="h2" variant="header-md" className="text-icon6">
+      <Txt as="h2" variant="header-md" className="text-neutral6">
         Headers
       </Txt>
 
-      <div className="bg-surface4 rounded-lg p-4 border-sm border-border2 space-y-4">
+      <div className="bg-surface4 rounded-lg p-4 border border-border2 space-y-4">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
