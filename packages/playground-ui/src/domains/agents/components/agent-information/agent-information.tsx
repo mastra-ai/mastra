@@ -1,7 +1,7 @@
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentEntityHeader } from '../agent-entity-header';
-import { Tabs, Tab, TabContent, TabList } from '@/components/ui/elements/tabs';
+import { Tabs, Tab, TabContent, TabList } from '@/ds/components/Tabs';
 import { AgentMetadata } from '../agent-metadata';
 import { useAgent } from '../../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks';
@@ -130,7 +130,7 @@ export const AgentInformationTabLayout = ({ children, agentId }: AgentInformatio
   });
 
   return (
-    <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
+    <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
       <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
         {children}
       </Tabs>

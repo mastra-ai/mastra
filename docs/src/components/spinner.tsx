@@ -1,4 +1,4 @@
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 
 function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
   return (

@@ -384,6 +384,7 @@ export const mongodbAgent = new Agent({
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     vector: new MongoDBVector({
+      id: 'mongodb-vector',
       uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
@@ -394,9 +395,7 @@ export const mongodbAgent = new Agent({
         topK: 3,
         messageRange: 2,
       },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
+      generateTitle: true, // generates descriptive thread titles automatically
     },
   }),
 });

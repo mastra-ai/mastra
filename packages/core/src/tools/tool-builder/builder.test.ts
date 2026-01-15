@@ -598,8 +598,11 @@ describe('Tool Tracing Context Injection', () => {
     expect(receivedTracingContext).toBeTruthy();
     expect(receivedTracingContext.currentSpan).toBe(mockToolSpan);
 
-    // Verify tool span was ended with result
-    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: { result: 'processed: test' } });
+    // Verify tool span was ended with result and success attribute
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: { result: 'processed: test' },
+      attributes: { success: true },
+    });
     expect(result).toEqual({ result: 'processed: test' });
   });
 
@@ -699,8 +702,11 @@ describe('Tool Tracing Context Injection', () => {
     // Verify Vercel tool execute was called (without tracingContext)
     expect(executeCalled).toBe(true);
 
-    // Verify tool span was ended with result
-    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: { output: 'vercel result: test' } });
+    // Verify tool span was ended with result and success attribute
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: { output: 'vercel result: test' },
+      attributes: { success: true },
+    });
     expect(result).toEqual({ output: 'vercel result: test' });
   });
 
@@ -750,8 +756,11 @@ describe('Tool Tracing Context Injection', () => {
     // Verify tool span was created
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
 
-    // Verify tool span was ended with error
-    expect(mockToolSpan.error).toHaveBeenCalledWith({ error: testError });
+    // Verify tool span was ended with error and success: false attribute
+    expect(mockToolSpan.error).toHaveBeenCalledWith({
+      error: testError,
+      attributes: { success: false },
+    });
     expect(mockToolSpan.end).not.toHaveBeenCalled(); // Should not call end() when error() is called
 
     // Verify the result is a MastraError
