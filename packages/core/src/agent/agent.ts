@@ -2634,9 +2634,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           })) as ModelFallbacks,
         );
       }
+      // Handle single model returned from dynamic function
+      return this.prepareModels(requestContext, resolved as DynamicArgument<MastraLanguageModel>);
     }
 
-    if ((model && !Array.isArray(model)) || (!model && !Array.isArray(this.model))) {
+    if (
+      (model && !Array.isArray(model)) ||
+      (!model && !Array.isArray(this.model) && typeof this.model !== 'function')
+    ) {
       const modelToUse = model ?? this.model;
       const resolvedModel = await this.resolveModelConfig(
         modelToUse as DynamicArgument<MastraModelConfig>,
