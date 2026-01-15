@@ -635,11 +635,15 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           });
 
           // Should return products with 20 <= price <= 100
+          // Note: If supportsNullValues is true, a product with price: null will also be included
+          // because null doesn't match $lt or $gt conditions
           expect(results.length).toBeGreaterThan(0);
           expect(
             results.every(r => {
-              const price = r.metadata?.price as number;
-              return price >= 20 && price <= 100;
+              const price = r.metadata?.price;
+              // null prices are included because they don't match the $nor conditions
+              if (price === null || price === undefined) return true;
+              return (price as number) >= 20 && (price as number) <= 100;
             }),
           ).toBe(true);
         });
