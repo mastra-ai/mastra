@@ -790,6 +790,11 @@ export class Workspace {
         await this._sandbox.start();
       }
 
+      // Auto-index files if autoIndexPaths is configured
+      if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
+        await this.rebuildIndex(this._config.autoIndexPaths);
+      }
+
       this._status = 'ready';
     } catch (error) {
       this._status = 'error';

@@ -170,6 +170,77 @@ export function createWorkspaceTools(workspace: Workspace) {
     });
   }
 
+  // Only add search tools if search is available
+  if (workspace.canBM25 || workspace.canVector) {
+    tools.workspace_search = createTool({
+      id: 'workspace_search',
+      description:
+        'Search indexed content in the workspace. Supports keyword (BM25), semantic (vector), and hybrid search modes.',
+      inputSchema: z.object({
+        query: z.string().describe('The search query string'),
+        topK: z.number().optional().default(5).describe('Maximum number of results to return'),
+        mode: z
+          .enum(['bm25', 'vector', 'hybrid'])
+          .optional()
+          .describe('Search mode: bm25 for keyword search, vector for semantic search, hybrid for both combined'),
+        minScore: z.number().optional().describe('Minimum score threshold (0-1 for normalized scores)'),
+      }),
+      outputSchema: z.object({
+        results: z.array(
+          z.object({
+            id: z.string().describe('Document/file path'),
+            content: z.string().describe('The matching content'),
+            score: z.number().describe('Relevance score'),
+            lineRange: z
+              .object({
+                start: z.number(),
+                end: z.number(),
+              })
+              .optional()
+              .describe('Line range where query terms were found'),
+          }),
+        ),
+        count: z.number().describe('Number of results returned'),
+        mode: z.string().describe('The search mode that was used'),
+      }),
+      execute: async ({ query, topK, mode, minScore }) => {
+        const results = await workspace.search(query, {
+          topK,
+          mode: mode as 'bm25' | 'vector' | 'hybrid' | undefined,
+          minScore,
+        });
+        return {
+          results: results.map(r => ({
+            id: r.id,
+            content: r.content,
+            score: r.score,
+            lineRange: r.lineRange,
+          })),
+          count: results.length,
+          mode: mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25'),
+        };
+      },
+    });
+
+    tools.workspace_index = createTool({
+      id: 'workspace_index',
+      description: 'Index a file for search. The file path becomes the document ID in search results.',
+      inputSchema: z.object({
+        path: z.string().describe('The file path to index (used as document ID)'),
+        content: z.string().describe('The text content to index'),
+        metadata: z.record(z.unknown()).optional().describe('Optional metadata to store with the document'),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        path: z.string().describe('The indexed file path'),
+      }),
+      execute: async ({ path, content, metadata }) => {
+        await workspace.index(path, content, { metadata });
+        return { success: true, path };
+      },
+    });
+  }
+
   // Only add sandbox tools if sandbox is available
   if (workspace.sandbox) {
     tools.workspace_execute_code = createTool({
@@ -279,12 +350,17 @@ export function createWorkspaceTools(workspace: Workspace) {
  * Tool names for workspace tools.
  */
 export const WORKSPACE_TOOL_NAMES = {
+  // Filesystem tools
   READ_FILE: 'workspace_read_file',
   WRITE_FILE: 'workspace_write_file',
   LIST_FILES: 'workspace_list_files',
   DELETE_FILE: 'workspace_delete_file',
   FILE_EXISTS: 'workspace_file_exists',
   MKDIR: 'workspace_mkdir',
+  // Search tools
+  SEARCH: 'workspace_search',
+  INDEX: 'workspace_index',
+  // Sandbox tools
   EXECUTE_CODE: 'workspace_execute_code',
   EXECUTE_COMMAND: 'workspace_execute_command',
   INSTALL_PACKAGE: 'workspace_install_package',
