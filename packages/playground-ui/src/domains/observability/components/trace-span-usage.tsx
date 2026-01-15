@@ -221,7 +221,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
 
         return (
           <div
-            className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-[0.875rem] flex-grow', {
+            className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-ui-md flex-grow', {
               'min-h-[5.5rem]': traceUsage,
             })}
             key={key}
@@ -233,11 +233,11 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
               )}
             >
               {tokenPresentations?.[key]?.icon}
-              <span className="text-[0.875rem]">{tokenPresentations?.[key]?.label}</span>
-              {!isObject && <b className="text-[1rem]">{value}</b>}
+              <span className="text-ui-md">{tokenPresentations?.[key]?.label}</span>
+              {!isObject && <b className="text-ui-lg">{value}</b>}
             </div>
             {isObject && (
-              <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
+              <div className="text-ui-md mt-[0.5rem] pl-[2rem]">
                 {Object.entries(value).map(([detailKey, detailValue]) => {
                   if (typeof detailValue !== 'number') return null;
                   return (
@@ -253,7 +253,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
               </div>
             )}
             {!isObject && tokensByProviderValid && (
-              <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
+              <div className="text-ui-md mt-[0.5rem] pl-[2rem]">
                 {Object.entries(tokensByProvider).map(([provider, providerTokens]) => {
                   const tokenValue = providerTokens?.[key as keyof typeof providerTokens];
                   if (typeof tokenValue !== 'number') return null;

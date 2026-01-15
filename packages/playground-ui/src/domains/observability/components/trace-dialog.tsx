@@ -262,7 +262,7 @@ export function TraceDialog({
                 <div className="grid xl:grid-cols-[3fr_2fr] gap-[1rem] items-start">
                   <KeyValueList data={traceInfo} LinkComponent={Link} />
                   <div className="bg-surface3 p-[1.5rem] rounded-lg grid gap-[1rem]">
-                    <h4 className="text-[1rem]">
+                    <h4 className="text-ui-lg">
                       <TextAndIcon>
                         <GaugeIcon /> Evaluate trace
                       </TextAndIcon>

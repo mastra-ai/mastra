@@ -40,7 +40,7 @@ export function SelectField({
       )}
     >
       {label && (
-        <label className={cn('text-[0.8125rem] text-neutral3 flex justify-between items-center shrink-0')}>
+        <label className={cn('text-ui-sm text-neutral3 flex justify-between items-center shrink-0')}>
           {label}
           {required && <i className="text-neutral2">(required)</i>}
         </label>
@@ -63,7 +63,7 @@ export function SelectField({
           ))}
         </SelectContent>
       </Select>
-      {helpMsg && <p className="text-neutral3 text-[0.75rem]">{helpMsg}</p>}
+      {helpMsg && <p className="text-neutral3 text-ui-sm">{helpMsg}</p>}
     </div>
   );
 }

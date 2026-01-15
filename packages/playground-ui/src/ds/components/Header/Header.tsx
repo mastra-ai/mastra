@@ -11,7 +11,7 @@ export interface HeaderProps {
 export const Header = ({ children, border = true }: HeaderProps) => {
   return (
     <header
-      className={cn('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent px-5', {
+      className={cn('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent px-3', {
         'border-b border-border1': border,
       })}
     >
@@ -22,7 +22,7 @@ export const Header = ({ children, border = true }: HeaderProps) => {
 
 export const HeaderTitle = ({ children }: HeaderProps) => {
   return (
-    <Txt as="h1" variant="ui-lg" className="font-medium text-white flex items-center gap-2">
+    <Txt as="h1" variant="ui-md" className="text-white flex items-center gap-2">
       {children}
     </Txt>
   );

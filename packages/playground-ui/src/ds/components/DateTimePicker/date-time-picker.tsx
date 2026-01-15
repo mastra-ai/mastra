@@ -213,7 +213,7 @@ export const DateTimePickerContent = ({
       {localErrorMsg && (
         <div
           className={cn(
-            'text-[0.875rem] m-[1rem] mb-0 text-neutral3',
+            'text-ui-md m-[1rem] mb-0 text-neutral3',
             '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mt-[0.2em] [&>svg]:text-red-500 [&>svg]:float-left [&>svg]:mr-[0.5rem]',
           )}
         >

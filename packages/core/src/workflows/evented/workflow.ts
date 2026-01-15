@@ -141,7 +141,7 @@ function isProcessor(obj: unknown): obj is Processor {
 // ============================================
 
 /**
- * Creates a step from explicit params
+ * Creates a step from explicit params (FIRST overload for best error messages)
  * @param params Configuration parameters for the step
  * @param params.id Unique identifier for the step
  * @param params.description Optional description of what the step does
@@ -150,9 +150,24 @@ function isProcessor(obj: unknown): obj is Processor {
  * @param params.execute Function that performs the step's operations
  * @returns A Step object that can be added to the workflow
  */
-export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
-): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+export function createStep<
+  TStepId extends string,
+  TStateSchema extends z.ZodTypeAny | undefined,
+  TInputSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny,
+  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
+  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+>(
+  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+): Step<
+  TStepId,
+  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
+  z.infer<TInputSchema>,
+  z.infer<TOutputSchema>,
+  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
+  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  DefaultEngineType
+>;
 
 /**
  * Creates a step from an agent with structured output
@@ -175,13 +190,7 @@ export function createStep<
   TStepOutput extends { text: string },
   TResume,
   TSuspend,
->(
-  agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions<TStepOutput> & {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
-): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+>(agent: Agent<TStepId, any>): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
  * Creates a step from a tool
@@ -192,16 +201,24 @@ export function createStep<
   TResume,
   TSchemaOut,
   TContext extends ToolExecutionContext<TSuspend, TResume>,
+  TId extends string,
 >(
-  tool: ToolStep<TSchemaIn, TSuspend, TResume, TSchemaOut, TContext>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<string, any, TSchemaIn, TSchemaOut, TResume, TSuspend, DefaultEngineType>;
+): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
 
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step
+ * Note: We require at least one processor method to distinguish from StepParams
  */
 export function createStep<TProcessorId extends string>(
-  processor: Processor<TProcessorId> & { inputSchema?: InferSchemaOutput<typeof ProcessorStepSchema> },
+  processor:
+    | (Processor<TProcessorId> & { processInput: Function })
+    | (Processor<TProcessorId> & { processInputStream: Function })
+    | (Processor<TProcessorId> & { processInputStep: Function })
+    | (Processor<TProcessorId> & { processOutputStream: Function })
+    | (Processor<TProcessorId> & { processOutputResult: Function })
+    | (Processor<TProcessorId> & { processOutputStep: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -212,62 +229,47 @@ export function createStep<TProcessorId extends string>(
   DefaultEngineType
 >;
 
+/**
+ * IMPORTANT: Fallback overload - provides better error messages when StepParams doesn't match
+ * This should be LAST and will show clearer errors about what's wrong
+ * This is a copy of first one, KEEP THIS IN SYNC!
+ */
+export function createStep<
+  TStepId extends string,
+  TStateSchema extends z.ZodTypeAny | undefined,
+  TInputSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny,
+  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
+  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+>(
+  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+): Step<
+  TStepId,
+  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
+  z.infer<TInputSchema>,
+  z.infer<TOutputSchema>,
+  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
+  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  DefaultEngineType
+>;
+
 // ============================================
 // Implementation (uses type guards for clean logic)
 // ============================================
 
-export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
-  params:
-    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>
-    | Agent<TStepId, any>
-    | ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>
-    | (Processor<TStepId> & { inputSchema?: TStepInput }),
-  agentOrToolOptions?:
-    | (AgentStepOptions<TStepOutput> & {
-        retries?: number;
-        scorers?: DynamicArgument<MastraScorers>;
-      })
-    | {
-        retries?: number;
-        scorers?: DynamicArgument<MastraScorers>;
-      },
-): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
-  // Type assertions are needed because each branch returns a different Step type,
-  // but the overloads ensure type safety for consumers
+export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
+  // Type guards determine the correct factory function
+  // Overloads ensure type safety for consumers
   if (isAgent(params)) {
-    return createStepFromAgent(params, agentOrToolOptions) as Step<
-      TStepId,
-      TState,
-      TStepInput,
-      TStepOutput,
-      TResume,
-      TSuspend,
-      DefaultEngineType
-    >;
+    return createStepFromAgent(params, agentOrToolOptions);
   }
 
   if (isToolStep(params)) {
-    return createStepFromTool(params, agentOrToolOptions) as Step<
-      TStepId,
-      TState,
-      TStepInput,
-      TStepOutput,
-      TResume,
-      TSuspend,
-      DefaultEngineType
-    >;
+    return createStepFromTool(params, agentOrToolOptions);
   }
 
   if (isProcessor(params)) {
-    return createStepFromProcessor(params) as unknown as Step<
-      TStepId,
-      TState,
-      TStepInput,
-      TStepOutput,
-      TResume,
-      TSuspend,
-      DefaultEngineType
-    >;
+    return createStepFromProcessor(params);
   }
 
   if (isStepParams(params)) {
@@ -281,9 +283,9 @@ export function createStep<TStepId extends string, TState, TStepInput, TStepOutp
 // Internal Implementations
 // ============================================
 
-function createStepFromParams<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
-): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
+function createStepFromParams(
+  params: StepParams<any, any, any, any, any, any>,
+): Step<any, any, any, any, any, any, DefaultEngineType> {
   return {
     id: params.id,
     description: params.description,

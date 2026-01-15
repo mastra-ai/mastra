@@ -13,7 +13,7 @@ export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> 
 
 export const Cell = ({ className, children, ...props }: CellProps) => {
   return (
-    <td className={cn('text-neutral5 first:pl-5 last:pr-5', className)} {...props}>
+    <td className={cn('text-neutral5 first:pl-3 last:pr-3', className)} {...props}>
       <div className={cn('flex h-full w-full shrink-0 items-center')}>{children}</div>
     </td>
   );
@@ -68,11 +68,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="text-neutral6 font-medium !leading-tight">
+          <Txt as="span" variant="ui-md" className="text-neutral6 !leading-tight">
             {name}
           </Txt>
           {description && (
-            <Txt as="span" variant="ui-xs" className="text-neutral3 w-full max-w-[300px] truncate !leading-tight">
+            <Txt as="span" variant="ui-xs" className="text-neutral3 w-full max-w-[300px] truncate !leading-tight pt-1">
               {description}
             </Txt>
           )}

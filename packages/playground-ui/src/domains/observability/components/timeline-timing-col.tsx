@@ -58,26 +58,24 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-neutral3 text-[0.75rem]')}>
-          {(span.latency / 1000).toFixed(3)}&nbsp;s
-        </div>
+        <div className={cn('flex justify-end text-neutral3 text-ui-sm')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-[100] w-auto max-w-[25rem] rounded-md bg-surface4 p-[.5rem] px-[1rem] pr-[1.5rem] text-[.75rem] text-neutral5 text-center border border-border1"
+          className="z-[100] w-auto max-w-[25rem] rounded-md bg-surface4 p-[.5rem] px-[1rem] pr-[1.5rem] text-ui-sm text-neutral5 text-center border border-border1"
           sideOffset={5}
           side="top"
         >
           <div
             className={cn(
-              'text-[0.875rem] flex items-center gap-[0.5rem] mb-[1rem]',
+              'text-ui-md flex items-center gap-[0.5rem] mb-[1rem]',
               '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
             <TimerIcon /> Span Timing
           </div>
           <KeyValueList
-            className=" [&>dd]:text-[0.875rem] [&>dt]:text-[0.875rem] [&>dt]:min-h-0 [&>dd]:min-h-0"
+            className=" [&>dd]:text-ui-md [&>dt]:text-ui-md [&>dt]:min-h-0 [&>dd]:min-h-0"
             data={[
               {
                 key: 'Latency',

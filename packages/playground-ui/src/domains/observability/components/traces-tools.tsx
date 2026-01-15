@@ -52,7 +52,7 @@ export function TracesTools({
         disabled={isLoading}
       />
       <div className={cn('flex gap-[1rem] items-center flex-wrap')}>
-        <span className={cn('shrink-0 text-[0.875rem] text-neutral3')}>Filter by Date & time range</span>
+        <span className={cn('shrink-0 text-ui-md text-neutral3')}>Filter by Date & time range</span>
         <DateTimePicker
           placeholder="From"
           value={selectedDateFrom}

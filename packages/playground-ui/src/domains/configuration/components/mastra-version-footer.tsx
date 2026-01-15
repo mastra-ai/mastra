@@ -110,7 +110,7 @@ function CountBadge({ count, variant }: { count: number; variant: 'warning' | 'e
   return (
     <span
       className={cn(
-        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold text-black',
+        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-ui-xs font-bold text-black',
         variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
       )}
     >

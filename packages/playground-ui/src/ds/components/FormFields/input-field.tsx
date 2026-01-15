@@ -46,10 +46,7 @@ export function InputField({
       )}
     >
       <LabelWrapper>
-        <label
-          htmlFor={`input-${name}`}
-          className={cn('text-[0.8125rem] text-neutral3 flex justify-between items-center')}
-        >
+        <label htmlFor={`input-${name}`} className={cn('text-ui-sm text-neutral3 flex justify-between items-center')}>
           {label}
           {required && <i className="text-neutral2 text-xs">(required)</i>}
         </label>
@@ -59,9 +56,9 @@ export function InputField({
         name={name}
         value={value}
         className={cn(
-          'flex grow items-center cursor-pointer text-[0.875rem] text-neutral5 border border-border1 leading-none rounded-lg bg-transparent min-h-[2.5rem] px-[0.75rem] py-[0.5rem] w-full',
+          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none rounded-lg bg-transparent min-h-[2.5rem] px-[0.75rem] py-[0.5rem] w-full',
           'focus:outline-none focus:shadow-[inset_0_0_0_1px_#18fb6f]',
-          'placeholder:text-neutral3 placeholder:text-[.8125rem]',
+          'placeholder:text-neutral3 placeholder:text-ui-sm',
           {
             'cursor-not-allowed opacity-50': disabled,
             'border-red-800 focus:border-border1': error || errorMsg,
@@ -70,11 +67,11 @@ export function InputField({
         data-testid={testId}
         {...props}
       />
-      {helpMsg && <p className="text-neutral3 text-[0.75rem]">{helpMsg}</p>}
+      {helpMsg && <p className="text-neutral3 text-ui-sm">{helpMsg}</p>}
       {errorMsg && (
         <p
           className={cn(
-            'text-[0.75rem] text-neutral4 flex items-center gap-[.5rem]',
+            'text-ui-sm text-neutral4 flex items-center gap-[.5rem]',
             '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:text-red-400',
           )}
         >
