@@ -1,163 +1,177 @@
 # Unified Workspace Design
 
-Merging Knowledge and Workspace into a single unified primitive.
+The overall vision and architecture for Mastra's unified Workspace primitive.
 
-## Core Idea
+---
 
-**Workspace = Knowledge + Workspace merged.** All capabilities from both primitives become Workspace. Skills is a specialized directory convention within Workspace.
+## Goal
+
+**Create a single, unified Workspace primitive** that provides agents with:
+
+- **File storage** - Read, write, and organize files
+- **Code execution** - Run code in sandboxed environments
+- **Search** - Find content using keyword (BM25), semantic (vector), or hybrid search
+- **Skills** - Discover and use SKILL.md files from configurable paths
+
+This replaces the current fragmented approach of separate Knowledge, Skills, and Workspace concepts.
+
+---
+
+## Why Unify?
+
+### Current State (Three Concepts)
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│    Knowledge    │    │     Skills      │    │    Workspace    │
+│                 │    │                 │    │                 │
+│ • Storage       │    │ • SKILL.md      │    │ • Filesystem    │
+│ • BM25 search   │    │ • Discovery     │    │ • Sandbox       │
+│ • Vector search │    │ • Search        │    │ • Code exec     │
+│ • Namespaces    │    │ • References    │    │ • Tools         │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+**Problems:**
+
+- Three separate primitives to configure and understand
+- Overlapping storage concepts (Knowledge storage vs Workspace filesystem)
+- Separate search implementations
+- Skills artificially separated from the files they represent
+
+### Target State (One Concept)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Workspace                                │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │              Filesystem (from Workspace)                 │   │
+│   │              Filesystem                                  │   │
 │   │  • readFile, writeFile, readdir, exists, mkdir, delete  │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │              Sandbox (from Workspace) - optional         │   │
+│   │              Sandbox (optional)                          │   │
 │   │  • executeCode, executeCommand, installPackage          │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │              Search (from Knowledge) - optional          │   │
+│   │              Search (optional)                           │   │
 │   │  • BM25 keyword search                                  │   │
 │   │  • Vector semantic search                               │   │
 │   │  • Hybrid search                                        │   │
+│   │  • index(), search()                                    │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │              /skills (directory convention)              │   │
-│   │  • SKILL.md parsing                                     │   │
-│   │  • Skill matching & resolution                          │   │
+│   │              Skills (configurable paths)                 │   │
+│   │  • SKILL.md parsing from skillsPaths                    │   │
 │   │  • listSkills, getSkill, searchSkills                   │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Benefits:**
+
+- **Simpler mental model** - One primitive to learn
+- **Unified storage** - Single filesystem abstraction for everything
+- **Composable** - Enable only what you need (filesystem only, +search, +sandbox)
+- **Consistent** - Same patterns as other Mastra abstractions (stores/, vectors/)
+- **Flexible** - Multiple filesystem providers (local, cloud, in-memory)
+
 ---
 
-## Key Decisions
+## Core Design Principles
 
-### 1. Workspace = Knowledge + Workspace Merged
+### 1. Workspace = Everything
 
-The two primitives become one:
+All file-based functionality goes through Workspace:
 
-| From Knowledge      | From Workspace         | Result                      |
-| ------------------- | ---------------------- | --------------------------- |
-| Storage abstraction | Filesystem abstraction | **Workspace.filesystem**    |
-| BM25 search         | -                      | **Workspace.search()**      |
-| Vector search       | -                      | **Workspace.search()**      |
-| Hybrid search       | -                      | **Workspace.search()**      |
-| -                   | Sandbox                | **Workspace.sandbox**       |
-| -                   | executeCode/Command    | **Workspace.executeCode()** |
-| -                   | Auto-injected tools    | **createWorkspaceTools()**  |
+- Files live in `workspace.filesystem`
+- Search indexes content from the filesystem
+- Skills are SKILL.md files in the filesystem at configured paths
+- Code execution happens in `workspace.sandbox`
 
 ### 2. Skills = Directory Convention
 
-Skills is not a separate primitive - it's a `/skills` directory pattern within Workspace:
+Skills are not a separate primitive. They are a **directory pattern** within Workspace:
 
-- Workspace scans `/skills` for SKILL.md files
-- Skill matching uses workspace search capabilities
-- `listSkills()`, `getSkill()`, `searchSkills()` are Workspace methods
+- Workspace scans `skillsPaths` (default: `['/skills']`) for SKILL.md files
+- Skill parsing, discovery, and search use workspace capabilities
+- Users can configure where skills live: `['/skills']`, `['/prompts', '/custom']`, etc.
 
-### 3. Knowledge Class Goes Away
+### 3. Processors Handle Context
 
-The `Knowledge` class is removed. Its functionality moves to Workspace:
+Workspace stores and searches. **Processors decide what to inject into agent context:**
 
-- `knowledge.add()` → `workspace.writeFile()`
-- `knowledge.get()` → `workspace.readFile()`
-- `knowledge.search()` → `workspace.search()`
-- `knowledge.listNamespaces()` → `workspace.readdir()` + scoping
+| Workspace Does         | Processors Do                      |
+| ---------------------- | ---------------------------------- |
+| Store files            | Inject static content into context |
+| Search indexed content | Search and inject relevant docs    |
+| Parse SKILL.md files   | Match and activate skills          |
 
-### 4. Workspace Lives on Mastra Instance
+This separation keeps Workspace focused while processors handle agent-specific logic.
+
+### 4. Provider-Based Architecture
+
+Workspace uses provider instances for flexibility:
 
 ```typescript
-const mastra = new Mastra({
-  workspace: new Workspace({
-    filesystem: new AgentFS({
-      /* ... */
-    }),
-    vectorStore: pinecone, // Optional, for semantic search
-    bm25: true, // Optional, for keyword search
-  }),
-  agents: { developerAgent, supportAgent },
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './data' }), // Provider
+  sandbox: new E2BSandbox({ apiKey: '...' }), // Provider
+  vectorStore: pinecone, // Provider
 });
 ```
 
-### 5. No Backward Compatibility Concerns
-
-None of this is merged to main yet - greenfield development.
+This allows mixing providers: local filesystem with cloud sandbox, or cloud filesystem with no sandbox.
 
 ---
 
 ## Workspace Scoping
 
-Workspaces support three scopes. Skills and all content follow the same pattern.
+Workspaces support three scopes for access control:
 
 ```typescript
 type WorkspaceScope = 'global' | 'agent' | 'thread';
 ```
 
-| Scope    | Shared Across             | Use Case                            |
-| -------- | ------------------------- | ----------------------------------- |
-| `global` | All agents, all threads   | Shared skills, company knowledge    |
-| `agent`  | All threads for one agent | Agent-specific skills, agent memory |
-| `thread` | Single conversation       | Thread-specific work files          |
+| Scope    | Shared Across             | Use Case                         |
+| -------- | ------------------------- | -------------------------------- |
+| `global` | All agents, all threads   | Shared skills, company knowledge |
+| `agent`  | All threads for one agent | Agent-specific skills and data   |
+| `thread` | Single conversation       | Thread-specific working files    |
 
-### Directory Structure with Scopes
-
-```
-.mastra/
-├── global/                    # scope: 'global'
-│   ├── skills/                # Available to ALL agents
-│   │   ├── code-review/
-│   │   └── api-design/
-│   └── knowledge/             # Shared knowledge
-│
-├── agents/
-│   ├── docs-agent/            # scope: 'agent', agentId: 'docs-agent'
-│   │   ├── skills/            # Only for docs-agent
-│   │   │   └── brand-guidelines/
-│   │   └── knowledge/         # Agent-specific knowledge
-│   │
-│   └── developer-agent/       # scope: 'agent', agentId: 'developer-agent'
-│       ├── skills/
-│       └── knowledge/
-│
-└── threads/                   # scope: 'thread'
-    └── {threadId}/
-        └── work/              # Thread-specific runtime files
-```
-
-### Mastra + Agent Configuration
+### Example: Multi-Scope Setup
 
 ```typescript
 const mastra = new Mastra({
-  // Global workspace - shared skills/knowledge
+  // Global workspace - company-wide skills and docs
   workspace: new Workspace({
     scope: 'global',
     filesystem: new AgentFS({
       /* ... */
     }),
+    skillsPaths: ['/skills'],
+    bm25: true,
   }),
 
   agents: {
-    docsAgent: new Agent({
-      id: 'docs-agent',
-      // Agent can have its own scoped workspace
-      workspace: new Workspace({
-        scope: 'agent',
-        agentId: 'docs-agent',
-        filesystem: new LocalFilesystem({ basePath: './.mastra/agents/docs-agent' }),
-      }),
+    supportAgent: new Agent({
+      id: 'support',
+      // Inherits global workspace
     }),
 
     developerAgent: new Agent({
-      id: 'developer-agent',
-      // No workspace = inherits from Mastra global
+      id: 'developer',
+      // Has its own agent-scoped workspace for dev-specific skills
+      workspace: new Workspace({
+        scope: 'agent',
+        agentId: 'developer',
+        filesystem: new LocalFilesystem({ basePath: './.mastra/agents/developer' }),
+        skillsPaths: ['/skills'],
+      }),
     }),
   },
 });
@@ -165,60 +179,163 @@ const mastra = new Mastra({
 
 ### Skill Resolution Order
 
-When an agent needs skills:
+When an agent needs skills, resolution follows the scope hierarchy:
 
-1. **Thread workspace** (if exists) - most specific
-2. **Agent workspace** (if exists) - agent-specific skills
-3. **Global workspace** (Mastra-level) - shared skills
+1. **Thread workspace** (most specific)
+2. **Agent workspace** (agent-specific)
+3. **Global workspace** (shared)
+
+---
+
+## API Overview
+
+### WorkspaceConfig
 
 ```typescript
-// Agent.getSkills() resolves from all applicable workspaces
-const allSkills = [
-  ...(threadWorkspace?.listSkills() ?? []),
-  ...(agentWorkspace?.listSkills() ?? []),
-  ...(globalWorkspace?.listSkills() ?? []),
-];
+interface WorkspaceConfig {
+  // Identity & Scoping
+  id?: string;
+  scope?: WorkspaceScope;
+  agentId?: string;
+  threadId?: string;
+
+  // Core Providers
+  filesystem: WorkspaceFilesystem;
+  sandbox?: WorkspaceSandbox;
+
+  // Search Capabilities
+  vectorStore?: VectorStore;
+  embedder?: Embedder;
+  bm25?: boolean | BM25Config;
+
+  // Directory Conventions
+  skillsPaths?: string[]; // Default: ['/skills']
+  autoIndexPaths?: string[]; // Paths to index on init()
+}
+```
+
+### Workspace API
+
+```typescript
+class Workspace {
+  // === File Operations ===
+  readFile(path: string): Promise<string | Buffer>;
+  writeFile(path: string, content: string | Buffer): Promise<void>;
+  readdir(path: string): Promise<FileEntry[]>;
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string): Promise<void>;
+  deleteFile(path: string): Promise<void>;
+
+  // === Code Execution (if sandbox configured) ===
+  executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
+  executeCommand(command: string, args?: string[]): Promise<CommandResult>;
+
+  // === Search (if bm25 or vectorStore configured) ===
+  index(path: string, content: string, options?: IndexOptions): Promise<void>;
+  search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
+  rebuildIndex(paths?: string[]): Promise<void>;
+
+  // === Skills (from skillsPaths) ===
+  listSkills(): Promise<SkillMetadata[]>;
+  getSkill(name: string): Promise<Skill | null>;
+  searchSkills(query: string): Promise<SkillSearchResult[]>;
+
+  // === Capabilities ===
+  canBM25: boolean;
+  canVector: boolean;
+  canHybrid: boolean;
+}
+```
+
+### SearchOptions
+
+```typescript
+interface SearchOptions {
+  topK?: number;
+  minScore?: number;
+  mode?: 'bm25' | 'vector' | 'hybrid';
+  vectorWeight?: number; // For hybrid mode (0-1)
+  paths?: string[]; // Scope search to paths
+  filter?: Record<string, unknown>; // Vector filter
+}
+```
+
+### SearchResult
+
+```typescript
+interface SearchResult {
+  id: string; // File path
+  content: string; // Matched content
+  score: number; // Search score
+  lineRange?: LineRange; // Where match was found
+  metadata?: Record<string, unknown>;
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
 ```
 
 ---
 
-## Workspace Implementations
+## Tool Injection
 
-Structure mirrors `stores/` - multiple implementations:
+When workspace is configured on an agent, tools are auto-injected:
 
-```
-workspaces/
-├── local/           # LocalFilesystem (disk-based)
-├── agentfs/         # AgentFS (SQLite/Turso)
-├── daytona/         # Daytona cloud workspace
-├── e2b/             # E2B sandbox + filesystem
-└── memory/          # In-memory (testing)
-```
+| Tool                        | When Available         | Description            |
+| --------------------------- | ---------------------- | ---------------------- |
+| `workspace_read_file`       | Always (if filesystem) | Read file contents     |
+| `workspace_write_file`      | Always (if filesystem) | Write to a file        |
+| `workspace_list_files`      | Always (if filesystem) | List directory         |
+| `workspace_search`          | If search configured   | Search indexed content |
+| `workspace_execute_code`    | If sandbox configured  | Run code               |
+| `workspace_execute_command` | If sandbox configured  | Run shell command      |
 
-### Examples
+---
+
+## Workspace Providers
+
+Multiple filesystem and sandbox implementations available:
+
+### Filesystem Providers
+
+| Provider          | Package                      | Storage      | Best For        |
+| ----------------- | ---------------------------- | ------------ | --------------- |
+| `LocalFilesystem` | `@mastra/core`               | Disk         | Development     |
+| `AgentFS`         | `@mastra/filesystem-agentfs` | SQLite/Turso | Production      |
+| `RamFilesystem`   | `@mastra/core`               | Memory       | Testing         |
+| `E2BFilesystem`   | `@mastra/filesystem-e2b`     | E2B Cloud    | Cloud sandboxes |
+
+### Sandbox Providers
+
+| Provider            | Package                      | Isolation | Best For         |
+| ------------------- | ---------------------------- | --------- | ---------------- |
+| `LocalSandbox`      | `@mastra/core`               | None      | Development only |
+| `ComputeSDKSandbox` | `@mastra/sandbox-computesdk` | Full      | Production       |
+| `E2BSandbox`        | `@mastra/sandbox-e2b`        | Full      | E2B users        |
+
+### Example Configurations
 
 ```typescript
-// Local disk-based
-const workspace = new Workspace({
+// Development: Local files, no sandbox
+const devWorkspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
 });
 
-// SQLite/Turso-backed
-const workspace = new Workspace({
+// Production: Cloud storage with search
+const prodWorkspace = new Workspace({
   filesystem: new AgentFS({
     connectionUrl: process.env.TURSO_URL,
     authToken: process.env.TURSO_TOKEN,
   }),
+  vectorStore: pinecone,
+  embedder: openaiEmbed,
+  bm25: true,
 });
 
-// Daytona cloud with sandbox
-const workspace = new Workspace({
-  filesystem: new DaytonaFilesystem({ projectId: 'my-project' }),
-  sandbox: new DaytonaSandbox({ projectId: 'my-project' }),
-});
-
-// E2B with integrated sandbox
-const workspace = new Workspace({
+// Full sandbox: E2B for code execution
+const sandboxWorkspace = new Workspace({
   filesystem: new E2BFilesystem({ sandboxId: 'xxx' }),
   sandbox: new E2BSandbox({ sandboxId: 'xxx' }),
 });
@@ -226,315 +343,14 @@ const workspace = new Workspace({
 
 ---
 
-## API Design
-
-### WorkspaceConfig
-
-```typescript
-interface WorkspaceConfig {
-  id?: string;
-  scope?: WorkspaceScope;
-  agentId?: string; // Required if scope is 'agent'
-  threadId?: string; // Required if scope is 'thread'
-
-  // Core providers
-  filesystem: WorkspaceFilesystem;
-  sandbox?: WorkspaceSandbox;
-
-  // Search capabilities (from Knowledge)
-  vectorStore?: VectorStore; // Or inherit from Mastra
-  embedder?: Embedder; // Required if vectorStore is provided
-  bm25?: boolean | BM25Config;
-
-  // Directory conventions
-  skillsPath?: string; // Default: '/skills'
-}
-```
-
-### Workspace Class (Complete Merged API)
-
-```typescript
-class Workspace {
-  // === Providers ===
-  readonly filesystem: WorkspaceFilesystem;
-  readonly sandbox?: WorkspaceSandbox;
-
-  // === Filesystem Operations (from current Workspace) ===
-  readFile(path: string, options?: ReadOptions): Promise<string | Buffer>;
-  writeFile(path: string, content: string | Buffer, options?: WriteOptions): Promise<void>;
-  readdir(path: string, options?: ReaddirOptions): Promise<FileEntry[]>;
-  exists(path: string): Promise<boolean>;
-  mkdir(path: string, options?: MkdirOptions): Promise<void>;
-  deleteFile(path: string, options?: DeleteOptions): Promise<void>;
-  stat(path: string): Promise<FileStat>;
-  copyFile(src: string, dest: string): Promise<void>;
-  moveFile(src: string, dest: string): Promise<void>;
-
-  // === Sandbox Operations (from current Workspace) ===
-  executeCode(code: string, options?: ExecuteOptions): Promise<CodeResult>;
-  executeCommand(command: string, args?: string[], options?: CommandOptions): Promise<CommandResult>;
-  installPackage?(packageName: string, options?: InstallOptions): Promise<InstallResult>;
-
-  // === Search Operations (from Knowledge) ===
-  search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
-  index(path: string, options?: IndexOptions): Promise<void>; // Index a file for search
-  indexDirectory(path: string, options?: IndexDirOptions): Promise<void>; // Index all files in directory
-
-  // Search capabilities
-  get canBM25(): boolean;
-  get canVector(): boolean;
-  get canHybrid(): boolean;
-
-  // === Skills Operations (directory convention) ===
-  listSkills(): Promise<SkillMetadata[]>;
-  getSkill(name: string): Promise<Skill | null>;
-  searchSkills(query: string, options?: SearchOptions): Promise<SkillSearchResult[]>;
-
-  // === Scoping ===
-  readonly scope: WorkspaceScope;
-  readonly agentId?: string;
-  readonly threadId?: string;
-}
-
-// Search options (from Knowledge)
-interface SearchOptions {
-  topK?: number;
-  minScore?: number;
-  mode?: 'bm25' | 'vector' | 'hybrid';
-  filter?: Record<string, unknown>;
-  path?: string; // Scope search to a specific directory
-}
-```
-
----
-
-## Tool Injection vs Input Processing
-
-Two patterns for giving agents capabilities. **Use both.**
-
-### Pattern 1: Tool Injection
-
-Tools added directly to agent's tool set. Agent decides when to use.
-
-```typescript
-function createWorkspaceTools(workspace: Workspace) {
-  return {
-    workspace_read_file: createTool({
-      /* ... */
-    }),
-    workspace_write_file: createTool({
-      /* ... */
-    }),
-    workspace_execute_code: createTool({
-      /* ... */
-    }),
-    workspace_search: createTool({
-      /* ... */
-    }),
-  };
-}
-```
-
-**Best for**: File operations, code execution, explicit search
-
-### Pattern 2: Input Processing
-
-Processors inject context/tools based on content matching.
-
-```typescript
-class SkillsProcessor implements InputProcessor {
-  async process(messages, context) {
-    const activeSkills = await this.matchSkills(messages);
-    return {
-      messages,
-      context: {
-        ...context,
-        instructions: context.instructions + '\n' + skillInstructions,
-      },
-    };
-  }
-}
-```
-
-**Best for**: Skill instructions, contextual knowledge injection
-
-### Recommendation
-
-| Capability           | Pattern          | Rationale                     |
-| -------------------- | ---------------- | ----------------------------- |
-| File operations      | Tool injection   | Agent explicitly reads/writes |
-| Code execution       | Tool injection   | Agent decides when to run     |
-| Search               | Tool injection   | Agent explicitly searches     |
-| Skill instructions   | Input processing | Context injected when matched |
-| Contextual knowledge | Input processing | Relevant docs auto-injected   |
-
----
-
-## Search Index Architecture
-
-### BM25 Index
-
-The existing `BM25Index` class is designed for persistence:
-
-```typescript
-// Serialization support already exists
-interface BM25IndexData {
-  k1: number;
-  b: number;
-  documents: SerializedBM25Document[];
-  avgDocLength: number;
-}
-
-// BM25Index methods
-bm25Index.serialize(): BM25IndexData;           // Export to JSON
-BM25Index.deserialize(data): BM25Index;         // Restore from JSON
-```
-
-**Decision: Memory-only with optional persistence**
-
-Default behavior (recommended):
-
-- BM25 index lives in memory
-- Rebuilt on startup from `/knowledge` directory files
-- Fast enough for typical knowledge bases (< 10k documents)
-
-For large datasets, optional persistence:
-
-```typescript
-// On shutdown or periodically
-const indexData = workspace.bm25Index.serialize();
-await workspace.writeFile('/.indexes/bm25.json', JSON.stringify(indexData));
-
-// On startup
-const cached = await workspace.readFile('/.indexes/bm25.json');
-const bm25Index = BM25Index.deserialize(JSON.parse(cached));
-```
-
-If using AgentFS (SQLite/Turso), index can be stored in a dedicated table instead of filesystem.
-
-### Vector Indexes
-
-**Decision: Configure on workspace OR inherit from Mastra**
-
-```typescript
-// Option A: Workspace has its own vectorStore
-const workspace = new Workspace({
-  filesystem: new AgentFS({
-    /* ... */
-  }),
-  vectorStore: new PineconeStore({
-    /* ... */
-  }),
-});
-
-// Option B: Inherit from Mastra (recommended for shared vector stores)
-const mastra = new Mastra({
-  vectors: {
-    pinecone: new PineconeStore({
-      /* ... */
-    }),
-  },
-  workspace: new Workspace({
-    filesystem: new AgentFS({
-      /* ... */
-    }),
-    // vectorStore inherited from mastra.vectors.pinecone
-  }),
-});
-```
-
-Vector indexes are managed by the vector store provider (Pinecone, Chroma, etc.) - workspace just references them.
-
----
-
-## Benefits
-
-1. **Simpler Mental Model**: One primitive instead of three
-2. **Unified Storage**: Single filesystem abstraction
-3. **Composable**: Mix and match filesystem + sandbox + search
-4. **Consistent Patterns**: Similar to stores/ architecture
-5. **Scope-Based Access**: Skills/knowledge scoped like workspace
-
----
-
-## Current Implementation Catalogue
-
-### packages/core (Interfaces & Base Classes)
-
-| File                          | Contents                                                                                          |
-| ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| `src/knowledge/types.ts`      | `MastraKnowledge` interface, `KnowledgeSearchResult`, `KnowledgeSearchOptions`, artifact types    |
-| `src/knowledge/base.ts`       | `KnowledgeStorage` abstract class (namespace CRUD, artifact CRUD)                                 |
-| `src/skills/types.ts`         | `MastraSkills` interface, `Skill`, `SkillMetadata`, `SkillSearchResult`, skill CRUD types         |
-| `src/skills/base.ts`          | `SkillsStorage` abstract class (skill discovery, CRUD, references/scripts/assets)                 |
-| `src/artifacts/types.ts`      | Shared types: `ContentSource`, `SearchMode`, `LineRange`, `BaseSearchResult`, `BaseSearchOptions` |
-| `src/workspace/workspace.ts`  | `Workspace` class (filesystem + sandbox), lifecycle, sync, snapshots                              |
-| `src/workspace/filesystem.ts` | `WorkspaceFilesystem` interface                                                                   |
-| `src/workspace/sandbox.ts`    | `WorkspaceSandbox` interface                                                                      |
-| `src/workspace/tools.ts`      | `createWorkspaceTools()` - auto-injected tools for agents                                         |
-| `src/workspace/local-*.ts`    | `LocalFilesystem`, `LocalSandbox` implementations                                                 |
-
-### packages/skills (Implementations)
-
-| File                                    | Contents                                                                |
-| --------------------------------------- | ----------------------------------------------------------------------- |
-| `src/skills.ts`                         | `Skills` class - full implementation with BM25/vector search            |
-| `src/knowledge.ts`                      | `Knowledge` class - namespace/artifact management with search           |
-| `src/search-engine.ts`                  | `SearchEngine` class - unified BM25 + vector + hybrid search            |
-| `src/bm25.ts`                           | `BM25Index` class - in-memory inverted index with serialize/deserialize |
-| `src/storage/filesystem.ts`             | `FilesystemStorage` - skills storage on disk                            |
-| `src/storage/knowledge-filesystem.ts`   | `KnowledgeFilesystemStorage` - knowledge storage on disk                |
-| `src/processors/skills.ts`              | `SkillsProcessor` - input processor for skill activation/tools          |
-| `src/processors/static-knowledge.ts`    | `StaticKnowledge` - processor for static artifacts                      |
-| `src/processors/retrieved-knowledge.ts` | `RetrievedKnowledge` - processor for search-based injection             |
-| `src/schemas.ts`                        | Zod schemas for skill validation                                        |
-
-### What Moves Where
-
-| Current Location                                | Destination              | Notes                          |
-| ----------------------------------------------- | ------------------------ | ------------------------------ |
-| `@mastra/skills/search-engine`                  | `@mastra/core/workspace` | Core search capability         |
-| `@mastra/skills/bm25`                           | `@mastra/core/workspace` | BM25 index implementation      |
-| `@mastra/core/knowledge/*`                      | **REMOVED**              | Subsumed by Workspace          |
-| `@mastra/skills/knowledge`                      | **REMOVED**              | Subsumed by Workspace          |
-| `@mastra/skills/storage/knowledge-*`            | **REMOVED**              | Use Workspace filesystem       |
-| `@mastra/skills/processors/static-knowledge`    | Keep or adapt            | May become workspace processor |
-| `@mastra/skills/processors/retrieved-knowledge` | Keep or adapt            | May become workspace processor |
-
----
-
-## Implementation Plan
-
-### Phase 1: Add Search to Workspace
-
-1. [ ] Add `SearchEngine` to Workspace class (from Knowledge)
-2. [ ] Add `search()`, `index()`, `indexDirectory()` methods
-3. [ ] Add `bm25` and `vectorStore` config options
-4. [ ] Add `workspace_search` tool to `createWorkspaceTools()`
-
-### Phase 2: Add Skills to Workspace
-
-1. [ ] Add `listSkills()`, `getSkill()`, `searchSkills()` methods
-2. [ ] Implement SKILL.md parsing within Workspace
-3. [ ] Skills indexed in workspace search automatically
-
-### Phase 3: Deprecate Knowledge
-
-1. [ ] Mark Knowledge class as deprecated
-2. [ ] Migration guide: Knowledge → Workspace
-3. [ ] Remove Knowledge from examples
-
-### Phase 4: Scope-based Resolution
-
-1. [ ] Test global/agent/thread scoping
-2. [ ] Skill resolution across scopes
-3. [ ] Search across scopes (optional)
-
----
-
 ## Related Documents
 
-- [WORKSPACE_PR_EXPLORATION.md](./WORKSPACE_PR_EXPLORATION.md) - PR #11567 research
-- [AGENT_SKILLS_SPEC.md](./AGENT_SKILLS_SPEC.md) - Agent Skills spec (agentskills.io)
-- [SKILLS_GRAPHS.md](./SKILLS_GRAPHS.md) - Knowledge graph exploration
-- [VERSIONING_DESIGN.md](./VERSIONING_DESIGN.md) - Skill versioning design
+For migration-specific details, see:
+
+- [KNOWLEDGE_MIGRATION_PLAN.md](./KNOWLEDGE_MIGRATION_PLAN.md) - How Knowledge becomes Workspace
+- [SKILLS_MIGRATION_PLAN.md](./SKILLS_MIGRATION_PLAN.md) - How Skills integrates with Workspace
+
+For background research:
+
+- [WORKSPACE_PR_EXPLORATION.md](./WORKSPACE_PR_EXPLORATION.md) - PR #11567 analysis
+- [AGENT_SKILLS_SPEC.md](./AGENT_SKILLS_SPEC.md) - Agent Skills specification
