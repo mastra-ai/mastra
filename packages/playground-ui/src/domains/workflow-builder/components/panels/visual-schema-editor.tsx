@@ -198,9 +198,9 @@ function FieldRow({ field, onUpdate, onDelete, depth = 0 }: FieldRowProps) {
 
   return (
     <div className={cn('rounded-md border border-border1 bg-surface1', depth > 0 && 'ml-4')}>
-      <div className="p-3">
-        {/* Row 1: Name and actions */}
-        <div className="flex items-center gap-2 mb-2">
+      <div className="p-3 space-y-3">
+        {/* Row 1: Field name */}
+        <div className="flex items-center gap-2">
           {/* Expand/collapse for objects */}
           {hasChildren ? (
             <button
@@ -214,52 +214,36 @@ function FieldRow({ field, onUpdate, onDelete, depth = 0 }: FieldRowProps) {
                 <ChevronRight className="w-4 h-4 text-icon4" />
               )}
             </button>
-          ) : (
-            <div className="w-5" />
-          )}
+          ) : null}
 
-          {/* Field name input */}
+          {/* Field name input - full width */}
           <input
             type="text"
             value={field.name}
             onChange={e => onUpdate({ ...field, name: e.target.value })}
             placeholder="fieldName"
             style={inputStyle}
-            className="flex-1 h-8 px-3 text-sm font-mono rounded border focus:outline-none focus:border-accent1"
+            className="flex-1 h-9 px-3 text-sm font-mono rounded border focus:outline-none focus:border-accent1"
           />
-
-          {/* Required toggle */}
-          <button
-            type="button"
-            onClick={() => onUpdate({ ...field, required: !field.required })}
-            className={cn(
-              'h-8 px-3 text-xs rounded border transition-colors flex-shrink-0',
-              field.required
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                : 'bg-surface2 text-icon4 border-border1 hover:border-icon3',
-            )}
-          >
-            {field.required ? 'Required' : 'Optional'}
-          </button>
 
           {/* Delete button */}
           <button
             type="button"
             onClick={onDelete}
-            className="h-8 w-8 flex items-center justify-center text-icon4 hover:text-red-400 hover:bg-red-500/10 rounded border border-transparent hover:border-red-500/30 transition-colors flex-shrink-0"
+            className="h-9 w-9 flex items-center justify-center text-icon4 hover:text-red-400 hover:bg-red-500/10 rounded border border-border1 hover:border-red-500/30 transition-colors flex-shrink-0"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Row 2: Type and description */}
-        <div className="flex items-center gap-2 ml-5">
+        {/* Row 2: Type, Required toggle */}
+        <div className="flex items-center gap-2">
           {/* Type selector */}
           <select
             value={field.type}
             onChange={e => handleTypeChange(e.target.value as JsonSchemaType)}
             style={selectStyle}
-            className="h-7 px-2 text-xs rounded border focus:outline-none focus:border-accent1 cursor-pointer"
+            className="h-8 px-2 text-xs rounded border focus:outline-none focus:border-accent1 cursor-pointer flex-shrink-0"
           >
             {TYPE_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>
@@ -276,7 +260,7 @@ function FieldRow({ field, onUpdate, onDelete, depth = 0 }: FieldRowProps) {
                 value={field.items?.type || 'string'}
                 onChange={e => onUpdate({ ...field, items: { type: e.target.value as JsonSchemaType } })}
                 style={selectStyle}
-                className="h-7 px-2 text-xs rounded border focus:outline-none focus:border-accent1 cursor-pointer"
+                className="h-8 px-2 text-xs rounded border focus:outline-none focus:border-accent1 cursor-pointer flex-shrink-0"
               >
                 <option value="string">String</option>
                 <option value="number">Number</option>
@@ -285,16 +269,32 @@ function FieldRow({ field, onUpdate, onDelete, depth = 0 }: FieldRowProps) {
             </>
           )}
 
-          {/* Description */}
-          <input
-            type="text"
-            value={field.description || ''}
-            onChange={e => onUpdate({ ...field, description: e.target.value || undefined })}
-            placeholder="Description (optional)"
-            style={{ ...inputStyle, color: '#E6E6E6' }}
-            className="flex-1 h-7 px-2 text-xs rounded border focus:outline-none focus:border-accent1"
-          />
+          <div className="flex-1" />
+
+          {/* Required toggle */}
+          <button
+            type="button"
+            onClick={() => onUpdate({ ...field, required: !field.required })}
+            className={cn(
+              'h-8 px-3 text-xs rounded border transition-colors flex-shrink-0',
+              field.required
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                : 'bg-surface2 text-icon4 border-border1 hover:border-icon3',
+            )}
+          >
+            {field.required ? 'Required' : 'Optional'}
+          </button>
         </div>
+
+        {/* Row 3: Description */}
+        <input
+          type="text"
+          value={field.description || ''}
+          onChange={e => onUpdate({ ...field, description: e.target.value || undefined })}
+          placeholder="Description (optional)"
+          style={{ ...inputStyle, color: '#A9A9A9' }}
+          className="w-full h-8 px-3 text-xs rounded border focus:outline-none focus:border-accent1"
+        />
       </div>
 
       {/* Nested fields for object type */}

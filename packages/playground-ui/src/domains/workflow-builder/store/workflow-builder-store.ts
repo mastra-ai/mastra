@@ -32,6 +32,7 @@ import {
 } from '../types';
 import { deserializeDefinition } from '../utils/deserialize';
 import { validateWorkflow, type ValidationResult } from '../utils/validate';
+import { serializeGraph } from '../utils/serialize';
 
 // ============================================================================
 // Constants
@@ -703,7 +704,8 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
 
   toDefinition: () => {
     const state = get();
-    // TODO: Implement with serialize utility
+    const { stepGraph, steps } = serializeGraph(state.nodes, state.edges);
+
     return {
       id: state.workflowId ?? '',
       name: state.workflowName,
@@ -711,8 +713,8 @@ export const useWorkflowBuilderStore = create<WorkflowBuilderState>()((set, get)
       inputSchema: state.inputSchema,
       outputSchema: state.outputSchema,
       stateSchema: state.stateSchema,
-      stepGraph: [],
-      steps: {},
+      stepGraph,
+      steps,
     };
   },
 

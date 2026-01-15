@@ -6,15 +6,38 @@ import type {
   ToolNodeData,
   ConditionNodeData,
   ConditionBranch,
+  WorkflowNodeData,
+  TransformNodeData,
+  SuspendNodeData,
+  SleepNodeData,
+  LoopNodeData,
+  ForeachNodeData,
+  ParallelNodeData,
+  ParallelBranch,
 } from '../types';
-import { createTriggerNodeData, createAgentNodeData, createToolNodeData, createConditionNodeData } from '../types';
+import {
+  createTriggerNodeData,
+  createAgentNodeData,
+  createToolNodeData,
+  createConditionNodeData,
+  createWorkflowNodeData,
+  createTransformNodeData,
+  createSuspendNodeData,
+  createSleepNodeData,
+  createLoopNodeData,
+  createForeachNodeData,
+  createParallelNodeData,
+} from '../types';
 import type {
   StorageWorkflowDefinitionType,
   DeclarativeStepDefinition,
   AgentStepDef,
   ToolStepDef,
-  ConditionDef,
+  WorkflowStepDef,
+  TransformStepDef,
+  SuspendStepDef,
   VariableRef,
+  DefinitionStepFlowEntry,
 } from '@mastra/core/storage';
 
 export interface DeserializeResult {
@@ -41,7 +64,7 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
   };
   nodes.push(triggerNode);
 
-  // Create nodes for each step
+  // Create nodes for each step in the steps object
   for (const [stepId, stepDef] of Object.entries(definition.steps)) {
     const node = stepDefToNode(stepId, stepDef);
     if (node) {
@@ -49,115 +72,36 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
     }
   }
 
-  // Create edges from stepGraph
-  let lastNodeId = 'trigger';
+  // Track generated nodes for flow entries that create nodes (sleep, loop, etc.)
   let conditionCounter = 0;
+  let sleepCounter = 0;
+  let loopCounter = 0;
+  let foreachCounter = 0;
+  let parallelCounter = 0;
+
+  // Process stepGraph to create flow control nodes and edges
+  let lastNodeId = 'trigger';
+  const processedSteps = new Set<string>();
 
   for (const entry of definition.stepGraph) {
-    switch (entry.type) {
-      case 'step': {
-        edges.push({
-          id: `e-${lastNodeId}-${entry.step.id}`,
-          source: lastNodeId,
-          target: entry.step.id,
-        });
-        lastNodeId = entry.step.id;
-        break;
-      }
+    const result = processStepGraphEntry(entry, lastNodeId, nodes, edges, processedSteps, {
+      conditionCounter,
+      sleepCounter,
+      loopCounter,
+      foreachCounter,
+      parallelCounter,
+    });
 
-      case 'conditional': {
-        // Create a condition node
-        const conditionNodeId = `condition-${conditionCounter++}`;
-        const branches: ConditionBranch[] = entry.branches.map((branch, i) => ({
-          id: String(i),
-          label: `Branch ${i + 1}`,
-          condition: branch.condition,
-        }));
+    // Update counters
+    conditionCounter = result.counters.conditionCounter;
+    sleepCounter = result.counters.sleepCounter;
+    loopCounter = result.counters.loopCounter;
+    foreachCounter = result.counters.foreachCounter;
+    parallelCounter = result.counters.parallelCounter;
 
-        // Add default branch if present
-        if (entry.default) {
-          branches.push({
-            id: 'default',
-            label: 'Default',
-            condition: null,
-          });
-        }
-
-        const conditionNodeData: ConditionNodeData = {
-          ...createConditionNodeData('Condition'),
-          branches,
-          defaultBranch: entry.default ? 'default' : undefined,
-        };
-
-        const conditionNode: BuilderNode = {
-          id: conditionNodeId,
-          type: 'condition',
-          position: { x: 0, y: 0 },
-          data: conditionNodeData,
-        };
-        nodes.push(conditionNode);
-
-        // Edge from last node to condition
-        edges.push({
-          id: `e-${lastNodeId}-${conditionNodeId}`,
-          source: lastNodeId,
-          target: conditionNodeId,
-        });
-
-        // Create edges to each branch target
-        for (let i = 0; i < entry.branches.length; i++) {
-          const branch = entry.branches[i];
-          edges.push({
-            id: `e-${conditionNodeId}-${branch.stepId}-${i}`,
-            source: conditionNodeId,
-            target: branch.stepId,
-            sourceHandle: `branch-${i}`,
-            data: {
-              branchId: String(i),
-              label: `Branch ${i + 1}`,
-            },
-          });
-        }
-
-        if (entry.default) {
-          edges.push({
-            id: `e-${conditionNodeId}-${entry.default}-default`,
-            source: conditionNodeId,
-            target: entry.default,
-            sourceHandle: `branch-${entry.branches.length}`,
-            data: {
-              branchId: 'default',
-              label: 'Default',
-            },
-          });
-        }
-
-        // Note: With conditions, there's no single "last node"
-        // This is a simplification - real implementation would need more sophisticated graph traversal
-        break;
-      }
-
-      case 'parallel': {
-        for (const parallelStep of entry.steps) {
-          edges.push({
-            id: `e-${lastNodeId}-${parallelStep.step.id}`,
-            source: lastNodeId,
-            target: parallelStep.step.id,
-          });
-        }
-        // After parallel, we'd need to track multiple "last nodes"
-        // For simplicity, we don't update lastNodeId here
-        break;
-      }
-
-      // Handle other entry types as needed
-      case 'sleep':
-      case 'sleepUntil':
-      case 'loop':
-      case 'foreach':
-      case 'map':
-        // These types are not yet fully supported in the builder
-        break;
+    // Update lastNodeId if the entry type advances it
+    if (result.nextNodeId) {
+      lastNodeId = result.nextNodeId;
     }
   }
 
@@ -168,6 +112,325 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
     nodes: layoutedNodes,
     edges,
   };
+}
+
+interface ProcessingCounters {
+  conditionCounter: number;
+  sleepCounter: number;
+  loopCounter: number;
+  foreachCounter: number;
+  parallelCounter: number;
+}
+
+interface ProcessingResult {
+  counters: ProcessingCounters;
+  nextNodeId: string | null;
+}
+
+/**
+ * Process a single step graph entry
+ */
+function processStepGraphEntry(
+  entry: DefinitionStepFlowEntry,
+  lastNodeId: string,
+  nodes: BuilderNode[],
+  edges: BuilderEdge[],
+  processedSteps: Set<string>,
+  counters: ProcessingCounters,
+): ProcessingResult {
+  switch (entry.type) {
+    case 'step': {
+      // Don't create duplicate edges for already-processed steps
+      if (!processedSteps.has(entry.step.id)) {
+        edges.push({
+          id: `e-${lastNodeId}-${entry.step.id}`,
+          source: lastNodeId,
+          target: entry.step.id,
+          type: 'data',
+        });
+        processedSteps.add(entry.step.id);
+      }
+      return {
+        counters,
+        nextNodeId: entry.step.id,
+      };
+    }
+
+    case 'sleep': {
+      const sleepNodeId = `sleep-${counters.sleepCounter++}`;
+      const sleepData: SleepNodeData = {
+        ...createSleepNodeData('Sleep'),
+        sleepType: 'duration',
+        duration: entry.duration,
+      };
+
+      nodes.push({
+        id: sleepNodeId,
+        type: 'sleep',
+        position: { x: 0, y: 0 },
+        data: sleepData,
+      });
+
+      edges.push({
+        id: `e-${lastNodeId}-${sleepNodeId}`,
+        source: lastNodeId,
+        target: sleepNodeId,
+        type: 'data',
+      });
+
+      return {
+        counters: { ...counters, sleepCounter: counters.sleepCounter },
+        nextNodeId: sleepNodeId,
+      };
+    }
+
+    case 'sleepUntil': {
+      const sleepNodeId = `sleep-${counters.sleepCounter++}`;
+      const sleepData: SleepNodeData = {
+        ...createSleepNodeData('Sleep Until'),
+        sleepType: 'timestamp',
+        timestamp: entry.timestamp,
+      };
+
+      nodes.push({
+        id: sleepNodeId,
+        type: 'sleep',
+        position: { x: 0, y: 0 },
+        data: sleepData,
+      });
+
+      edges.push({
+        id: `e-${lastNodeId}-${sleepNodeId}`,
+        source: lastNodeId,
+        target: sleepNodeId,
+        type: 'data',
+      });
+
+      return {
+        counters: { ...counters, sleepCounter: counters.sleepCounter },
+        nextNodeId: sleepNodeId,
+      };
+    }
+
+    case 'loop': {
+      const loopNodeId = `loop-${counters.loopCounter++}`;
+      const loopData: LoopNodeData = {
+        ...createLoopNodeData('Loop'),
+        loopType: entry.loopType,
+        condition: entry.condition,
+      };
+
+      nodes.push({
+        id: loopNodeId,
+        type: 'loop',
+        position: { x: 0, y: 0 },
+        data: loopData,
+      });
+
+      // Edge from last node to loop
+      edges.push({
+        id: `e-${lastNodeId}-${loopNodeId}`,
+        source: lastNodeId,
+        target: loopNodeId,
+        type: 'data',
+      });
+
+      // Edge from loop to body step
+      edges.push({
+        id: `e-${loopNodeId}-${entry.stepId}`,
+        source: loopNodeId,
+        target: entry.stepId,
+        type: 'data',
+        sourceHandle: 'loop-body',
+        data: { label: 'Loop body' },
+      });
+
+      return {
+        counters: { ...counters, loopCounter: counters.loopCounter },
+        nextNodeId: loopNodeId,
+      };
+    }
+
+    case 'foreach': {
+      const foreachNodeId = `foreach-${counters.foreachCounter++}`;
+      const foreachData: ForeachNodeData = {
+        ...createForeachNodeData('For Each'),
+        collection: entry.collection,
+        concurrency: entry.concurrency,
+        itemVariable: 'item',
+      };
+
+      nodes.push({
+        id: foreachNodeId,
+        type: 'foreach',
+        position: { x: 0, y: 0 },
+        data: foreachData,
+      });
+
+      // Edge from last node to foreach
+      edges.push({
+        id: `e-${lastNodeId}-${foreachNodeId}`,
+        source: lastNodeId,
+        target: foreachNodeId,
+        type: 'data',
+      });
+
+      // Edge from foreach to body step
+      edges.push({
+        id: `e-${foreachNodeId}-${entry.stepId}`,
+        source: foreachNodeId,
+        target: entry.stepId,
+        type: 'data',
+        sourceHandle: 'foreach-body',
+        data: { label: 'For each item' },
+      });
+
+      return {
+        counters: { ...counters, foreachCounter: counters.foreachCounter },
+        nextNodeId: foreachNodeId,
+      };
+    }
+
+    case 'parallel': {
+      const parallelNodeId = `parallel-${counters.parallelCounter++}`;
+      const branches: ParallelBranch[] = entry.steps.map((s, i) => ({
+        id: `branch-${i}`,
+        label: `Branch ${i + 1}`,
+      }));
+
+      const parallelData: ParallelNodeData = {
+        ...createParallelNodeData('Parallel'),
+        branches,
+      };
+
+      nodes.push({
+        id: parallelNodeId,
+        type: 'parallel',
+        position: { x: 0, y: 0 },
+        data: parallelData,
+      });
+
+      // Edge from last node to parallel
+      edges.push({
+        id: `e-${lastNodeId}-${parallelNodeId}`,
+        source: lastNodeId,
+        target: parallelNodeId,
+        type: 'data',
+      });
+
+      // Edge from parallel to each branch step
+      for (let i = 0; i < entry.steps.length; i++) {
+        const step = entry.steps[i];
+        edges.push({
+          id: `e-${parallelNodeId}-${step.step.id}`,
+          source: parallelNodeId,
+          target: step.step.id,
+          type: 'data',
+          sourceHandle: `branch-${i}`,
+          data: {
+            branchId: `branch-${i}`,
+            label: `Branch ${i + 1}`,
+          },
+        });
+      }
+
+      return {
+        counters: { ...counters, parallelCounter: counters.parallelCounter },
+        // Parallel doesn't have a single "next" node
+        nextNodeId: null,
+      };
+    }
+
+    case 'conditional': {
+      const conditionNodeId = `condition-${counters.conditionCounter++}`;
+      const branches: ConditionBranch[] = entry.branches.map((branch, i) => ({
+        id: String(i),
+        label: `Branch ${i + 1}`,
+        condition: branch.condition,
+      }));
+
+      // Add default branch if present
+      if (entry.default) {
+        branches.push({
+          id: 'default',
+          label: 'Default',
+          condition: null,
+        });
+      }
+
+      const conditionData: ConditionNodeData = {
+        ...createConditionNodeData('Condition'),
+        branches,
+        defaultBranch: entry.default ? 'default' : undefined,
+      };
+
+      nodes.push({
+        id: conditionNodeId,
+        type: 'condition',
+        position: { x: 0, y: 0 },
+        data: conditionData,
+      });
+
+      // Edge from last node to condition
+      edges.push({
+        id: `e-${lastNodeId}-${conditionNodeId}`,
+        source: lastNodeId,
+        target: conditionNodeId,
+        type: 'data',
+      });
+
+      // Create edges to each branch target
+      for (let i = 0; i < entry.branches.length; i++) {
+        const branch = entry.branches[i];
+        edges.push({
+          id: `e-${conditionNodeId}-${branch.stepId}-${i}`,
+          source: conditionNodeId,
+          target: branch.stepId,
+          type: 'data',
+          sourceHandle: `branch-${i}`,
+          data: {
+            branchId: String(i),
+            label: `Branch ${i + 1}`,
+          },
+        });
+      }
+
+      if (entry.default) {
+        edges.push({
+          id: `e-${conditionNodeId}-${entry.default}-default`,
+          source: conditionNodeId,
+          target: entry.default,
+          type: 'data',
+          sourceHandle: `branch-${entry.branches.length}`,
+          data: {
+            branchId: 'default',
+            label: 'Default',
+          },
+        });
+      }
+
+      return {
+        counters: { ...counters, conditionCounter: counters.conditionCounter },
+        // Condition doesn't have a single "next" node
+        nextNodeId: null,
+      };
+    }
+
+    case 'map': {
+      // Map entries are inline transforms, we don't create a separate node
+      // The output is applied to the workflow state
+      return {
+        counters,
+        nextNodeId: null,
+      };
+    }
+
+    default:
+      return {
+        counters,
+        nextNodeId: null,
+      };
+  }
 }
 
 /**
@@ -213,11 +476,54 @@ function stepDefToNode(stepId: string, stepDef: DeclarativeStepDefinition): Buil
       };
     }
 
-    case 'workflow':
-    case 'transform':
-    case 'suspend':
-      // These step types are not yet fully supported in the builder
-      return null;
+    case 'workflow': {
+      const workflowDef = stepDef as WorkflowStepDef;
+      const label = workflowDef.workflowId || 'Sub-Workflow';
+      const workflowData: WorkflowNodeData = {
+        ...createWorkflowNodeData(label),
+        workflowId: workflowDef.workflowId,
+        input: workflowDef.input ?? {},
+      };
+
+      return {
+        id: stepId,
+        type: 'workflow',
+        position: { x: 0, y: 0 },
+        data: workflowData,
+      };
+    }
+
+    case 'transform': {
+      const transformDef = stepDef as TransformStepDef;
+      const transformData: TransformNodeData = {
+        ...createTransformNodeData('Transform'),
+        output: transformDef.output,
+        outputSchema: transformDef.outputSchema,
+      };
+
+      return {
+        id: stepId,
+        type: 'transform',
+        position: { x: 0, y: 0 },
+        data: transformData,
+      };
+    }
+
+    case 'suspend': {
+      const suspendDef = stepDef as SuspendStepDef;
+      const suspendData: SuspendNodeData = {
+        ...createSuspendNodeData('Human Input'),
+        resumeSchema: suspendDef.resumeSchema,
+        payload: suspendDef.payload,
+      };
+
+      return {
+        id: stepId,
+        type: 'suspend',
+        position: { x: 0, y: 0 },
+        data: suspendData,
+      };
+    }
 
     default:
       return null;

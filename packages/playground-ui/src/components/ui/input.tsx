@@ -5,7 +5,7 @@ import * as React from 'react';
 import clsx from 'clsx';
 
 const inputVariants = cva(
-  'flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+  'flex w-full text-icon6 rounded-lg border bg-surface2 shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:border-accent1',
   {
     variants: {
       variant: {
