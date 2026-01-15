@@ -15,7 +15,7 @@ function NavbarContentDesktop() {
         <Link href="/docs/v1">
           <Logo />
         </Link>
-        <div className="hidden min-[996px]:block">
+        <div className="hidden lg:block">
           <TabSwitcher />
         </div>
       </div>
@@ -25,9 +25,9 @@ function NavbarContentDesktop() {
           <GitHubIconLink />
         </div>
 
-        <div className="hidden @[798px]:block">
-          <div className="flex gap-2 items-center">
-            <SearchContainer locale="en" />
+        <div className="flex gap-2 items-center">
+          <SearchContainer locale="en" />
+          <div className="hidden lg:block">
             <AskAI />
           </div>
         </div>

@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
+@theme {
+  --breakpoint-lg: 62.25rem;
+}
+
 /* ==================== LIGHT MODE ==================== */
 :root {
   /* Primary colors - Light mode uses darker green to match Nextra */
@@ -637,7 +641,21 @@ ol {
   margin: var(--ifm-toc-padding-vertical) 0;
 }
 
-@media (min-width: 997px) {
+kbd {
+  all: unset;
+  background: var(--ifm-background-color);
+  border-radius: 4px;
+  padding-inline: 0.38rem;
+  padding-block: 0.2rem;
+  display: flex;
+  font-size: 10px;
+}
+
+[data-theme="dark"] kbd {
+  background: var(--ifm-navbar-background-color);
+}
+
+@media (min-width: 62.25rem) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
   }
@@ -1028,20 +1046,6 @@ ol {
     text-wrap: balance;
   }
 
-  kbd {
-    all: unset;
-    background: var(--ifm-background-color);
-    border-radius: 4px;
-    padding-inline: 0.38rem;
-    padding-block: 0.2rem;
-    display: flex;
-    font-size: 10px;
-  }
-
-  [data-theme="dark"] kbd {
-    background: var(--ifm-navbar-background-color);
-  }
-
   /* Hide in Safari */
   input,
   button {
@@ -1160,7 +1164,7 @@ ol {
   }
 
   #doc-item-container {
-    max-width: 64rem;
+    max-width: 62.25rem;
     margin: 0 auto;
   }
 
@@ -1202,7 +1206,6 @@ ol {
   }
 
   [class*="docItemContainer"] {
-    padding-inline: 3rem;
     max-width: 48rem;
     margin: 0 auto;
   }

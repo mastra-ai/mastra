@@ -75,7 +75,7 @@ const getSectionIcon = (section?: string) => {
 
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  placeholder = "Search docs...",
+  placeholder = "Search documentation",
   searchOptions,
   closeModal,
 }) => {
@@ -103,7 +103,7 @@ export const CustomSearch: FC<SearchProps> = ({
   }, []);
 
   // Check if screen is mobile size
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery("(max-width: 996px)");
 
   // Virtual list for search results
   const virtualizer = useVirtualizer({
@@ -295,7 +295,7 @@ export const CustomSearch: FC<SearchProps> = ({
       <div
         className={cn(
           className,
-          "flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-[14px]",
+          "flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-3.5",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
