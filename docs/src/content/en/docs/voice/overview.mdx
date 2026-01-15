@@ -4,6 +4,7 @@ description: Overview of voice capabilities in Mastra, including text-to-speech,
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
+  - "@mastra/voice-amazon-nova-sonic"
   - "@mastra/voice-azure"
   - "@mastra/voice-cloudflare"
   - "@mastra/voice-deepgram"
@@ -661,6 +662,50 @@ await voiceAgent.voice.send(micStream);
 Visit the [Google Gemini Live Reference](/reference/v1/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
+  <TabItem value="amazon" label="Amazon Nova Sonic">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { NovaSonicVoice } from "@mastra/voice-amazon-nova-sonic";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new NovaSonicVoice({
+    region: "us-east-1",
+    speaker: "tiffany",
+    instructions: "You are a helpful voice assistant.",
+  }),
+});
+
+// Connect before using speak/send
+await voiceAgent.voice.connect();
+
+// Listen for agent audio responses
+voiceAgent.voice.on("speaker", (audioStream) => {
+  playAudio(audioStream);
+});
+
+// Listen for text responses and transcriptions
+voiceAgent.voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// Initiate the conversation
+await voiceAgent.voice.speak("How can I help you today?");
+
+// Send continuous audio from the microphone
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+Visit the [Amazon Nova Sonic Reference](/reference/v1/voice/amazon-nova-sonic) for more information on the Amazon Nova Sonic voice provider.
+
+  </TabItem>
 </Tabs>
 
 ## Voice Configuration
@@ -1039,6 +1084,7 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 
 - [CompositeVoice](/reference/v1/voice/composite-voice)
 - [MastraVoice](/reference/v1/voice/mastra-voice)
+- [Amazon Nova Sonic Voice](/reference/v1/voice/amazon-nova-sonic)
 - [OpenAI Voice](/reference/v1/voice/openai)
 - [OpenAI Realtime Voice](/reference/v1/voice/openai-realtime)
 - [Azure Voice](/reference/v1/voice/azure)
