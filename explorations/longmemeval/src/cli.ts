@@ -21,6 +21,7 @@ import { ListPartialCommand } from './commands/list-partial';
 import { TokensCommand } from './commands/tokens';
 import { PrecomputeEmbeddingsCommand } from './commands/precompute-embeddings';
 import { FindProhibitedCommand } from './commands/find-prohibited';
+import { PartialResultsCommand } from './commands/partial-results';
 import {
   getRunVariant,
   resolveConfigAlias,
@@ -1155,6 +1156,25 @@ program
       await command.run({
         dataset: options.dataset,
         questionId: options.questionId,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('partial [config]')
+  .description('Check partial or complete benchmark results')
+  .option('-o, --output <dir>', 'Results directory', './results')
+  .option('--run-id <id>', 'Specific run ID to check')
+  .action(async (config, options) => {
+    try {
+      const command = new PartialResultsCommand();
+      await command.run({
+        config,
+        runId: options.runId,
+        outputDir: options.output,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);

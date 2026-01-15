@@ -23,7 +23,8 @@
     "clean-partial": "tsx src/cli.ts clean -d longmemeval_s -c observational-memory --partial",
     "tokens": "tsx src/cli.ts tokens -d longmemeval_s",
     "precompute-embeddings": "tsx src/cli.ts precompute-embeddings -d longmemeval_s -c observational-memory",
-    "find-prohibited": "tsx src/cli.ts find-prohibited -d longmemeval_s"
+    "find-prohibited": "tsx src/cli.ts find-prohibited -d longmemeval_s",
+    "partial": "tsx src/cli.ts partial"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
