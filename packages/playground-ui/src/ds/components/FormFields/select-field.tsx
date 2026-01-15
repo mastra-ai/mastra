@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils';
 import * as React from 'react';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/ds/components/Select';
+import { formElementFocus, formElementRadius, type FormElementSize } from '@/ds/primitives/form-element';
 
-export type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
+export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> & {
   name?: string;
   testId?: string;
   label?: React.ReactNode;
@@ -14,6 +15,7 @@ export type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   options: { value: string; label: string }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
+  size?: FormElementSize;
 };
 
 export function SelectField({
@@ -27,6 +29,7 @@ export function SelectField({
   options,
   onValueChange,
   placeholder = 'Select an option',
+  size = 'lg',
 }: SelectFieldProps) {
   return (
     <div
@@ -48,10 +51,8 @@ export function SelectField({
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger
           id="select-dataset"
-          className={cn(
-            'w-full border border-border1 rounded-lg min-h-10 min-w-20 gap-2',
-            'focus:outline-none focus:shadow-[inset_0_0_0_1px_rgba(24,251,111,0.75)]',
-          )}
+          size={size}
+          className={cn('w-full border border-border1 min-w-20 gap-2', formElementRadius, formElementFocus)}
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
