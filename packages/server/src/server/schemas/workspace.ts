@@ -38,7 +38,8 @@ export const fsDeleteQuerySchema = z.object({
 
 export const fsWriteBodySchema = z.object({
   path: z.string().describe('Path to write to'),
-  content: z.string().describe('Content to write'),
+  content: z.string().describe('Content to write (text or base64-encoded binary)'),
+  encoding: z.enum(['utf-8', 'base64']).optional().default('utf-8').describe('Content encoding'),
   recursive: z.coerce.boolean().optional().describe('Create parent directories if needed'),
 });
 

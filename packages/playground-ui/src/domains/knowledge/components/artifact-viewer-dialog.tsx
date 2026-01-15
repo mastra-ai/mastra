@@ -1,6 +1,6 @@
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Copy, X, FileText, Check } from 'lucide-react';
 import { useState } from 'react';
 

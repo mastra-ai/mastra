@@ -51,6 +51,8 @@ import KnowledgeNamespaceDetail from './pages/knowledge/[namespace]';
 import Skills from './pages/skills';
 import SkillDetailPage from './pages/skills/[skillName]';
 import { AgentSkillDetailPage } from './pages/agents/skills/[skillName]';
+import Workspace from './pages/workspace';
+import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -71,7 +73,9 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string) => `/skills/${skillName}`,
+  skillLink: (skillName: string) => `/workspace/skills/${skillName}`,
+  workspaceLink: () => `/workspace`,
+  workspaceSkillLink: (skillName: string) => `/workspace/skills/${skillName}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
@@ -183,6 +187,9 @@ function App() {
 
                 <Route path="/skills" element={<Skills />} />
                 <Route path="/skills/:skillName" element={<SkillDetailPage />} />
+
+                <Route path="/workspace" element={<Workspace />} />
+                <Route path="/workspace/skills/:skillName" element={<WorkspaceSkillDetailPage />} />
 
                 <Route path="/workflows" element={<Workflows />} />
                 <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />

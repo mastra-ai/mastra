@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { EntryList } from '@/components/ui/elements';
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { EntryList } from '@/ds/components/EntryList';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { FileText, File, Image, Lock, Trash2 } from 'lucide-react';
 import type { KnowledgeArtifact } from '../hooks/use-knowledge';
 

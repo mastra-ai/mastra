@@ -1281,3 +1281,81 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   deprecated: true,
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
 });
+
+// ============================================================================
+// Agent Skill Routes
+// ============================================================================
+
+const agentSkillPathParams = z.object({
+  agentId: z.string().describe('Agent ID'),
+  skillName: z.string().describe('Skill name'),
+});
+
+const agentSkillResponseSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  license: z.string().optional(),
+  compatibility: z.string().optional(),
+  metadata: z.record(z.string()).optional(),
+  allowedTools: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  instructions: z.string().optional(),
+  source: z
+    .discriminatedUnion('type', [
+      z.object({ type: z.literal('external'), packagePath: z.string() }),
+      z.object({ type: z.literal('local'), projectPath: z.string() }),
+      z.object({ type: z.literal('managed'), mastraPath: z.string() }),
+    ])
+    .optional(),
+  references: z.array(z.string()).optional(),
+  scripts: z.array(z.string()).optional(),
+  assets: z.array(z.string()).optional(),
+});
+
+export const GET_AGENT_SKILL_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId/skills/:skillName',
+  responseType: 'json',
+  pathParamSchema: agentSkillPathParams,
+  responseSchema: agentSkillResponseSchema,
+  summary: 'Get agent skill',
+  description: 'Returns details for a specific skill available to the agent via its workspace',
+  tags: ['Agents', 'Skills'],
+  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+    try {
+      const agent = agentId ? mastra.getAgentById(agentId) : null;
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      // Get the agent's workspace
+      const workspace = await agent.getWorkspace({ requestContext });
+      if (!workspace?.skills) {
+        throw new HTTPException(404, { message: 'Agent does not have skills configured' });
+      }
+
+      // Get the skill from the workspace
+      const skill = await workspace.skills.get(skillName);
+      if (!skill) {
+        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+      }
+
+      return {
+        name: skill.name,
+        description: skill.description,
+        license: skill.license,
+        compatibility: skill.compatibility,
+        metadata: skill.metadata,
+        allowedTools: skill.allowedTools,
+        path: skill.path,
+        instructions: skill.instructions,
+        source: skill.source,
+        references: skill.references,
+        scripts: skill.scripts,
+        assets: skill.assets,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting agent skill');
+    }
+  },
+});

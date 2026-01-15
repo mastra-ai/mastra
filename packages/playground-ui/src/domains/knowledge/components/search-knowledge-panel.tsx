@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/ds/components/Input';
 import { Search, Loader2, Sparkles, FileText, Zap } from 'lucide-react';
 import type { SearchResponse, SearchResult } from '../hooks/use-knowledge';
 

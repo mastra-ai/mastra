@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/ds/components/Dialog';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { Switch } from '@/ds/components/Switch';
 import { Plus, Database, Search, Sparkles } from 'lucide-react';
 
 interface VectorConfig {

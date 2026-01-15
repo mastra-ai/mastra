@@ -7,8 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
-  DatabaseIcon,
-  Wand2Icon,
+  FolderIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -56,14 +55,9 @@ const mainNavigation: NavSection[] = [
         icon: <GaugeIcon />,
       },
       {
-        name: 'Knowledge',
-        url: '/knowledge',
-        icon: <DatabaseIcon />,
-      },
-      {
-        name: 'Skills',
-        url: '/skills',
-        icon: <Wand2Icon />,
+        name: 'Workspace',
+        url: '/workspace',
+        icon: <FolderIcon />,
       },
       {
         name: 'Request Context',

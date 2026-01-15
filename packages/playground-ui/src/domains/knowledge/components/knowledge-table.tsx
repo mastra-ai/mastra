@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { EntryList } from '@/components/ui/elements';
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { EntryList } from '@/ds/components/EntryList';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useLinkComponent } from '@/lib/framework';
 import { Database, Search, Sparkles, BookOpen, FolderOpen, Trash2 } from 'lucide-react';
 import type { KnowledgeNamespace } from '../hooks/use-knowledge';

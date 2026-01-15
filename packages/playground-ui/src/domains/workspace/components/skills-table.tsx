@@ -2,13 +2,14 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { useLinkComponent } from '@/lib/framework';
-import { Wand2, BookOpen, FolderOpen, FileCode, Package, Home, Server } from 'lucide-react';
-import type { SkillMetadata, SkillSource } from '../hooks/use-skills';
+import { Wand2, BookOpen, FileCode, Package, Home, Server } from 'lucide-react';
+import type { SkillMetadata, SkillSource } from '../hooks/use-workspace-skills';
 
 export interface SkillsTableProps {
   skills: SkillMetadata[];
   isLoading: boolean;
   isSkillsConfigured?: boolean;
+  basePath?: string;
 }
 
 const columns = [
@@ -47,7 +48,12 @@ function getSourceLabel(source?: SkillSource) {
   }
 }
 
-export function SkillsTable({ skills, isLoading, isSkillsConfigured = true }: SkillsTableProps) {
+export function SkillsTable({
+  skills,
+  isLoading,
+  isSkillsConfigured = true,
+  basePath = '/workspace/skills',
+}: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
   if (!isSkillsConfigured && !isLoading) {
@@ -77,7 +83,7 @@ export function SkillsTable({ skills, isLoading, isSkillsConfigured = true }: Sk
                   key={skill.name}
                   entry={entry}
                   columns={columns}
-                  onClick={() => navigate(`/skills/${encodeURIComponent(skill.name)}`)}
+                  onClick={() => navigate(`${basePath}/${encodeURIComponent(skill.name)}`)}
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-1.5 rounded bg-surface5">
@@ -139,8 +145,8 @@ function SkillsNotConfigured() {
         </div>
         <h2 className="text-lg font-medium text-icon6 mb-2">Skills Not Configured</h2>
         <p className="text-sm text-icon4 mb-6">
-          No Skills instance is registered with Mastra. Add a Skills instance to your configuration to discover and
-          manage agent skills.
+          No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
+          agent skills.
         </p>
         <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/skills/overview" target="_blank">
           <Icon>

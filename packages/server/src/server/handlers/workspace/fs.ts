@@ -84,9 +84,9 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   bodySchema: fsWriteBodySchema,
   responseSchema: fsWriteResponseSchema,
   summary: 'Write file content',
-  description: 'Writes content to a file at the specified path',
+  description: 'Writes content to a file at the specified path. Supports base64 encoding for binary files.',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, content, recursive }) => {
+  handler: async ({ mastra, path, content, encoding, recursive }) => {
     try {
       if (!path || content === undefined) {
         throw new HTTPException(400, { message: 'Path and content are required' });
@@ -99,7 +99,13 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      await workspace.fs.writeFile(decodedPath, content, { recursive: recursive ?? true });
+      // Handle base64-encoded content for binary files
+      let fileContent: string | Buffer = content;
+      if (encoding === 'base64') {
+        fileContent = Buffer.from(content, 'base64');
+      }
+
+      await workspace.fs.writeFile(decodedPath, fileContent, { recursive: recursive ?? true });
 
       return {
         success: true,
