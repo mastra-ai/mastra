@@ -1,6 +1,6 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,
@@ -98,68 +98,8 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
   }
 
   async upsert({ indexName, vectors, metadata, ids, documents }: ChromaUpsertVectorParams): Promise<string[]> {
-    // Input validation
-    if (!vectors || vectors.length === 0) {
-      throw new MastraError({
-        id: createVectorErrorId('CHROMA', 'UPSERT', 'INVALID_INPUT'),
-        domain: ErrorDomain.MASTRA_VECTOR,
-        category: ErrorCategory.USER,
-        text: 'Vectors array cannot be empty',
-        details: { indexName },
-      });
-    }
-
-    if (metadata && metadata.length !== vectors.length) {
-      throw new MastraError({
-        id: createVectorErrorId('CHROMA', 'UPSERT', 'INVALID_INPUT'),
-        domain: ErrorDomain.MASTRA_VECTOR,
-        category: ErrorCategory.USER,
-        text: `Metadata length (${metadata.length}) must match vectors length (${vectors.length})`,
-        details: {
-          indexName,
-          vectorsLength: vectors.length,
-          metadataLength: metadata.length,
-        },
-      });
-    }
-
-    if (ids && ids.length !== vectors.length) {
-      throw new MastraError({
-        id: createVectorErrorId('CHROMA', 'UPSERT', 'INVALID_INPUT'),
-        domain: ErrorDomain.MASTRA_VECTOR,
-        category: ErrorCategory.USER,
-        text: `IDs length (${ids.length}) must match vectors length (${vectors.length})`,
-        details: {
-          indexName,
-          vectorsLength: vectors.length,
-          idsLength: ids.length,
-        },
-      });
-    }
-
-    // Validate vector values for NaN and Infinity
-    for (let i = 0; i < vectors.length; i++) {
-      const vector = vectors[i];
-      if (!vector) continue;
-
-      for (let j = 0; j < vector.length; j++) {
-        const value = vector[j];
-        if (value === null || value === undefined || !Number.isFinite(value)) {
-          throw new MastraError({
-            id: createVectorErrorId('CHROMA', 'UPSERT', 'INVALID_VECTOR_VALUE'),
-            domain: ErrorDomain.MASTRA_VECTOR,
-            category: ErrorCategory.USER,
-            text: `Vector at index ${i} contains invalid value at position ${j}: ${value}. Values must be finite numbers.`,
-            details: {
-              indexName,
-              vectorIndex: i,
-              valueIndex: j,
-              value: String(value),
-            },
-          });
-        }
-      }
-    }
+    // Validate input parameters and vector values
+    validateUpsert('CHROMA', vectors, metadata, ids, true);
 
     try {
       const collection = await this.getCollection({ indexName });
@@ -255,16 +195,8 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
     includeVector = false,
     documentFilter,
   }: ChromaQueryVectorParams): Promise<QueryResult[]> {
-    // Validate topK
-    if (topK <= 0) {
-      throw new MastraError({
-        id: createVectorErrorId('CHROMA', 'QUERY', 'INVALID_TOP_K'),
-        domain: ErrorDomain.MASTRA_VECTOR,
-        category: ErrorCategory.USER,
-        text: `topK must be a positive integer, got: ${topK}`,
-        details: { indexName, topK },
-      });
-    }
+    // Validate topK parameter
+    validateTopK('CHROMA', topK);
 
     try {
       const collection = await this.getCollection({ indexName });

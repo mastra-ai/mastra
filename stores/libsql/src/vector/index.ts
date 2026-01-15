@@ -4,7 +4,7 @@ import type { Client as TursoClient, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
   QueryResult,
@@ -133,9 +133,8 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     minScore = -1, // Default to -1 to include all results (cosine similarity ranges from -1 to 1)
   }: LibSQLQueryVectorParams): Promise<QueryResult[]> {
     try {
-      if (!Number.isInteger(topK) || topK <= 0) {
-        throw new Error('topK must be a positive integer');
-      }
+      // Validate topK parameter
+      validateTopK('LIBSQL', topK);
       if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
         throw new Error('queryVector must be an array of finite numbers');
       }
@@ -215,39 +214,8 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
-    // Input validation
-    if (!vectors || vectors.length === 0) {
-      throw new MastraError(
-        {
-          id: createVectorErrorId('LIBSQL', 'UPSERT', 'INVALID_ARGS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        new Error('vectors array cannot be empty'),
-      );
-    }
-
-    if (metadata && metadata.length !== vectors.length) {
-      throw new MastraError(
-        {
-          id: createVectorErrorId('LIBSQL', 'UPSERT', 'INVALID_ARGS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        new Error(`metadata length (${metadata.length}) must match vectors length (${vectors.length})`),
-      );
-    }
-
-    if (ids && ids.length !== vectors.length) {
-      throw new MastraError(
-        {
-          id: createVectorErrorId('LIBSQL', 'UPSERT', 'INVALID_ARGS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        new Error(`ids length (${ids.length}) must match vectors length (${vectors.length})`),
-      );
-    }
+    // Validate input parameters
+    validateUpsertInput('LIBSQL', vectors, metadata, ids);
 
     const tx = await this.turso.transaction('write');
     try {

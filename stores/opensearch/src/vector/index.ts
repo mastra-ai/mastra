@@ -12,7 +12,7 @@ import type {
   UpsertVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import type { ClientOptions } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';
@@ -212,67 +212,8 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
   async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
-    // Input validation
-    if (!vectors || vectors.length === 0) {
-      throw new MastraError({
-        id: createVectorErrorId('OPENSEARCH', 'UPSERT', 'INVALID_ARGS'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'Cannot upsert with empty vectors array',
-        details: { indexName },
-      });
-    }
-
-    if (metadata && metadata.length !== vectors.length) {
-      throw new MastraError({
-        id: createVectorErrorId('OPENSEARCH', 'UPSERT', 'INVALID_ARGS'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: `Metadata length (${metadata.length}) must match vectors length (${vectors.length})`,
-        details: {
-          indexName,
-          vectorsLength: vectors.length,
-          metadataLength: metadata.length,
-        },
-      });
-    }
-
-    if (ids && ids.length !== vectors.length) {
-      throw new MastraError({
-        id: createVectorErrorId('OPENSEARCH', 'UPSERT', 'INVALID_ARGS'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: `IDs length (${ids.length}) must match vectors length (${vectors.length})`,
-        details: {
-          indexName,
-          vectorsLength: vectors.length,
-          idsLength: ids.length,
-        },
-      });
-    }
-
-    // Validate vectors for NaN/Infinity
-    for (let i = 0; i < vectors.length; i++) {
-      const vector = vectors[i];
-      if (!vector) continue;
-      for (let j = 0; j < vector.length; j++) {
-        const component = vector[j];
-        if (!Number.isFinite(component)) {
-          throw new MastraError({
-            id: createVectorErrorId('OPENSEARCH', 'UPSERT', 'INVALID_ARGS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Vector at index ${i} contains invalid value at position ${j}: ${component}. Vectors cannot contain NaN, Infinity, or -Infinity.`,
-            details: {
-              indexName,
-              vectorIndex: i,
-              componentIndex: j,
-              invalidValue: String(component),
-            },
-          });
-        }
-      }
-    }
+    // Validate input parameters and vector values
+    validateUpsert('OPENSEARCH', vectors, metadata, ids, true);
 
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
@@ -338,15 +279,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     includeVector = false,
   }: OpenSearchVectorParams): Promise<QueryResult[]> {
     // Validate topK parameter
-    if (topK !== undefined && topK <= 0) {
-      throw new MastraError({
-        id: createVectorErrorId('OPENSEARCH', 'QUERY', 'INVALID_ARGS'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: 'topK must be a positive integer',
-        details: { indexName, topK },
-      });
-    }
+    validateTopK('OPENSEARCH', topK);
 
     try {
       const translatedFilter = this.transformFilter(filter);
