@@ -16,10 +16,12 @@ import {
   X,
   AlertCircle,
   Save,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { Button } from '@/ds/components/Button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useWorkflowBuilderStore } from '../store/workflow-builder-store';
 import { useTestRunnerStore, type TestRunResult, type StepResult, type StepStatus } from '../store/test-runner-store';
 
@@ -67,26 +69,53 @@ function StepResultRow({
   step,
   isExpanded,
   onToggle,
+  onSelectNode,
 }: {
   step: StepResult;
   isExpanded: boolean;
   onToggle: () => void;
+  onSelectNode: (stepId: string) => void;
 }) {
   return (
     <div className="border-b border-border1 last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-surface3 transition-colors"
-      >
+      <div className="flex items-center gap-1 px-3 py-2 hover:bg-surface3 transition-colors">
         <StatusIcon status={step.status} />
-        <span className="text-xs font-medium text-icon5 flex-1 text-left truncate">{step.stepId}</span>
+        <button
+          type="button"
+          onClick={() => onSelectNode(step.stepId)}
+          className="text-xs font-medium text-icon5 flex-1 text-left truncate hover:text-accent1 transition-colors"
+          title="Click to select node"
+        >
+          {step.stepId}
+        </button>
         {step.durationMs && <span className="text-[10px] text-icon3 font-mono">{formatDuration(step.durationMs)}</span>}
         {step.aiMetrics?.totalTokens && (
           <span className="text-[10px] text-purple-400 font-mono">{step.aiMetrics.totalTokens} tok</span>
         )}
-        {isExpanded ? <ChevronDown className="w-4 h-4 text-icon3" /> : <ChevronRight className="w-4 h-4 text-icon3" />}
-      </button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onSelectNode(step.stepId)}
+                className="p-1 rounded hover:bg-surface4 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3 text-icon3 hover:text-accent1" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Select node in canvas</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <button type="button" onClick={onToggle} className="p-1 rounded hover:bg-surface4 transition-colors">
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 text-icon3" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-icon3" />
+          )}
+        </button>
+      </div>
 
       {isExpanded && (
         <div className="px-3 py-2 bg-surface2 text-xs space-y-2">
@@ -194,6 +223,7 @@ export function TestRunnerPanel({ className }: TestRunnerPanelProps) {
   // Workflow builder state - check if workflow is saved
   const workflowId = useWorkflowBuilderStore(state => state.workflowId);
   const isDirty = useWorkflowBuilderStore(state => state.isDirty);
+  const selectNode = useWorkflowBuilderStore(state => state.selectNode);
 
   // Test runner state
   const isOpen = useTestRunnerStore(state => state.isOpen);
@@ -205,6 +235,11 @@ export function TestRunnerPanel({ className }: TestRunnerPanelProps) {
   const setShowInputModal = useTestRunnerStore(state => state.setShowInputModal);
   const cancelRun = useTestRunnerStore(state => state.cancelRun);
   const clearRun = useTestRunnerStore(state => state.clearRun);
+
+  // Handler to select a node in the canvas
+  const handleSelectNode = (stepId: string) => {
+    selectNode(stepId);
+  };
 
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [showHistory, setShowHistory] = useState(false);
@@ -402,6 +437,7 @@ export function TestRunnerPanel({ className }: TestRunnerPanelProps) {
                   step={step}
                   isExpanded={expandedSteps.has(step.stepId)}
                   onToggle={() => toggleStep(step.stepId)}
+                  onSelectNode={handleSelectNode}
                 />
               ))}
             </div>
