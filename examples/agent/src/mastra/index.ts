@@ -94,6 +94,7 @@ const config = {
   server: {
     auth: mastraAuth,
     rbac: rbacProvider,
+    audit: true, // Enable audit logging for all events (auth, agents, workflows, etc.)
     build: {
       swaggerUI: true,
     },

@@ -34,6 +34,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       'memory:*',
       'tools:*',
       'logs:read',
+      'audit:read',
       'users:read',
       'users:invite',
       'settings:read',

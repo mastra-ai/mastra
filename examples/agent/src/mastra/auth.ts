@@ -58,9 +58,8 @@ export const rbacProvider = new StaticRBACProvider<EEUser>({
       return ['admin'];
     }
 
-    // For testing: set everyone to viewer to test UI permission restrictions
-    // Change back to 'member' for normal usage
-    return ['member'];
+    // Give all users admin role for demo purposes (includes audit:read)
+    return ['admin'];
   },
 });
 

@@ -8,7 +8,7 @@
  * - Logout users
  */
 
-import { MastraAuthProvider } from '@mastra/core/server';
+import { MastraAuthProvider, getAuditService, AuditService } from '@mastra/core/server';
 import {
   buildCapabilities,
   type IUserProvider,
@@ -199,8 +199,10 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
   description: 'Handles the OAuth callback, exchanges code for session, and returns user info.',
   tags: ['Auth'],
   handler: async ctx => {
+    const { mastra, code, state, request } = ctx as any;
+    const auditService = getAuditService(mastra);
+
     try {
-      const { mastra, code, state } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
@@ -219,6 +221,15 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
       }
 
       const user = result.user as EEUser;
+
+      // Log successful SSO login
+      await auditService.log('auth', {
+        actor: AuditService.createActorFromUser(user, request),
+        action: 'auth.sso-callback',
+        outcome: 'success',
+        metadata: { email: user.email },
+      });
+
       return {
         success: true,
         user: {
@@ -230,6 +241,19 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
         redirectTo,
       };
     } catch (error) {
+      // Log failed SSO callback
+      await auditService.log('auth', {
+        actor: {
+          type: 'user',
+          id: 'unknown',
+          ip: request?.headers?.get('x-forwarded-for') ?? request?.headers?.get('x-real-ip') ?? undefined,
+          userAgent: request?.headers?.get('user-agent') ?? undefined,
+        },
+        action: 'auth.sso-callback',
+        outcome: 'failure',
+        metadata: { error: error instanceof Error ? error.message : 'Unknown error' },
+      });
+
       return handleError(error, 'Error handling SSO callback');
     }
   },
@@ -248,12 +272,20 @@ export const POST_LOGOUT_ROUTE = createRoute({
   description: 'Destroys the current session and returns logout redirect URL if available.',
   tags: ['Auth'],
   handler: async ctx => {
+    const { mastra, request } = ctx as any;
+    const auditService = getAuditService(mastra);
+
     try {
-      const { mastra, request } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth) {
         return { success: true };
+      }
+
+      // Get current user for audit logging before destroying session
+      let user: EEUser | null = null;
+      if (implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
+        user = await auth.getCurrentUser(request);
       }
 
       // Get session ID and destroy it
@@ -268,6 +300,15 @@ export const POST_LOGOUT_ROUTE = createRoute({
       let redirectTo: string | undefined;
       if (implementsInterface<ISSOProvider>(auth, 'getLogoutUrl') && auth.getLogoutUrl) {
         redirectTo = auth.getLogoutUrl('/');
+      }
+
+      // Log successful logout
+      if (user) {
+        await auditService.log('auth', {
+          actor: AuditService.createActorFromUser(user, request),
+          action: 'auth.logout',
+          outcome: 'success',
+        });
       }
 
       return {
@@ -293,8 +334,10 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
   description: 'Authenticates a user with email and password.',
   tags: ['Auth'],
   handler: async ctx => {
+    const { mastra, request, email, password } = ctx as any;
+    const auditService = getAuditService(mastra);
+
     try {
-      const { mastra, request, email, password } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
@@ -303,6 +346,14 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
 
       const result = await auth.signIn(email, password, request);
       const user = result.user as EEUser;
+
+      // Log successful sign-in
+      await auditService.log('auth', {
+        actor: AuditService.createActorFromUser(user, request),
+        action: 'auth.sign-in',
+        outcome: 'success',
+        metadata: { email: user.email },
+      });
 
       const responseBody = JSON.stringify({
         user: {
@@ -328,6 +379,20 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
 
       return new Response(responseBody, { status: 200, headers });
     } catch (error) {
+      // Log failed sign-in attempt
+      await auditService.log('auth', {
+        actor: {
+          type: 'user',
+          id: 'unknown',
+          email,
+          ip: request?.headers.get('x-forwarded-for') ?? request?.headers.get('x-real-ip') ?? undefined,
+          userAgent: request?.headers.get('user-agent') ?? undefined,
+        },
+        action: 'auth.sign-in',
+        outcome: 'failure',
+        metadata: { email, error: error instanceof Error ? error.message : 'Unknown error' },
+      });
+
       if (error instanceof HTTPException) throw error;
       // Return a generic error for auth failures to avoid leaking info
       throw new HTTPException(401, { message: 'Invalid email or password' });
@@ -348,8 +413,10 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createRoute({
   description: 'Creates a new user account with email and password.',
   tags: ['Auth'],
   handler: async ctx => {
+    const { mastra, request, email, password, name } = ctx as any;
+    const auditService = getAuditService(mastra);
+
     try {
-      const { mastra, request, email, password, name } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signUp')) {
@@ -358,6 +425,14 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createRoute({
 
       const result = await auth.signUp(email, password, name, request);
       const user = result.user as EEUser;
+
+      // Log successful sign-up
+      await auditService.log('auth', {
+        actor: AuditService.createActorFromUser(user, request),
+        action: 'auth.sign-up',
+        outcome: 'success',
+        metadata: { email: user.email, name: user.name },
+      });
 
       const responseBody = JSON.stringify({
         user: {
@@ -383,6 +458,20 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createRoute({
 
       return new Response(responseBody, { status: 200, headers });
     } catch (error) {
+      // Log failed sign-up attempt
+      await auditService.log('auth', {
+        actor: {
+          type: 'user',
+          id: 'unknown',
+          email,
+          ip: request?.headers.get('x-forwarded-for') ?? request?.headers.get('x-real-ip') ?? undefined,
+          userAgent: request?.headers.get('user-agent') ?? undefined,
+        },
+        action: 'auth.sign-up',
+        outcome: 'failure',
+        metadata: { email, error: error instanceof Error ? error.message : 'Unknown error' },
+      });
+
       if (error instanceof HTTPException) throw error;
       // Extract message from error (handles Better Auth APIError format)
       const errorMessage = error instanceof Error ? error.message : 'Failed to create account';

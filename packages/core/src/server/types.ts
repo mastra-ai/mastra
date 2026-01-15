@@ -36,6 +36,35 @@ export type ContextWithMastra = Context<{
   };
 }>;
 
+/**
+ * Configuration for audit event logging.
+ */
+export type AuditConfig = {
+  /**
+   * Which event types to log.
+   * If not specified, all events are logged.
+   */
+  events?: {
+    /** Log authentication events (login, logout, sign-up) */
+    auth?: boolean;
+    /** Log agent execution events */
+    agents?: boolean;
+    /** Log workflow execution events */
+    workflows?: boolean;
+    /** Log tool execution events */
+    tools?: boolean;
+    /** Log permission denial events */
+    permissions?: boolean;
+  };
+  /**
+   * Retention policy for audit events.
+   */
+  retention?: {
+    /** Number of days to keep audit events. Events older than this are auto-deleted. */
+    days?: number;
+  };
+};
+
 export type MastraAuthConfig<TUser = unknown> = {
   /**
    * Protected paths for the server
@@ -147,6 +176,45 @@ export type ServerConfig = {
    * For authorization (WHAT the user can do), use the `rbac` option.
    */
   auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * Audit logging configuration for EE (Enterprise Edition).
+   *
+   * Enables activity tracking for compliance, security monitoring,
+   * and debugging. Audit events are stored in Mastra's storage layer.
+   *
+   * Set to `true` to enable with defaults (logs all events).
+   * Pass a config object to customize what gets logged.
+   *
+   * @example Enable with defaults
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     audit: true,
+   *   },
+   * });
+   * ```
+   *
+   * @example Custom configuration
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     audit: {
+   *       events: {
+   *         auth: true,      // Login, logout, sign-up
+   *         agents: true,    // Agent executions
+   *         workflows: true, // Workflow runs
+   *         tools: false,    // Tool executions (disabled)
+   *       },
+   *       retention: {
+   *         days: 90,        // Auto-delete after 90 days
+   *       },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  audit?: true | AuditConfig;
 
   /**
    * Role-based access control (RBAC) provider for EE (Enterprise Edition).

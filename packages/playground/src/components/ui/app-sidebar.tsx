@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  ScrollTextIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -69,6 +70,17 @@ const mainNavigation: NavSection[] = [
         name: 'Observability',
         url: '/observability',
         icon: <EyeIcon />,
+      },
+    ],
+  },
+  {
+    key: 'audit',
+    separator: true,
+    links: [
+      {
+        name: 'Audit Logs',
+        url: '/audit',
+        icon: <ScrollTextIcon />,
       },
     ],
   },

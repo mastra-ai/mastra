@@ -46,6 +46,7 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
+import Audit from './pages/audit';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -146,6 +147,15 @@ function App() {
                 }
               >
                 <Route path="/observability" element={<Observability />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/audit" element={<Audit />} />
               </Route>
               <Route
                 element={
