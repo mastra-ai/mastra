@@ -36,6 +36,7 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { Workspace } from '../workspace';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
@@ -284,6 +285,11 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Voice settings for speech input and output.
    */
   voice?: CompositeVoice;
+  /**
+   * Workspace for file storage and code execution.
+   * When configured, workspace tools are automatically injected into the agent.
+   */
+  workspace?: DynamicArgument<Workspace>;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
