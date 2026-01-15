@@ -50,24 +50,9 @@ export interface EvaluationResult {
 
 export type DatasetType = 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
 
-export type MemoryConfigType =
-  | 'semantic-recall'
-  | 'working-memory'
-  | 'working-memory-tailored'
-  | 'combined'
-  | 'combined-tailored'
-  | 'observational-memory'
-  | 'observational-memory-shortcut'
-  | 'observational-memory-shortcut-glm'
-  | 'om-patterns-observed'
-  | 'om-patterns-tool'
-  | 'om-glm'
-  | 'om-glm-patterns-observed'
-  | 'om-glm-patterns-tool'
-  | 'om-rag'
-  | 'om-glm-rag'
-  | 'om-glm-rag-topk100'
-  | 'om-glm-rag-prefboost';
+// MemoryConfigType is derived from MEMORY_CONFIGS keys in config.ts
+// This is a placeholder that gets properly typed via the config module
+export type MemoryConfigType = string;
 
 export interface MemoryConfigOptions {
   type: MemoryConfigType;
