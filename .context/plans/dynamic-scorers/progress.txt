@@ -1299,3 +1299,106 @@ Verification:
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
 
+Task 012 - Implement LibSQL storage for stored scorers - COMPLETED
+===================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created complete LibSQL implementation for stored scorers following the agents pattern
+- Implemented StoredScorersLibSQL class extending StoredScorersStorage
+- All CRUD methods implemented with proper JSON serialization
+- All version methods implemented with proper JSON serialization
+- Registered storedScorers domain in LibSQLStore
+- Followed exact same patterns as AgentsLibSQL for consistency
+
+Files created:
+- stores/libsql/src/storage/domains/stored-scorers/index.ts (595 lines)
+
+Files modified:
+- stores/libsql/src/storage/index.ts
+  * Added StoredScorersLibSQL import
+  * Added storedScorers to exports
+  * Instantiated StoredScorersLibSQL in constructor
+  * Added storedScorers to this.stores object
+
+Key features implemented:
+1. Table initialization:
+   - Uses TABLE_STORED_SCORERS and TABLE_STORED_SCORER_VERSIONS constants
+   - Uses STORED_SCORERS_SCHEMA and STORED_SCORER_VERSIONS_SCHEMA from core
+   - createTable called for both tables in init()
+
+2. JSON serialization:
+   - parseJson helper for safe JSON.parse with error handling
+   - JSON fields (model, scoreRange, metadata, snapshot, changedFields) handled correctly
+   - Uses LibSQLDB.insert/update which automatically JSON.stringify complex fields
+
+3. CRUD methods:
+   - createScorer - Uses insert with all fields
+   - getScorerById - Uses select with keys
+   - updateScorer - Builds data object incrementally, merges metadata
+   - deleteScorer - Cascades to deleteScorerVersionsByScorerId
+   - listScorers - Supports pagination, filtering (ownerId, metadata), ordering
+
+4. Version methods:
+   - createScorerVersion - Creates new version with auto-generated createdAt
+   - getScorerVersion - Gets version by ID
+   - getScorerVersionByNumber - Gets by scorerId + versionNumber
+   - getLatestScorerVersion - Gets highest versionNumber for scorerId
+   - listScorerVersions - Paginated list with ordering
+   - deleteScorerVersion - Deletes single version
+   - deleteScorerVersionsByScorerId - Deletes all versions for scorer
+   - countScorerVersions - Returns total version count
+
+5. Data parsing:
+   - parseScorerRow - Converts DB row to StoredScorerType
+   - parseScorerVersionRow - Converts DB row to StoredScorerVersionType
+   - Proper Date handling for timestamps (new Date(row.createdAt))
+   - parseJson for all JSON fields with field name in errors
+
+6. Error handling:
+   - MastraError with proper error IDs and categories
+   - createStorageErrorId('LIBSQL', operation, error_type)
+   - Detailed error messages with scorerId/versionId in details
+
+7. Filtering support:
+   - ownerId filtering via WHERE clause
+   - metadata filtering via json_extract with SAFE_KEY_PATTERN validation
+   - Follows exact same pattern as AgentsLibSQL for security
+
+8. Pagination:
+   - normalizePerPage with default 100 for scorers, 20 for versions
+   - calculatePagination for offset/limit calculation
+   - perPage: false returns all records
+   - Proper total, page, perPage, hasMore in response
+
+LibSQL-specific patterns used:
+- LibSQLDB helper class instead of raw SQL
+- whereClause format: { sql: 'WHERE...', args: [...] }
+- selectMany/select/insert/update/delete methods
+- selectTotalCount for counting
+- JSON fields handled automatically by LibSQLDB
+- Date fields stored as ISO strings, parsed with new Date()
+
+Verification:
+- pnpm typecheck: PASSED (no errors)
+- All method signatures match StoredScorersStorage base class
+- All methods follow LibSQL patterns from AgentsLibSQL
+- JSON serialization working correctly
+- Error handling consistent with other LibSQL domains
+
+Acceptance criteria met:
+✓ Tables are created with correct schema
+✓ All CRUD methods work with LibSQL
+✓ JSON fields (model, scoreRange, snapshot, changedFields) are properly handled
+✓ Timestamps are properly typed as Date objects
+✓ Falsy values (false, 0) are handled correctly by JSON serialization
+
+Next steps:
+- Task 023: Add scorers field to workflow step data types (P2 priority)
+- Task 024: Create scorer config section for workflow steps (P2 priority)
+- Task 029: Add unit tests for scorer storage operations (P1 priority)
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
+
