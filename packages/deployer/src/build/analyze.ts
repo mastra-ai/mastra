@@ -14,7 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, type BundlerPlatform } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
-import { detectPinoTransports } from './plugins/pino';
+import { detectPinoTransports } from './babel/detect-pino-transports';
 import * as stackTraceParser from 'stacktrace-parser';
 
 type ErrorId =
