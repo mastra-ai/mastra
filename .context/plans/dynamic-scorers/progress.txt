@@ -324,3 +324,78 @@ Next steps:
 
 Git Commit: Pending
 Status: COMPLETED AND VERIFIED
+
+Task 009 - Create API endpoints for scorer versions - COMPLETED
+===================================================================
+Date: 2026-01-15
+Engineer: Claude
+
+Summary:
+- Created comprehensive API endpoints for scorer version management
+- Followed the exact same patterns as agent-versions.ts for consistency
+- Implemented 6 version-related endpoints with proper validation and error handling
+- Registered all routes in the STORED_SCORERS_ROUTES array
+- All endpoints integrate with the existing auto-versioning system from task 008
+
+Files modified:
+- packages/server/src/server/handlers/stored-scorers.ts (added 370 lines for version endpoints)
+- packages/server/src/server/server-adapter/routes/stored-scorers.ts (added 6 route imports)
+
+API Endpoints implemented:
+1. GET /api/stored/scorers/:scorerId/versions - List all versions with pagination
+   - Supports page, perPage, orderBy query parameters
+   - Returns paginated list sorted by versionNumber descending by default
+   - Verifies scorer exists before listing versions
+
+2. POST /api/stored/scorers/:scorerId/versions - Create new version snapshot
+   - Takes optional name and changeMessage in request body
+   - Calculates changed fields from latest version
+   - Uses createVersionWithRetry for race condition handling
+   - Returns the newly created version object
+
+3. GET /api/stored/scorers/:scorerId/versions/:versionId - Get specific version
+   - Retrieves full version object including snapshot
+   - Verifies version belongs to the specified scorer
+   - Returns 404 if version not found or doesn't belong to scorer
+
+4. POST /api/stored/scorers/:scorerId/versions/:versionId/activate - Set active version
+   - Updates scorer's activeVersionId to specified version
+   - Verifies both scorer and version exist
+   - Returns success message with new active version ID
+
+5. POST /api/stored/scorers/:scorerId/versions/:versionId/restore - Restore from version
+   - Updates scorer configuration from version snapshot
+   - Creates new version with "Restored from version X" message
+   - Sets new version as active
+   - Excludes id, createdAt, updatedAt, activeVersionId from snapshot
+
+6. DELETE /api/stored/scorers/:scorerId/versions/:versionId - Delete version
+   - Deletes specific version by ID
+   - Prevents deletion of active version (must activate different version first)
+   - Verifies version exists and belongs to scorer
+
+Key implementation details:
+- All handlers follow try/catch pattern with handleError utility
+- Reuses calculateChangedFields and createVersionWithRetry from scorer-versions.ts
+- Proper HTTP status codes (404, 400, 500) for different error scenarios
+- Consistent error messages matching agent-versions pattern
+- Version verification ensures versions belong to the correct scorer
+
+Integration with auto-versioning:
+- CREATE_SCORER_VERSION_ROUTE manually creates snapshots on demand
+- UPDATE_STORED_SCORER_ROUTE (from task 007) automatically creates versions on update
+- Both use the same createVersionWithRetry helper for consistency
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build:lib (server package): PASSED
+- All route handlers compile without errors
+- Routes registered in STORED_SCORERS_ROUTES array
+
+Next steps:
+- Task 010: Merge code-defined and stored scorers in list endpoint
+- Task 011: Implement PostgreSQL storage for stored scorers
+- Task 012: Implement LibSQL storage for stored scorers
+
+Git Commit: Pending
+Status: COMPLETED AND VERIFIED
