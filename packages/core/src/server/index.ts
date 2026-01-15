@@ -4,7 +4,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
-export type { MastraAuthConfig, ContextWithMastra, ApiRoute, AuditConfig } from './types';
+export type { MastraAuthConfig, ContextWithMastra, ApiRoute, AuditConfig, MastraAuditProvider } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';

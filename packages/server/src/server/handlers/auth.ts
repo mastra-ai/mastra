@@ -61,6 +61,14 @@ function getRBACProvider(mastra: any): IRBACProvider<EEUser> | undefined {
 }
 
 /**
+ * Helper to check if audit is enabled in Mastra server config.
+ */
+function isAuditEnabled(mastra: any): boolean {
+  const serverConfig = mastra.getServer?.();
+  return !!serverConfig?.audit;
+}
+
+/**
  * Type guard to check if auth provider implements an interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
@@ -85,9 +93,10 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
       const { mastra, request } = ctx as any;
       const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
+      const audit = isAuditEnabled(mastra);
 
       // Use buildCapabilities from core/ee
-      const capabilities = await buildCapabilities(auth, request, { rbac });
+      const capabilities = await buildCapabilities(auth, request, { rbac, audit });
 
       return capabilities;
     } catch (error) {
@@ -240,13 +249,18 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
       const headers = new Headers();
       headers.set('Location', redirectTo);
 
-      // If session provider is available, create session and add cookies
-      if (implementsInterface<ISessionProvider>(auth, 'createSession') && result.tokens) {
-        // Create a session with the tokens as metadata
+      // Set session cookies from the SSO result
+      if (result.cookies?.length) {
+        for (const cookie of result.cookies) {
+          headers.append('Set-Cookie', cookie);
+        }
+      } else if (implementsInterface<ISessionProvider>(auth, 'createSession') && result.tokens) {
+        // Fallback: Create session manually for providers without cookie support
         const session = await auth.createSession(user.id, {
           accessToken: result.tokens.accessToken,
           refreshToken: result.tokens.refreshToken,
           expiresAt: result.tokens.expiresAt,
+          organizationId: (user as any).organizationId,
         });
         const sessionHeaders = auth.getSessionHeaders(session);
         for (const [key, value] of Object.entries(sessionHeaders)) {

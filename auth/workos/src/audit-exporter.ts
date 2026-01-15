@@ -1,7 +1,9 @@
 /**
- * WorkOS Audit Logs Exporter.
+ * WorkOS Audit Logs Provider.
  *
  * Exports Mastra audit events to WorkOS Audit Logs for enterprise SIEM integration.
+ * Implements MastraAuditProvider interface for use with Mastra's audit system.
+ *
  * Allows enterprise customers to:
  * - View Mastra events in WorkOS Admin Portal
  * - Export to SIEM systems (Splunk, Datadog, etc.)
@@ -12,6 +14,7 @@
 
 import type { WorkOS } from '@workos-inc/node';
 import type { AuditEvent } from '@mastra/core/storage';
+import type { MastraAuditProvider } from '@mastra/core/server';
 
 import { DEFAULT_AUDIT_ACTION_MAPPING, type WorkOSAuditExporterOptions } from './types';
 
@@ -19,6 +22,8 @@ import { DEFAULT_AUDIT_ACTION_MAPPING, type WorkOSAuditExporterOptions } from '.
  * Options for creating an audit log export from WorkOS.
  */
 export interface CreateExportOptions {
+  /** Organization ID to export logs for */
+  organizationId: string;
   /** Start date for the export range */
   startDate: Date;
   /** End date for the export range */
@@ -42,51 +47,49 @@ export interface AuditExportResult {
 }
 
 /**
- * Exports Mastra audit events to WorkOS Audit Logs.
+ * WorkOS Audit Provider for Mastra.
  *
- * This class bridges Mastra's internal audit system with WorkOS Audit Logs,
- * enabling enterprise customers to centralize their audit trail and integrate
- * with SIEM platforms.
+ * This class implements MastraAuditProvider to bridge Mastra's audit system
+ * with WorkOS Audit Logs, enabling enterprise customers to centralize their
+ * audit trail and integrate with SIEM platforms.
  *
  * @example
  * ```typescript
  * import { WorkOS } from '@workos-inc/node';
- * import { WorkOSAuditExporter } from '@mastra/auth-workos';
+ * import { WorkOSAuditProvider } from '@mastra/auth-workos';
  *
  * const workos = new WorkOS(process.env.WORKOS_API_KEY);
- * const exporter = new WorkOSAuditExporter(workos, {
+ * const auditProvider = new WorkOSAuditProvider(workos, {
  *   organizationId: 'org_123',
  * });
  *
- * // Export a single event
- * await exporter.exportEvent(auditEvent);
- *
- * // Create a CSV export for compliance
- * const { id } = await exporter.createExport({
- *   startDate: new Date('2024-01-01'),
- *   endDate: new Date('2024-12-31'),
+ * // Use as Mastra audit provider
+ * const mastra = new Mastra({
+ *   server: {
+ *     audit: auditProvider,
+ *   },
  * });
  * ```
  */
-export class WorkOSAuditExporter {
+export class WorkOSAuditProvider implements MastraAuditProvider {
   private workos: WorkOS;
-  private organizationId: string;
+  private defaultOrganizationId?: string;
   private actionMapping: Record<string, string>;
 
   /**
-   * Creates a new WorkOSAuditExporter instance.
+   * Creates a new WorkOSAuditProvider instance.
    *
    * @param workos - WorkOS client instance
-   * @param options - Configuration options
+   * @param options - Configuration options (optional)
    */
-  constructor(workos: WorkOS, options: WorkOSAuditExporterOptions) {
+  constructor(workos: WorkOS, options?: WorkOSAuditExporterOptions) {
     this.workos = workos;
-    this.organizationId = options.organizationId;
-    this.actionMapping = options.actionMapping ?? DEFAULT_AUDIT_ACTION_MAPPING;
+    this.defaultOrganizationId = options?.organizationId;
+    this.actionMapping = options?.actionMapping ?? DEFAULT_AUDIT_ACTION_MAPPING;
   }
 
   /**
-   * Exports a single Mastra audit event to WorkOS Audit Logs.
+   * Log an audit event to WorkOS Audit Logs.
    *
    * Maps Mastra's AuditEvent format to WorkOS's audit log format:
    * - action: Mapped via actionMapping (falls back to original action if unmapped)
@@ -95,11 +98,11 @@ export class WorkOSAuditExporter {
    * - context: IP address and user agent from actor
    * - metadata: Outcome, duration, and any additional metadata
    *
-   * @param event - The Mastra audit event to export
+   * @param event - The Mastra audit event to log
    *
    * @example
    * ```typescript
-   * await exporter.exportEvent({
+   * await provider.logEvent({
    *   id: 'evt_123',
    *   createdAt: new Date(),
    *   actor: { type: 'user', id: 'user_123', email: 'alice@example.com' },
@@ -110,7 +113,15 @@ export class WorkOSAuditExporter {
    * });
    * ```
    */
-  async exportEvent(event: AuditEvent): Promise<void> {
+  async logEvent(event: AuditEvent): Promise<void> {
+    // Get organization ID from event actor or fall back to default
+    const organizationId = event.actor.organizationId ?? this.defaultOrganizationId;
+    if (!organizationId) {
+      // Skip logging if no organization ID available
+      console.warn('[WorkOSAuditProvider] Skipping audit event - no organizationId in actor or default config');
+      return;
+    }
+
     // Map the action using the configured mapping, or use the original action
     const action = this.actionMapping[event.action] ?? event.action;
 
@@ -149,7 +160,7 @@ export class WorkOSAuditExporter {
       }
     }
 
-    await this.workos.auditLogs.createEvent(this.organizationId, {
+    await this.workos.auditLogs.createEvent(organizationId, {
       action,
       occurredAt: event.createdAt,
       actor: {
@@ -183,7 +194,7 @@ export class WorkOSAuditExporter {
    */
   async exportEvents(events: AuditEvent[]): Promise<void> {
     for (const event of events) {
-      await this.exportEvent(event);
+      await this.logEvent(event);
     }
   }
 
@@ -219,7 +230,7 @@ export class WorkOSAuditExporter {
    */
   async createExport(options: CreateExportOptions): Promise<AuditExportResult> {
     const exportResult = await this.workos.auditLogs.createExport({
-      organizationId: this.organizationId,
+      organizationId: options.organizationId,
       rangeStart: options.startDate,
       rangeEnd: options.endDate,
       ...(options.actions && { actions: options.actions }),

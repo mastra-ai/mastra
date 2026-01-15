@@ -1,9 +1,8 @@
 /**
  * MastraAuthWorkos - WorkOS authentication provider for Mastra.
  *
- * This class provides a complete authentication solution using WorkOS,
- * implementing SSO, session management, and user provider capabilities
- * for the Mastra framework's Enterprise Edition features.
+ * Uses @workos/authkit-session for session management with encrypted
+ * cookie-based sessions that persist across server restarts.
  */
 
 import { verifyJwks } from '@mastra/auth';
@@ -19,51 +18,31 @@ import type {
   SSOLoginConfig,
 } from '@mastra/core/ee';
 import { WorkOS } from '@workos-inc/node';
+import {
+  AuthService,
+  CookieSessionStorage,
+  sessionEncryption,
+  type AuthKitConfig,
+  type Session as WorkOSSession,
+  type AuthResult,
+} from '@workos/authkit-session';
 import type { HonoRequest } from 'hono';
 
 import type { WorkOSUser, MastraAuthWorkosOptions, WorkOSSessionConfig } from './types.js';
 import { mapWorkOSUserToEEUser } from './types.js';
+import { WebSessionStorage } from './session-storage.js';
 
 /**
- * Default session configuration values.
+ * Default cookie password for development (MUST be overridden in production).
+ * Generated once per process to ensure consistency during dev.
  */
-const DEFAULT_SESSION_CONFIG: Required<WorkOSSessionConfig> = {
-  cookieName: 'mastra_workos_session',
-  maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-  sameSite: 'Lax',
-};
-
-/**
- * Global session store shared across all MastraAuthWorkos instances.
- * This ensures sessions persist even if multiple instances are created
- * (e.g., during hot reload or dev mode).
- */
-const globalSessionStore = new Map<string, WorkOSSession>();
-console.log('[WorkOS] Global session store initialized');
-
-/**
- * Internal session storage type for managing session state.
- * WorkOS uses access tokens rather than traditional sessions,
- * so we create a session wrapper around the token data.
- */
-interface WorkOSSession extends Session {
-  /** WorkOS access token */
-  accessToken: string;
-  /** WorkOS refresh token */
-  refreshToken?: string;
-  /** Token expiration timestamp */
-  tokenExpiresAt?: Date;
-}
+const DEV_COOKIE_PASSWORD = crypto.randomUUID() + crypto.randomUUID(); // 72 chars
 
 /**
  * Mastra authentication provider for WorkOS.
  *
- * WorkOS provides enterprise-ready authentication with support for SSO,
- * Directory Sync, and Admin Portal. This provider integrates WorkOS
- * User Management for authentication and implements the Mastra EE
- * interfaces for SSO, session management, and user awareness.
+ * Uses WorkOS AuthKit with encrypted cookie-based sessions.
+ * Sessions are stored in cookies, so they persist across server restarts.
  *
  * @example Basic usage with SSO
  * ```typescript
@@ -73,57 +52,20 @@ interface WorkOSSession extends Session {
  *   apiKey: process.env.WORKOS_API_KEY,
  *   clientId: process.env.WORKOS_CLIENT_ID,
  *   redirectUri: 'https://myapp.com/auth/callback',
- *   sso: {
- *     provider: 'GoogleOAuth',
- *   },
- * });
- *
- * const mastra = new Mastra({
- *   server: {
- *     auth,
- *   },
+ *   cookiePassword: process.env.WORKOS_COOKIE_PASSWORD, // min 32 chars
  * });
  * ```
- *
- * @example SSO with organization selector
- * ```typescript
- * const auth = new MastraAuthWorkos({
- *   sso: {
- *     // User will be prompted to select their organization
- *     // and authenticate via the configured identity provider
- *   },
- * });
- * ```
- *
- * @example Direct connection SSO
- * ```typescript
- * const auth = new MastraAuthWorkos({
- *   sso: {
- *     connection: 'conn_123', // Direct to specific IdP
- *   },
- * });
- * ```
- *
- * @see https://workos.com/docs for WorkOS documentation
  */
 export class MastraAuthWorkos
   extends MastraAuthProvider<WorkOSUser>
-  implements IUserProvider<EEUser>, ISSOProvider<EEUser>, ISessionProvider<WorkOSSession>
+  implements IUserProvider<EEUser>, ISSOProvider<EEUser>, ISessionProvider<Session>
 {
   protected workos: WorkOS;
   protected clientId: string;
   protected redirectUri: string;
   protected ssoConfig: MastraAuthWorkosOptions['sso'];
-  protected sessionConfig: Required<WorkOSSessionConfig>;
-
-  /**
-   * Reference to the global session store.
-   * Using a module-level singleton ensures sessions persist across
-   * multiple class instances (e.g., during hot reload).
-   */
-  private get sessions(): Map<string, WorkOSSession> {
-    return globalSessionStore;
-  }
+  protected authService: AuthService<Request, Response>;
+  protected config: AuthKitConfig;
 
   /** Unique identifier for this instance (for debugging) */
   private instanceId = crypto.randomUUID().slice(0, 8);
@@ -136,6 +78,8 @@ export class MastraAuthWorkos
     const apiKey = options?.apiKey ?? process.env.WORKOS_API_KEY;
     const clientId = options?.clientId ?? process.env.WORKOS_CLIENT_ID;
     const redirectUri = options?.redirectUri ?? process.env.WORKOS_REDIRECT_URI;
+    const cookiePassword =
+      options?.session?.cookiePassword ?? process.env.WORKOS_COOKIE_PASSWORD ?? DEV_COOKIE_PASSWORD;
 
     if (!apiKey || !clientId) {
       throw new Error(
@@ -151,19 +95,46 @@ export class MastraAuthWorkos
       );
     }
 
+    if (cookiePassword.length < 32) {
+      throw new Error(
+        'Cookie password must be at least 32 characters. ' +
+          'Set WORKOS_COOKIE_PASSWORD environment variable or provide session.cookiePassword option.',
+      );
+    }
+
     this.clientId = clientId;
     this.redirectUri = redirectUri;
     this.ssoConfig = options?.sso;
-    this.sessionConfig = {
-      ...DEFAULT_SESSION_CONFIG,
-      ...options?.session,
+
+    // Create WorkOS client
+    this.workos = new WorkOS(apiKey, { clientId });
+
+    // Create AuthKit config
+    this.config = {
+      clientId,
+      apiKey,
+      redirectUri,
+      cookiePassword,
+      cookieName: options?.session?.cookieName ?? 'wos_session',
+      cookieMaxAge: options?.session?.maxAge ?? 60 * 60 * 24 * 400, // 400 days
+      cookieSameSite: options?.session?.sameSite?.toLowerCase() as 'lax' | 'strict' | 'none' | undefined,
+      cookieDomain: undefined,
+      apiHttps: true,
     };
 
-    this.workos = new WorkOS(apiKey, {
-      clientId,
-    });
+    // Create session storage and auth service
+    const storage = new WebSessionStorage(this.config);
+    this.authService = new AuthService(this.config, storage, this.workos, sessionEncryption);
 
     this.registerOptions(options as MastraAuthProviderOptions<WorkOSUser>);
+
+    if (cookiePassword === DEV_COOKIE_PASSWORD) {
+      console.warn(
+        '[WorkOS] Using auto-generated cookie password for development. ' +
+          'Sessions will not persist across server restarts. ' +
+          'Set WORKOS_COOKIE_PASSWORD for persistent sessions.',
+      );
+    }
   }
 
   // ============================================================================
@@ -171,67 +142,58 @@ export class MastraAuthWorkos
   // ============================================================================
 
   /**
-   * Authenticate a bearer token by verifying it against WorkOS JWKS.
+   * Authenticate a bearer token or session cookie.
    *
-   * This method supports both JWT tokens (access tokens from WorkOS)
-   * and session-based authentication via cookies.
-   *
-   * @param token - The bearer token to authenticate
-   * @param request - The incoming HTTP request
-   * @returns The authenticated user or null if authentication fails
+   * Uses AuthKit's withAuth() for cookie-based sessions, falls back to
+   * JWT verification for bearer tokens.
    */
   async authenticateToken(token: string, request: HonoRequest): Promise<WorkOSUser | null> {
-    console.log(`[WorkOS:${this.instanceId}] authenticateToken: token=${token ? 'present' : 'empty'}`);
+    console.log(`[WorkOS:${this.instanceId}] authenticateToken called`);
+
     try {
-      // First, try to validate as a JWT using WorkOS JWKS
-      const jwksUri = this.workos.userManagement.getJwksUrl(this.clientId);
-      const payload = await verifyJwks(token, jwksUri);
+      // First try session-based auth via AuthKit
+      const { auth } = await this.authService.withAuth(request.raw);
 
-      if (payload && payload.sub) {
-        console.log(`[WorkOS:${this.instanceId}] authenticateToken: JWT valid for user ${payload.sub}`);
-        // Fetch full user details from WorkOS
-        const user = await this.workos.userManagement.getUser(payload.sub);
-
-        // Get organization memberships for the user
-        const memberships = await this.workos.userManagement.listOrganizationMemberships({
-          userId: user.id,
-        });
-
+      if (auth.user) {
+        console.log(`[WorkOS:${this.instanceId}] authenticateToken: session valid for user ${auth.user.id}`);
         return {
-          ...mapWorkOSUserToEEUser(user),
-          workosId: user.id,
-          organizationId: memberships.data[0]?.organizationId,
-          memberships: memberships.data,
+          ...mapWorkOSUserToEEUser(auth.user),
+          workosId: auth.user.id,
+          organizationId: auth.organizationId,
+          // Note: memberships not available from session, fetch if needed
         };
+      }
+
+      // Fall back to JWT verification for bearer tokens
+      if (token) {
+        const jwksUri = this.workos.userManagement.getJwksUrl(this.clientId);
+        const payload = await verifyJwks(token, jwksUri);
+
+        if (payload?.sub) {
+          console.log(`[WorkOS:${this.instanceId}] authenticateToken: JWT valid for user ${payload.sub}`);
+          const user = await this.workos.userManagement.getUser(payload.sub);
+          const memberships = await this.workos.userManagement.listOrganizationMemberships({
+            userId: user.id,
+          });
+
+          return {
+            ...mapWorkOSUserToEEUser(user),
+            workosId: user.id,
+            organizationId: memberships.data[0]?.organizationId,
+            memberships: memberships.data,
+          };
+        }
       }
 
       return null;
     } catch (error) {
-      console.log(`[WorkOS:${this.instanceId}] authenticateToken: JWT verification failed, trying session-based auth`);
-      // JWT verification failed, try session-based auth
-      const sessionId = this.getSessionIdFromRequest(request.raw);
-      console.log(`[WorkOS:${this.instanceId}] authenticateToken: sessionId from cookie = ${sessionId || 'none'}`);
-      if (sessionId) {
-        const session = await this.validateSession(sessionId);
-        if (session) {
-          console.log(`[WorkOS:${this.instanceId}] authenticateToken: session valid, fetching user ${session.userId}`);
-          return this.getUser(session.userId) as Promise<WorkOSUser | null>;
-        }
-      }
-
+      console.log(`[WorkOS:${this.instanceId}] authenticateToken failed:`, error);
       return null;
     }
   }
 
   /**
    * Authorize a user for access.
-   *
-   * By default, any authenticated user with a valid WorkOS ID is authorized.
-   * Override this behavior by providing a custom `authorizeUser` function
-   * in the constructor options.
-   *
-   * @param user - The authenticated user
-   * @returns True if the user is authorized
    */
   async authorizeUser(user: WorkOSUser): Promise<boolean> {
     return !!user?.id && !!user?.workosId;
@@ -242,37 +204,49 @@ export class MastraAuthWorkos
   // ============================================================================
 
   /**
-   * Get the current user from the request.
-   *
-   * Extracts the user from the session cookie or authorization header.
-   *
-   * @param request - The incoming HTTP request
-   * @returns The current user or null if not authenticated
+   * Get the current user from the request using AuthKit session.
    */
   async getCurrentUser(request: Request): Promise<EEUser | null> {
     try {
-      // Try to get session from cookie
-      const sessionId = this.getSessionIdFromRequest(request);
-      if (sessionId) {
-        const session = await this.validateSession(sessionId);
-        if (session) {
-          return this.getUser(session.userId);
-        }
+      const { auth, refreshedSessionData } = await this.authService.withAuth(request);
+
+      if (!auth.user) {
+        return null;
       }
 
-      // Try to get from Authorization header
-      const authHeader = request.headers.get('Authorization');
-      if (authHeader?.startsWith('Bearer ')) {
-        const token = authHeader.slice(7);
-        const jwksUri = this.workos.userManagement.getJwksUrl(this.clientId);
-        const payload = await verifyJwks(token, jwksUri);
-
-        if (payload?.sub) {
-          return this.getUser(payload.sub);
+      // Get organizationId from JWT claims, or fall back to fetching from memberships
+      let organizationId = auth.organizationId;
+      if (!organizationId) {
+        try {
+          const memberships = await this.workos.userManagement.listOrganizationMemberships({
+            userId: auth.user.id,
+          });
+          organizationId = memberships.data[0]?.organizationId;
+          console.log(`[WorkOS:${this.instanceId}] getCurrentUser: fetched orgId from memberships: ${organizationId}`);
+        } catch {
+          // Ignore membership fetch errors
         }
+      } else {
+        console.log(`[WorkOS:${this.instanceId}] getCurrentUser: orgId from JWT: ${organizationId}`);
       }
 
-      return null;
+      // Build user with session data
+      const user: WorkOSUser = {
+        ...mapWorkOSUserToEEUser(auth.user),
+        workosId: auth.user.id,
+        organizationId,
+      };
+
+      // If session was refreshed, we should save it
+      // Note: This is a side effect, but necessary to persist refreshed tokens
+      if (refreshedSessionData) {
+        console.log(`[WorkOS:${this.instanceId}] Session refreshed for user ${auth.user.id}`);
+        // The caller should handle saving the refreshed session via response headers
+        // We attach it to the user object for the handler to access
+        (user as any)._refreshedSessionData = refreshedSessionData;
+      }
+
+      return user;
     } catch {
       return null;
     }
@@ -280,11 +254,6 @@ export class MastraAuthWorkos
 
   /**
    * Get a user by their ID.
-   *
-   * Fetches the user from WorkOS User Management.
-   *
-   * @param userId - The WorkOS user ID
-   * @returns The user or null if not found
    */
   async getUser(userId: string): Promise<WorkOSUser | null> {
     try {
@@ -300,9 +269,6 @@ export class MastraAuthWorkos
 
   /**
    * Get the URL to the user's profile page.
-   *
-   * @param user - The user object
-   * @returns URL to the profile page
    */
   getUserProfileUrl(user: EEUser): string {
     return `/profile/${user.id}`;
@@ -314,45 +280,31 @@ export class MastraAuthWorkos
 
   /**
    * Get the URL to redirect users to for SSO login.
-   *
-   * Constructs the WorkOS authorization URL based on the configured
-   * SSO options (connection, organization, or OAuth provider).
-   *
-   * @param redirectUri - The callback URL after authentication
-   * @param state - CSRF protection state parameter
-   * @returns The authorization URL
    */
   getLoginUrl(redirectUri: string, state: string): string {
-    // Build authorization URL options based on SSO configuration
-    // WorkOS requires exactly one of: connection, organization, or provider
     const baseOptions = {
       clientId: this.clientId,
       redirectUri: redirectUri || this.redirectUri,
       state,
     };
 
-    // Configure SSO method based on options
     if (this.ssoConfig?.connection) {
-      // Direct connection SSO
       return this.workos.userManagement.getAuthorizationUrl({
         ...baseOptions,
         connectionId: this.ssoConfig.connection,
       });
     } else if (this.ssoConfig?.provider) {
-      // OAuth provider (Google, Microsoft, GitHub, Apple)
       return this.workos.userManagement.getAuthorizationUrl({
         ...baseOptions,
         provider: this.ssoConfig.provider,
       });
     } else if (this.ssoConfig?.defaultOrganization) {
-      // Organization-based SSO
       return this.workos.userManagement.getAuthorizationUrl({
         ...baseOptions,
         organizationId: this.ssoConfig.defaultOrganization,
       });
     }
 
-    // Default: use AuthKit provider if no specific SSO config
     return this.workos.userManagement.getAuthorizationUrl({
       ...baseOptions,
       provider: 'authkit',
@@ -362,43 +314,40 @@ export class MastraAuthWorkos
   /**
    * Handle the OAuth callback from WorkOS.
    *
-   * Exchanges the authorization code for tokens and retrieves the user.
-   *
-   * @param code - The authorization code from the callback
-   * @param _state - The state parameter for CSRF validation (validated by caller)
-   * @returns The authenticated user and tokens
+   * Uses AuthKit's handleCallback for proper session creation.
    */
   async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<EEUser>> {
-    const response = await this.workos.userManagement.authenticateWithCode({
-      code,
-      clientId: this.clientId,
-    });
+    // Use AuthService's handleCallback for session creation
+    const result = await this.authService.handleCallback(
+      new Request('http://localhost'), // Dummy request, not used
+      new Response(), // Dummy response to get headers
+      { code, state: _state },
+    );
 
-    const user = mapWorkOSUserToEEUser(response.user);
+    const user: WorkOSUser = {
+      ...mapWorkOSUserToEEUser(result.authResponse.user),
+      workosId: result.authResponse.user.id,
+      organizationId: result.authResponse.organizationId,
+    };
 
-    // WorkOS response may include expiresIn (seconds until expiry)
-    // Cast to access optional properties that may exist on the response
-    const authResponse = response as typeof response & { expiresIn?: number };
-    const expiresIn = authResponse.expiresIn;
+    // Extract session cookie from headers
+    const sessionCookie = result.headers?.['Set-Cookie'];
+    const cookies = sessionCookie ? (Array.isArray(sessionCookie) ? sessionCookie : [sessionCookie]) : undefined;
 
     return {
       user,
       tokens: {
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-        expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : undefined,
+        accessToken: result.authResponse.accessToken,
+        refreshToken: result.authResponse.refreshToken,
       },
+      cookies,
     };
   }
 
   /**
    * Get the URL to redirect users to for logout.
-   *
-   * @param redirectUri - The URL to redirect to after logout
-   * @returns The logout URL
    */
   getLogoutUrl(redirectUri: string): string {
-    // WorkOS User Management logout endpoint
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: redirectUri,
@@ -408,11 +357,8 @@ export class MastraAuthWorkos
 
   /**
    * Get the configuration for rendering the login button.
-   *
-   * @returns Login button configuration
    */
   getLoginButtonConfig(): SSOLoginConfig {
-    // Customize text based on provider
     let text = 'Sign in with SSO';
     if (this.ssoConfig?.provider) {
       const providerNames: Record<string, string> = {
@@ -437,197 +383,78 @@ export class MastraAuthWorkos
   /**
    * Create a new session for a user.
    *
-   * @param userId - The user ID to create a session for
-   * @param metadata - Optional session metadata including tokens
-   * @returns The created session
+   * Note: With AuthKit, sessions are created via handleCallback.
+   * This method is kept for interface compatibility.
    */
-  async createSession(userId: string, metadata?: Record<string, unknown>): Promise<WorkOSSession> {
+  async createSession(userId: string, metadata?: Record<string, unknown>): Promise<Session> {
     const sessionId = crypto.randomUUID();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + this.sessionConfig.maxAge * 1000);
+    const expiresAt = new Date(now.getTime() + this.config.cookieMaxAge * 1000);
 
-    const session: WorkOSSession = {
+    return {
       id: sessionId,
       userId,
       createdAt: now,
       expiresAt,
-      accessToken: (metadata?.accessToken as string) || '',
-      refreshToken: metadata?.refreshToken as string | undefined,
-      tokenExpiresAt: metadata?.tokenExpiresAt as Date | undefined,
       metadata,
     };
-
-    this.sessions.set(sessionId, session);
-    console.log(
-      `[WorkOS:${this.instanceId}] createSession: created session ${sessionId} for user ${userId}, total sessions: ${this.sessions.size}`,
-    );
-    return session;
   }
 
   /**
-   * Validate a session and return it if valid.
+   * Validate a session.
    *
-   * @param sessionId - The session ID to validate
-   * @returns The session if valid, null otherwise
+   * With AuthKit, sessions are validated via withAuth().
    */
-  async validateSession(sessionId: string): Promise<WorkOSSession | null> {
-    console.log(
-      `[WorkOS:${this.instanceId}] validateSession: looking for session ${sessionId}, total sessions: ${this.sessions.size}`,
-    );
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      console.log(`[WorkOS:${this.instanceId}] validateSession: session NOT FOUND`);
-      return null;
-    }
-
-    // Check if session has expired
-    if (new Date() > session.expiresAt) {
-      console.log(`[WorkOS:${this.instanceId}] validateSession: session EXPIRED`);
-      this.sessions.delete(sessionId);
-      return null;
-    }
-
-    console.log(`[WorkOS:${this.instanceId}] validateSession: session VALID for user ${session.userId}`);
-    return session;
+  async validateSession(sessionId: string): Promise<Session | null> {
+    // AuthKit handles validation internally via withAuth()
+    // This method is kept for interface compatibility
+    return null;
   }
 
   /**
-   * Destroy a session (logout).
-   *
-   * @param sessionId - The session ID to destroy
+   * Destroy a session.
    */
   async destroySession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (session?.accessToken) {
-      try {
-        // Attempt to revoke the access token with WorkOS
-        // Note: WorkOS may not have a direct revoke endpoint,
-        // but we clear the local session regardless
-        this.sessions.delete(sessionId);
-      } catch {
-        // Still delete the session even if revocation fails
-        this.sessions.delete(sessionId);
-      }
-    } else {
-      this.sessions.delete(sessionId);
-    }
+    // AuthKit handles session clearing via signOut()
+    // The actual cookie clearing happens in the response headers
   }
 
   /**
-   * Refresh a session, extending its expiry.
-   *
-   * If the session has a refresh token, this will also refresh
-   * the underlying WorkOS tokens.
-   *
-   * @param sessionId - The session ID to refresh
-   * @returns The updated session or null if invalid
+   * Refresh a session.
    */
-  async refreshSession(sessionId: string): Promise<WorkOSSession | null> {
-    const session = await this.validateSession(sessionId);
-    if (!session) {
-      return null;
-    }
-
-    // Try to refresh tokens if we have a refresh token
-    if (session.refreshToken) {
-      try {
-        const response = await this.workos.userManagement.authenticateWithRefreshToken({
-          refreshToken: session.refreshToken,
-          clientId: this.clientId,
-        });
-
-        // WorkOS response may include expiresIn (seconds until expiry)
-        const authResponse = response as typeof response & { expiresIn?: number };
-        const expiresIn = authResponse.expiresIn;
-
-        session.accessToken = response.accessToken;
-        session.refreshToken = response.refreshToken;
-        session.tokenExpiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : undefined;
-      } catch {
-        // Token refresh failed, but we can still extend the session
-      }
-    }
-
-    // Extend session expiry
-    session.expiresAt = new Date(Date.now() + this.sessionConfig.maxAge * 1000);
-    this.sessions.set(sessionId, session);
-
-    return session;
+  async refreshSession(sessionId: string): Promise<Session | null> {
+    // AuthKit handles refresh automatically in withAuth()
+    return null;
   }
 
   /**
-   * Extract session ID from an incoming request.
-   *
-   * Looks for the session in the configured cookie name.
-   *
-   * @param request - The incoming HTTP request
-   * @returns The session ID or null if not present
+   * Extract session ID from a request.
    */
   getSessionIdFromRequest(request: Request): string | null {
-    const cookieHeader = request.headers.get('Cookie');
-    if (!cookieHeader) {
-      return null;
-    }
-
-    const cookies = cookieHeader.split(';').reduce(
-      (acc, cookie) => {
-        const [name, value] = cookie.trim().split('=');
-        if (name && value) {
-          acc[name] = value;
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
-
-    return cookies[this.sessionConfig.cookieName] || null;
+    // With AuthKit, we don't expose the session ID directly
+    // The session is managed via encrypted cookies
+    return null;
   }
 
   /**
-   * Create response headers to set the session cookie.
-   *
-   * @param session - The session to encode in the cookie
-   * @returns Headers object with Set-Cookie header
+   * Get response headers to set the session cookie.
    */
-  getSessionHeaders(session: WorkOSSession): Record<string, string> {
-    const cookieParts = [
-      `${this.sessionConfig.cookieName}=${session.id}`,
-      `Path=${this.sessionConfig.path}`,
-      `Max-Age=${this.sessionConfig.maxAge}`,
-      `SameSite=${this.sessionConfig.sameSite}`,
-      'HttpOnly',
-    ];
-
-    if (this.sessionConfig.secure) {
-      cookieParts.push('Secure');
+  getSessionHeaders(session: Session): Record<string, string> {
+    // AuthKit handles cookie setting via saveSession()
+    // Check for _sessionCookie from handleCallback
+    const sessionCookie = (session as any)._sessionCookie;
+    if (sessionCookie) {
+      return { 'Set-Cookie': Array.isArray(sessionCookie) ? sessionCookie[0] : sessionCookie };
     }
-
-    return {
-      'Set-Cookie': cookieParts.join('; '),
-    };
+    return {};
   }
 
   /**
-   * Create response headers to clear the session cookie.
-   *
-   * @returns Headers object to clear the session
+   * Get response headers to clear the session cookie.
    */
   getClearSessionHeaders(): Record<string, string> {
-    const cookieParts = [
-      `${this.sessionConfig.cookieName}=`,
-      `Path=${this.sessionConfig.path}`,
-      'Max-Age=0',
-      `SameSite=${this.sessionConfig.sameSite}`,
-      'HttpOnly',
-    ];
-
-    if (this.sessionConfig.secure) {
-      cookieParts.push('Secure');
-    }
-
-    return {
-      'Set-Cookie': cookieParts.join('; '),
-    };
+    const cookieParts = [`${this.config.cookieName}=`, 'Path=/', 'Max-Age=0', 'HttpOnly'];
+    return { 'Set-Cookie': cookieParts.join('; ') };
   }
 
   // ============================================================================
@@ -636,20 +463,20 @@ export class MastraAuthWorkos
 
   /**
    * Get the underlying WorkOS client.
-   *
-   * Useful for accessing WorkOS APIs directly, such as
-   * Directory Sync, Admin Portal, or Organization management.
-   *
-   * @returns The WorkOS client instance
    */
   getWorkOS(): WorkOS {
     return this.workos;
   }
 
   /**
+   * Get the AuthKit AuthService.
+   */
+  getAuthService(): AuthService<Request, Response> {
+    return this.authService;
+  }
+
+  /**
    * Get the configured client ID.
-   *
-   * @returns The WorkOS client ID
    */
   getClientId(): string {
     return this.clientId;
@@ -657,8 +484,6 @@ export class MastraAuthWorkos
 
   /**
    * Get the configured redirect URI.
-   *
-   * @returns The OAuth redirect URI
    */
   getRedirectUri(): string {
     return this.redirectUri;

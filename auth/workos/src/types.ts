@@ -60,7 +60,13 @@ export interface WorkOSSSOConfig {
 export interface WorkOSSessionConfig {
   /** Cookie name for session storage */
   cookieName?: string;
-  /** Session duration in seconds (default: 7 days) */
+  /**
+   * Password for encrypting session cookies.
+   * Must be at least 32 characters.
+   * Defaults to WORKOS_COOKIE_PASSWORD env var.
+   */
+  cookiePassword?: string;
+  /** Session duration in seconds (default: 400 days) */
   maxAge?: number;
   /** Use secure cookies (HTTPS only, default: true in production) */
   secure?: boolean;
@@ -194,11 +200,14 @@ export interface WorkOSDirectorySyncOptions {
 // ============================================================================
 
 /**
- * Options for WorkOSAuditExporter.
+ * Options for WorkOSAuditProvider.
  */
 export interface WorkOSAuditExporterOptions {
-  /** Organization ID to associate events with */
-  organizationId: string;
+  /**
+   * Default organization ID for events.
+   * If not provided, the org ID is taken from event.actor.organizationId.
+   */
+  organizationId?: string;
   /**
    * Map Mastra action names to WorkOS action names.
    * If not provided, uses default mapping.

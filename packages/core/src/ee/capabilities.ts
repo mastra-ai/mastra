@@ -10,7 +10,6 @@ import type {
   IRBACProvider,
   IACLProvider,
   ISessionProvider,
-  IAuditLogger,
   ICredentialsProvider,
 } from './interfaces';
 import { isEELicenseValid } from './license';
@@ -141,6 +140,12 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
+
+  /**
+   * Whether audit logging is enabled.
+   * Set to true if an audit provider or audit config is configured.
+   */
+  audit?: boolean;
 }
 
 /**
@@ -238,7 +243,7 @@ export async function buildCapabilities(
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
-    audit: implementsInterface<IAuditLogger>(auth, 'log') && isLicensedOrCloud,
+    audit: !!options?.audit && isLicensedOrCloud,
   };
 
   // Get roles/permissions from RBAC provider (if available)

@@ -44,11 +44,14 @@ export { MastraRBACWorkos } from './rbac-provider';
 // Directory Sync (SCIM) webhook handler
 export { WorkOSDirectorySync } from './directory-sync';
 
-// Audit log exporter
-export { WorkOSAuditExporter } from './audit-exporter';
+// Audit provider for WorkOS Audit Logs
+export { WorkOSAuditProvider } from './audit-exporter';
 
 // Admin Portal helper
 export { WorkOSAdminPortal } from './admin-portal';
+
+// Session storage adapter for Web Request/Response
+export { WebSessionStorage } from './session-storage';
 
 // Re-export all types
 export type {

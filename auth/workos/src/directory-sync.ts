@@ -107,8 +107,10 @@ export class WorkOSDirectorySync {
   async handleWebhook(payload: string | object, signature: string): Promise<void> {
     // Verify the webhook signature and construct the event
     // Cast through unknown since WorkOS Event type is a union of many event types
+    // Parse string payloads for the new SDK which expects objects
+    const parsedPayload = typeof payload === 'string' ? JSON.parse(payload) : payload;
     const event = (await this.workos.webhooks.constructEvent({
-      payload,
+      payload: parsedPayload as Record<string, unknown>,
       sigHeader: signature,
       secret: this.webhookSecret,
     })) as unknown as DirectorySyncEvent;
