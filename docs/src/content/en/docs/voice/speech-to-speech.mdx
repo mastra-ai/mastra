@@ -4,6 +4,7 @@ description: Overview of speech-to-speech capabilities in Mastra, including real
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
+  - "@mastra/voice-amazon-nova-sonic"
   - "@mastra/voice-google-gemini-live"
   - "@mastra/voice-openai-realtime"
 ---
@@ -112,3 +113,45 @@ Note:
 
 - Live API requires `GOOGLE_API_KEY`. Vertex AI requires project/location and service account credentials.
 - Events: `speaker` (audio stream), `writing` (text), `turnComplete`, `usage`, and `error`.
+
+## Amazon Nova Sonic (Realtime)
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { NovaSonicVoice } from "@mastra/voice-amazon-nova-sonic";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+const agent = new Agent({
+  id: "agent",
+  name: "Nova Sonic Agent",
+  instructions:
+    "You are a helpful assistant with real-time voice capabilities.",
+  model: "openai/gpt-5.1",
+  voice: new NovaSonicVoice({
+    region: "us-east-1",
+    speaker: "tiffany",
+    instructions: "You are a helpful voice assistant.",
+  }),
+});
+
+await agent.voice.connect();
+
+agent.voice.on("speaker", (audioStream) => {
+  playAudio(audioStream);
+});
+
+agent.voice.on("writing", ({ role, text }) => {
+  console.log(`${role}: ${text}`);
+});
+
+await agent.voice.speak("How can I help you today?");
+
+const micStream = getMicrophoneStream();
+await agent.voice.send(micStream);
+```
+
+Note:
+
+- Requires AWS credentials via environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) or IAM role.
+- Supports multiple voices: `tiffany`, `amy`, `matthew`, `ruth`.
+- Events: `speaker` (audio stream), `speaking` (raw audio data), `writing` (text), `turnComplete`, `toolCall`, and `error`.

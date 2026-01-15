@@ -1,0 +1,622 @@
+---
+title: "Reference: Amazon Nova Sonic Voice | Voice"
+description: "Documentation for the NovaSonicVoice class, providing real-time speech-to-speech voice interactions using Amazon's Nova Sonic model via AWS Bedrock."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-amazon-nova-sonic"
+---
+
+# Amazon Nova Sonic Voice
+
+The NovaSonicVoice class provides real-time voice interaction capabilities using Amazon's Nova Sonic speech-to-speech model via AWS Bedrock. It supports bidirectional audio streaming, tool calling, and event-based audio processing with multiple voice personas.
+
+## Usage Example
+
+```typescript
+import { NovaSonicVoice } from "@mastra/voice-amazon-nova-sonic";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// Initialize with AWS credentials
+const voice = new NovaSonicVoice({
+  region: "us-east-1",
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  speaker: "tiffany", // Default voice
+  instructions: "You are a helpful voice assistant.",
+});
+
+// Or use the VoiceConfig pattern (recommended for consistency with other providers)
+const voiceWithConfig = new NovaSonicVoice({
+  speechModel: {
+    name: "amazon.nova-sonic-v1:0",
+    apiKey: process.env.AWS_ACCESS_KEY_ID,
+  },
+  speaker: "tiffany",
+  realtimeConfig: {
+    model: "amazon.nova-sonic-v1:0",
+    options: {
+      region: "us-east-1",
+      debug: true,
+    },
+  },
+});
+
+// Establish connection (required before using other methods)
+await voice.connect();
+
+// Set up event listeners
+voice.on("speaker", (audioStream) => {
+  // Handle audio stream (NodeJS.ReadableStream)
+  playAudio(audioStream);
+});
+
+voice.on("speaking", ({ audio, audioData, sampleRate }) => {
+  // Handle raw audio data (Int16Array) in PCM16 format
+  console.log(`Received ${audioData.length} audio samples at ${sampleRate}Hz`);
+});
+
+voice.on("writing", ({ text, role }) => {
+  // Handle transcribed text
+  console.log(`${role}: ${text}`);
+});
+
+voice.on("turnComplete", ({ timestamp }) => {
+  // Handle turn completion
+  console.log("Turn completed at:", timestamp);
+});
+
+// Convert text to speech
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "matthew", // Override default voice
+});
+
+// Process audio input
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// When done, disconnect
+voice.disconnect();
+// Or use the synchronous wrapper
+voice.close();
+```
+
+## Configuration
+
+### Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "region",
+      type: "string",
+      description: "AWS region for Bedrock service.",
+      isOptional: true,
+      defaultValue: "'us-east-1'",
+    },
+    {
+      name: "accessKeyId",
+      type: "string",
+      description:
+        "AWS access key ID. Falls back to AWS_ACCESS_KEY_ID environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "secretAccessKey",
+      type: "string",
+      description:
+        "AWS secret access key. Falls back to AWS_SECRET_ACCESS_KEY environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "sessionToken",
+      type: "string",
+      description:
+        "AWS session token for temporary credentials. Falls back to AWS_SESSION_TOKEN environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "model",
+      type: "string",
+      description: "The model ID to use for real-time voice interactions.",
+      isOptional: true,
+      defaultValue: "'amazon.nova-sonic-v1:0'",
+    },
+    {
+      name: "speaker",
+      type: "NovaSonicVoiceId",
+      description: "Default voice ID for speech synthesis.",
+      isOptional: true,
+      defaultValue: "'tiffany'",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "System instructions for the voice assistant.",
+      isOptional: true,
+    },
+    {
+      name: "debug",
+      type: "boolean",
+      description: "Enable debug logging for troubleshooting.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### Audio Configuration
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioConfig.inputSampleRate",
+      type: "number",
+      description: "Input audio sample rate in Hz.",
+      isOptional: true,
+      defaultValue: "16000",
+    },
+    {
+      name: "audioConfig.outputSampleRate",
+      type: "number",
+      description: "Output audio sample rate in Hz.",
+      isOptional: true,
+      defaultValue: "24000",
+    },
+    {
+      name: "audioConfig.inputFormat",
+      type: "string",
+      description: "Input audio format.",
+      isOptional: true,
+      defaultValue: "'pcm'",
+    },
+    {
+      name: "audioConfig.outputFormat",
+      type: "string",
+      description: "Output audio format.",
+      isOptional: true,
+      defaultValue: "'pcm'",
+    },
+  ]}
+/>
+
+## Methods
+
+### connect()
+
+Establishes a connection to the AWS Bedrock Nova Sonic service. Must be called before using speak, listen, or send methods.
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.requestContext",
+      type: "RequestContext",
+      description: "Optional request context for the connection.",
+      isOptional: true,
+    },
+    {
+      name: "returns",
+      type: "Promise<void>",
+      description: "Promise that resolves when the connection is established.",
+    },
+  ]}
+/>
+
+### speak()
+
+Converts text to speech and sends it to the model. Can accept either a string or a readable stream as input.
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "Text or text stream to convert to speech.",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "NovaSonicVoiceId",
+      description: "Voice ID to use for this specific speech request.",
+      isOptional: true,
+      defaultValue: "Constructor's speaker value",
+    },
+  ]}
+/>
+
+Returns: `Promise<void>` (responses are emitted via `speaker` and `writing` events)
+
+### listen()
+
+Processes audio input for speech recognition. Takes a readable stream of audio data and returns the transcribed text.
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "Audio stream to transcribe.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+Returns: `Promise<string>` - The transcribed text
+
+### send()
+
+Streams audio data in real-time to the Nova Sonic service for continuous audio streaming scenarios like live microphone input.
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream | Int16Array",
+      description: "Audio stream or buffer to send to the service.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+Returns: `Promise<void>`
+
+### answer()
+
+Triggers a response from the model. This method sends a prompt end event and prepares for continued conversation.
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "Optional parameters for the answer request.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `Promise<void>`
+
+### updateConfig()
+
+Updates the session configuration dynamically. This can be used to modify voice settings, speaker selection, and other runtime configurations.
+
+<PropertiesTable
+  content={[
+    {
+      name: "sessionConfig",
+      type: "Record<string, unknown>",
+      description: "Configuration updates to apply.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+Returns: `void`
+
+### addTools()
+
+Adds a set of tools to the voice instance. Tools allow the model to perform additional actions during conversations. When NovaSonicVoice is added to an Agent, any tools configured for the Agent will automatically be available to the voice interface.
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description: "Tools configuration to equip.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+Returns: `void`
+
+### addInstructions()
+
+Adds or updates system instructions for the model.
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string",
+      description: "System instructions to set.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+Returns: `void`
+
+### getSpeakers()
+
+Returns a list of available voice speakers for the Nova Sonic model.
+
+Returns: `Promise<Array<{ voiceId: string; description?: string }>>`
+
+### disconnect()
+
+Disconnects from the Nova Sonic session and cleans up resources.
+
+Returns: `void`
+
+### close()
+
+Alias for disconnect(). Disconnects from the session and cleans up resources.
+
+Returns: `void`
+
+### isConnected()
+
+Returns whether the voice instance is currently connected.
+
+Returns: `boolean`
+
+### getConnectionState()
+
+Returns the current connection state.
+
+Returns: `'disconnected' | 'connecting' | 'connected'`
+
+### on()
+
+Registers an event listener for voice events.
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "Name of the event to listen for.",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "Function to call when the event occurs.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+Returns: `void`
+
+### off()
+
+Removes a previously registered event listener.
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "Name of the event to stop listening to.",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "The specific callback function to remove.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+Returns: `void`
+
+## Events
+
+The NovaSonicVoice class emits the following events:
+
+<PropertiesTable
+  content={[
+    {
+      name: "speaker",
+      type: "event",
+      description:
+        "Emitted when an audio stream is available from the model. Callback receives a NodeJS.ReadableStream (PassThrough).",
+    },
+    {
+      name: "speaking",
+      type: "event",
+      description:
+        "Emitted when audio data is received from the model. Callback receives { audio: string (base64), audioData: Int16Array, sampleRate: number }.",
+    },
+    {
+      name: "writing",
+      type: "event",
+      description:
+        "Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }.",
+    },
+    {
+      name: "session",
+      type: "event",
+      description:
+        "Emitted on session state changes. Callback receives { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting', config?: object }.",
+    },
+    {
+      name: "turnComplete",
+      type: "event",
+      description:
+        "Emitted when a conversation turn is completed. Callback receives { timestamp: number }.",
+    },
+    {
+      name: "toolCall",
+      type: "event",
+      description:
+        "Emitted when the model requests a tool call. Callback receives { name: string, args: object, id: string }.",
+    },
+    {
+      name: "tool-call-start",
+      type: "event",
+      description:
+        "Emitted when tool execution starts. Callback receives { toolCallId: string, toolName: string, args: object }.",
+    },
+    {
+      name: "tool-call-result",
+      type: "event",
+      description:
+        "Emitted when tool execution completes. Callback receives { toolCallId: string, toolName: string, result: unknown }.",
+    },
+    {
+      name: "error",
+      type: "event",
+      description:
+        "Emitted when an error occurs. Callback receives { message: string, code?: string, details?: unknown }.",
+    },
+  ]}
+/>
+
+## Available Voices
+
+The following voice options are available:
+
+| Voice ID | Description |
+|----------|-------------|
+| `tiffany` | Default female voice - clear and professional |
+| `amy` | Female voice - warm and conversational |
+| `matthew` | Male voice - confident and articulate |
+| `ruth` | Female voice - friendly and approachable |
+
+## Authentication Methods
+
+### Explicit Credentials
+
+Provide AWS credentials directly in the constructor:
+
+```typescript
+const voice = new NovaSonicVoice({
+  region: "us-east-1",
+  accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+  secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+});
+```
+
+### Environment Variables
+
+The SDK will automatically use these environment variables:
+
+```bash
+export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+export AWS_REGION=us-east-1
+```
+
+```typescript
+const voice = new NovaSonicVoice({
+  region: "us-east-1", // Optional if AWS_REGION is set
+});
+```
+
+### IAM Roles (Recommended for Production)
+
+For EC2, ECS, Lambda, or other AWS services:
+
+```typescript
+const voice = new NovaSonicVoice({
+  region: "us-east-1",
+  // No credentials needed - uses instance role
+});
+```
+
+### Temporary Credentials
+
+For STS temporary credentials:
+
+```typescript
+const voice = new NovaSonicVoice({
+  region: "us-east-1",
+  accessKeyId: "ASIAXXX...",
+  secretAccessKey: "...",
+  sessionToken: "FwoGZX...",
+});
+```
+
+## IAM Permissions
+
+Required IAM permissions for the user/role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModelWithBidirectionalStream",
+      "Resource": "arn:aws:bedrock:*:*:model/amazon.nova-sonic-v1:0"
+    }
+  ]
+}
+```
+
+## Tool Calling
+
+Enable the model to call functions during conversations:
+
+```typescript
+import { z } from "zod";
+
+voice.addTools({
+  getWeather: {
+    id: "getWeather",
+    description: "Get weather information for a location",
+    inputSchema: z.object({
+      location: z.string().describe("City name or zip code"),
+    }),
+    execute: async ({ context }) => {
+      const weather = await fetchWeather(context.location);
+      return weather;
+    },
+  },
+});
+
+voice.on("toolCall", ({ name, args, id }) => {
+  console.log(`Tool called: ${name} with args:`, args);
+});
+
+voice.on("tool-call-result", ({ toolName, result }) => {
+  console.log(`Tool ${toolName} returned:`, result);
+});
+```
+
+## Audio Format
+
+Nova Sonic uses PCM16 (16-bit signed integer) audio format:
+
+- **Input**: 16kHz sample rate (configurable)
+- **Output**: 24kHz sample rate (configurable)
+- **Channels**: Mono
+- **Encoding**: Little-endian
+
+### Converting Audio for Input
+
+```typescript
+// From Web Audio API
+const audioContext = new AudioContext({ sampleRate: 16000 });
+const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+const source = audioContext.createMediaStreamSource(mediaStream);
+
+// From Node.js file
+import { createReadStream } from "fs";
+const audioStream = createReadStream("input.pcm");
+await voice.send(audioStream);
+
+// From Int16Array buffer
+const audioBuffer = new Int16Array([...]); // PCM16 samples
+await voice.send(audioBuffer);
+```
+
+## Notes
+
+- The Nova Sonic model uses AWS Bedrock's bidirectional streaming API
+- Audio is processed as 16kHz PCM16 for input and 24kHz PCM16 for output
+- The voice instance must be connected with `connect()` before using other methods
+- Always call `close()` or `disconnect()` when done to properly clean up resources
+- AWS credentials can be provided via constructor options, environment variables, or IAM roles
+- Tool calling is supported for interactive conversations
+- The model supports real-time interruptions and turn-taking
+
+## Related
+
+- [Amazon Nova Documentation](https://docs.aws.amazon.com/nova/latest/userguide/speech.html)
+- [AWS Bedrock Runtime SDK](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/client/bedrock-runtime/)
+- [Mastra Voice Documentation](/docs/agents/adding-voice)
