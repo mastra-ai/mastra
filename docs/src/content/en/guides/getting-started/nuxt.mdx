@@ -27,28 +27,28 @@ Run the following command to [create a new Nuxt app](https://nuxt.com/docs/getti
 <TabItem value="npm" label="npm">
 
 ```bash
-npx nuxi@latest init mastra-nuxt
+npm create nuxt@latest mastra-nuxt -- --template minimal --packageManager npm --gitInit --modules
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash
-pnpm dlx nuxi@latest init mastra-nuxt
+pnpm create nuxt@latest mastra-nuxt --template minimal --packageManager pnpm --gitInit --modules
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash
-yarn dlx nuxi@latest init mastra-nuxt
+yarn create nuxt@latest mastra-nuxt --template minimal --packageManager yarn --gitInit --modules
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash
-bunx nuxi@latest init mastra-nuxt
+bun create nuxt@latest mastra-nuxt --template minimal --packageManager bun --gitInit --modules
 ```
 
 </TabItem>
@@ -148,7 +148,7 @@ Create `server/api/chat.ts`:
 import { handleChatStream } from '@mastra/ai-sdk';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { createUIMessageStreamResponse } from 'ai';
-import { mastra } from '../../mastra';
+import { mastra } from '../../src/mastra';
 
 const THREAD_ID = 'example-user-id';
 const RESOURCE_ID = 'weather-chat';
@@ -198,13 +198,19 @@ The `POST` handler accepts a prompt and streams the agent's response back in AI 
 
 ## Add the chat UI
 
-Replace the contents of `app.vue` with the following:
+Replace the contents of `app/app.vue` with the following:
 
-```vue title="app.vue"
+```html title="app/app.vue"
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useChat } from '@ai-sdk/vue';
+import { Chat } from "@ai-sdk/vue";
 import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+const chat = new Chat({
+  transport: new DefaultChatTransport({
+    api: '/api/chat',
+  }),
+})
 
 const STATE_TO_LABEL_MAP: Record<string, string> = {
   'input-streaming': 'Pending',
@@ -214,24 +220,18 @@ const STATE_TO_LABEL_MAP: Record<string, string> = {
   'output-denied': 'Denied',
 };
 
-const { messages, setMessages, sendMessage, status } = useChat({
-  transport: new DefaultChatTransport({
-    api: '/api/chat',
-  }),
-});
-
 const input = ref('');
 
 onMounted(async () => {
   const res = await fetch('/api/chat');
   const data = await res.json();
-  setMessages([...data]);
+  chat.messages = [...data];
 });
 
 function handleSubmit() {
   if (!input.value.trim()) return;
 
-  sendMessage({ text: input.value });
+  chat.sendMessage({ text: input.value });
   input.value = '';
 }
 </script>
@@ -239,7 +239,7 @@ function handleSubmit() {
 <template>
   <div class="chat-container">
     <div class="messages">
-      <div v-for="message in messages" :key="message.id" class="message-wrapper">
+      <div v-for="message in chat.messages" :key="message.id" class="message-wrapper">
         <div
           v-for="(part, i) in message.parts"
           :key="`${message.id}-${i}`"
@@ -286,17 +286,60 @@ function handleSubmit() {
         v-model="input"
         type="text"
         placeholder="Ask about the weather..."
-        :disabled="status !== 'ready'"
+        :disabled="chat.status !== 'ready'"
         class="chat-input"
       />
-      <button type="submit" class="submit-button" :disabled="status !== 'ready'">
+      <button type="submit" class="submit-button" :disabled="chat.status !== 'ready'">
         Send
       </button>
     </form>
   </div>
 </template>
 
-<style scoped>
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+*:not(dialog) {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    interpolate-size: allow-keywords;
+  }
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+p {
+  text-wrap: pretty;
+}
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
 .chat-container {
   max-width: 48rem;
   margin: 0 auto;
@@ -323,18 +366,19 @@ function handleSubmit() {
 .message {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  max-width: 80%;
 }
 
 .message.user {
   background-color: #3b82f6;
   color: white;
   margin-left: auto;
+  max-width: 60%;
 }
 
 .message.assistant {
   background-color: #f3f4f6;
   color: #1f2937;
+  max-width: 80%;
 }
 
 .tool {
@@ -435,7 +479,7 @@ function handleSubmit() {
 </style>
 ```
 
-This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+This component connects [`Chat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/api/chat` endpoint, sending prompts there and streaming the response back in chunks.
 
 It renders the response text using custom message styling and shows any tool invocations in a collapsible details element.
 
