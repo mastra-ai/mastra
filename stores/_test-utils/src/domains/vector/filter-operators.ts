@@ -598,6 +598,8 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
     });
 
     // $nor operator tests - only run if store supports it
+    // Note: If supportsNullValues is true, Null Handling tests add a 9th vector with category: 'test'
+    // which affects count expectations (3 home + 1 test = 4, 8 base + 1 = 9)
     if (supportsNorOperator) {
       describe('$nor Operator', () => {
         it('should filter with $nor operator', async () => {
@@ -610,12 +612,14 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
             },
           });
 
-          // Should return products that are neither electronics nor books (home: 3 products)
+          // Should return products that are neither electronics nor books
+          // Base: 3 home products. If null values supported, +1 for 'test' category product
+          const expectedCount = supportsNullValues ? 4 : 3;
           expect(results.length).toBeGreaterThan(0);
           expect(results.every(r => r.metadata?.category !== 'electronics' && r.metadata?.category !== 'books')).toBe(
             true,
           );
-          expect(results.length).toBe(3);
+          expect(results.length).toBe(expectedCount);
         });
 
         it('should handle $nor with comparison operators', async () => {
@@ -688,12 +692,15 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
           });
 
           // Empty $nor should match all documents
-          expect(results.length).toBe(8);
+          // Base: 8 products. If null values supported, +1 for 'test' category product
+          const expectedCount = supportsNullValues ? 9 : 8;
+          expect(results.length).toBe(expectedCount);
         });
       });
     }
 
     // Advanced $not operator combinations - only run if store supports $not
+    // Note: If supportsNullValues is true, Null Handling tests add a 9th vector with category: 'test'
     if (supportsNotOperator) {
       describe('Advanced $not Combinations', () => {
         it('should handle $not with $in operator', async () => {
@@ -704,10 +711,12 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
             filter: { category: { $not: { $in: ['electronics', 'books'] } } },
           });
 
-          // Should return products NOT in electronics or books (home: 3 products)
+          // Should return products NOT in electronics or books
+          // Base: 3 home products. If null values supported, +1 for 'test' category product
+          const expectedCount = supportsNullValues ? 4 : 3;
           expect(results.length).toBeGreaterThan(0);
           expect(results.every(r => !['electronics', 'books'].includes(r.metadata?.category as string))).toBe(true);
-          expect(results.length).toBe(3);
+          expect(results.length).toBe(expectedCount);
         });
 
         it('should handle $not with $and combination', async () => {

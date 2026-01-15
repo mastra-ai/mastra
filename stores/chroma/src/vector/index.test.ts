@@ -583,6 +583,7 @@ createVectorTestSuite({
   supportsContains: false, // Chroma uses documentFilter for text search, not metadata $contains
   supportsNotOperator: false, // Chroma doesn't support $not
   supportsNorOperator: false, // Chroma doesn't support $nor
+  supportsEmptyLogicalOperators: false, // Chroma throws validation errors on empty $and/$or
 });
 
 // ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)

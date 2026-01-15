@@ -95,6 +95,13 @@ export interface VectorTestConfig {
   /** Whether the store throws errors for malformed operator syntax. Default: true.
    *  Set to false for stores that silently handle malformed operators (e.g., return empty results). */
   supportsStrictOperatorValidation?: boolean;
+  /** Whether the store allows empty $not operator (matches all documents). Default: false.
+   *  Most stores using the core filter translator reject empty $not by design.
+   *  Set to true only for stores that allow empty $not and treat it as matching all. */
+  supportsEmptyNot?: boolean;
+  /** Whether the store allows empty logical operators ($and, $or). Default: true.
+   *  Set to false for stores that throw validation errors on empty logical operators. */
+  supportsEmptyLogicalOperators?: boolean;
 }
 
 /**
