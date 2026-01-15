@@ -4465,15 +4465,18 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -4522,8 +4525,8 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps.step2.status).toBe('failed');
       expect(result.steps.step2.error).toBeInstanceOf(Error);
       expect((result.steps.step2.error as Error).message).toBe('Step failed');
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
     it('should retry a step with a custom retry config', async ctx => {
@@ -4534,15 +4537,18 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -4595,8 +4601,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
     });
 
     it('should retry a step with step retries option, overriding the workflow retry config', async ctx => {
@@ -4607,16 +4613,19 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 2,
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 2,
@@ -4670,8 +4679,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
     });
   });
 
@@ -10155,13 +10164,15 @@ describe('MastraInngestWorkflow', () => {
         finalValue: z.number(),
       });
 
+      const passthroughExecute = vi.fn().mockImplementation(async ({ inputData }) => {
+        return inputData;
+      });
+
       const passthroughStep = createStep({
         id: 'passthrough',
         inputSchema: counterInputSchema,
         outputSchema: counterInputSchema,
-        execute: vi.fn().mockImplementation(async ({ inputData }) => {
-          return inputData;
-        }),
+        execute: passthroughExecute,
       });
 
       const wfA = createWorkflow({
@@ -10253,7 +10264,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
         suspendPayload: {
@@ -10288,7 +10299,7 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(2);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(1);
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
     });
 
     it('should be able clone workflows as steps', async ctx => {
@@ -13588,12 +13599,9 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      // Get current time and schedule cron for 1 minute from now
+      // Use every-minute cron schedule
+      const cronSchedule = '* * * * *';
       const now = new Date();
-      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
-
-      // Convert to cron format: minute hour day month dayOfWeek
-      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
 
       const workflow = createWorkflow({
         id: 'cron-test',
@@ -13639,15 +13647,23 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      // Calculate wait time (1 minute + 10 seconds buffer)
-      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
-      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+      // Poll for workflow runs until we find at least one, or timeout
+      const maxWaitTime = 75 * 1000; // 75 seconds max
+      const pollInterval = 20 * 1000; // Poll every 20 seconds
+      const startTime = Date.now();
+      let runs: Awaited<ReturnType<typeof workflow.listWorkflowRuns>>['runs'] = [];
+      let total = 0;
 
-      // Wait for cron to trigger
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log('Waiting for cron to trigger (polling every 20s, max 75s)...');
 
-      // Check storage for workflow runs
-      const { runs, total } = await workflow.listWorkflowRuns();
+      while (runs.length === 0 && Date.now() - startTime < maxWaitTime) {
+        const result = await workflow.listWorkflowRuns();
+        runs = result.runs;
+        total = result.total;
+        if (runs.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
 
       expect(total).toBeGreaterThanOrEqual(1);
       expect(runs.length).toBeGreaterThanOrEqual(1);
@@ -13663,7 +13679,7 @@ describe('MastraInngestWorkflow', () => {
       expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
 
       srv.close();
-    }, 120000); // 2 minute timeout
+    }, 90000); // 90 second timeout
 
     it('should execute workflow via cron schedule with initialState', async ctx => {
       const inngest = new Inngest({
@@ -13683,12 +13699,9 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      // Get current time and schedule cron for 1 minute from now
+      // Use every-minute cron schedule
+      const cronSchedule = '* * * * *';
       const now = new Date();
-      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
-
-      // Convert to cron format: minute hour day month dayOfWeek
-      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
 
       const workflow = createWorkflow({
         id: 'cron-initial-state-test',
@@ -13736,15 +13749,23 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      // Calculate wait time (1 minute + 10 seconds buffer)
-      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
-      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+      // Poll for workflow runs until we find at least one, or timeout
+      const maxWaitTime = 75 * 1000; // 75 seconds max
+      const pollInterval = 20 * 1000; // Poll every 20 seconds
+      const startTime = Date.now();
+      let runs: Awaited<ReturnType<typeof workflow.listWorkflowRuns>>['runs'] = [];
+      let total = 0;
 
-      // Wait for cron to trigger
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log('Waiting for cron to trigger (polling every 20s, max 75s)...');
 
-      // Check storage for workflow runs
-      const { runs, total } = await workflow.listWorkflowRuns();
+      while (runs.length === 0 && Date.now() - startTime < maxWaitTime) {
+        const result = await workflow.listWorkflowRuns();
+        runs = result.runs;
+        total = result.total;
+        if (runs.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
 
       expect(total).toBeGreaterThanOrEqual(1);
       expect(runs.length).toBeGreaterThanOrEqual(1);
@@ -13760,7 +13781,7 @@ describe('MastraInngestWorkflow', () => {
       expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
 
       srv.close();
-    }, 120000); // 2 minute timeout
+    }, 90000); // 90 second timeout
   });
 
   describe('serve function with user-supplied functions', () => {
