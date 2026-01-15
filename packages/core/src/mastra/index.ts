@@ -10,7 +10,6 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
-import type { MastraKnowledge } from '../knowledge';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -217,26 +216,6 @@ export interface Config<
   memory?: TMemory;
 
   /**
-   * Knowledge instance for document storage and retrieval.
-   * Supports vector search, BM25 keyword search, and hybrid search.
-   * Processors like RetrievedKnowledge can inherit this instance from Mastra.
-   *
-   * @example
-   * ```typescript
-   * import { Knowledge, KnowledgeFilesystemStorage } from '@mastra/skills';
-   *
-   * const mastra = new Mastra({
-   *   knowledge: new Knowledge({
-   *     id: 'support-docs',
-   *     storage: new KnowledgeFilesystemStorage({ basePath: './docs' }),
-   *     bm25: true,
-   *   }),
-   * });
-   * ```
-   */
-  knowledge?: MastraKnowledge;
-
-  /**
    * Skills instance for agent skill management following the Agent Skills specification.
    * Discovers skills from filesystem paths and makes them available to agents.
    * Processors like SkillsProcessor can inherit this instance from Mastra.
@@ -325,7 +304,6 @@ export class Mastra<
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
 > {
   #vectors?: TVectors;
-  #knowledge?: MastraKnowledge;
   #skills?: MastraSkills;
   #agents: TAgents;
   #logger: TLogger;
@@ -343,7 +321,6 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #memory?: TMemory;
-  // Note: #knowledge and #skills are declared above with #vectors
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -548,7 +525,6 @@ export class Mastra<
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
-    this.#knowledge = undefined;
     this.#skills = undefined;
     this.#mcpServers = {} as TMCPServers;
     this.#tts = {} as TTTS;
@@ -594,10 +570,6 @@ export class Mastra<
           this.addVector(vector, key);
         }
       });
-    }
-
-    if (config?.knowledge) {
-      this.#knowledge = config.knowledge;
     }
 
     if (config?.skills) {
@@ -1441,37 +1413,6 @@ export class Mastra<
   public getVectors(): TVectors | undefined {
     console.warn('getVectors() is deprecated. Use listVectors() instead.');
     return this.listVectors();
-  }
-
-  // ============================================================================
-  // Knowledge Management
-  // ============================================================================
-
-  /**
-   * Returns the registered knowledge instance.
-   *
-   * @returns The knowledge instance or undefined if none is registered
-   *
-   * @example
-   * ```typescript
-   * import { Knowledge, KnowledgeFilesystemStorage } from '@mastra/skills';
-   *
-   * const mastra = new Mastra({
-   *   knowledge: new Knowledge({
-   *     id: 'support-docs',
-   *     storage: new KnowledgeFilesystemStorage({ basePath: './docs' }),
-   *     bm25: true,
-   *   }),
-   * });
-   *
-   * const knowledge = mastra.getKnowledge();
-   * if (knowledge) {
-   *   const results = await knowledge.search('default', 'password reset', { mode: 'bm25' });
-   * }
-   * ```
-   */
-  public getKnowledge(): MastraKnowledge | undefined {
-    return this.#knowledge;
   }
 
   // ============================================================================
