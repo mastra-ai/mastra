@@ -5191,19 +5191,19 @@ Google Antigravity is an agent-first development platform that supports MCP serv
 
 3. Add the Mastra MCP server configuration:
 
-   ```json copy
-   {
-      "mcpServers": {
-          "mastra-docs": {
-              "command": "npx",
-              "args": [
-                  "-y",
-                  "@mastra/mcp-docs-server"
-              ]
-          }
-      }
+```json copy
+{
+  "mcpServers": {
+    "mastra-docs": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mastra/mcp-docs-server"
+      ]
+    }
   }
-   ```
+}
+```
 
 4. Save the configuration and restart Antigravity
     <img
@@ -5963,6 +5963,12 @@ Visit [MCPClient](/reference/v1/tools/mcp-client) for a full list of configurati
 
 :::
 
+:::tip Authentication
+
+For connecting to OAuth-protected MCP servers, see the [OAuth Authentication](/reference/v1/tools/mcp-client#oauth-authentication) section.
+
+:::
+
 ## Using `MCPClient` with an agent
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
@@ -6017,6 +6023,12 @@ export const testMcpServer = new MCPServer({
 :::info
 
 Visit [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+
+:::
+
+:::tip Authentication
+
+To protect your MCP server with OAuth, see the [OAuth Protection](/reference/v1/tools/mcp-server#oauth-protection) section.
 
 :::
 
@@ -8465,25 +8477,6 @@ Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and Ope
 
 This exporter implements the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
 
-## Using Tags
-
-Tags help you categorize and filter traces in Phoenix and Arize AX. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear as the `tag.tags` attribute following OpenInference conventions and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -8588,25 +8581,6 @@ new BraintrustExporter({
   logLevel: "info", // Diagnostic logging: debug | info | warn | error
 });
 ```
-
-## Using Tags
-
-Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
@@ -9202,19 +9176,6 @@ export const mastra = new Mastra({
 });
 ```
 
-## Using Tags
-
-Tags help you categorize and filter traces in the Laminar dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -9372,10 +9333,8 @@ import { buildTracingOptions } from "@mastra/observability";
 import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
 
-const langfuse = new Langfuse({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-});
+// Reads credentials from LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL env vars
+const langfuse = new Langfuse();
 
 // Fetch the prompt from Langfuse Prompt Management
 const prompt = await langfuse.getPrompt("customer-support");
@@ -9386,15 +9345,6 @@ export const supportAgent = new Agent({
   model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
-## Using Tags
-
-Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
   },
 });
 ```
@@ -9432,12 +9382,6 @@ You can link prompts using either:
 - All three fields
 
 When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
-Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
 
 ## Related
 
@@ -9915,6 +9859,12 @@ The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-
 
 :::
 
+:::tip Datadog-Native Exporter
+
+For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/v1/observability/tracing/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
+
+:::
+
 ### Custom/Generic OTEL Endpoints
 
 For other OTEL-compatible platforms or custom collectors:
@@ -10015,25 +9965,6 @@ Install the suggested package for your provider.
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
-
-## Using Tags
-
-Tags help you categorize and filter traces in your observability platform. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
@@ -10177,30 +10108,211 @@ new PosthogExporter({
 });
 ```
 
-## Using Tags
-
-Tags help you categorize and filter traces in PostHog's AI analytics. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are added as event properties where the tag name is the key and the value is set to `true`. In PostHog's trace view, filter by a tag using the `is set` filter (e.g., "production is set" shows all traces with the production tag). Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [PostHog Documentation](https://posthog.com/docs)
+
+---
+title: "Sentry Exporter | Tracing | Observability"
+description: "Send traces to Sentry for AI tracing and monitoring"
+packages:
+  - "@mastra/sentry"
+  - "@mastra/observability"
+---
+
+# Sentry Exporter
+[EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/sentry
+
+[Sentry](https://sentry.io/) is an application monitoring platform with AI-specific tracing capabilities. The Sentry exporter sends your traces to Sentry using OpenTelemetry semantic conventions, providing insights into model performance, token usage, and tool executions.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/sentry@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Sentry Account**: Sign up at [sentry.io](https://sentry.io/)
+2. **DSN**: Get your [Data Source Name](https://docs.sentry.io/concepts/key-terms/dsn-explainer/) from Project Settings → Client Keys
+3. **Environment Variables**: Set your configuration
+
+```bash title=".env"
+SENTRY_DSN=https://...@...sentry.io/...
+
+# Optional
+SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=1.0.0
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { SentryExporter } from "@mastra/sentry";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      sentry: {
+        serviceName: "my-service",
+        exporters: [new SentryExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { SentryExporter } from "@mastra/sentry";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      sentry: {
+        serviceName: "my-service",
+        exporters: [
+          new SentryExporter({
+            dsn: process.env.SENTRY_DSN!,
+            environment: "production",
+            tracesSampleRate: 1.0, // Send 100% of transactions to Sentry
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Configuration Options
+
+### Complete Configuration
+
+```typescript
+new SentryExporter({
+  // Required settings
+  dsn: process.env.SENTRY_DSN!, // Data Source Name - tells the SDK where to send events
+
+  // Optional settings
+  environment: "production", // Deployment environment (enables filtering issues and alerts by environment)
+  tracesSampleRate: 1.0, // Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%)
+  release: "1.0.0", // Version of your code deployed (helps identify regressions and track deployments)
+
+  // Advanced Sentry options
+  options: {
+    // Any additional Sentry.NodeOptions
+    integrations: [],
+    beforeSend: (event) => event,
+    // ... other Sentry SDK options
+  },
+
+  // Diagnostic logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### Sampling Configuration
+
+Control the percentage of transactions sent to Sentry. This is useful for high-volume applications:
+
+```typescript
+new SentryExporter({
+  dsn: process.env.SENTRY_DSN!,
+  tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
+});
+```
+
+:::tip
+Set to `1.0` (100%) for development and `0.1` to `0.2` (10-20%) for production high-load applications. To disable tracing entirely, don't set `tracesSampleRate` at all rather than setting it to `0`.
+:::
+
+## Span Type Mapping
+
+Mastra span types are automatically mapped to Sentry operations:
+
+| Mastra SpanType             | Sentry Operation       | Notes                                            |
+| --------------------------- | ---------------------- | ------------------------------------------------ |
+| `AGENT_RUN`                 | `gen_ai.invoke_agent`  | Contains tokens from child MODEL_GENERATION span |
+| `MODEL_GENERATION`          | `gen_ai.chat`          | Includes usage stats, streaming data             |
+| `MODEL_STEP`                | _(skipped)_            | Skipped to simplify trace hierarchy              |
+| `MODEL_CHUNK`               | _(skipped)_            | Data aggregated in MODEL_GENERATION              |
+| `TOOL_CALL`                 | `gen_ai.execute_tool`  | Tool execution with input/output                 |
+| `MCP_TOOL_CALL`             | `gen_ai.execute_tool`  | MCP tool execution                               |
+| `WORKFLOW_RUN`              | `workflow.run`         |                                                  |
+| `WORKFLOW_STEP`             | `workflow.step`        |                                                  |
+| `WORKFLOW_CONDITIONAL`      | `workflow.conditional` |                                                  |
+| `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` |                                                  |
+| `WORKFLOW_PARALLEL`         | `workflow.parallel`    |                                                  |
+| `WORKFLOW_LOOP`             | `workflow.loop`        |                                                  |
+| `WORKFLOW_SLEEP`            | `workflow.sleep`       |                                                  |
+| `WORKFLOW_WAIT_EVENT`       | `workflow.wait`        |                                                  |
+| `PROCESSOR_RUN`             | `ai.processor`         |                                                  |
+| `GENERIC`                   | `ai.span`              |                                                  |
+
+## OpenTelemetry Semantic Conventions
+
+The exporter uses standard GenAI semantic conventions with Sentry-specific attributes:
+
+**For MODEL_GENERATION spans:**
+
+- `gen_ai.system`: Model provider (e.g., `openai`, `anthropic`)
+- `gen_ai.request.model`: Model identifier (e.g., `gpt-4`)
+- `gen_ai.response.model`: Response model
+- `gen_ai.response.text`: Output text response
+- `gen_ai.response.tool_calls`: Tool calls made during generation (JSON array)
+- `gen_ai.usage.input_tokens`: Input token count
+- `gen_ai.usage.output_tokens`: Output token count
+- `gen_ai.request.temperature`: Temperature parameter
+- `gen_ai.request.stream`: Whether streaming was requested
+- `gen_ai.request.messages`: Input messages/prompts (JSON)
+- `gen_ai.completion_start_time`: Time first token arrived
+
+**For TOOL_CALL spans:**
+
+- `gen_ai.tool.name`: Tool identifier
+- `gen_ai.tool.type`: `function`
+- `gen_ai.tool.call.id`: Tool call ID
+- `gen_ai.tool.input`: Tool input (JSON)
+- `gen_ai.tool.output`: Tool output (JSON)
+- `tool.success`: Whether the tool call succeeded
+
+**For AGENT_RUN spans:**
+
+- `gen_ai.agent.name`: Agent identifier
+- `gen_ai.pipeline.name`: Agent name (for Sentry AI view)
+- `gen_ai.agent.instructions`: Agent instructions
+- `gen_ai.response.model`: Model from child generation
+- `gen_ai.response.text`: Output text from child generation
+- `gen_ai.usage.*`: Token usage from child generation
+
+## Features
+
+- **Hierarchical traces**: Maintains parent-child relationships
+- **Token tracking**: Automatic token usage tracking for generations
+- **Tool call tracking**: Captures tool executions with input/output
+- **Streaming support**: Aggregates streaming responses
+- **Error tracking**: Automatic error status and exception capture
+- **Workflow support**: Tracks workflow execution steps
+- **Simplified hierarchy**: MODEL_STEP and MODEL_CHUNK spans are skipped to reduce noise
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Sentry Documentation](https://docs.sentry.io/)
+- [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/concepts/semantic-conventions/)
+
 
 ---
 title: "Tracing | Observability"
@@ -10287,11 +10399,14 @@ In addition to the internal exporters, Mastra supports integration with popular 
 
 - **[Arize](/docs/v1/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/v1/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Datadog](/docs/v1/observability/tracing/exporters/datadog)** - Sends traces to Datadog APM via OTLP for full-stack observability with AI tracing
 - **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
+- **[PostHog](/docs/v1/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
+- **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -10699,6 +10814,61 @@ const result = await agent.generate({
 - **Request types**: `"user-request"`, `"batch-job"`, `"scheduled-task"`
 - **Priority levels**: `"priority-high"`, `"priority-low"`
 - **Experiments**: `"experiment-v1"`, `"control-group"`, `"treatment-a"`
+
+### Hiding Sensitive Input/Output
+
+When processing sensitive data, you may want to prevent input and output values from being logged to your observability platforms. Use `hideInput` and `hideOutput` in `tracingOptions` to exclude this data from all spans in a trace:
+
+```ts
+// Hide input data (e.g., user credentials, PII)
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Process this sensitive data" }],
+  tracingOptions: {
+    hideInput: true, // Input will be hidden from all spans
+  },
+});
+
+// Hide output data (e.g., generated secrets, confidential results)
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Generate API keys" }],
+  tracingOptions: {
+    hideOutput: true, // Output will be hidden from all spans
+  },
+});
+
+// Hide both input and output
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Handle confidential request" }],
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+  },
+});
+```
+
+#### How It Works
+
+- **Trace-wide effect**: When set on the root span, these options apply to all child spans in the trace (tool calls, model generations, etc.)
+- **Export-time filtering**: The data is still available internally during execution but is excluded when spans are exported to observability platforms
+- **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
+
+```ts
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Sensitive operation" }],
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+    tags: ["sensitive-operation", "pii-handling"],
+    metadata: { operationType: "credential-processing" },
+  },
+});
+```
+
+:::tip
+
+For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+
+:::
 
 #### Child Spans and Metadata Extraction
 
@@ -17002,6 +17172,12 @@ Visit [MCPClient](/reference/v1/tools/mcp-client) for a full list of configurati
 
 :::
 
+:::tip Authentication
+
+For connecting to OAuth-protected MCP servers, see the [OAuth Authentication](/reference/v1/tools/mcp-client#oauth-authentication) section.
+
+:::
+
 ## Using `MCPClient` with an agent
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
@@ -17056,6 +17232,12 @@ export const testMcpServer = new MCPServer({
 :::info
 
 Visit [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+
+:::
+
+:::tip Authentication
+
+To protect your MCP server with OAuth, see the [OAuth Protection](/reference/v1/tools/mcp-server#oauth-protection) section.
 
 :::
 
@@ -32751,12 +32933,12 @@ Need help with the migration? Join our [Discord community](https://discord.gg/BT
 
 ### Update all Mastra packages to `beta` tag
 
-Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility.
+Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility (all `@mastra/*` packages and `mastra`).
 
 Here's how you update the most commonly used packages:
 
 ```shell
-npm install @mastra/core@beta mastra@beta @mastra/loggers@beta @mastra/memory@beta
+npm install @mastra/core@beta @mastra/loggers@beta @mastra/memory@beta mastra@beta
 ```
 
 Install any other Mastra package with the `@beta` tag and you'll get the latest beta version available. Be sure to update all Mastra packages (especially if you're in a monorepo) to avoid version mismatches.
@@ -32780,7 +32962,9 @@ npx @mastra/codemod@beta v1
 :::
 
 :::note[Database Migration Required]
+
 If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#database-migration) for details.
+
 :::
 
 ## Breaking Changes by Area
@@ -36266,7 +36450,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 70+ AI providers and 1828+ models through Mastra's model router."
+description: "Access 70+ AI providers and 1833+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36279,7 +36463,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1828 models from 70 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1833 models from 70 providers through a single API.
 
 ## Features
 
@@ -36578,7 +36762,7 @@ You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts 
 
 ---
 title: "Abacus | Models | Mastra"
-description: "Use Abacus models with Mastra. 52 models available."
+description: "Use Abacus models with Mastra. 55 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36588,7 +36772,7 @@ description: "Use Abacus models with Mastra. 52 models available."
 # <img src="https://models.dev/logos/abacus.svg" alt="Abacus logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Abacus
 [EN] Source: https://mastra.ai/en/models/providers/abacus
 
-Access 52 Abacus models through Mastra's model router. Authentication is handled automatically using the `ABACUS_API_KEY` environment variable.
+Access 55 Abacus models through Mastra's model router. Authentication is handled automatically using the `ABACUS_API_KEY` environment variable.
 
 Learn more in the [Abacus documentation](https://abacus.ai).
 
@@ -36603,7 +36787,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "abacus/Qwen-QwQ-32B"
+  model: "abacus/Qwen/QwQ-32B"
 });
 
 // Generate a response
@@ -36711,7 +36895,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "abacus/deepseek-ai-DeepSeek-R1",
+    "model": "abacus/deepseek-ai/DeepSeek-R1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -36723,7 +36907,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7
   },
   {
-    "model": "abacus/deepseek-ai-DeepSeek-V3.1-Terminus",
+    "model": "abacus/deepseek-ai/DeepSeek-V3.1-Terminus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -36735,7 +36919,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "abacus/deepseek-ai-DeepSeek-V3.2",
+    "model": "abacus/deepseek-ai/DeepSeek-V3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -36747,7 +36931,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "abacus/deepseek-deepseek-v3.1",
+    "model": "abacus/deepseek/deepseek-v3.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -36755,8 +36939,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 0.55,
-    "outputCost": 1.66
+    "inputCost": 0.14,
+    "outputCost": 0.28
   },
   {
     "model": "abacus/gemini-2.0-flash-001",
@@ -36963,6 +37147,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 14
   },
   {
+    "model": "abacus/gpt-5.2-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.5,
+    "outputCost": 12
+  },
+  {
     "model": "abacus/grok-4-0709",
     "imageInput": true,
     "audioInput": false,
@@ -37035,7 +37231,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.79
   },
   {
-    "model": "abacus/meta-llama-Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "model": "abacus/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -37047,7 +37243,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "abacus/meta-llama-Meta-Llama-3.1-405B-Instruct-Turbo",
+    "model": "abacus/meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37059,7 +37255,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.5
   },
   {
-    "model": "abacus/meta-llama-Meta-Llama-3.1-70B-Instruct",
+    "model": "abacus/meta-llama/Meta-Llama-3.1-70B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37071,7 +37267,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "abacus/meta-llama-Meta-Llama-3.1-8B-Instruct",
+    "model": "abacus/meta-llama/Meta-Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37131,7 +37327,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.4
   },
   {
-    "model": "abacus/openai-gpt-oss-120b",
+    "model": "abacus/openai/gpt-oss-120b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -37155,7 +37351,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.79
   },
   {
-    "model": "abacus/Qwen-Qwen2.5-72B-Instruct",
+    "model": "abacus/Qwen/Qwen2.5-72B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37167,7 +37363,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.38
   },
   {
-    "model": "abacus/Qwen-Qwen3-235B-A22B-Instruct-2507",
+    "model": "abacus/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37179,7 +37375,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "abacus/Qwen-Qwen3-32B",
+    "model": "abacus/Qwen/Qwen3-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37191,7 +37387,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.29
   },
   {
-    "model": "abacus/qwen-qwen3-coder-480b-a35b-instruct",
+    "model": "abacus/Qwen/qwen3-coder-480b-a35b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37203,19 +37399,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "abacus/qwen-qwen3-Max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 1.2,
-    "outputCost": 6
-  },
-  {
-    "model": "abacus/Qwen-QwQ-32B",
+    "model": "abacus/Qwen/QwQ-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37227,7 +37411,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "abacus/zai-org-glm-4.5",
+    "model": "abacus/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 1.2,
+    "outputCost": 6
+  },
+  {
+    "model": "abacus/route-llm",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "abacus/zai-org/glm-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37239,7 +37447,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.2
   },
   {
-    "model": "abacus/zai-org-glm-4.6",
+    "model": "abacus/zai-org/glm-4.6",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37249,6 +37457,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "abacus/zai-org/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.7,
+    "outputCost": 2.5
   }
 ]}
 />
@@ -37263,7 +37483,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://routellm.abacus.ai/v1",
-    id: "abacus/Qwen-QwQ-32B",
+    id: "abacus/Qwen/QwQ-32B",
     apiKey: process.env.ABACUS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -37281,8 +37501,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "abacus/zai-org-glm-4.6"
-      : "abacus/Qwen-QwQ-32B";
+      ? "abacus/zai-org/glm-4.7"
+      : "abacus/Qwen/QwQ-32B";
   }
 });
 ```
@@ -46680,7 +46900,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/xai.svg"
     />    <CardGridItem
       title="Abacus"
-      description="52 models"
+      description="55 models"
       href="/models/v1/providers/abacus"
       logo="https://models.dev/logos/abacus.svg"
     />    <CardGridItem
@@ -46925,7 +47145,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="23 models"
+      description="25 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -58921,7 +59141,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 23 models available."
+description: "Use Venice AI models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -58931,7 +59151,7 @@ description: "Use Venice AI models with Mastra. 23 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 23 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 25 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -58980,6 +59200,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 50688,
     "inputCost": 6,
     "outputCost": 30
+  },
+  {
+    "model": "venice/claude-sonnet-45",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 3.75,
+    "outputCost": 18.75
   },
   {
     "model": "venice/deepseek-v3.2",
@@ -59128,6 +59360,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "venice/openai-gpt-52",
     "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 2.19,
+    "outputCost": 17.5
+  },
+  {
+    "model": "venice/openai-gpt-52-codex",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -82176,6 +82420,225 @@ const exporter = new PosthogExporter({
 
 
 ---
+title: "Reference: SentryExporter | Observability"
+description: Sentry AI monitoring exporter for Tracing
+packages:
+  - "@mastra/sentry"
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# SentryExporter
+[EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/sentry
+
+Sends Tracing data to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions.
+
+## Constructor
+
+```typescript
+new SentryExporter(config: SentryExporterConfig)
+```
+
+## SentryExporterConfig
+
+```typescript
+interface SentryExporterConfig extends BaseExporterConfig {
+  dsn?: string;
+  environment?: string;
+  tracesSampleRate?: number;
+  release?: string;
+  options?: Partial<Sentry.NodeOptions>;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "dsn",
+      type: "string",
+      description: "Data Source Name - tells the SDK where to send events. Either this parameter or the SENTRY_DSN env var must be set. Falls back to SENTRY_DSN env var.",
+      required: false,
+    },
+    {
+      name: "environment",
+      type: "string",
+      description: "Deployment environment (enables filtering issues and alerts by environment). Falls back to SENTRY_ENVIRONMENT env var. Default: 'production'.",
+      required: false,
+    },
+    {
+      name: "tracesSampleRate",
+      type: "number",
+      description: "Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%). Default: 1.0.",
+      required: false,
+    },
+    {
+      name: "release",
+      type: "string",
+      description: "Version of your code deployed (helps identify regressions and track deployments). Falls back to SENTRY_RELEASE env var.",
+      required: false,
+    },
+    {
+      name: "options",
+      type: "Partial<Sentry.NodeOptions>",
+      description: "Additional Sentry SDK options (integrations, beforeSend, etc.). See Sentry SDK documentation for available options.",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to Sentry. Handles SPAN_STARTED, SPAN_UPDATED, and SPAN_ENDED events.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Ends all active spans, clears internal state, and closes the Sentry connection. Waits up to 2 seconds for pending data to be sent.
+
+## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { SentryExporter } from "@mastra/sentry";
+
+// Reads from SENTRY_DSN, SENTRY_ENVIRONMENT, SENTRY_RELEASE
+const exporter = new SentryExporter();
+```
+
+### Explicit Configuration
+
+```typescript
+import { SentryExporter } from "@mastra/sentry";
+
+const exporter = new SentryExporter({
+  dsn: process.env.SENTRY_DSN,
+  environment: "production",
+  tracesSampleRate: 1.0,
+  release: "1.0.0",
+});
+```
+
+### With Sampling
+
+```typescript
+const exporter = new SentryExporter({
+  dsn: process.env.SENTRY_DSN,
+  environment: "production",
+  tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
+});
+```
+
+### With Custom Sentry Options
+
+```typescript
+const exporter = new SentryExporter({
+  dsn: process.env.SENTRY_DSN,
+  environment: "production",
+  options: {
+    integrations: [
+      // Custom Sentry integrations
+    ],
+    beforeSend: (event) => {
+      // Custom event processing
+      return event;
+    },
+  },
+});
+```
+
+## Span Mapping
+
+Mastra span types are mapped to Sentry operations:
+
+| Mastra SpanType             | Sentry Operation       |
+| --------------------------- | ---------------------- |
+| `AGENT_RUN`                 | `gen_ai.invoke_agent`  |
+| `MODEL_GENERATION`          | `gen_ai.chat`          |
+| `MODEL_STEP`                | _(skipped)_            |
+| `MODEL_CHUNK`               | _(skipped)_            |
+| `TOOL_CALL`                 | `gen_ai.execute_tool`  |
+| `MCP_TOOL_CALL`             | `gen_ai.execute_tool`  |
+| `WORKFLOW_RUN`              | `workflow.run`         |
+| `WORKFLOW_STEP`             | `workflow.step`        |
+| `WORKFLOW_CONDITIONAL`      | `workflow.conditional` |
+| `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` |
+| `WORKFLOW_PARALLEL`         | `workflow.parallel`    |
+| `WORKFLOW_LOOP`             | `workflow.loop`        |
+| `WORKFLOW_SLEEP`            | `workflow.sleep`       |
+| `WORKFLOW_WAIT_EVENT`       | `workflow.wait`        |
+| `PROCESSOR_RUN`             | `ai.processor`         |
+| `GENERIC`                   | `ai.span`              |
+
+MODEL_STEP and MODEL_CHUNK spans are skipped to simplify trace hierarchy. Their data is aggregated into MODEL_GENERATION spans.
+
+## Environment Variables
+
+The exporter reads configuration from these environment variables:
+
+| Variable              | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `SENTRY_DSN`          | Data Source Name - tells the SDK where to send events |
+| `SENTRY_ENVIRONMENT`  | Deployment environment name                          |
+| `SENTRY_RELEASE`      | Version of your code deployed                        |
+
+## OpenTelemetry Attributes
+
+The exporter sets these standard OpenTelemetry attributes:
+
+**Common attributes (all spans):**
+- `sentry.origin`: `auto.ai.mastra` (identifies spans from Mastra)
+- `ai.span.type`: Mastra span type
+
+**MODEL_GENERATION spans:**
+- `gen_ai.operation.name`: `chat`
+- `gen_ai.system`: Model provider
+- `gen_ai.request.model`: Model identifier
+- `gen_ai.request.messages`: Input messages/prompts (JSON)
+- `gen_ai.response.model`: Response model
+- `gen_ai.response.text`: Output text
+- `gen_ai.response.tool_calls`: Tool calls made during generation (JSON array)
+- `gen_ai.usage.input_tokens`: Input token count
+- `gen_ai.usage.output_tokens`: Output token count
+- `gen_ai.usage.total_tokens`: Total tokens
+- `gen_ai.request.stream`: Streaming flag
+- `gen_ai.request.temperature`: Temperature parameter
+- `gen_ai.completion_start_time`: First token time
+
+**TOOL_CALL spans:**
+- `gen_ai.operation.name`: `execute_tool`
+- `gen_ai.tool.name`: Tool identifier
+- `gen_ai.tool.type`: `function`
+- `gen_ai.tool.call.id`: Tool call ID
+- `gen_ai.tool.input`: Tool input
+- `gen_ai.tool.output`: Tool output
+- `tool.success`: Success flag
+
+**AGENT_RUN spans:**
+- `gen_ai.operation.name`: `invoke_agent`
+- `gen_ai.agent.name`: Agent identifier
+- `gen_ai.pipeline.name`: Agent name
+- `gen_ai.agent.instructions`: Agent instructions
+- `gen_ai.response.model`: Model from child generation
+- `gen_ai.response.text`: Output from child generation
+- `gen_ai.usage.*`: Token usage from child generation
+
+
+---
 title: "Reference: Tracing | Observability"
 description: Core Tracing classes and methods
 asIndexPage: true
@@ -82927,6 +83390,18 @@ interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 ```
 
@@ -87661,6 +88136,13 @@ The `extract` parameter accepts the following fields:
       description:
         "Enable keyword extraction. Set to true for default settings, or provide custom configuration.",
     },
+    {
+      name: "schema",
+      type: "SchemaExtractArgs",
+      isOptional: true,
+      description:
+        "Enable structured metadata extraction using a Zod schema.",
+    },
   ]}
 />
 
@@ -87784,6 +88266,37 @@ The `extract` parameter accepts the following fields:
   ]}
 />
 
+### SchemaExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "schema",
+      type: "ZodType",
+      isOptional: false,
+      description: "Zod schema defining the structure of the data to extract.",
+    },
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "AI SDK language model to use for extraction.",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "Instructions for the LLM on what to extract.",
+    },
+    {
+      name: "metadataKey",
+      type: "string",
+      isOptional: true,
+      description: "Key to nest extraction results under. If omitted, results are spread into the metadata object.",
+    },
+  ]}
+/>
+
 ## Advanced Example
 
 ```typescript
@@ -87817,6 +88330,16 @@ const chunks = await doc.chunk({
       keywords: 5, // Extract 5 keywords
       promptTemplate: "Extract {maxKeywords} key terms from: {context}",
     },
+
+    // Schema extraction with Zod
+    schema: {
+        schema: z.object({
+            productName: z.string(),
+            category: z.enum(["electronics", "clothing"]),
+        }),
+        instructions: "Extract product information.",
+        metadataKey: "product",
+    },
   },
 });
 
@@ -87825,7 +88348,11 @@ const chunks = await doc.chunk({
 //   documentTitle: "AI in Modern Computing",
 //   sectionSummary: "Overview of AI concepts and their applications in computing",
 //   questionsThisExcerptCanAnswer: "1. What is machine learning?\n2. How do neural networks work?",
-//   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data"
+//   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data",
+//   product: {
+//     productName: "Neural Net 2000",
+//     category: "electronics"
+//   }
 // }
 ```
 
@@ -97822,6 +98349,43 @@ export const tool = createTool({
 });
 ```
 
+## Example with MCP Annotations
+
+When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("City name or coordinates"),
+  }),
+  // MCP-specific properties
+  mcp: {
+    // Annotations for client behavior hints
+    annotations: {
+      title: "Weather Lookup",           // Human-readable display name
+      readOnlyHint: true,                // Tool doesn't modify environment
+      destructiveHint: false,            // Tool doesn't perform destructive updates
+      idempotentHint: true,              // Same args = same result
+      openWorldHint: true,               // Interacts with external API
+    },
+    // Custom metadata for client-specific functionality
+    _meta: {
+      version: "1.0.0",
+      category: "weather",
+    },
+  },
+  execute: async (inputData) => {
+    const weather = await fetchWeather(inputData.location);
+    return { weather };
+  },
+});
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -97872,6 +98436,13 @@ export const tool = createTool({
       type: "boolean",
       description:
         "When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.",
+      isOptional: true,
+    },
+    {
+      name: "mcp",
+      type: "MCPToolProperties",
+      description:
+        "MCP-specific properties for tools exposed via Model Context Protocol. Includes `annotations` (tool behavior hints like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) and `_meta` (arbitrary metadata passed through to MCP clients).",
       isOptional: true,
     },
     {
@@ -98087,6 +98658,63 @@ Additionally:
 ### Error Handling
 
 Hook errors are caught and logged automatically, but do not prevent tool execution from continuing. If a hook throws an error, it will be logged to the console but will not fail the tool call.
+
+## MCP Tool Annotations
+
+When exposing tools via the Model Context Protocol (MCP), you can provide annotations that describe tool behavior. These annotations help MCP clients like OpenAI Apps SDK understand how to present and handle your tools.
+
+MCP-specific properties are grouped under the `mcp` property, which includes `annotations` and `_meta`:
+
+```typescript
+mcp: {
+  annotations: { /* behavior hints */ },
+  _meta: { /* custom metadata */ },
+}
+```
+
+### ToolAnnotations Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "title",
+      type: "string",
+      description:
+        "A human-readable title for the tool. Used for display purposes in UI components.",
+      isOptional: true,
+    },
+    {
+      name: "readOnlyHint",
+      type: "boolean",
+      description:
+        "If true, the tool does not modify its environment. This hint indicates the tool only reads data and has no side effects. Defaults to false.",
+      isOptional: true,
+    },
+    {
+      name: "destructiveHint",
+      type: "boolean",
+      description:
+        "If true, the tool may perform destructive updates to its environment. If false, the tool performs only additive updates. This hint helps clients determine if confirmation should be required. Defaults to true.",
+      isOptional: true,
+    },
+    {
+      name: "idempotentHint",
+      type: "boolean",
+      description:
+        "If true, calling the tool repeatedly with the same arguments will have no additional effect on its environment. This hint indicates idempotent behavior. Defaults to false.",
+      isOptional: true,
+    },
+    {
+      name: "openWorldHint",
+      type: "boolean",
+      description:
+        "If true, this tool may interact with an 'open world' of external entities (e.g., web search, external APIs). If false, the tool's domain is closed and fully defined. Defaults to true.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+These annotations follow the [MCP specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations) and are passed through when tools are listed via MCP.
 
 ## Related
 
@@ -98676,6 +99304,12 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       description: "Server-specific capabilities configuration.",
     },
     {
+      name: "authProvider",
+      type: "OAuthClientProvider",
+      isOptional: true,
+      description: "For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.",
+    },
+    {
       name: "enableServerLogs",
       type: "boolean",
       isOptional: true,
@@ -99237,6 +99871,104 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 - **Respect user choice**: Handle decline and cancel responses gracefully
 - **Clear UI**: Make it obvious what information is being requested and why
 - **Security**: Never auto-accept requests for sensitive information
+
+## OAuth Authentication
+
+For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
+
+```typescript
+import { MCPClient, MCPOAuthClientProvider } from "@mastra/mcp";
+
+// Create an OAuth provider
+const oauthProvider = new MCPOAuthClientProvider({
+  redirectUrl: "http://localhost:3000/oauth/callback",
+  clientMetadata: {
+    redirect_uris: ["http://localhost:3000/oauth/callback"],
+    client_name: "My MCP Client",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+  },
+  onRedirectToAuthorization: (url) => {
+    // Handle authorization redirect (open browser, redirect response, etc.)
+    console.log(`Please visit: ${url}`);
+  },
+});
+
+// Use the provider with MCPClient
+const client = new MCPClient({
+  servers: {
+    protectedServer: {
+      url: new URL("https://mcp.example.com/mcp"),
+      authProvider: oauthProvider,
+    },
+  },
+});
+```
+
+### Quick Token Provider
+
+For testing or when you already have a valid access token:
+
+```typescript
+import { MCPClient, createSimpleTokenProvider } from "@mastra/mcp";
+
+const provider = createSimpleTokenProvider("your-access-token", {
+  redirectUrl: "http://localhost:3000/callback",
+  clientMetadata: {
+    redirect_uris: ["http://localhost:3000/callback"],
+    client_name: "Test Client",
+  },
+});
+
+const client = new MCPClient({
+  servers: {
+    testServer: {
+      url: new URL("https://mcp.example.com/mcp"),
+      authProvider: provider,
+    },
+  },
+});
+```
+
+### Custom Token Storage
+
+For persistent token storage across sessions, implement the `OAuthStorage` interface:
+
+```typescript
+import { MCPOAuthClientProvider, OAuthStorage } from "@mastra/mcp";
+
+class DatabaseOAuthStorage implements OAuthStorage {
+  constructor(private db: Database, private userId: string) {}
+
+  async set(key: string, value: string): Promise<void> {
+    await this.db.query(
+      "INSERT INTO oauth_tokens (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET value = ?",
+      [this.userId, key, value, value]
+    );
+  }
+
+  async get(key: string): Promise<string | undefined> {
+    const result = await this.db.query(
+      "SELECT value FROM oauth_tokens WHERE user_id = ? AND key = ?",
+      [this.userId, key]
+    );
+    return result?.[0]?.value;
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.db.query(
+      "DELETE FROM oauth_tokens WHERE user_id = ? AND key = ?",
+      [this.userId, key]
+    );
+  }
+}
+
+const provider = new MCPOAuthClientProvider({
+  redirectUrl: "http://localhost:3000/callback",
+  clientMetadata: { /* ... */ },
+  storage: new DatabaseOAuthStorage(db, "user-123"),
+});
+```
 
 ## Examples
 
@@ -100691,44 +101423,286 @@ type ElicitResult = {
 };
 ```
 
+## OAuth Protection
+
+To protect your MCP server with OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `createOAuthMiddleware` function:
+
+```typescript
+import http from "node:http";
+import { MCPServer, createOAuthMiddleware, createStaticTokenValidator } from "@mastra/mcp";
+
+const mcpServer = new MCPServer({
+  id: "protected-server",
+  name: "Protected MCP Server",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+// Create OAuth middleware
+const oauthMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    scopesSupported: ["mcp:read", "mcp:write"],
+    resourceName: "My Protected MCP Server",
+    validateToken: createStaticTokenValidator(["allowed-token-1"]),
+  },
+  mcpPath: "/mcp",
+});
+
+// Create HTTP server with OAuth protection
+const httpServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url || "", "https://mcp.example.com");
+
+  // Apply OAuth middleware first
+  const result = await oauthMiddleware(req, res, url);
+  if (!result.proceed) return; // Middleware handled response (401, metadata, etc.)
+
+  // Token is valid, proceed to MCP handler
+  await mcpServer.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+
+httpServer.listen(3000);
+```
+
+The middleware automatically:
+
+- Serves **Protected Resource Metadata** at `/.well-known/oauth-protected-resource` (RFC 9728)
+- Returns `401 Unauthorized` with proper `WWW-Authenticate` headers when authentication is required
+- Validates bearer tokens using your provided validator
+
+### Token Validation
+
+For production, use proper token validation:
+
+```typescript
+import { createOAuthMiddleware, createIntrospectionValidator } from "@mastra/mcp";
+
+// Option 1: Token introspection (RFC 7662)
+const middleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    validateToken: createIntrospectionValidator(
+      "https://auth.example.com/oauth/introspect",
+      { clientId: "mcp-server", clientSecret: "secret" }
+    ),
+  },
+});
+
+// Option 2: Custom validation (JWT, database lookup, etc.)
+const customMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    validateToken: async (token, resource) => {
+      const decoded = await verifyJWT(token);
+      if (!decoded) {
+        return { valid: false, error: "invalid_token" };
+      }
+      return {
+        valid: true,
+        scopes: decoded.scope?.split(" ") || [],
+        subject: decoded.sub,
+      };
+    },
+  },
+});
+```
+
+### OAuth Middleware Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "oauth.resource",
+      type: "string",
+      description: "The canonical URL of your MCP server. This is returned in Protected Resource Metadata.",
+    },
+    {
+      name: "oauth.authorizationServers",
+      type: "string[]",
+      description: "URLs of authorization servers that can issue tokens for this resource.",
+    },
+    {
+      name: "oauth.scopesSupported",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "['mcp:read', 'mcp:write']",
+      description: "Scopes supported by this MCP server.",
+    },
+    {
+      name: "oauth.resourceName",
+      type: "string",
+      isOptional: true,
+      description: "Human-readable name for this resource server.",
+    },
+    {
+      name: "oauth.validateToken",
+      type: "(token: string, resource: string) => Promise<TokenValidationResult>",
+      isOptional: true,
+      description: "Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).",
+    },
+    {
+      name: "mcpPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "'/mcp'",
+      description: "Path where the MCP endpoint is served. Only requests to this path require authentication.",
+    },
+  ]}
+/>
+
 ## Authentication Context
 
-Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. This allows you to pass authentication info, user context, or any custom data from your HTTP middleware to your MCP tools.
+
+### How It Works
+
+Whatever you set on `req.auth` in your HTTP middleware becomes available as `context.mcp.extra.authInfo` in your tools:
+
+```
+req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
+```
+
+### Setting Up Authentication Middleware
+
+To pass data to your tools, populate `req.auth` on the Node.js request object in your HTTP server middleware before calling `server.startHTTP()`.
+
+```typescript
+import express from "express";
+
+const app = express();
+
+// Auth middleware - set req.auth before the MCP handler
+app.use("/mcp", (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const user = verifyToken(token);
+
+  // This entire object becomes context.mcp.extra.authInfo
+  // @ts-ignore - req.auth is read by the MCP SDK
+  req.auth = {
+    token,
+    userId: user.userId,
+    email: user.email,
+  };
+  next();
+});
+
+app.all("/mcp", async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  await server.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+```
+
+### Accessing Auth Data in Tools
+
+The `req.auth` object is available as `context.mcp.extra.authInfo` in your tool's execute function:
 
 ```typescript
 execute: async (inputData, context) => {
-  if (!context.mcp?.extra?.authInfo?.token) {
-    return "Authentication required";
+  // Access the auth data you set in middleware
+  const authInfo = context?.mcp?.extra?.authInfo;
+
+  if (!authInfo?.extra?.userId) {
+    return { error: "Authentication required" };
   }
 
-  // Use the auth token
+  // Use the auth data
+  console.log("User ID:", authInfo.extra.userId);
+  console.log("Email:", authInfo.extra.email);
+
   const response = await fetch("/api/data", {
-    headers: { Authorization: `Bearer ${context.mcp.extra.authInfo.token}` },
-    signal: context.mcp.extra.signal,
+    headers: { Authorization: `Bearer ${authInfo.token}` },
+    signal: context?.mcp?.extra?.signal,
   });
 
   return response.json();
 };
 ```
 
-The `extra` object contains:
+### The `extra` Object
 
-- `authInfo`: Authentication info (when provided by server middleware)
-- `sessionId`: Session identifier
-- `signal`: AbortSignal for cancellation
-- `sendNotification`/`sendRequest`: MCP protocol functions
+The full `context.mcp.extra` object contains:
 
-> Note: To enable authentication, your HTTP server needs middleware that populates `req.auth` before calling `server.startHTTP()`. For example:
->
-> ```typescript
-> httpServer.createServer((req, res) => {
->   // Add auth middleware
->   req.auth = validateAuthToken(req.headers.authorization);
->
->   // Then pass to MCP server
->   await server.startHTTP({ url, httpPath, req, res });
-> });
-> ```
+| Property | Description |
+|----------|-------------|
+| `authInfo` | Whatever you set on `req.auth` in your middleware |
+| `sessionId` | Session identifier for the MCP connection |
+| `signal` | AbortSignal for request cancellation |
+| `sendNotification` | MCP protocol function for sending notifications |
+| `sendRequest` | MCP protocol function for sending requests |
+
+### Complete Example
+
+Here's a complete example showing the data flow from middleware to tool:
+
+```typescript
+import express from "express";
+import { MCPServer } from "@mastra/mcp";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const verifyToken = (token: string) => {
+  // TODO: Implement token verification
+  return {
+    userId: "123",
+    email: "test@test.com",
+  };
+};
+
+// 1. Define your tool that uses auth context
+const getUserData = createTool({
+  id: "get-user-data",
+  description: "Fetches data for the authenticated user",
+  inputSchema: z.object({}),
+  execute: async (inputData, context) => {
+    const authInfo = context?.mcp?.extra?.authInfo;
+
+    if (!authInfo?.extra?.userId) {
+      return { error: "Authentication required" };
+    }
+
+    // Access the data you set in middleware
+    return {
+      userId: authInfo.extra.userId,
+      email: authInfo.extra.email,
+    };
+  },
+});
+
+// 2. Create the MCP server with your tools
+const server = new MCPServer({
+  id: "my-server",
+  name: "My Server",
+  version: "1.0.0",
+  tools: { getUserData },
+});
+
+// 3. Set up Express with auth middleware
+const app = express();
+
+app.use("/mcp", (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const user = verifyToken(token);
+
+  // This entire object becomes context.mcp.extra.authInfo
+  // @ts-ignore - req.auth is read by the MCP SDK
+  req.auth = {
+    token,
+    userId: user.userId,
+    email: user.email,
+  };
+  next();
+});
+
+app.all("/mcp", async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  await server.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+
+app.listen(3000);
+```
 
 ## Related Information
 
@@ -104727,6 +105701,21 @@ const store = new MongoDBVector({
 });
 ```
 
+### Custom Embedding Field Path
+
+If you need to store embeddings in a nested field structure (e.g., to integrate with existing MongoDB collections), use the `embeddingFieldPath` option:
+
+```typescript
+import { MongoDBVector } from "@mastra/mongodb";
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+  embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
+});
+```
+
 ## Constructor Options
 
 <PropertiesTable
@@ -104751,6 +105740,13 @@ const store = new MongoDBVector({
       type: "MongoClientOptions",
       isOptional: true,
       description: "Optional MongoDB client options",
+    },
+    {
+      name: "embeddingFieldPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "embedding",
+      description: "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
     },
   ]}
 />

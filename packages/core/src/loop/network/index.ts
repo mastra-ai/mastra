@@ -263,7 +263,9 @@ export async function prepareMemoryStep({
   }
 
   // Add title generation to promises if needed (non-blocking)
-  if (thread?.title?.startsWith('New Thread') && memory) {
+  // Check if this is the first user message by looking at existing messages in the thread
+  // This works automatically for pre-created threads without requiring any metadata flags
+  if (thread && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 
     const {
@@ -273,27 +275,38 @@ export async function prepareMemoryStep({
     } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
 
     if (shouldGenerate && userMessage) {
-      promises.push(
-        routingAgent
-          .genTitle(
-            userMessage,
-            requestContext,
-            tracingContext || { currentSpan: undefined },
-            titleModel,
-            titleInstructions,
-          )
-          .then(title => {
-            if (title) {
-              return memory.createThread({
-                threadId: thread.id,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
-          }),
-      );
+      // Check for existing user messages in the thread - if none, this is the first user message
+      // We fetch existing messages before the new message is saved
+      const existingMessages = await memory.recall({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+      });
+      const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
+      const isFirstUserMessage = existingUserMessages.length === 0;
+
+      if (isFirstUserMessage) {
+        promises.push(
+          routingAgent
+            .genTitle(
+              userMessage,
+              requestContext,
+              tracingContext || { currentSpan: undefined },
+              titleModel,
+              titleInstructions,
+            )
+            .then(title => {
+              if (title) {
+                return memory.createThread({
+                  threadId: thread.id,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                  title,
+                  metadata: thread.metadata,
+                });
+              }
+            }),
+        );
+      }
     }
   }
 

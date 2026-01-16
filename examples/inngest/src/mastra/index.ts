@@ -4,7 +4,10 @@ import { PinoLogger } from '@mastra/loggers';
 import { Observability, ConsoleExporter, DefaultExporter } from '@mastra/observability';
 import { activityPlanningWorkflow, inngest } from './workflows/inngest-workflow';
 import { defaultActivityPlanningWorkflow } from './workflows/default-workflow';
+import { parallelCityComparisonWorkflow } from './workflows/inngest-parallel-workflow';
+import { defaultParallelCityComparisonWorkflow } from './workflows/default-parallel-workflow';
 import { planningAgent } from './agents/planning-agent';
+import { tripComparisonAgent } from './agents/trip-comparison-agent';
 import { LibSQLStore } from '@mastra/libsql';
 
 const storage = new LibSQLStore({
@@ -32,9 +35,12 @@ export const mastra = new Mastra({
   workflows: {
     activityPlanningWorkflow,
     defaultActivityPlanningWorkflow,
+    parallelCityComparisonWorkflow,
+    defaultParallelCityComparisonWorkflow,
   },
   agents: {
     planningAgent,
+    tripComparisonAgent,
   },
   storage,
   observability,

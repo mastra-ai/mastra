@@ -342,6 +342,12 @@ The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-
 
 :::
 
+:::tip Datadog-Native Exporter
+
+For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/v1/observability/tracing/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
+
+:::
+
 ### Custom/Generic OTEL Endpoints
 
 For other OTEL-compatible platforms or custom collectors:
@@ -442,25 +448,6 @@ Install the suggested package for your provider.
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
-
-## Using Tags
-
-Tags help you categorize and filter traces in your observability platform. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
