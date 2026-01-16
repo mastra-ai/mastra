@@ -63,6 +63,9 @@ export type NetworkOptions<OUTPUT = undefined> = {
   /** Tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
 
+  /** Tracing options for starting new traces with observability */
+  tracingOptions?: TracingOptions;
+
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
 

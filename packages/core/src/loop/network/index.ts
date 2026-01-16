@@ -8,7 +8,14 @@ import type { MastraDBMessage, MessageListInput } from '../../agent/message-list
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
-import type { TracingContext } from '../../observability';
+import {
+  EntityType,
+  SpanType,
+  getOrCreateSpan,
+  type AnySpan,
+  type TracingContext,
+  type TracingOptions,
+} from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
@@ -364,6 +371,7 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
+  tracingContext,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -375,6 +383,7 @@ export async function createNetworkLoop({
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
   };
+  tracingContext?: TracingContext;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -637,6 +646,7 @@ export async function createNetworkLoop({
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
             runId,
+            tracingContext,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -648,6 +658,7 @@ export async function createNetworkLoop({
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
+            tracingContext,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -1637,6 +1648,7 @@ export async function networkLoop<OUTPUT = undefined>({
   autoResumeSuspendedTools,
   mastra,
   structuredOutput,
+  tracingOptions,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1679,6 +1691,11 @@ export async function networkLoop<OUTPUT = undefined>({
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
   mastra?: Mastra;
+  /**
+   * Tracing options for observability.
+   * When provided, creates a root span for the network execution.
+   */
+  tracingOptions?: TracingOptions;
 }): Promise<MastraAgentNetworkStream<OUTPUT>> {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1694,6 +1711,38 @@ export async function networkLoop<OUTPUT = undefined>({
       },
     });
   }
+
+  // Create root span for network execution tracing
+  const networkSpan = getOrCreateSpan({
+    type: SpanType.AGENT_RUN,
+    name: `agent network: '${routingAgent.id}'`,
+    entityType: EntityType.AGENT,
+    entityId: routingAgent.id,
+    entityName: networkName,
+    input: messages,
+    attributes: {
+      conversationId: threadId,
+      maxSteps: maxIterations,
+    },
+    metadata: {
+      runId,
+      resourceId,
+      threadId,
+      networkName,
+    },
+    tracingOptions,
+    requestContext,
+    mastra,
+  });
+
+  // Create tracing context to pass to sub-agent calls
+  const networkTracingContext: TracingContext = { currentSpan: networkSpan };
+
+  // Merge tracing context into routing agent options
+  const routingAgentOptionsWithTracing = {
+    ...routingAgentOptions,
+    tracingContext: networkTracingContext,
+  } as AgentExecutionOptions<OUTPUT>;
 
   const task = getLastMessage(messages);
 
@@ -1752,7 +1801,7 @@ export async function networkLoop<OUTPUT = undefined>({
                 requestContext,
                 messageList,
                 agentId: routingAgent.id,
-                tracingContext: routingAgentOptions?.tracingContext!,
+                tracingContext: networkTracingContext,
                 structuredOutput: {
                   schema: z.object({
                     resumeData: z.string(),
@@ -1778,7 +1827,7 @@ export async function networkLoop<OUTPUT = undefined>({
   const runIdToUse = runIdFromTask ?? runId;
   const resumeDataToUse = resumeDataFromTask ?? resumeData;
 
-  const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
+  const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptionsWithTracing || {};
 
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
@@ -1788,6 +1837,7 @@ export async function networkLoop<OUTPUT = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
+    tracingContext: networkTracingContext,
   });
 
   // Validation step: runs external checks when LLM says task is complete
@@ -2158,7 +2208,7 @@ export async function networkLoop<OUTPUT = undefined>({
     messages,
     routingAgent,
     generateId,
-    tracingContext: routingAgentOptions?.tracingContext,
+    tracingContext: networkTracingContext,
     memoryConfig: routingAgentMemoryOptions?.options,
   });
 
@@ -2183,6 +2233,16 @@ export async function networkLoop<OUTPUT = undefined>({
           verboseIntrospection: true,
         },
       }).fullStream;
+    },
+    onComplete: () => {
+      networkSpan?.end();
+    },
+    onError: error => {
+      if (error instanceof Error || (error && typeof error === 'object' && 'message' in error)) {
+        networkSpan?.error({ error: error as Error, endSpan: true });
+      } else {
+        networkSpan?.end();
+      }
     },
   });
 }

@@ -28,9 +28,15 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
   constructor({
     createStream,
     run,
+    onComplete,
+    onError,
   }: {
     createStream: (writer: WritableStream<ChunkType<OUTPUT>>) => Promise<ReadableStream<any>> | ReadableStream<any>;
     run: Run<DefaultEngineType, Step<string, any, any, any, any, any, DefaultEngineType>[], any, any, any>;
+    /** Callback invoked when the stream completes successfully */
+    onComplete?: () => void;
+    /** Callback invoked when the stream encounters an error */
+    onError?: (error: unknown) => void;
   }) {
     const deferredPromise = {
       promise: null,
@@ -172,6 +178,7 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
 
           controller.close();
           deferredPromise.resolve();
+          onComplete?.();
         } catch (error) {
           controller.error(error);
           deferredPromise.reject(error);
@@ -179,6 +186,7 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
           if (objectStreamController) {
             objectStreamController.error(error);
           }
+          onError?.(error);
         }
       },
     });
