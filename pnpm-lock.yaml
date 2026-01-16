@@ -22,6 +22,7 @@ overrides:
   cookie: '>=0.7.2'
   tmp: '>=0.2.5'
   jsondiffpatch: '>=0.7.3'
+  '@openrouter/ai-sdk-provider>ai': ^5.0.97
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
@@ -9337,7 +9338,7 @@ packages:
     resolution: {integrity: sha512-a6Nc8dPRHakRH9966YJ/HZJhLOds7DuPTscNZDoAr+Aw+tEFUlacSJMvb/b3gukn74mgbuaJRji9YOn62ipfVg==}
     engines: {node: '>=18'}
     peerDependencies:
-      ai: ^5.0.0
+      ai: ^5.0.97
       zod: ^3.24.1 || ^v4
 
   '@openrouter/sdk@0.1.27':

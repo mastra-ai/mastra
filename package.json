@@ -102,6 +102,7 @@
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3",
+    "@openrouter/ai-sdk-provider>ai": "^5.0.97",
     "ssri": ">=6.0.2",
     "jws": "^4.0.1"
   },
@@ -109,7 +110,8 @@
     "overrides": {
       "client-js-e2e-tests-zod-v3>zod": "^3.24.0",
       "client-js-e2e-tests-zod-v4>zod": "^4.3.5",
-      "better-auth": "^1.4.5"
+      "better-auth": "^1.4.5",
+      "@openrouter/ai-sdk-provider>ai": "^5.0.97"
     }
   },
   "license": "Apache-2.0",
