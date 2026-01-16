@@ -501,7 +501,6 @@ export async function createNetworkLoop({
           category: ErrorCategory.SYSTEM,
           text: `Routing agent returned undefined for 'object'. This may indicate an issue with the model's response or structured output parsing.`,
           details: {
-            text: result.text?.substring(0, 1000) ?? null,
             finishReason: result.finishReason ?? null,
             usage: JSON.stringify(result.usage) ?? null,
           },
