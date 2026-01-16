@@ -244,11 +244,39 @@ for await (const chunk of result.fullStream) {
 
 ### Workflow status types
 
-When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+When running a workflow, its `status` can be `success`, `failed`, `suspended`, `tripwire`, or `paused`.
+
+### Workflow result type
+
+The return type of `run.start()` is a discriminated union based on the `status` property. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
+
+Additionally, depending on the status, different properties are available:
+
+| Status      | Unique properties               | Description                                              |
+| ----------- | ------------------------------- | -------------------------------------------------------- |
+| `success`   | `result`                        | The workflow's output data                               |
+| `failed`    | `error`                         | The error that caused the failure                        |
+| `tripwire`  | `tripwire`                      | Contains `reason`, `retry?`, `metadata?`, `processorId?` |
+| `suspended` | `suspendPayload`, `suspended`   | Suspension data and array of suspended step paths        |
+| `paused`    | _(none)_                        | Only common properties available                         |
+
+To access status-specific properties, check the `status` first:
+
+```typescript
+const result = await run.start({ inputData: { message: "Hello world" } });
+
+if (result.status === "success") {
+  console.log(result.result); // Only available when status is "success"
+} else if (result.status === "failed") {
+  console.log(result.error.message);
+} else if (result.status === "suspended") {
+  console.log(result.suspendPayload);
+}
+```
 
 ### Workflow output
 
-The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
+Here's an example of a successful workflow result, showing the `input`, `steps`, and `result` properties:
 
 ```json
 {
@@ -261,7 +289,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      },
+      }
     },
     "step-2": {
       "status": "success",
@@ -270,7 +298,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      },
+      }
     }
   },
   "input": {
