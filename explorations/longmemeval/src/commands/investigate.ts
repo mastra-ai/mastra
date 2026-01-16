@@ -58,7 +58,7 @@ export interface InvestigateOptions {
   improveAnswer?: string;   // Improved answer text
   improveNote?: string;     // Improvement note
   category?: FailureCategory; // Failure category for this question
-  clearImproved?: boolean;  // Clear all improved fields (use with --improve)
+  clearImproved?: string | boolean;  // Clear specific field(s): 'all', 'question', 'answer', 'note', 'category' or true for all
   // Check for duplicate observations
   checkDuplicates?: boolean; // Check for duplicate thread blocks in observations
   // Baseline check - comprehensive data quality check
@@ -1962,11 +1962,31 @@ export class InvestigateCommand {
     improvedAnswer?: string,
     improvementNote?: string,
     category?: FailureCategory,
-    clearImproved?: boolean,
+    clearImproved?: string | boolean,
   ): Promise<void> {
     if (!clearImproved && !improvedQuestion && !improvedAnswer && !improvementNote && !category) {
       console.log('❌ At least one of --improve-question, --improve-answer, --improve-note, --category, or --clear-improved is required');
       return;
+    }
+    
+    // Parse clearImproved into specific fields to clear
+    const clearFields = new Set<string>();
+    if (clearImproved === true || clearImproved === 'all') {
+      clearFields.add('question');
+      clearFields.add('answer');
+      clearFields.add('note');
+      clearFields.add('category');
+    } else if (typeof clearImproved === 'string') {
+      // Support comma-separated list: "note,category"
+      for (const field of clearImproved.split(',')) {
+        const trimmed = field.trim().toLowerCase();
+        if (['question', 'answer', 'note', 'category'].includes(trimmed)) {
+          clearFields.add(trimmed);
+        } else {
+          console.log(`❌ Unknown field to clear: ${trimmed}. Valid fields: question, answer, note, category, all`);
+          return;
+        }
+      }
     }
 
     const datasetPath = join(this.datasetDir, 'longmemeval_s.json');
@@ -1998,44 +2018,43 @@ export class InvestigateCommand {
     // Show what's being updated
     console.log('\n📋 Changes:');
     
-    if (clearImproved) {
-      // Clear all improved fields
-      if (question.improved_question) {
-        console.log(`   improved_question: ${question.improved_question} → (cleared)`);
-        delete question.improved_question;
-      }
-      if (question.improved_answer) {
-        console.log(`   improved_answer: ${question.improved_answer.substring(0, 50)}... → (cleared)`);
-        delete question.improved_answer;
-      }
-      if (question.improvement_note) {
-        console.log(`   improvement_note: ${question.improvement_note} → (cleared)`);
-        delete question.improvement_note;
-      }
-      if (question.failure_category) {
-        console.log(`   failure_category: ${question.failure_category} → (cleared)`);
-        delete question.failure_category;
-      }
-    } else {
-      if (improvedQuestion) {
-        console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
-        question.improved_question = improvedQuestion;
-      }
-      
-      if (improvedAnswer) {
-        console.log(`   improved_answer: ${question.improved_answer || '(not set)'} → ${improvedAnswer}`);
-        question.improved_answer = improvedAnswer;
-      }
-      
-      if (improvementNote) {
-        console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
-        question.improvement_note = improvementNote;
-      }
-      
-      if (category) {
-        console.log(`   failure_category: ${question.failure_category || '(not set)'} → ${category}`);
-        question.failure_category = category;
-      }
+    // Handle clearing specific fields
+    if (clearFields.has('question') && question.improved_question) {
+      console.log(`   improved_question: ${question.improved_question} → (cleared)`);
+      delete question.improved_question;
+    }
+    if (clearFields.has('answer') && question.improved_answer) {
+      console.log(`   improved_answer: ${question.improved_answer.substring(0, 50)}... → (cleared)`);
+      delete question.improved_answer;
+    }
+    if (clearFields.has('note') && question.improvement_note) {
+      console.log(`   improvement_note: ${question.improvement_note.substring(0, 50)}... → (cleared)`);
+      delete question.improvement_note;
+    }
+    if (clearFields.has('category') && question.failure_category) {
+      console.log(`   failure_category: ${question.failure_category} → (cleared)`);
+      delete question.failure_category;
+    }
+    
+    // Handle setting new values (can be combined with clearing other fields)
+    if (improvedQuestion) {
+      console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
+      question.improved_question = improvedQuestion;
+    }
+    
+    if (improvedAnswer) {
+      console.log(`   improved_answer: ${question.improved_answer || '(not set)'} → ${improvedAnswer}`);
+      question.improved_answer = improvedAnswer;
+    }
+    
+    if (improvementNote) {
+      console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
+      question.improvement_note = improvementNote;
+    }
+    
+    if (category) {
+      console.log(`   failure_category: ${question.failure_category || '(not set)'} → ${category}`);
+      question.failure_category = category;
     }
 
     // Save dataset with 4-space indentation
