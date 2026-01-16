@@ -370,12 +370,7 @@ const sandboxWorkspace = new Workspace({
 
 ## Related Documents
 
-For migration-specific details, see:
-
-- [KNOWLEDGE_MIGRATION_PLAN.md](./KNOWLEDGE_MIGRATION_PLAN.md) - How Knowledge becomes Workspace
-- [SKILLS_MIGRATION_PLAN.md](./SKILLS_MIGRATION_PLAN.md) - How Skills integrates with Workspace
-
-For background research:
-
+- [WORKSPACE_TESTS_PLAN.md](./WORKSPACE_TESTS_PLAN.md) - Test coverage plan
 - [WORKSPACE_PR_EXPLORATION.md](./WORKSPACE_PR_EXPLORATION.md) - PR #11567 analysis
 - [AGENT_SKILLS_SPEC.md](./AGENT_SKILLS_SPEC.md) - Agent Skills specification
+- [SKILLS_GRAPHS.md](./SKILLS_GRAPHS.md) - Knowledge graphs design exploration
