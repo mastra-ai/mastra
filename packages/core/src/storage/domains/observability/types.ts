@@ -435,6 +435,51 @@ export const batchDeleteTracesArgsSchema = z
 export type BatchDeleteTracesArgs = z.infer<typeof batchDeleteTracesArgsSchema>;
 
 // ============================================================================
+// Cleanup / Retention Schemas
+// ============================================================================
+
+/**
+ * Schema for deleteTracesOlderThan operation arguments.
+ * Deletes all traces where the root span's startedAt is before the specified date.
+ */
+export const deleteTracesOlderThanArgsSchema = z
+  .object({
+    /** Delete traces with root span started before this date */
+    beforeDate: z.date().describe('Delete traces with startedAt before this date'),
+    /** Optional filters to scope which traces are deleted */
+    filters: z
+      .object({
+        /** Only delete traces with this entity type */
+        entityType: entityTypeField.optional(),
+        /** Only delete traces with this entity ID */
+        entityId: entityIdField.optional(),
+        /** Only delete traces for this organization */
+        organizationId: organizationIdField.optional(),
+        /** Only delete traces for this environment */
+        environment: environmentField.optional(),
+      })
+      .optional()
+      .describe('Optional filters to scope deletion'),
+  })
+  .describe('Arguments for deleting traces older than a specific date');
+
+/** Arguments for deleting traces older than a specific date */
+export type DeleteTracesOlderThanArgs = z.infer<typeof deleteTracesOlderThanArgsSchema>;
+
+/**
+ * Schema for deleteTracesOlderThan operation response.
+ */
+export const deleteTracesOlderThanResponseSchema = z
+  .object({
+    /** Number of traces deleted */
+    deletedCount: z.number().describe('Number of traces deleted'),
+  })
+  .describe('Response from deleteTracesOlderThan operation');
+
+/** Response from deleteTracesOlderThan operation */
+export type DeleteTracesOlderThanResponse = z.infer<typeof deleteTracesOlderThanResponseSchema>;
+
+// ============================================================================
 // Scoring related schemas
 // ============================================================================
 

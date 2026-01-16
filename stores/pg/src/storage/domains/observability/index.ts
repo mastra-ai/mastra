@@ -18,6 +18,8 @@ import type {
   BatchUpdateSpansArgs,
   BatchCreateSpansArgs,
   CreateSpanArgs,
+  DeleteTracesOlderThanArgs,
+  DeleteTracesOlderThanResponse,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -769,6 +771,74 @@ export class ObservabilityPG extends ObservabilityStorage {
           id: createStorageErrorId('PG', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteTracesOlderThan(args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      // Build WHERE clause
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      // Date filter - delete traces where root span started before this date
+      conditions.push(`"startedAtZ" < $${paramIndex++}`);
+      params.push(args.beforeDate.toISOString());
+
+      // Optional filters
+      if (args.filters?.entityType !== undefined) {
+        conditions.push(`"entityType" = $${paramIndex++}`);
+        params.push(args.filters.entityType);
+      }
+      if (args.filters?.entityId !== undefined) {
+        conditions.push(`"entityId" = $${paramIndex++}`);
+        params.push(args.filters.entityId);
+      }
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`"organizationId" = $${paramIndex++}`);
+        params.push(args.filters.organizationId);
+      }
+      if (args.filters?.environment !== undefined) {
+        conditions.push(`"environment" = $${paramIndex++}`);
+        params.push(args.filters.environment);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // First, find trace IDs of root spans matching the criteria
+      // Then delete all spans belonging to those traces
+      const result = await this.#db.client.query(
+        `WITH traces_to_delete AS (
+          SELECT DISTINCT "traceId"
+          FROM ${tableName}
+          WHERE "parentSpanId" IS NULL AND ${whereClause}
+        )
+        DELETE FROM ${tableName}
+        WHERE "traceId" IN (SELECT "traceId" FROM traces_to_delete)`,
+        params,
+      );
+
+      return {
+        deletedCount: result.rowCount ?? 0,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_TRACES_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );

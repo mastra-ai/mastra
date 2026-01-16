@@ -153,6 +153,32 @@ export type StorageListWorkflowRunsInput = {
   status?: WorkflowRunStatus;
 };
 
+/**
+ * Arguments for deleting workflow runs older than a specific date.
+ * Useful for implementing data retention policies.
+ */
+export type DeleteWorkflowRunsOlderThanArgs = {
+  /** Delete workflow runs created before this date */
+  beforeDate: Date;
+  /** Optional filters to scope which workflow runs are deleted */
+  filters?: {
+    /** Only delete runs for this specific workflow */
+    workflowName?: string;
+    /** Only delete runs with this status */
+    status?: WorkflowRunStatus;
+    /** Only delete runs for this resource */
+    resourceId?: string;
+  };
+};
+
+/**
+ * Response from deleteWorkflowRunsOlderThan operation.
+ */
+export type DeleteWorkflowRunsOlderThanResponse = {
+  /** Number of workflow runs deleted */
+  deletedCount: number;
+};
+
 export type StorageListThreadsInput = {
   /**
    * Number of items per page, or `false` to fetch all records without pagination limit.

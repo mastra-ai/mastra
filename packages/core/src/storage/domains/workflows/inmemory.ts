@@ -2,6 +2,8 @@ import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { isPendingMarker } from '../../../workflows/evented/types';
 import { normalizePerPage } from '../../base';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   StorageWorkflowRun,
   WorkflowRun,
   WorkflowRuns,
@@ -350,5 +352,53 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     this.db.workflows.delete(key);
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    const { beforeDate, filters } = args;
+    const keysToDelete: string[] = [];
+
+    for (const [key, run] of this.db.workflows) {
+      // Check if the run was created before the cutoff date
+      if (run.createdAt >= beforeDate) {
+        continue;
+      }
+
+      // Check optional filters
+      if (filters?.workflowName !== undefined && run.workflow_name !== filters.workflowName) {
+        continue;
+      }
+
+      if (filters?.resourceId !== undefined && run.resourceId !== filters.resourceId) {
+        continue;
+      }
+
+      if (filters?.status !== undefined) {
+        let snapshot = run.snapshot;
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot);
+          } catch {
+            continue;
+          }
+        }
+        if ((snapshot as WorkflowRunState)?.status !== filters.status) {
+          continue;
+        }
+      }
+
+      keysToDelete.push(key);
+    }
+
+    // Delete the matching workflow runs
+    for (const key of keysToDelete) {
+      this.db.workflows.delete(key);
+    }
+
+    return {
+      deletedCount: keysToDelete.length,
+    };
   }
 }
