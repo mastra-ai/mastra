@@ -16,6 +16,8 @@ export interface TokensOptions {
   preparedDataDir?: string;
   showSessions?: boolean;
   topN?: number;
+  observationsOnly?: boolean;
+  config?: string;
 }
 
 interface SessionStats {
@@ -42,6 +44,13 @@ interface QuestionStats {
   // Prepared data comparison (if available)
   preparedObservationTokens?: number;
   compressionRatio?: number;
+}
+
+interface ObservationOnlyStats {
+  questionId: string;
+  questionType: string;
+  observationTokens: number;
+  found: boolean;
 }
 
 interface AggregateStats {
@@ -75,6 +84,12 @@ export class TokensCommand {
   }
 
   async run(options: TokensOptions): Promise<void> {
+    // Fast path for observations-only mode
+    if (options.observationsOnly) {
+      await this.runObservationsOnly(options);
+      return;
+    }
+
     const spinner = ora('Loading dataset...').start();
 
     try {
@@ -127,6 +142,163 @@ export class TokensCommand {
       spinner.fail('Error loading dataset');
       throw error;
     }
+  }
+
+  /**
+   * Fast path: only count observation tokens from prepared data (skip raw session analysis)
+   */
+  private async runObservationsOnly(options: TokensOptions): Promise<void> {
+    const config = options.config || 'observational-memory';
+    const preparedDir = options.preparedDataDir || this.preparedDataDir;
+    const configDir = join(preparedDir, options.dataset, config);
+
+    // Check if config directory exists
+    if (!existsSync(configDir)) {
+      console.log(chalk.red(`Config directory not found: ${configDir}`));
+      console.log(chalk.gray(`Use --config to specify a different config, or prepare data first.`));
+      return;
+    }
+
+    const spinner = ora('Scanning prepared data...').start();
+
+    // Get all question directories
+    const { readdirSync } = await import('fs');
+    const questionDirs = readdirSync(configDir, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name);
+
+    // Filter by questionId if specified
+    let targetQuestions = questionDirs;
+    if (options.questionId) {
+      if (!questionDirs.includes(options.questionId)) {
+        spinner.fail(`Question ${options.questionId} not found in ${config}`);
+        return;
+      }
+      targetQuestions = [options.questionId];
+    } else {
+      // Apply offset and subset
+      const offset = options.offset || 0;
+      targetQuestions = questionDirs.slice(offset);
+      if (options.subset) {
+        targetQuestions = targetQuestions.slice(0, options.subset);
+      }
+    }
+
+    spinner.text = `Counting observation tokens for ${targetQuestions.length} questions...`;
+
+    const stats: ObservationOnlyStats[] = [];
+    let totalTokens = 0;
+    let foundCount = 0;
+
+    for (const questionId of targetQuestions) {
+      const omJsonPath = join(configDir, questionId, 'om.json');
+      let observationTokens = 0;
+      let found = false;
+
+      if (existsSync(omJsonPath)) {
+        try {
+          const omData = JSON.parse(await readFile(omJsonPath, 'utf-8'));
+
+          // Sum activeObservations across ALL records
+          if (Array.isArray(omData.observationalMemory) && omData.observationalMemory[0]) {
+            const [, records] = omData.observationalMemory[0];
+            if (Array.isArray(records)) {
+              for (const record of records) {
+                if (record?.activeObservations) {
+                  observationTokens += this.tokenCounter.countString(record.activeObservations);
+                }
+              }
+            }
+          } else if (omData.record?.activeObservations) {
+            observationTokens = this.tokenCounter.countString(omData.record.activeObservations);
+          }
+
+          if (observationTokens > 0) {
+            found = true;
+            foundCount++;
+            totalTokens += observationTokens;
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      // Try to get question type from meta.json
+      let questionType = 'unknown';
+      const metaPath = join(configDir, questionId, 'meta.json');
+      if (existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(await readFile(metaPath, 'utf-8'));
+          questionType = meta.questionType || 'unknown';
+        } catch {
+          // Ignore
+        }
+      }
+
+      stats.push({ questionId, questionType, observationTokens, found });
+    }
+
+    spinner.succeed(`Counted ${foundCount}/${targetQuestions.length} questions with observations`);
+
+    // Display results
+    console.log(chalk.blue(`\n📊 Observation Tokens (${config})\n`));
+
+    if (targetQuestions.length === 1) {
+      // Single question view
+      const s = stats[0];
+      console.log(chalk.bold(`Question: ${s.questionId}`));
+      console.log(chalk.gray(`Type: ${s.questionType}`));
+      console.log();
+      if (s.found) {
+        console.log(`  Observation tokens: ${this.formatTokens(s.observationTokens)}`);
+      } else {
+        console.log(chalk.yellow(`  No observations found`));
+      }
+    } else {
+      // Aggregate view
+      const tokenCounts = stats.filter(s => s.found).map(s => s.observationTokens).sort((a, b) => a - b);
+
+      const percentile = (arr: number[], p: number) => {
+        if (arr.length === 0) return 0;
+        const idx = Math.ceil((p / 100) * arr.length) - 1;
+        return arr[Math.max(0, idx)];
+      };
+
+      console.log(chalk.bold('Summary:'));
+      console.log(`  Questions with data:  ${foundCount}/${targetQuestions.length}`);
+      console.log(`  Total tokens:         ${this.formatTokens(totalTokens)}`);
+      console.log(`  Avg tokens/question:  ${this.formatTokens(foundCount > 0 ? Math.round(totalTokens / foundCount) : 0)}`);
+      console.log();
+
+      if (tokenCounts.length > 0) {
+        console.log(chalk.bold('Distribution:'));
+        console.log(`  Min:                  ${this.formatTokens(tokenCounts[0])}`);
+        console.log(`  Median:               ${this.formatTokens(percentile(tokenCounts, 50))}`);
+        console.log(`  P90:                  ${this.formatTokens(percentile(tokenCounts, 90))}`);
+        console.log(`  P95:                  ${this.formatTokens(percentile(tokenCounts, 95))}`);
+        console.log(`  Max:                  ${this.formatTokens(tokenCounts[tokenCounts.length - 1])}`);
+        console.log();
+
+        // Top N largest
+        const topN = options.topN || 10;
+        const sorted = [...stats].filter(s => s.found).sort((a, b) => b.observationTokens - a.observationTokens);
+        console.log(chalk.bold(`Top ${Math.min(topN, sorted.length)} Largest:`));
+        for (let i = 0; i < Math.min(topN, sorted.length); i++) {
+          const s = sorted[i];
+          console.log(`  ${(i + 1).toString().padStart(2)}. ${s.questionId}  ${this.formatTokens(s.observationTokens)}`);
+        }
+        console.log();
+
+        // Cost estimates
+        const gpt4oInputPrice = 2.5;
+        const gpt4oMiniInputPrice = 0.15;
+        console.log(chalk.bold('Estimated Input Costs:'));
+        console.log(`  GPT-4o:               $${((totalTokens / 1_000_000) * gpt4oInputPrice).toFixed(2)}`);
+        console.log(`  GPT-4o-mini:          $${((totalTokens / 1_000_000) * gpt4oMiniInputPrice).toFixed(2)}`);
+      }
+    }
+
+    console.log();
   }
 
   private async calculateQuestionStats(

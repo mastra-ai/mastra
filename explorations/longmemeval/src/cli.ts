@@ -1101,6 +1101,8 @@ program
   .option('-p, --prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
   .option('--sessions', 'Show per-session breakdown')
   .option('--top <n>', 'Show top N largest questions in aggregate view', parseInt)
+  .option('--observations-only', 'Only count observation tokens from prepared data (fast)')
+  .option('-c, --config <config>', 'Config to use for observations-only mode', 'observational-memory')
   .action(async options => {
     try {
       const tokensCommand = new TokensCommand();
@@ -1112,6 +1114,8 @@ program
         preparedDataDir: options.preparedData,
         showSessions: options.sessions,
         topN: options.top,
+        observationsOnly: options.observationsOnly,
+        config: options.config,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
