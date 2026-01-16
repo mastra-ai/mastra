@@ -259,25 +259,6 @@ Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and Ope
 
 This exporter implements the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
 
-## Using Tags
-
-Tags help you categorize and filter traces in Phoenix and Arize AX. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear as the `tag.tags` attribute following OpenInference conventions and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)

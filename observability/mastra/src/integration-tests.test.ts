@@ -1129,8 +1129,11 @@ describe('Tracing Integration Tests', () => {
         });
 
         const resourceId = 'test-resource-id';
+        const threadId = 'test-thread-id';
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { resourceId });
+        const result = await method(agent, 'Calculate 5 + 3', {
+          memory: { thread: threadId, resource: resourceId },
+        });
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 

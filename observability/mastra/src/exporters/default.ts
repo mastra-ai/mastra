@@ -338,7 +338,7 @@ export class DefaultExporter extends BaseExporter {
       clearTimeout(this.#flushTimer);
     }
     this.#flushTimer = setTimeout(() => {
-      this.flush().catch(error => {
+      this.flushBuffer().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -497,7 +497,7 @@ export class DefaultExporter extends BaseExporter {
 
     if (this.shouldFlush()) {
       // Immediate flush for size/emergency triggers
-      this.flush().catch(error => {
+      this.flushBuffer().catch(error => {
         this.logger.error('Batch flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -518,7 +518,7 @@ export class DefaultExporter extends BaseExporter {
 
       if (this.shouldFlush()) {
         // Immediate flush for size/emergency triggers
-        this.flush().catch(error => {
+        this.flushBuffer().catch(error => {
           this.logger.error('Batch flush failed', {
             error: error instanceof Error ? error.message : String(error),
           });
@@ -539,9 +539,9 @@ export class DefaultExporter extends BaseExporter {
   }
 
   /**
-   * Flushes the current buffer to storage with retry logic
+   * Flushes the current buffer to storage with retry logic (internal implementation)
    */
-  private async flush(): Promise<void> {
+  private async flushBuffer(): Promise<void> {
     if (!this.#observability) {
       this.logger.debug('Cannot flush traces. Observability storage is not initialized');
       return;
@@ -686,6 +686,20 @@ export class DefaultExporter extends BaseExporter {
     }
   }
 
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    if (this.buffer.totalSize > 0) {
+      this.logger.debug('Flushing buffered events', {
+        bufferedEvents: this.buffer.totalSize,
+      });
+      await this.flushBuffer();
+    }
+  }
+
   async shutdown(): Promise<void> {
     // Clear any pending timer
     if (this.#flushTimer) {
@@ -694,18 +708,7 @@ export class DefaultExporter extends BaseExporter {
     }
 
     // Flush any remaining events
-    if (this.buffer.totalSize > 0) {
-      this.logger.info('Flushing remaining events on shutdown', {
-        remainingEvents: this.buffer.totalSize,
-      });
-      try {
-        await this.flush();
-      } catch (error) {
-        this.logger.error('Failed to flush remaining events during shutdown', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    await this.flush();
 
     this.logger.info('DefaultExporter shutdown complete');
   }
