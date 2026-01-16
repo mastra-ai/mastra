@@ -1106,7 +1106,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           this.logger?.warn(`Invalid metric '${metric}' for bit vector type, defaulting to 'hamming'`);
         }
         // For bit vectors, use bit_hamming_ops or bit_jaccard_ops
-         metricOp = this.getBitOperatorClass(metric as BitDistanceMetric);
+        metricOp = this.getBitOperatorClass(metric as BitDistanceMetric);
       } else if (effectiveVectorType === 'sparsevec') {
         // For sparsevec, use sparsevec_l2_ops, sparsevec_cosine_ops, or sparsevec_ip_ops
         if (!['l2', 'cosine', 'inner_product'].includes(metric)) {
@@ -1382,8 +1382,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         }
       } else if (vectorType === 'sparsevec' && operator_class.startsWith('sparsevec_')) {
         const suffix = operator_class.replace('sparsevec_', '').replace('_ops', '');
-        if (suffix === 'l2' || suffix === 'cosine' || suffix === 'inner_product') {
+        if (suffix === 'l2' || suffix === 'cosine') {
           distanceMetric = suffix;
+        } else if (suffix === 'ip') {
+          distanceMetric = 'inner_product';
         }
       }
 
