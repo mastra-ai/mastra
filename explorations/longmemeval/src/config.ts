@@ -73,7 +73,7 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     description: 'Stratified sample: 10 questions per type (60 total)',
     dataset: 'longmemeval_s',
     perTypeCount: 10,
-    prepareConcurrency: 2,
+    prepareConcurrency: 5,
     benchConcurrency: 10,
   },
   'sample-comb': {
@@ -305,7 +305,7 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'om-gpt5': 'om-gpt5',
   'om-gpt5-mini': 'om-gpt5-mini',
   // om2 variants
-  'om2': 'om2',
+  om2: 'om2',
   'om2-gpt5': 'om2-gpt5',
   'om2-gpt5-mini': 'om2-gpt5-mini',
   'om2-glm': 'om2-glm',
@@ -809,7 +809,7 @@ const MEMORY_CONFIGS = {
   // om2 - Fresh preparation with latest Observer/Reflector improvements
   // ============================================================================
 
-  'om2': {
+  om2: {
     type: 'om2',
     description: 'OM v2 - fresh data with latest Observer/Reflector improvements',
     memoryOptions: {
