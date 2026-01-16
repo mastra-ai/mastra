@@ -4,5 +4,3 @@
 ---
 
 **Fixed:** Align `Agent.network` with core and update `@mastra/react` network usage.
-
-**Before**
