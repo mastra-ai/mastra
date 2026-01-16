@@ -4,6 +4,8 @@ export const GLOBAL_EXTERNALS = [
   'pino',
   'pino-pretty',
   '@libsql/client',
+  '@mastra/loggers',
+  '@mastra/libsql',
   'pg',
   'libsql',
   '#tools',
