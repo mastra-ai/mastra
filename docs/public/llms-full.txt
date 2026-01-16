@@ -2087,7 +2087,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### Completion using `onFinish()`
+<h3 id="completion-using-onfinish">Completion using `onFinish()`</h3>
 
 When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
 It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
@@ -2942,11 +2942,7 @@ console.log(response.object);
 
 :::info[Gemini 2.5 with tools]
 
-Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error:
-
-```
-Function calling with a response mime type: 'application/json' is unsupported
-```
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
 
 ```typescript
 const response = await agentWithTools.generate("Your prompt", {
@@ -10938,15 +10934,29 @@ execute: async (inputData, context) => {
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
-## Span Processors
+## Span Formatting
 
-Span processors allow you to transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Mastra includes built-in processors and supports custom implementations.
+Mastra provides two ways to transform span data before it reaches your observability platform: **span processors** and **custom span formatters**. Both allow you to modify, filter, or enrich trace data, but they operate at different levels and serve different purposes.
 
-### Built-in Processors
+| Feature | Span Processors | Custom Span Formatters |
+| --- | --- | --- |
+| Configuration level | Observability config | Per-exporter |
+| Operates on | Internal `Span` object | Exported `ExportedSpan` data |
+| Applies to | All exporters | Single exporter |
+| Async support | No | Yes |
+| Use case | Security, filtering, enrichment | Platform-specific formatting, async enrichment |
+
+Use **span processors** for synchronous transformations that should apply to all exporters (like redacting sensitive data). Use **custom span formatters** when different exporters need different representations of the same data (like plain text for one platform and structured data for another), or when you need to perform asynchronous operations like fetching data from external APIs.
+
+### Span Processors
+
+Span processors transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Processors run once and affect all exporters.
+
+#### Built-in Processors
 
 - [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
-### Creating Custom Processors
+#### Creating Custom Processors
 
 You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
@@ -10979,13 +10989,149 @@ export const mastra = new Mastra({
 });
 ```
 
-Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases for custom processors include:
+Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases include:
 
+- Redacting sensitive data (passwords, tokens, API keys)
 - Adding environment-specific metadata
 - Filtering out spans based on criteria
 - Normalizing data formats
-- Sampling high-volume traces
 - Enriching spans with business context
+
+### Custom Span Formatters
+
+Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
+
+#### Use Cases
+
+- **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
+- **Transform input/output formats** - Customize how data appears in specific platforms
+- **Platform-specific field mapping** - Add or remove fields based on platform requirements
+- **Async data enrichment** - Fetch additional context from external APIs or databases
+
+#### Configuration
+
+Add a `customSpanFormatter` to any exporter configuration:
+
+```ts title="src/mastra/index.ts"
+import { BraintrustExporter } from "@mastra/braintrust";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { SpanType } from "@mastra/core/observability";
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Formatter that extracts plain text from AI messages
+const plainTextFormatter: CustomSpanFormatter = (span) => {
+  if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+    const userMessage = span.input.find((m) => m.role === "user");
+    return {
+      ...span,
+      input: userMessage?.content ?? span.input,
+    };
+  }
+  return span;
+};
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          // Braintrust gets plain text formatting
+          new BraintrustExporter({
+            customSpanFormatter: plainTextFormatter,
+          }),
+          // Langfuse keeps the original structured format
+          new LangfuseExporter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+#### Chaining Multiple Formatters
+
+Use `chainFormatters` to combine multiple formatters. Chains support both sync and async formatters:
+
+```ts
+import { chainFormatters } from "@mastra/observability";
+
+const inputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  input: extractPlainText(span.input),
+});
+
+const outputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  output: extractPlainText(span.output),
+});
+
+const exporter = new BraintrustExporter({
+  customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
+});
+```
+
+#### Async Formatters
+
+Custom span formatters support asynchronous operations, enabling use cases like fetching data from external APIs or databases to enrich your spans:
+
+```ts
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Async formatter that enriches spans with user data
+const userEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  const userId = span.metadata?.userId;
+  if (!userId) return span;
+
+  // Fetch user data from your API or database
+  const userData = await fetchUserData(userId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      userName: userData.name,
+      userEmail: userData.email,
+      department: userData.department,
+    },
+  };
+};
+
+// Async formatter that looks up additional context
+const contextEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  if (span.type !== SpanType.AGENT_RUN) return span;
+
+  // Fetch experiment configuration
+  const experimentConfig = await getExperimentConfig(span.metadata?.experimentId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      experimentVariant: experimentConfig?.variant,
+      experimentGroup: experimentConfig?.group,
+    },
+  };
+};
+
+// Use async formatters with an exporter
+const exporter = new BraintrustExporter({
+  customSpanFormatter: userEnrichmentFormatter,
+});
+
+// Or chain sync and async formatters together
+const exporter = new LangfuseExporter({
+  customSpanFormatter: chainFormatters([
+    plainTextFormatter,           // sync
+    userEnrichmentFormatter,      // async
+    contextEnrichmentFormatter,   // async
+  ]),
+});
+```
+
+:::note
+Async formatters add latency to span export. Keep async operations fast (under 100ms) to avoid slowing down your application. Consider using caching for frequently accessed data.
+:::
 
 ## Serialization Options
 
@@ -11213,6 +11359,54 @@ app.post("/api/analyze", async (req, res) => {
 ```
 
 This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
+
+## Flushing Traces in Serverless Environments
+
+In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflare Workers, runtime instances can be reused across multiple requests. The `flush()` method allows you to ensure all buffered spans are exported before the runtime terminates, without shutting down the exporter (which would prevent future exports).
+
+### Using flush()
+
+Call `flush()` on the observability instance to flush all exporters:
+
+```ts
+// Get the observability instance from Mastra
+const observability = mastra.getObservability();
+
+// Flush all buffered spans to all exporters
+await observability.flush();
+```
+
+### When to Use flush()
+
+Use `flush()` in these scenarios:
+
+- **End of serverless function execution**: Ensure spans are exported before the runtime is paused or terminated
+- **Before long-running operations**: Flush accumulated spans before a potentially slow operation
+- **Periodic flushing**: In long-running processes, periodically flush to ensure timely data availability
+
+```ts
+// Example: Vercel serverless function
+export async function POST(req: Request) {
+  const result = await agent.generate({
+    messages: [{ role: "user", content: await req.text() }],
+  });
+
+  // Ensure spans are exported before function completes
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+### flush() vs shutdown()
+
+| Method | Behavior | Use Case |
+| --- | --- | --- |
+| `flush()` | Exports buffered spans, keeps exporter active | Serverless environments, periodic flushing |
+| `shutdown()` | Exports buffered spans, releases resources | Application shutdown, graceful termination |
+
+Use `flush()` when you need to ensure data is exported but want to keep the exporter ready for future requests. Use `shutdown()` only when the application is terminating.
 
 ## What Gets Traced
 
@@ -12719,7 +12913,7 @@ await store.upsert({
 });
 ```
 
-### Using MongoDB Atlas Vector search
+<h3>Using MongoDB Atlas Vector search</h3>
 
 For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel&utm_source=third-party-content&utm_medium=cta&utm_content=mastra-docs).
 
@@ -12747,7 +12941,7 @@ await store.upsert({
 });
 ```
 
-### Using PostgreSQL with pgvector
+<h3>Using PostgreSQL with pgvector</h3>
 
 PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
 For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
@@ -13015,7 +13209,7 @@ await store.upsert({
 });
 ```
 
-### Using LanceDB
+<h3>Using LanceDB</h3>
 
 LanceDB is an embedded vector database built on the Lance columnar format, suitable for local development or cloud deployment.
 For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
@@ -20069,7 +20263,7 @@ For scenarios where you need to handle workflow completion without awaiting the 
 
 Called when a workflow completes with any status (success, failed, suspended, or tripwire):
 
-```typescript {8-15} title="src/mastra/workflows/order-workflow.ts"
+```typescript {8-17} title="src/mastra/workflows/order-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -20079,7 +20273,9 @@ const orderWorkflow = createWorkflow({
   outputSchema: z.object({ orderId: z.string(), status: z.string() }),
   options: {
     onFinish: async (result) => {
-      await db.updateOrderStatus(result.result?.orderId, result.status);
+      if (result.status === 'success') {
+        await db.updateOrderStatus(result.result.orderId, result.status);
+      }
       await analytics.track('workflow_completed', {
         workflowId: 'order-processing',
         status: result.status,
@@ -20921,36 +21117,69 @@ const result = await run.start({
   }
 });
 
-console.log(result);
+if (result.status === "success") {
+  console.log(result.result);
+}
 ```
   </TabItem>
   <TabItem value="stream" label="Stream">
-Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. Iterate over `fullStream` to track progress, then await `result` to get the final workflow result.
 
 ```typescript
 const run = await testWorkflow.createRun();
 
-const result = await run.stream({
+const stream = run.stream({
   inputData: {
     message: "Hello world"
   }
 });
 
-for await (const chunk of result.fullStream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk);
+}
+
+// Get the final result (same type as run.start())
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
 }
 ```
   </TabItem>
 </Tabs>
 
 
-### Workflow status types
+### Workflow result type
 
-When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+Both `run.start()` and `stream.result` return a discriminated union based on the `status` property, which can be `success`, `failed`, `suspended`, `tripwire`, or `paused`. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
+
+Additionally, depending on the status, different properties are available:
+
+| Status      | Unique properties               | Description                                              |
+| ----------- | ------------------------------- | -------------------------------------------------------- |
+| `success`   | `result`                        | The workflow's output data                               |
+| `failed`    | `error`                         | The error that caused the failure                        |
+| `tripwire`  | `tripwire`                      | Contains `reason`, `retry?`, `metadata?`, `processorId?` |
+| `suspended` | `suspendPayload`, `suspended`   | Suspension data and array of suspended step paths        |
+| `paused`    | _(none)_                        | Only common properties available                         |
+
+To access status-specific properties, check the `status` first:
+
+```typescript
+const result = await run.start({ inputData: { message: "Hello world" } });
+
+if (result.status === "success") {
+  console.log(result.result); // Only available when status is "success"
+} else if (result.status === "failed") {
+  console.log(result.error.message);
+} else if (result.status === "suspended") {
+  console.log(result.suspendPayload);
+}
+```
 
 ### Workflow output
 
-The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
+Here's an example of a successful workflow result, showing the `input`, `steps`, and `result` properties:
 
 ```json
 {
@@ -20963,7 +21192,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      },
+      }
     },
     "step-2": {
       "status": "success",
@@ -20972,7 +21201,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      },
+      }
     }
   },
   "input": {
@@ -21696,18 +21925,20 @@ Use `timeTravelStream()` to receive streaming events during time travel executio
 ```typescript
 const run = await workflow.createRun();
 
-const output = run.timeTravelStream({
+const stream = run.timeTravelStream({
   step: "step2",
   inputData: { value: 10 },
 });
 
-// Access the stream
-for await (const event of output.fullStream) {
+for await (const event of stream.fullStream) {
   console.log(event.type, event.payload);
 }
 
-// Get final result
-const result = await output.result;
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
+}
 ```
 
 ## Time travel with initial state
@@ -24908,18 +25139,18 @@ For more information on how to create a new Mastra application,
 refer to our [getting started guide](/guides/v1/getting-started/quickstart)
 :::
 
+## Instructions
+
 <Tabs>
 
   <TabItem value="app-platform" label="App Platform">
 
-## App Platform
-
-### Prerequisites
+<h3>Prerequisites</h3>
 
 - A Git repository containing your Mastra application. This can be a [GitHub](https://github.com/) repository, [GitLab](https://gitlab.com/) repository, or any other compatible source provider.
 - A [Digital Ocean account](https://www.digitalocean.com/)
 
-### Deployment Steps
+<h3>Deployment Steps</h3>
 
 <Steps>
 
@@ -24994,11 +25225,9 @@ The Digital Ocean App Platform uses an ephemeral file system, meaning that any f
 
   <TabItem value="droplets" label="Droplets">
 
-## Droplets
-
 Deploy your Mastra application to Digital Ocean's Droplets.
 
-### Prerequisites
+<h3>Prerequisites</h3>
 
 - A [Digital Ocean account](https://www.digitalocean.com/)
 - A [Droplet](https://docs.digitalocean.com/products/droplets/) running Ubuntu 24+
@@ -25007,7 +25236,7 @@ Deploy your Mastra application to Digital Ocean's Droplets.
 - SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
 - Node.js 22.13.0 or later installed on your droplet
 
-### Deployment Steps
+<h3>Deployment Steps</h3>
 
 <Steps>
 
@@ -31692,6 +31921,33 @@ Client SDK changes align with server-side API updates including renamed utilitie
 
 ## Changed
 
+### `messages` is now identical to `@mastra/core/agent` syntax
+
+The `messages` argument is now the first argument of the `generate`, `stream` and `network` method calls, similar to the NodeJS version in `@mastra/core/agent`.
+
+To migrate, move `messages` to the first argument of the method call:
+
+**Using `@mastra/client-js`:**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+-  await agent.generate({
+-    messages: [...]
++  await agent.generate([...], {
+  });
+
+-  await agent.stream({
+-    messages: [...]
++  await agent.stream([...], {
+  });
+
+-  await agent.network({
+-    messages: [...]
++  await agent.network([...], {
+  });
+```
+
 ### `threadId` and `resourceId` to `memory` option
 
 The `threadId` and `resourceId` options have been removed from agent method calls. Use the `memory` option instead, which provides a cleaner API for memory configuration. This applies to both `@mastra/client-js` and `@mastra/react` packages.
@@ -31703,8 +31959,7 @@ To migrate, move `threadId` and `resourceId` into the `memory` option:
 ```diff
   const agent = client.getAgent('my-agent');
 
-  await agent.generate({
-    messages: [...],
+  await agent.generate([...], {
 -   threadId: 'thread-123',
 -   resourceId: 'user-456',
 +   memory: {
@@ -31713,8 +31968,7 @@ To migrate, move `threadId` and `resourceId` into the `memory` option:
 +   },
   });
 
-  await agent.stream({
-    messages: [...],
++  await agent.stream([...], {
 -   threadId: 'thread-123',
 -   resourceId: 'user-456',
 +   memory: {
@@ -31742,8 +31996,7 @@ The `useChat` hook internally passes the memory option when you provide a `threa
 The `memory` option also supports passing thread metadata when creating new threads:
 
 ```typescript
-await agent.generate({
-  messages: [...],
+await agent.generate([...], {
   memory: {
     thread: {
       id: 'thread-123',
@@ -36450,7 +36703,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 70+ AI providers and 1833+ models through Mastra's model router."
+description: "Access 70+ AI providers and 1834+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36463,7 +36716,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1833 models from 70 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1834 models from 70 providers through a single API.
 
 ## Features
 
@@ -42061,7 +42314,7 @@ const agent = new Agent({
 
 ---
 title: "Deep Infra | Models | Mastra"
-description: "Use Deep Infra models with Mastra. 8 models available."
+description: "Use Deep Infra models with Mastra. 9 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -42072,7 +42325,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 [EN] Source: https://mastra.ai/en/models/providers/deepinfra
 
-Access 8 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 9 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -42121,6 +42374,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.254,
     "outputCost": 1.02
+  },
+  {
+    "model": "deepinfra/MiniMaxAI/MiniMax-M2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 196608,
+    "inputCost": 0.28,
+    "outputCost": 1.2
   },
   {
     "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
@@ -46945,7 +47210,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cortecs.svg"
     />    <CardGridItem
       title="Deep Infra"
-      description="8 models"
+      description="9 models"
       href="/models/v1/providers/deepinfra"
       logo="https://models.dev/logos/deepinfra.svg"
     />    <CardGridItem
@@ -80484,6 +80749,14 @@ async export(spans: ReadOnlySpan[]): Promise<void>
 
 Batch exports spans using OpenTelemetry with OpenInference semantic conventions.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to the configured endpoint without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -80652,6 +80925,14 @@ async export(spans: ReadOnlySpan[]): Promise<void>
 
 Batch exports spans to Braintrust.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to Braintrust without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -80784,6 +81065,14 @@ Processes tracing events. Only exports SPAN_ENDED events to Cloud.
     },
   ]}
 />
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered events to Mastra Cloud without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -81169,6 +81458,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to Datadog LLM Observability.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to Datadog without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -81356,6 +81653,14 @@ Processes a tracing event according to the resolved strategy.
     },
   ]}
 />
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered events to storage without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -81552,6 +81857,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to Laminar.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to Laminar without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -81679,6 +81992,14 @@ async export(spans: ReadOnlySpan[]): Promise<void>
 ```
 
 Batch exports spans to Langfuse.
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to Langfuse without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -81858,6 +82179,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to LangSmith.
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any pending spans to LangSmith without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -82165,6 +82494,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to the configured OTEL backend.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to the OTEL backend without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -82372,6 +82709,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to PostHog.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered events to PostHog without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -82500,6 +82845,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to Sentry. Handles SPAN_STARTED, SPAN_UPDATED, and SPAN_ENDED events.
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any pending spans to Sentry without shutting down the exporter. Waits up to 2 seconds for pending data to be sent. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -82844,6 +83197,9 @@ interface ObservabilityInstance {
     options: StartSpanOptions<TType>,
   ): Span<TType>;
 
+  /** Force flush any buffered spans without shutting down */
+  flush(): Promise<void>;
+
   /** Shutdown observability and clean up resources */
   shutdown(): Promise<void>;
 }
@@ -82963,6 +83319,9 @@ interface ObservabilityExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void>;
+
+  /** Force flush any buffered spans without shutting down */
+  flush(): Promise<void>;
 
   /** Shutdown exporter */
   shutdown(): Promise<void>;
@@ -107473,7 +107832,7 @@ It provides a production-ready service with a convenient API to store, search, a
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension (must match your embedding model)",
+      description: "Vector dimension (must match your embedding model). Required for single-vector collections.",
     },
     {
       name: "metric",
@@ -107482,13 +107841,38 @@ It provides a production-ready service with a convenient API to store, search, a
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+      name: "namedVectors",
+      type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
+      isOptional: true,
+      description: "Configuration for named vector spaces. When provided, creates a collection with multiple named vector fields.",
+    },
   ]}
 />
+
+#### Creating a Named Vectors Collection
+
+```typescript
+// Create a collection with multiple named vector spaces
+await store.createIndex({
+  indexName: "multi_modal",
+  dimension: 768, // fallback
+  namedVectors: {
+    text: { size: 768, distance: "cosine" },
+    image: { size: 512, distance: "euclidean" },
+  },
+});
+```
 
 ### upsert()
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -107506,8 +107890,34 @@ It provides a production-ready service with a convenient API to store, search, a
       isOptional: true,
       description: "Optional vector IDs (auto-generated if not provided)",
     },
+    {
+      name: "vectorName",
+      type: "string",
+      isOptional: true,
+      description: "Name of the vector space to upsert into when using named vectors.",
+    },
   ]}
 />
+
+#### Upserting into Named Vector Spaces
+
+```typescript
+// Upsert into the "text" vector space
+await store.upsert({
+  indexName: "multi_modal",
+  vectors: textEmbeddings,
+  metadata: textMetadata,
+  vectorName: "text",
+});
+
+// Upsert into the "image" vector space
+await store.upsert({
+  indexName: "multi_modal",
+  vectors: imageEmbeddings,
+  metadata: imageMetadata,
+  vectorName: "image",
+});
+```
 
 ### query()
 
@@ -107543,8 +107953,27 @@ It provides a production-ready service with a convenient API to store, search, a
       defaultValue: "false",
       description: "Whether to include vectors in the results",
     },
+    {
+      name: "using",
+      type: "string",
+      isOptional: true,
+      description: "Name of the vector field to query when using named vectors. Use this when your collection has multiple named vector fields.",
+    },
   ]}
 />
+
+#### Named Vectors
+
+Qdrant supports [named vectors](https://qdrant.tech/documentation/concepts/vectors/#named-vectors), allowing multiple vector fields per collection. Use the `using` parameter to specify which named vector to query against:
+
+```typescript
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: embedding,
+  topK: 10,
+  using: "title_embedding", // Query against a specific named vector
+});
+```
 
 ### listIndexes()
 
