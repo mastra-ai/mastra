@@ -70,6 +70,7 @@ const config = {
     posthogApiKey: process.env.POSTHOG_API_KEY,
     posthogHost: process.env.POSTHOG_HOST,
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
+    kapaGroupId: process.env.KAPA_GROUP_ID,
   },
 
   headTags: [
