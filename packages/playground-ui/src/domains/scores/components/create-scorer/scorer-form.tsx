@@ -8,13 +8,21 @@ import { Button } from '@/ds/components/Button';
 import { Badge } from '@/ds/components/Badge';
 import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
-import { Textarea } from '@/ds/components/Textarea';
 import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 
 import { ModelPicker } from '@/domains/agents/components/create-agent/model-picker';
+import { InstructionsEnhancer } from '@/domains/agents/components/create-agent/instructions-enhancer';
 import type { ScorerFormValues } from './scorer-form-validation';
 import { DEFAULT_PROMPT_TEMPLATE } from './scorer-form-validation';
+
+/** Template variables available in scorer prompts */
+const SCORER_VARIABLES = [
+  { name: 'minScore', description: 'Minimum score value' },
+  { name: 'maxScore', description: 'Maximum score value' },
+  { name: 'input', description: 'Input to the evaluated agent/tool' },
+  { name: 'output', description: 'Output from the evaluated agent/tool' },
+];
 
 // Simple validation resolver without zod to avoid version conflicts
 const scorerFormResolver: Resolver<ScorerFormValues> = async values => {
@@ -87,6 +95,7 @@ export function ScorerForm({
     handleSubmit,
     control,
     formState: { errors },
+    watch,
   } = useForm<ScorerFormValues>({
     resolver: scorerFormResolver,
     defaultValues: {
@@ -99,6 +108,9 @@ export function ScorerForm({
       ownerId: initialValues?.ownerId,
     },
   });
+
+  // Watch the model field to pass to the enhancer
+  const currentModel = watch('model');
 
   const handleFormSubmit = async (values: ScorerFormValues) => {
     await onSubmit(values);
@@ -221,19 +233,24 @@ export function ScorerForm({
           <Label htmlFor="prompt" className="text-xs text-icon5">
             Prompt <span className="text-accent2">*</span>
           </Label>
-          <Textarea
-            id="prompt"
-            placeholder="Enter evaluation prompt with template variables: {{minScore}}, {{maxScore}}, {{input}}, {{output}}"
-            rows={12}
-            {...register('prompt')}
-            className={cn('font-mono text-xs', errors.prompt && 'border-accent2')}
+          <Controller
+            name="prompt"
+            control={control}
+            render={({ field }) => (
+              <InstructionsEnhancer
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="Enter evaluation prompt with template variables: {{minScore}}, {{maxScore}}, {{input}}, {{output}}"
+                error={errors.prompt?.message}
+                context="scorer"
+                variables={SCORER_VARIABLES}
+                rows={12}
+                textareaClassName="font-mono text-xs"
+                enhanceCommentPlaceholder="Describe how to improve the evaluation criteria..."
+                defaultModel={currentModel}
+              />
+            )}
           />
-          {errors.prompt && <span className="text-xs text-accent2">{errors.prompt.message}</span>}
-          <p className="text-xs text-icon4">
-            Template variables: <code className="text-icon5">{'{{minScore}}'}</code>,{' '}
-            <code className="text-icon5">{'{{maxScore}}'}</code>, <code className="text-icon5">{'{{input}}'}</code>,{' '}
-            <code className="text-icon5">{'{{output}}'}</code>
-          </p>
         </div>
       </div>
 
@@ -266,7 +283,7 @@ export function ScorerForm({
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting || isDeleting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting || isDeleting}>
+          <Button type="submit" variant="light" disabled={isSubmitting || isDeleting}>
             {isSubmitting ? (
               <>
                 <Spinner className="h-3 w-3 mr-2" />

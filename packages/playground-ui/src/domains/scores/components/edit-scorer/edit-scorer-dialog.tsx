@@ -21,8 +21,7 @@ export function EditScorerDialog({ scorerId, open, onOpenChange, onSuccess, onDe
   const { data: scorer, isLoading } = useStoredScorer(scorerId);
   const { data: versionsData } = useScorerVersions(scorerId, {
     perPage: 1,
-    orderBy: 'versionNumber',
-    orderDirection: 'DESC',
+    orderBy: { field: 'versionNumber', direction: 'DESC' },
   });
   const { updateStoredScorer, deleteStoredScorer } = useStoredScorerMutations(scorerId);
 
@@ -34,7 +33,8 @@ export function EditScorerDialog({ scorerId, open, onOpenChange, onSuccess, onDe
       prompt: values.prompt,
       scoreRange: values.scoreRange,
       metadata: values.metadata,
-      ownerId: values.ownerId,
+      // Convert null to undefined since the server schema expects string | undefined, not null
+      ownerId: values.ownerId ?? undefined,
     });
     onOpenChange(false);
     onSuccess?.();

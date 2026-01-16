@@ -22,6 +22,8 @@ interface EnhancerModelSelectorProps {
   onModelSelect: (model: { provider: string; modelId: string } | null) => void;
   connectedModels: ModelInfo[];
   disabled?: boolean;
+  /** When true, hides the "Default (agent model)" option since there's no agent yet */
+  isCreateMode?: boolean;
 }
 
 const EnhancerModelSelector = ({
@@ -29,6 +31,7 @@ const EnhancerModelSelector = ({
   onModelSelect,
   connectedModels,
   disabled,
+  isCreateMode = false,
 }: EnhancerModelSelectorProps) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -58,10 +61,13 @@ const EnhancerModelSelector = ({
     (e: React.KeyboardEvent) => {
       if (!isOpen) return;
 
+      // In create mode, index 0 is the first model. In edit mode, index 0 is "Default"
+      const maxIndex = isCreateMode ? filteredModels.length - 1 : filteredModels.length;
+
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          setHighlightedIndex(prev => Math.min(prev + 1, filteredModels.length));
+          setHighlightedIndex(prev => Math.min(prev + 1, maxIndex));
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -69,10 +75,18 @@ const EnhancerModelSelector = ({
           break;
         case 'Enter':
           e.preventDefault();
-          if (highlightedIndex === 0) {
-            handleSelect(null);
-          } else if (highlightedIndex <= filteredModels.length) {
-            handleSelect(filteredModels[highlightedIndex - 1]);
+          if (isCreateMode) {
+            // In create mode, index maps directly to filteredModels
+            if (highlightedIndex < filteredModels.length) {
+              handleSelect(filteredModels[highlightedIndex]);
+            }
+          } else {
+            // In edit mode, index 0 is "Default", then models start at 1
+            if (highlightedIndex === 0) {
+              handleSelect(null);
+            } else if (highlightedIndex <= filteredModels.length) {
+              handleSelect(filteredModels[highlightedIndex - 1]);
+            }
           }
           break;
         case 'Escape':
@@ -82,10 +96,14 @@ const EnhancerModelSelector = ({
           break;
       }
     },
-    [isOpen, filteredModels, highlightedIndex, handleSelect],
+    [isOpen, filteredModels, highlightedIndex, handleSelect, isCreateMode],
   );
 
-  const displayValue = selectedModel ? `${selectedModel.provider}/${selectedModel.modelId}` : 'Default (agent model)';
+  const displayValue = selectedModel
+    ? `${selectedModel.provider}/${selectedModel.modelId}`
+    : isCreateMode
+      ? 'Select a model'
+      : 'Default (agent model)';
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -101,7 +119,7 @@ const EnhancerModelSelector = ({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[280px] max-h-[300px] overflow-y-auto p-2"
+        className="w-[280px] p-2"
         onOpenAutoFocus={e => {
           e.preventDefault();
           inputRef.current?.focus();
@@ -118,17 +136,21 @@ const EnhancerModelSelector = ({
           placeholder="Search models..."
           className="mb-2"
         />
-        <div className="space-y-0.5">
-          <div
-            className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded hover:bg-surface5 text-sm ${
-              highlightedIndex === 0 ? 'bg-surface5' : ''
-            } ${!selectedModel ? 'text-accent1' : ''}`}
-            onClick={() => handleSelect(null)}
-          >
-            Default (agent model)
-          </div>
+        <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+          {/* Only show "Default" option in edit mode */}
+          {!isCreateMode && (
+            <div
+              className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded hover:bg-surface5 text-sm ${
+                highlightedIndex === 0 ? 'bg-surface5' : ''
+              } ${!selectedModel ? 'text-accent1' : ''}`}
+              onClick={() => handleSelect(null)}
+            >
+              Default (agent model)
+            </div>
+          )}
           {filteredModels.map((model, index) => {
-            const isHighlighted = index + 1 === highlightedIndex;
+            // In create mode, index maps directly. In edit mode, offset by 1 for "Default" option
+            const isHighlighted = isCreateMode ? index === highlightedIndex : index + 1 === highlightedIndex;
             const isSelected = selectedModel?.provider === model.provider && selectedModel?.modelId === model.model;
             return (
               <div
@@ -150,12 +172,21 @@ const EnhancerModelSelector = ({
   );
 };
 
+/** Context type for the prompt enhancer - determines the enhancement strategy */
+export type EnhancerContext = 'agent' | 'scorer';
+
+/** Variable info for displaying available template variables */
+export interface TemplateVariable {
+  name: string;
+  description?: string;
+}
+
 export interface InstructionsEnhancerProps {
   /** Current instructions value */
   value: string;
   /** Callback when instructions change */
   onChange: (value: string) => void;
-  /** Agent ID - required for enhance functionality (only available in edit mode) */
+  /** Agent ID - if provided, can use agent's default model; otherwise requires model selection */
   agentId?: string;
   /** Placeholder text */
   placeholder?: string;
@@ -163,11 +194,25 @@ export interface InstructionsEnhancerProps {
   error?: string;
   /** Whether the field is disabled */
   disabled?: boolean;
+  /** Context for enhancement - determines what kind of prompt is being enhanced */
+  context?: EnhancerContext;
+  /** Available template variables to display as hints */
+  variables?: TemplateVariable[];
+  /** Number of rows for the textarea */
+  rows?: number;
+  /** Custom CSS class for the textarea */
+  textareaClassName?: string;
+  /** Placeholder for the enhance comment input */
+  enhanceCommentPlaceholder?: string;
+  /** Default model to use for enhancement (used in scorer context) */
+  defaultModel?: { provider: string; name: string };
 }
 
 /**
  * Instructions textarea with AI-powered enhance functionality.
- * The enhance feature is only available in edit mode (when agentId is provided).
+ * In edit mode (agentId provided), can use the agent's default model.
+ * In create mode (no agentId), requires explicit model selection.
+ * Supports different contexts (agent instructions, scorer prompts) with context-appropriate enhancement.
  */
 export function InstructionsEnhancer({
   value,
@@ -176,13 +221,23 @@ export function InstructionsEnhancer({
   placeholder = 'Enter agent instructions',
   error,
   disabled = false,
+  context = 'agent',
+  variables,
+  rows = 6,
+  textareaClassName,
+  enhanceCommentPlaceholder = 'Describe how to improve the instructions...',
+  defaultModel,
 }: InstructionsEnhancerProps) {
   const [enhanceComment, setEnhanceComment] = React.useState('');
   const [showEnhanceInput, setShowEnhanceInput] = React.useState(false);
-  const [selectedModel, setSelectedModel] = React.useState<{ provider: string; modelId: string } | null>(null);
+  const [selectedModel, setSelectedModel] = React.useState<{ provider: string; modelId: string } | null>(
+    defaultModel ? { provider: defaultModel.provider, modelId: defaultModel.name } : null,
+  );
 
-  // Only fetch data if we have an agentId (edit mode)
-  const { mutateAsync: enhancePrompt, isPending } = usePromptEnhancer({ agentId: agentId || '' });
+  const isCreateMode = !agentId;
+
+  // Fetch data - agent data only needed in edit mode, providers always needed
+  const { mutateAsync: enhancePrompt, isPending } = usePromptEnhancer({ agentId, context });
   const { data: agent, isLoading: isAgentLoading, isError: isAgentError } = useAgent(agentId);
   const { data: providersData, isLoading: isProvidersLoading } = useAgentsModelProviders();
 
@@ -203,7 +258,7 @@ export function InstructionsEnhancer({
     return provider?.connected === true;
   };
 
-  // Check if ANY enabled model has a connected provider
+  // Check if ANY enabled model has a connected provider (edit mode only)
   const hasConnectedModel = () => {
     if (!agent) return false;
     if (agent.modelList && agent.modelList.length > 0) {
@@ -212,13 +267,24 @@ export function InstructionsEnhancer({
     return agent.provider ? isProviderConnected(agent.provider) : false;
   };
 
-  const isDataLoading = isAgentLoading || isProvidersLoading;
-  // If user selected a custom model, we can still proceed even if agent has no valid model
-  const hasValidModel = !isDataLoading && (selectedModel || (!isAgentError && hasConnectedModel()));
+  // In create mode, only check if providers are loading. In edit mode, also check agent loading.
+  const isDataLoading = isCreateMode ? isProvidersLoading : isAgentLoading || isProvidersLoading;
 
-  // Enhance is only available in edit mode with a valid model
-  const canEnhance = !!agentId && hasValidModel;
-  const showEnhanceWarning = !!agentId && !isDataLoading && !selectedModel && !hasConnectedModel();
+  // In create mode: need a selected model. In edit mode: need selected model OR agent's default model.
+  const hasValidModel = isCreateMode
+    ? !isDataLoading && !!selectedModel
+    : !isDataLoading && (selectedModel || (!isAgentError && hasConnectedModel()));
+
+  // Can enhance if we have a valid model (and in create mode, a model must be explicitly selected)
+  const canEnhance = hasValidModel;
+
+  // Show warning when no valid model is available
+  const showEnhanceWarning = isCreateMode
+    ? !isDataLoading && !selectedModel && connectedModels.length === 0
+    : !isDataLoading && !selectedModel && !hasConnectedModel();
+
+  // In create mode, show a message prompting to select a model (different from warning about no connected models)
+  const showSelectModelPrompt = isCreateMode && !isDataLoading && !selectedModel && connectedModels.length > 0;
 
   const handleEnhance = async () => {
     if (!canEnhance) return;
@@ -254,7 +320,7 @@ export function InstructionsEnhancer({
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        rows={6}
+        rows={rows}
         disabled={disabled || isPending}
         className={cn(
           'flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors',
@@ -262,78 +328,91 @@ export function InstructionsEnhancer({
           'px-[13px] py-2 text-[calc(13_/_16_*_1rem)] resize-y min-h-[120px]',
           'disabled:cursor-not-allowed disabled:opacity-50',
           error && 'border-accent2',
+          textareaClassName,
         )}
       />
 
       {error && <span className="text-xs text-accent2">{error}</span>}
 
-      {/* Enhance UI - only show in edit mode */}
-      {agentId && (
-        <div className="flex flex-col gap-2">
-          {showEnhanceInput ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2" onKeyDown={handleKeyDown}>
-                <Input
-                  value={enhanceComment}
-                  onChange={e => setEnhanceComment(e.target.value)}
-                  placeholder="Describe how to improve the instructions..."
-                  disabled={isPending || !canEnhance}
-                  className="flex-1"
-                  autoFocus
-                />
-                <Button type="button" variant="light" onClick={handleEnhance} disabled={isPending || !canEnhance}>
-                  <Icon>{isPending ? <Spinner /> : <RefreshCcwIcon />}</Icon>
-                  Enhance
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowEnhanceInput(false);
-                    setEnhanceComment('');
-                  }}
-                  disabled={isPending}
-                >
-                  Cancel
-                </Button>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-icon3">Model:</span>
-                  <EnhancerModelSelector
-                    selectedModel={selectedModel}
-                    onModelSelect={setSelectedModel}
-                    connectedModels={connectedModels}
-                    disabled={isPending || isDataLoading}
-                  />
-                </div>
-                {showEnhanceWarning && (
-                  <span className="text-xs text-yellow-200">No model with a configured API key found.</span>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex justify-end items-center gap-2">
-              {showEnhanceWarning && (
-                <span className="text-xs text-yellow-200">No model with a configured API key found.</span>
-              )}
+      {/* Template variables hint */}
+      {variables && variables.length > 0 && (
+        <p className="text-xs text-icon4">
+          Template variables:{' '}
+          {variables.map((v, i) => (
+            <React.Fragment key={v.name}>
+              <code className="text-icon5">{`{{${v.name}}}`}</code>
+              {i < variables.length - 1 && ', '}
+            </React.Fragment>
+          ))}
+        </p>
+      )}
+
+      {/* Enhance UI - available in both create and edit modes */}
+      <div className="flex flex-col gap-2">
+        {showEnhanceInput ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2" onKeyDown={handleKeyDown}>
+              <Input
+                value={enhanceComment}
+                onChange={e => setEnhanceComment(e.target.value)}
+                placeholder={enhanceCommentPlaceholder}
+                disabled={isPending || !canEnhance}
+                className="flex-1"
+                autoFocus
+              />
+              <Button type="button" variant="light" onClick={handleEnhance} disabled={isPending || !canEnhance}>
+                <Icon>{isPending ? <Spinner /> : <RefreshCcwIcon />}</Icon>
+                Enhance
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
-                size="md"
-                onClick={() => setShowEnhanceInput(true)}
-                disabled={!agentId}
-                className="text-icon3 hover:text-icon5"
+                onClick={() => {
+                  setShowEnhanceInput(false);
+                  setEnhanceComment('');
+                }}
+                disabled={isPending}
               >
-                <Icon>
-                  <Sparkles className="h-3 w-3" />
-                </Icon>
-                Enhance with AI
+                Cancel
               </Button>
             </div>
-          )}
-        </div>
-      )}
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-icon3">Model:</span>
+                <EnhancerModelSelector
+                  selectedModel={selectedModel}
+                  onModelSelect={setSelectedModel}
+                  connectedModels={connectedModels}
+                  disabled={isPending || isDataLoading}
+                  isCreateMode={isCreateMode}
+                />
+              </div>
+              {showEnhanceWarning && (
+                <span className="text-xs text-yellow-200">No model with a configured API key found.</span>
+              )}
+              {showSelectModelPrompt && <span className="text-xs text-icon3">Please select a model to enhance.</span>}
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end items-center gap-2">
+            {showEnhanceWarning && (
+              <span className="text-xs text-yellow-200">No model with a configured API key found.</span>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              onClick={() => setShowEnhanceInput(true)}
+              className="text-icon3 hover:text-icon5"
+            >
+              <Icon>
+                <Sparkles className="h-3 w-3" />
+              </Icon>
+              Enhance with AI
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -27,7 +27,8 @@ export function CreateScorerDialog({ open, onOpenChange, onSuccess }: CreateScor
         prompt: values.prompt,
         scoreRange: values.scoreRange,
         metadata: values.metadata,
-        ownerId: values.ownerId,
+        // Convert null to undefined since the server schema expects string | undefined, not null
+        ownerId: values.ownerId ?? undefined,
       });
       onOpenChange(false);
       onSuccess?.(scorerId);
