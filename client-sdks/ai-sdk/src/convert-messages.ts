@@ -77,6 +77,12 @@ interface NetworkChildMessage {
 export function resolveNetworkMessages<T extends UIMessage>(messages: T[]): T[] {
   const messagesLength = messages.length;
   return messages.map((message, index) => {
+    // Only attempt to parse network messages from assistant role
+    // This prevents accidentally transforming user text that happens to contain '"isNetwork":true'
+    if (message.role !== 'assistant') {
+      return message;
+    }
+
     // Check if message contains network execution data
     const networkPart = (message.parts || []).find(
       (part): part is { type: 'text'; text: string } =>
@@ -89,7 +95,7 @@ export function resolveNetworkMessages<T extends UIMessage>(messages: T[]): T[] 
         part.text.includes('"isNetwork":true'),
     );
 
-    if (networkPart && networkPart.type === 'text') {
+    if (networkPart) {
       try {
         const json: NetworkExecutionData = JSON.parse(networkPart.text);
 
@@ -162,9 +168,9 @@ export function resolveNetworkMessages<T extends UIMessage>(messages: T[]): T[] 
                   result: finalResult?.text || '',
                 };
 
-          // Return the transformed message with dynamic-tool part
+          // Return the transformed message with dynamic-tool part, preserving original role
           return {
-            role: 'assistant' as const,
+            role: message.role,
             parts: [
               {
                 type: 'dynamic-tool',
