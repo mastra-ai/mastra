@@ -9,9 +9,9 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@assistant-ui/react": "0.10.45",
-    "@assistant-ui/react-markdown": "^0.10.9",
-    "@assistant-ui/react-ui": "^0.1.8",
+    "@assistant-ui/react": "0.11.53",
+    "@assistant-ui/react-markdown": "0.11.9",
+    "@assistant-ui/react-ui": "0.2.1",
     "@mastra/client-js": "latest",
     "next": "^15.5.7",
     "react": "^19.1.1",
@@ -36,5 +36,5 @@
     "typescript": "^5.9.3"
   },
   "version": "0.0.0",
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
+  "packageManager": "pnpm@10.10.0"
 }
