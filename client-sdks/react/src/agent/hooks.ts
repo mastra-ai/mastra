@@ -111,8 +111,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const response = await agent.generate({
-      messages: coreUserMessages,
+    const response = await agent.generate(coreUserMessages, {
       runId: uuid(),
       maxSteps,
       modelSettings: {
@@ -182,8 +181,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const runId = uuid();
 
-    const response = await agent.stream({
-      messages: coreUserMessages,
+    const response = await agent.stream(coreUserMessages, {
       runId,
       maxSteps,
       modelSettings: {
@@ -244,8 +242,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const runId = uuid();
 
-    const response = await agent.network({
-      messages: coreUserMessages,
+    const response = await agent.network(coreUserMessages, {
       maxSteps,
       modelSettings: {
         frequencyPenalty,
