@@ -86,9 +86,10 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
-- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
+- **[PostHog](/docs/v1/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
 - **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
+- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
+  - Supports: Dash0, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -620,15 +621,29 @@ execute: async (inputData, context) => {
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
-## Span Processors
+## Span Formatting
 
-Span processors allow you to transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Mastra includes built-in processors and supports custom implementations.
+Mastra provides two ways to transform span data before it reaches your observability platform: **span processors** and **custom span formatters**. Both allow you to modify, filter, or enrich trace data, but they operate at different levels and serve different purposes.
 
-### Built-in Processors
+| Feature | Span Processors | Custom Span Formatters |
+| --- | --- | --- |
+| Configuration level | Observability config | Per-exporter |
+| Operates on | Internal `Span` object | Exported `ExportedSpan` data |
+| Applies to | All exporters | Single exporter |
+| Async support | No | Yes |
+| Use case | Security, filtering, enrichment | Platform-specific formatting, async enrichment |
+
+Use **span processors** for synchronous transformations that should apply to all exporters (like redacting sensitive data). Use **custom span formatters** when different exporters need different representations of the same data (like plain text for one platform and structured data for another), or when you need to perform asynchronous operations like fetching data from external APIs.
+
+### Span Processors
+
+Span processors transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Processors run once and affect all exporters.
+
+#### Built-in Processors
 
 - [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
-### Creating Custom Processors
+#### Creating Custom Processors
 
 You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
@@ -661,13 +676,149 @@ export const mastra = new Mastra({
 });
 ```
 
-Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases for custom processors include:
+Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases include:
 
+- Redacting sensitive data (passwords, tokens, API keys)
 - Adding environment-specific metadata
 - Filtering out spans based on criteria
 - Normalizing data formats
-- Sampling high-volume traces
 - Enriching spans with business context
+
+### Custom Span Formatters
+
+Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
+
+#### Use Cases
+
+- **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
+- **Transform input/output formats** - Customize how data appears in specific platforms
+- **Platform-specific field mapping** - Add or remove fields based on platform requirements
+- **Async data enrichment** - Fetch additional context from external APIs or databases
+
+#### Configuration
+
+Add a `customSpanFormatter` to any exporter configuration:
+
+```ts title="src/mastra/index.ts"
+import { BraintrustExporter } from "@mastra/braintrust";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { SpanType } from "@mastra/core/observability";
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Formatter that extracts plain text from AI messages
+const plainTextFormatter: CustomSpanFormatter = (span) => {
+  if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+    const userMessage = span.input.find((m) => m.role === "user");
+    return {
+      ...span,
+      input: userMessage?.content ?? span.input,
+    };
+  }
+  return span;
+};
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          // Braintrust gets plain text formatting
+          new BraintrustExporter({
+            customSpanFormatter: plainTextFormatter,
+          }),
+          // Langfuse keeps the original structured format
+          new LangfuseExporter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+#### Chaining Multiple Formatters
+
+Use `chainFormatters` to combine multiple formatters. Chains support both sync and async formatters:
+
+```ts
+import { chainFormatters } from "@mastra/observability";
+
+const inputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  input: extractPlainText(span.input),
+});
+
+const outputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  output: extractPlainText(span.output),
+});
+
+const exporter = new BraintrustExporter({
+  customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
+});
+```
+
+#### Async Formatters
+
+Custom span formatters support asynchronous operations, enabling use cases like fetching data from external APIs or databases to enrich your spans:
+
+```ts
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Async formatter that enriches spans with user data
+const userEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  const userId = span.metadata?.userId;
+  if (!userId) return span;
+
+  // Fetch user data from your API or database
+  const userData = await fetchUserData(userId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      userName: userData.name,
+      userEmail: userData.email,
+      department: userData.department,
+    },
+  };
+};
+
+// Async formatter that looks up additional context
+const contextEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  if (span.type !== SpanType.AGENT_RUN) return span;
+
+  // Fetch experiment configuration
+  const experimentConfig = await getExperimentConfig(span.metadata?.experimentId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      experimentVariant: experimentConfig?.variant,
+      experimentGroup: experimentConfig?.group,
+    },
+  };
+};
+
+// Use async formatters with an exporter
+const exporter = new BraintrustExporter({
+  customSpanFormatter: userEnrichmentFormatter,
+});
+
+// Or chain sync and async formatters together
+const exporter = new LangfuseExporter({
+  customSpanFormatter: chainFormatters([
+    plainTextFormatter,           // sync
+    userEnrichmentFormatter,      // async
+    contextEnrichmentFormatter,   // async
+  ]),
+});
+```
+
+:::note
+Async formatters add latency to span export. Keep async operations fast (under 100ms) to avoid slowing down your application. Consider using caching for frequently accessed data.
+:::
 
 ## Serialization Options
 

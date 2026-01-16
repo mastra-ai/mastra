@@ -105,9 +105,14 @@ type SpanData = {
   }>;
 };
 
+/** Config type with Sentry-specific fields resolved */
+type ResolvedSentryConfig = Required<
+  Pick<SentryExporterConfig, 'dsn' | 'environment' | 'tracesSampleRate' | 'release'>
+>;
+
 export class SentryExporter extends BaseExporter {
   name = 'sentry';
-  private config: Required<Omit<SentryExporterConfig, 'logger' | 'logLevel' | 'options'>>;
+  private sentryConfig: ResolvedSentryConfig;
   private spanMap = new Map<string, SpanData>();
   private skippedSpans = new Map<string, string>();
   private initialized = false;
@@ -115,14 +120,14 @@ export class SentryExporter extends BaseExporter {
   constructor(config: SentryExporterConfig = {}) {
     super(config);
 
-    this.config = {
+    this.sentryConfig = {
       dsn: config.dsn ?? process.env.SENTRY_DSN ?? '',
       environment: config.environment ?? process.env.SENTRY_ENVIRONMENT ?? 'production',
       tracesSampleRate: config.tracesSampleRate ?? 1.0,
       release: config.release ?? process.env.SENTRY_RELEASE ?? '',
     };
 
-    if (!this.config.dsn) {
+    if (!this.sentryConfig.dsn) {
       const dsnSource = config.dsn ? 'from config' : process.env.SENTRY_DSN ? 'from env' : 'missing';
       this.setDisabled(
         `Missing required DSN (dsn: ${dsnSource}). Set SENTRY_DSN environment variable or pass it in config.`,
@@ -132,10 +137,10 @@ export class SentryExporter extends BaseExporter {
 
     try {
       Sentry.init({
-        dsn: this.config.dsn,
-        environment: this.config.environment,
-        tracesSampleRate: this.config.tracesSampleRate,
-        release: this.config.release,
+        dsn: this.sentryConfig.dsn,
+        environment: this.sentryConfig.environment,
+        tracesSampleRate: this.sentryConfig.tracesSampleRate,
+        release: this.sentryConfig.release,
         ...config.options,
       });
       this.initialized = true;

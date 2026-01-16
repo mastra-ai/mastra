@@ -9,7 +9,7 @@ import TOC from "@theme/TOC";
 export default function DocItemTOCDesktop(): ReactNode {
   const { toc, frontMatter } = useDoc();
   return (
-    <div className="toc-wrapper">
+    <>
       <div className="flex items-center text-(--mastra-text-secondary) gap-1.5">
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -39,6 +39,6 @@ export default function DocItemTOCDesktop(): ReactNode {
         {/* TODO: Move feedback to side footer */}
         <FeedbackTrigger />
       </div>
-    </div>
+    </>
   );
 }
