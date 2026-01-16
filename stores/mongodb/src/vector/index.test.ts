@@ -337,7 +337,8 @@ createVectorTestSuite({
   },
   waitForIndexing: async () => {
     // Vectors still need time to be indexed after upsert
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // CI environments are slower, so use 3000ms for reliability
+    await new Promise(resolve => setTimeout(resolve, 3000));
   },
   supportsContains: false,
   // MongoDB limitations:
