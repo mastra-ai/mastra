@@ -1220,6 +1220,9 @@ program
   .option('--improve-answer <text>', 'Improved answer text (use with --improve)')
   .option('--improve-note <text>', 'Improvement note (use with --improve)')
   .option('--clear-improved', 'Clear all improved fields (use with --improve)')
+  .option('--prepare-stale', '(deprecated) Use --print-prepare-command instead')
+  .option('--print-prepare-command', 'Print a prepare command for stale/partial questions')
+  .option('--dry-run', 'Show what would be prepared without actually doing it')
   .action(async (runId, options) => {
     try {
       const command = new InvestigateCommand({
@@ -1256,6 +1259,9 @@ program
         improveAnswer: options.improveAnswer,
         improveNote: options.improveNote,
         clearImproved: options.clearImproved,
+        prepareStale: options.prepareStale,
+        printPrepareCommand: options.printPrepareCommand,
+        dryRun: options.dryRun,
       });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);

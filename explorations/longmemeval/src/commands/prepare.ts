@@ -325,11 +325,20 @@ export class PrepareCommand {
       options._useTempDir = tempDir;
       console.log(chalk.gray(`   Preparing to temp directory: ${tempDir}\n`));
     } else if (options.questionId) {
-      questionsToProcess = questions.filter(q => q.question_id === options.questionId);
+      // Support comma-separated question IDs
+      const questionIds = options.questionId.split(',').map(id => id.trim()).filter(Boolean);
+      const questionIdSet = new Set(questionIds);
+      questionsToProcess = questions.filter(q => questionIdSet.has(q.question_id));
+      
       if (questionsToProcess.length === 0) {
-        throw new Error(`Question with ID "${options.questionId}" not found in dataset`);
+        throw new Error(`No questions found matching IDs: ${questionIds.join(', ')}`);
       }
-      console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
+      
+      if (questionIds.length === 1) {
+        console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
+      } else {
+        console.log(chalk.yellow(`\nFocusing on ${questionsToProcess.length} questions: ${questionIds.slice(0, 5).join(', ')}${questionIds.length > 5 ? ` ... and ${questionIds.length - 5} more` : ''}\n`));
+      }
     } else {
       // Apply stratified sampling if perTypeCount is set
       if (options.perTypeCount) {

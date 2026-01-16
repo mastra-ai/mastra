@@ -72,6 +72,10 @@ export interface InvestigateOptions {
   checkDuplicates?: boolean; // Check for duplicate thread blocks in observations
   // Baseline check - comprehensive data quality check
   baseline?: boolean; // Run all data quality checks for a question
+  // Prepare stale questions
+  prepareStale?: boolean; // Find and prepare all stale pending questions (deprecated, use --print-prepare-command)
+  dryRun?: boolean; // Just show what would be prepared, don't run
+  printPrepareCommand?: boolean; // Print a prepare command for stale questions
 }
 
 interface FailuresFile {
@@ -286,6 +290,18 @@ export class InvestigateCommand {
     // Baseline check - comprehensive data quality check
     if (options.baseline && options.questionId) {
       await this.runBaselineCheck(options.questionId);
+      return;
+    }
+
+    // Prepare stale questions (deprecated)
+    if (options.prepareStale) {
+      await this.prepareStaleQuestions(options.dryRun);
+      return;
+    }
+
+    // Print prepare command for stale questions
+    if (options.printPrepareCommand) {
+      await this.printPrepareCommand();
       return;
     }
 
@@ -664,11 +680,13 @@ export class InvestigateCommand {
 
     if (existsSync(resultPath)) {
       const result = JSON.parse(await readFile(resultPath, 'utf-8')) as EvaluationResult;
+      const expectedStr = String(result.expected_answer);
+      const hypothesisStr = String(result.hypothesis);
       console.log(`📋 Quick Context:`);
       console.log(`   Type: ${result.question_type}`);
       console.log(`   Q: ${result.question.substring(0, 100)}...`);
-      console.log(`   Expected: ${result.expected_answer.substring(0, 100)}...`);
-      console.log(`   Got: ${result.hypothesis.substring(0, 100)}...`);
+      console.log(`   Expected: ${expectedStr.substring(0, 100)}${expectedStr.length > 100 ? '...' : ''}`);
+      console.log(`   Got: ${hypothesisStr.substring(0, 100)}${hypothesisStr.length > 100 ? '...' : ''}`);
       console.log('');
     }
 
@@ -2283,6 +2301,88 @@ export class InvestigateCommand {
       console.log(`   ⚠️  Issues found: ${issues.join(', ')}`);
     }
     console.log('');
+  }
+
+  // --------------------------------------------------------------------------
+  // Print Prepare Command for Stale Questions
+  // --------------------------------------------------------------------------
+
+  private async printPrepareCommand(): Promise<void> {
+    console.log('\n🔍 Finding stale/partial questions in current investigation...\n');
+
+    // Get current investigation
+    const investigations = await this.listInvestigations();
+    if (investigations.length === 0) {
+      console.log('❌ No investigations found. Run: pnpm investigate <run-id>');
+      return;
+    }
+
+    // Use most recent investigation
+    const currentInv = investigations[0];
+    const progress = await this.loadProgress(currentInv);
+    if (!progress) {
+      console.log(`❌ Could not load progress for ${currentInv}`);
+      return;
+    }
+
+    // Determine the base config to use for preparation
+    let prepareConfig = progress.config;
+    try {
+      const { getMemoryConfig, isValidMemoryConfig } = await import('../config');
+      if (isValidMemoryConfig(progress.config)) {
+        const configDef = getMemoryConfig(progress.config);
+        if (configDef?.readOnlyConfig && configDef?.baseConfig) {
+          prepareConfig = configDef.baseConfig;
+        }
+      }
+    } catch {
+      // Use original config
+    }
+
+    console.log(`📁 Investigation: ${currentInv}`);
+    console.log(`   Config: ${progress.config}${prepareConfig !== progress.config ? ` (uses ${prepareConfig})` : ''}`);
+    console.log(`   Dataset: ${progress.dataset}\n`);
+
+    // Get pending questions
+    const pendingQuestions = Object.entries(progress.questions)
+      .filter(([_, q]) => q.status === 'pending')
+      .map(([id]) => id);
+
+    console.log(`📋 Pending questions: ${pendingQuestions.length}\n`);
+
+    // Check each pending question for staleness
+    const staleQuestionIds: string[] = [];
+
+    for (const questionId of pendingQuestions) {
+      const { omPath, config, dataset } = await this.findPreparedData(questionId);
+      if (!omPath) continue;
+
+      const result = await this.checkSingleQuestion(questionId, omPath, config, dataset);
+      
+      // Consider stale if:
+      // 1. No threads have cursors (completely stale)
+      // 2. Only some threads have cursors (partial)
+      if (result.isStale || (result.threadCount > 0 && result.threadsWithCursor < result.threadCount)) {
+        const status = result.threadsWithCursor === 0 ? 'STALE' : 'PARTIAL';
+        console.log(`   ${status}: ${questionId} (${result.reason})`);
+        staleQuestionIds.push(questionId);
+      }
+    }
+
+    if (staleQuestionIds.length === 0) {
+      console.log('✅ No stale or partial questions found in pending queue!');
+      return;
+    }
+
+    console.log(`\n📋 Found ${staleQuestionIds.length} stale/partial question(s)\n`);
+    console.log('Run this command to re-prepare them:\n');
+    console.log(`pnpm prepare ${prepareConfig} -v full --question-id ${staleQuestionIds.join(',')} --force-regenerate\n`);
+  }
+
+  // Deprecated - use printPrepareCommand instead
+  private async prepareStaleQuestions(dryRun?: boolean): Promise<void> {
+    console.log('\n⚠️  --prepare-stale is deprecated. Use --print-prepare-command instead.\n');
+    await this.printPrepareCommand();
   }
 
   private showHelp(): void {
