@@ -263,6 +263,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to the configured OTEL backend.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to the OTEL backend without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
