@@ -113,7 +113,7 @@ describe('CloudDeployer Server Runtime', () => {
       expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
       expect(entry).toContain('const vector = new LibSQLVector({');
-      expect(entry).toContain('connectionUrl: process.env.MASTRA_STORAGE_URL');
+      expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
 
       expect(entry).toContain('await storage.init()');
       expect(entry).toContain('mastra?.setStorage(storage)');
@@ -123,27 +123,27 @@ describe('CloudDeployer Server Runtime', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      // Default: playground disabled
-      expect(entry).toContain('playground: false');
+      // Default: studio disabled
+      expect(entry).toContain('studio: false');
       expect(entry).toContain('swaggerUI: false');
       expect(entry).toContain('tools: getToolExports(tools)');
     });
 
-    it('should create node server with playground enabled when studio is true', () => {
+    it('should create node server with studio enabled when studio is true', () => {
       const studioDeployer = new CloudDeployer({ studio: true });
       // @ts-ignore - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
-      expect(entry).toContain('playground: true');
+      expect(entry).toContain('studio: true');
       expect(entry).toContain('swaggerUI: false');
     });
 
-    it('should create node server with playground disabled when studio is false', () => {
+    it('should create node server with studio disabled when studio is false', () => {
       const studioDeployer = new CloudDeployer({ studio: false });
       // @ts-ignore - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
-      expect(entry).toContain('playground: false');
+      expect(entry).toContain('studio: false');
     });
 
     it('should include readiness logging with correct metadata', () => {

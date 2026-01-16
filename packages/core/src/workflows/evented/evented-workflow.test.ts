@@ -12,7 +12,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
-import type { StreamEvent, WorkflowRunState } from '../types';
+import type { StreamEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
@@ -2364,10 +2364,10 @@ describe('Workflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(run.runId);
+      const workflowRun = await workflow.getWorkflowRunById(run.runId);
 
-      expect(executionResult?.status).toBe('paused');
-      expect(executionResult?.steps).toEqual({
+      expect(workflowRun?.status).toBe('paused');
+      expect(workflowRun?.steps).toEqual({
         step1: {
           status: 'success',
           output: { value: 'step1' },
@@ -4216,7 +4216,8 @@ describe('Workflow', () => {
       await run.cancel();
 
       const workflowRun = await workflow.getWorkflowRunById(run.runId);
-      expect((workflowRun?.snapshot as WorkflowRunState)?.status).toBe('canceled');
+      // getWorkflowRunById now returns WorkflowState with status directly
+      expect(workflowRun?.status).toBe('canceled');
 
       await mastra.stopEventEngine();
     });
@@ -4263,7 +4264,8 @@ describe('Workflow', () => {
       // Check status IMMEDIATELY after cancel() returns (no waiting)
       // The user expects that after `await run.cancel()`, the status is already updated
       const workflowRun = await workflow.getWorkflowRunById(runId);
-      expect((workflowRun?.snapshot as WorkflowRunState)?.status).toBe('canceled');
+      // getWorkflowRunById now returns WorkflowState with status directly
+      expect(workflowRun?.status).toBe('canceled');
 
       await mastra.stopEventEngine();
     });
@@ -5591,18 +5593,20 @@ describe('Workflow', () => {
   describe('Retry', () => {
     it('should retry a step default 0 times', async () => {
       let err: Error | undefined;
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockImplementation(() => {
+        err = new Error('Step failed');
+        throw err;
+      });
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockImplementation(() => {
-          err = new Error('Step failed');
-          throw err;
-        }),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -5647,26 +5651,28 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
       expect((result.steps.step2 as any)?.error.name).toBe('Error');
       expect((result.steps.step2 as any)?.error.message).toBe('Step failed');
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
 
       await mastra.stopEventEngine();
     });
 
     it('should retry a step with a custom retry config', async () => {
       let err: Error | undefined;
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockImplementation(() => {
+        err = new Error('Step failed');
+        throw err;
+      });
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockImplementation(() => {
-          err = new Error('Step failed');
-          throw err;
-        }),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -5712,27 +5718,29 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
       expect((result.steps.step2 as any)?.error.name).toBe('Error');
       expect((result.steps.step2 as any)?.error.message).toBe('Step failed');
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
 
       await mastra.stopEventEngine();
     });
 
     it('should retry a step with step retries option, overriding the workflow retry config', async () => {
       let err: Error | undefined;
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockImplementation(() => {
+        err = new Error('Step failed');
+        throw err;
+      });
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 5,
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockImplementation(() => {
-          err = new Error('Step failed');
-          throw err;
-        }),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 5,
@@ -5779,8 +5787,8 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
       expect((result.steps.step2 as any)?.error.name).toBe('Error');
       expect((result.steps.step2 as any)?.error.message).toBe('Step failed');
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
 
       await mastra.stopEventEngine();
     });
@@ -9311,10 +9319,12 @@ describe('Workflow', () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
 
-      const run3 = await workflow.getWorkflowRunById(run1.runId);
-      expect(run3?.runId).toBe(run1.runId);
-      expect(run3?.workflowName).toBe('test-workflow');
-      expect(run3?.snapshot).toEqual(runs[0].snapshot);
+      const workflowRun = await workflow.getWorkflowRunById(run1.runId);
+      expect(workflowRun?.runId).toBe(run1.runId);
+      expect(workflowRun?.workflowName).toBe('test-workflow');
+      // getWorkflowRunById now returns WorkflowState with processed execution state
+      expect(workflowRun?.status).toBe('success');
+      expect(workflowRun?.steps).toBeDefined();
 
       await mastra.stopEventEngine();
     });
@@ -11170,13 +11180,14 @@ describe('Workflow', () => {
         finalValue: z.number(),
       });
 
+      const passthroughExecute = vi.fn().mockImplementation(async ({ inputData }) => {
+        return inputData;
+      });
       const passthroughStep = createStep({
         id: 'passthrough',
         inputSchema: counterInputSchema,
         outputSchema: counterInputSchema,
-        execute: vi.fn().mockImplementation(async ({ inputData }) => {
-          return inputData;
-        }),
+        execute: passthroughExecute,
       });
 
       const wfA = createWorkflow({
@@ -11249,7 +11260,7 @@ describe('Workflow', () => {
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
         suspendPayload: {
@@ -11277,7 +11288,7 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(2);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(1);
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
 
       await mastra.stopEventEngine();
     });
@@ -11936,7 +11947,7 @@ describe('Workflow', () => {
       // Poll for completion
       let result;
       for (let i = 0; i < 10; i++) {
-        result = await workflow.getWorkflowRunExecutionResult(runId);
+        result = await workflow.getWorkflowRunById(runId);
         if (result?.status === 'success') break;
         await new Promise(resolve => setTimeout(resolve, 100));
       }

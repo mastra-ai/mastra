@@ -28,7 +28,7 @@ export const useMarkdownContent = () => {
 
     // Remove unwanted elements
     const elementsToRemove = clonedArticle.querySelectorAll(
-      "[data-copy-page-button], .theme-edit-this-page, .pagination-nav",
+      "[data-copy-page-button], .theme-edit-this-page, .pagination-nav, .hash-link",
     );
     elementsToRemove.forEach((el) => el.remove());
 
@@ -36,7 +36,7 @@ export const useMarkdownContent = () => {
     let markdownText = "";
 
     // Add frontmatter and metadata
-    markdownText += `# ${metadata.title}\n\n`;
+    markdownText += `**Overview:**\n\n`;
 
     if (metadata.description) {
       markdownText += `${metadata.description}\n\n`;

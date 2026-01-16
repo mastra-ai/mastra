@@ -40,6 +40,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "getting-started/nuxt",
+          label: "Nuxt",
+        },
+        {
+          type: "doc",
           id: "getting-started/express",
           label: "Express",
         },

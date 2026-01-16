@@ -24,7 +24,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "huggingface/MiniMaxAI/MiniMax-M2"
+  model: "huggingface/MiniMaxAI/MiniMax-M2.1"
 });
 
 // Generate a response
@@ -60,26 +60,26 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
-    "model": "huggingface/deepseek-ai/Deepseek-V3-0324",
+    "model": "huggingface/deepseek-ai/DeepSeek-V3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 16384,
-    "maxOutput": 8192,
-    "inputCost": 1.25,
-    "outputCost": 1.25
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.28,
+    "outputCost": 0.4
   },
   {
-    "model": "huggingface/MiniMaxAI/MiniMax-M2",
+    "model": "huggingface/MiniMaxAI/MiniMax-M2.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 204800,
-    "maxOutput": 204800,
+    "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -106,6 +106,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 1,
     "outputCost": 3
+  },
+  {
+    "model": "huggingface/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
   },
   {
     "model": "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -180,38 +192,26 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "huggingface/zai-org/GLM-4.5",
+    "model": "huggingface/XiaomiMiMo/MiMo-V2-Flash",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
-    "model": "huggingface/zai-org/GLM-4.5-Air",
+    "model": "huggingface/zai-org/GLM-4.7",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 96000,
-    "inputCost": 0.2,
-    "outputCost": 1.1
-  },
-  {
-    "model": "huggingface/zai-org/GLM-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
   }
@@ -228,7 +228,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://router.huggingface.co/v1",
-    id: "huggingface/MiniMaxAI/MiniMax-M2",
+    id: "huggingface/MiniMaxAI/MiniMax-M2.1",
     apiKey: process.env.HF_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -246,8 +246,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "huggingface/zai-org/GLM-4.6"
-      : "huggingface/MiniMaxAI/MiniMax-M2";
+      ? "huggingface/zai-org/GLM-4.7"
+      : "huggingface/MiniMaxAI/MiniMax-M2.1";
   }
 });
 ```

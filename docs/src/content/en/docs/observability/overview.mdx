@@ -10,7 +10,7 @@ packages:
 
 # Observability Overview
 
-Mastra provides comprehensive observability features designed specifically for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with specialized tools that understand AI-specific patterns.
+Mastra provides observability features for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with tools that understand AI-specific patterns.
 
 ## Key Features
 
@@ -21,7 +21,7 @@ Specialized tracing for AI operations that captures:
 - **Model interactions**: Token usage, latency, prompts, and completions
 - **Agent execution**: Decision paths, tool calls, and memory operations
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
-- **Automatic instrumentation**: Zero-configuration tracing with decorators
+- **Automatic instrumentation**: Tracing with decorators
 
 ## Quick Start
 
@@ -30,8 +30,13 @@ Configure Observability in your Mastra instance:
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
-import { LibSqlStorage } from "@mastra/libsql";
-import { Observability } from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 
 export const mastra = new Mastra({
   logger: new PinoLogger(),
@@ -39,8 +44,19 @@ export const mastra = new Mastra({
     id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
-  observability: new Observability({ // Enables Tracing
-    default: { enabled: true },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
+    },
   }),
 });
 ```

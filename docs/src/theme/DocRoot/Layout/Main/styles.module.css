@@ -7,7 +7,7 @@
   min-width: 0;
 }
 
-@media (min-width: 997px) {
+@media (min-width: 62.25rem) {
   .docMainContainer {
     max-width: calc(
       100% - (var(--doc-sidebar-width) + var(--chatbot-sidebar-width))

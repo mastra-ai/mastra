@@ -6,8 +6,9 @@ import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
 import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
-import { MemorySearch } from '@/components/assistant-ui/memory-search';
-import { Button } from '@/components/ui/button';
+import { MemorySearch } from '@/lib/ai-ui/memory-search';
+import { Button } from '@/ds/components/Button/Button';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -20,7 +21,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { paths, navigate } = useLinkComponent();
 
   // Get memory config to check if semantic recall is enabled
-  const { data } = useMemoryConfig(agentId);
+  const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
 
   // Check if semantic recall is enabled
   const config = data?.config;
@@ -71,6 +72,16 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
 
   const searchScope = searchMemoryData?.searchScope;
 
+  if (isConfigLoading) {
+    return (
+      <div className="flex flex-col h-full p-4 gap-4">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Clone Thread Section */}
@@ -78,10 +89,10 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         <div className="p-4 border-b border-border1">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-medium text-icon5">Clone Thread</h3>
-              <p className="text-xs text-icon3 mt-1">Create a copy of this conversation</p>
+              <h3 className="text-sm font-medium text-neutral5">Clone Thread</h3>
+              <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
             </div>
-            <Button variant="outline" size="sm" onClick={handleCloneThread} disabled={isCloning}>
+            <Button onClick={handleCloneThread} disabled={isCloning}>
               <Copy className="w-4 h-4 mr-2" />
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
@@ -93,7 +104,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
       <div className="p-4 border-b border-border1">
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-sm font-medium text-icon5">Semantic Recall</h3>
+            <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
             {searchMemoryData?.searchScope && (
               <span
                 className={cn(
@@ -119,7 +130,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
           />
         ) : (
           <div className="bg-surface3 border border-border1 rounded-lg p-4">
-            <p className="text-sm text-icon3 mb-3">
+            <p className="text-sm text-neutral3 mb-3">
               Semantic recall is not enabled for this agent. Enable it to search through conversation history.
             </p>
             <a

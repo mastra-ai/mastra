@@ -7,6 +7,47 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 
 Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
 
+## Database Migration
+
+Run these SQL migrations through your normal migration process (e.g., Prisma Migrate, Drizzle Kit, or your DBA review process).
+
+### Scorers table column rename
+
+The `runtimeContext` column in `mastra_scorers` was renamed to `requestContext`.
+
+:::note[Who needs this migration]
+Only if you use `@mastra/pg` or `@mastra/libsql` with evals/scoring and have existing data in the `runtimeContext` column.
+:::
+
+:::important[What breaks without it]
+Existing score records won't have their request context data accessible.
+:::
+
+After deploying v1 (which adds the new `requestContext` column on init), copy the data and drop the old column:
+
+```sql
+UPDATE mastra_scorers SET "requestContext" = "runtimeContext" WHERE "runtimeContext" IS NOT NULL;
+ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
+```
+
+### JSON columns (TEXT → JSONB)
+
+**PostgreSQL only.** The `metadata` column in `mastra_threads` and `snapshot` column in `mastra_workflow_snapshot` changed from TEXT to JSONB.
+
+:::note[Recommended]
+Migrating to JSONB enables native PostgreSQL JSON operators and GIN indexing for better query performance on JSON fields.
+:::
+
+```sql
+ALTER TABLE mastra_threads
+ALTER COLUMN metadata TYPE jsonb
+USING metadata::jsonb;
+
+ALTER TABLE mastra_workflow_snapshot
+ALTER COLUMN snapshot TYPE jsonb
+USING snapshot::jsonb;
+```
+
 ## Added
 
 ### Storage composition in MastraStorage

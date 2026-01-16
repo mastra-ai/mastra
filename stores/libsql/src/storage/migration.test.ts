@@ -1,6 +1,12 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  OLD_SPAN_SCHEMA,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLDB } from './db';
 import { LibSQLStore } from './index';
@@ -336,5 +342,260 @@ describe('LibSQL Spans Table Migration', () => {
     // New columns should be null
     expect(trace!.spans[0]!.entityType).toBeNull();
     expect(trace!.spans[0]!.entityId).toBeNull();
+  });
+});
+
+/**
+ * JSONB backwards compatibility tests.
+ * Verifies that existing TEXT JSON data works correctly after the JSONB changes.
+ */
+describe('LibSQL JSONB Backwards Compatibility', () => {
+  const testDbPath = ':memory:';
+  let client: Client;
+  let dbOps: LibSQLDB;
+
+  beforeAll(async () => {
+    client = createClient({ url: testDbPath });
+    dbOps = new LibSQLDB({
+      client,
+      maxRetries: 5,
+      initialBackoffMs: 100,
+    });
+  });
+
+  beforeEach(async () => {
+    await client.execute(`DROP TABLE IF EXISTS "${TABLE_THREADS}"`);
+    await client.execute(`DROP TABLE IF EXISTS "${TABLE_WORKFLOW_SNAPSHOT}"`);
+  });
+
+  afterAll(async () => {
+    try {
+      await client.execute(`DROP TABLE IF EXISTS "${TABLE_THREADS}"`);
+      await client.execute(`DROP TABLE IF EXISTS "${TABLE_WORKFLOW_SNAPSHOT}"`);
+    } catch {}
+  });
+
+  describe('threads table - metadata column', () => {
+    it('should read existing TEXT JSON data after JSONB changes', async () => {
+      // Create table with TEXT column (simulating old schema)
+      await client.execute(`
+        CREATE TABLE "${TABLE_THREADS}" (
+          id TEXT PRIMARY KEY,
+          "resourceId" TEXT NOT NULL,
+          title TEXT NOT NULL,
+          metadata TEXT,
+          "createdAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL
+        )
+      `);
+
+      // Insert data as TEXT (old format)
+      const testMetadata = { key: 'value', nested: { a: 1 }, array: [1, 2, 3] };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [
+          'thread-text-1',
+          'resource-1',
+          'Test Thread',
+          JSON.stringify(testMetadata),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Read via the new select method (which uses json() wrapper)
+      const result = await dbOps.select<any>({
+        tableName: TABLE_THREADS,
+        keys: { id: 'thread-text-1' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.id).toBe('thread-text-1');
+      expect(result.metadata).toEqual(testMetadata);
+    });
+
+    it('should write new data as JSONB and read it back', async () => {
+      // Create table via dbOps (uses JSONB declaration)
+      await dbOps.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+
+      // Insert data via insert (uses jsonb() function)
+      const testMetadata = { newKey: 'newValue', special: 'chars "quotes" and \'apostrophes\'' };
+      await dbOps.insert({
+        tableName: TABLE_THREADS,
+        record: {
+          id: 'thread-jsonb-1',
+          resourceId: 'resource-1',
+          title: 'JSONB Thread',
+          metadata: testMetadata,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Read it back
+      const result = await dbOps.select<any>({
+        tableName: TABLE_THREADS,
+        keys: { id: 'thread-jsonb-1' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.metadata).toEqual(testMetadata);
+    });
+
+    it('should handle mixed TEXT and JSONB rows in same table', async () => {
+      // Create table with TEXT column first
+      await client.execute(`
+        CREATE TABLE "${TABLE_THREADS}" (
+          id TEXT PRIMARY KEY,
+          "resourceId" TEXT NOT NULL,
+          title TEXT NOT NULL,
+          metadata TEXT,
+          "createdAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL
+        )
+      `);
+
+      // Insert old TEXT row
+      const oldMetadata = { format: 'text', legacy: true };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [
+          'thread-old',
+          'resource-1',
+          'Old Thread',
+          JSON.stringify(oldMetadata),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Insert new JSONB row using jsonb() function
+      const newMetadata = { format: 'jsonb', modern: true };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, jsonb(?), ?, ?)`,
+        args: [
+          'thread-new',
+          'resource-1',
+          'New Thread',
+          JSON.stringify(newMetadata),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Read both via selectMany (uses json() wrapper)
+      const results = await dbOps.selectMany<any>({
+        tableName: TABLE_THREADS,
+        orderBy: 'id ASC',
+      });
+
+      expect(results.length).toBe(2);
+
+      // Old TEXT row should be readable
+      const oldRow = results.find((r: any) => r.id === 'thread-old');
+      expect(oldRow).toBeDefined();
+      expect(oldRow.metadata).toEqual(oldMetadata);
+
+      // New JSONB row should be readable
+      const newRow = results.find((r: any) => r.id === 'thread-new');
+      expect(newRow).toBeDefined();
+      expect(newRow.metadata).toEqual(newMetadata);
+    });
+
+    it('should handle null metadata correctly', async () => {
+      await dbOps.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+
+      await dbOps.insert({
+        tableName: TABLE_THREADS,
+        record: {
+          id: 'thread-null-meta',
+          resourceId: 'resource-1',
+          title: 'Thread with null metadata',
+          metadata: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await dbOps.select<any>({
+        tableName: TABLE_THREADS,
+        keys: { id: 'thread-null-meta' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.metadata).toBeNull();
+    });
+  });
+
+  describe('workflow_snapshot table - snapshot column', () => {
+    it('should read existing TEXT JSON snapshot after JSONB changes', async () => {
+      // Create table with TEXT column
+      await client.execute(`
+        CREATE TABLE "${TABLE_WORKFLOW_SNAPSHOT}" (
+          workflow_name TEXT NOT NULL,
+          run_id TEXT NOT NULL,
+          "resourceId" TEXT,
+          snapshot TEXT NOT NULL,
+          "createdAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL,
+          PRIMARY KEY (workflow_name, run_id)
+        )
+      `);
+
+      // Insert snapshot as TEXT
+      const testSnapshot = {
+        runId: 'run-1',
+        status: 'completed',
+        context: { step1: { result: 'success' } },
+      };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_WORKFLOW_SNAPSHOT}" (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [
+          'test-workflow',
+          'run-1',
+          JSON.stringify(testSnapshot),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Read via select
+      const result = await dbOps.select<any>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: 'test-workflow', run_id: 'run-1' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.snapshot).toEqual(testSnapshot);
+    });
+
+    it('should work with json_extract on both TEXT and JSONB data', async () => {
+      await dbOps.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+
+      // Insert via dbOps (uses jsonb())
+      await dbOps.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: 'json-extract-test',
+          run_id: 'run-1',
+          snapshot: { runId: 'run-1', status: 'running', value: { key: 'test' } },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Query using json_extract - should work on JSONB
+      const result = await client.execute({
+        sql: `SELECT workflow_name, json_extract(snapshot, '$.status') as status FROM "${TABLE_WORKFLOW_SNAPSHOT}" WHERE workflow_name = ?`,
+        args: ['json-extract-test'],
+      });
+
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0]?.status).toBe('running');
+    });
   });
 });

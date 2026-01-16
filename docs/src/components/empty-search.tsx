@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 
 export const searches = [
   {

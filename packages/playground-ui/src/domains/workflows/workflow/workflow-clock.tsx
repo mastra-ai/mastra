@@ -19,5 +19,5 @@ export const Clock = ({ startedAt, endedAt }: ClockProps) => {
 
   const timeDiff = endedAt ? endedAt - startedAt : time - startedAt;
 
-  return <span className="text-xs text-icon3">{toSigFigs(timeDiff, 3)}ms</span>;
+  return <span className="text-xs text-neutral3">{toSigFigs(timeDiff, 3)}ms</span>;
 };

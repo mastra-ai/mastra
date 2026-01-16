@@ -12,7 +12,7 @@ import type { BundlerOptions, DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { getPackageName, isBuiltinModule, isDependencyPartOfPackage } from './utils';
+import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, type BundlerPlatform } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
 import * as stackTraceParser from 'stacktrace-parser';
 
@@ -285,7 +285,7 @@ export async function analyzeBundle(
   }: {
     outputDir: string;
     projectRoot: string;
-    platform: 'node' | 'browser';
+    platform: BundlerPlatform;
     isDev?: boolean;
     bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
   },

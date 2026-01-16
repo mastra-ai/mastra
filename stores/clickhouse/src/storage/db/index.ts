@@ -127,8 +127,10 @@ export class ClickhouseDB extends MastraBase {
             sqlType = `Nullable(${sqlType})`;
           }
           const constraints = [];
-          // Add DEFAULT '{}' for metadata columns to prevent empty string issues
-          if (name === 'metadata' && def.type === 'text' && isNullable) {
+          // Add DEFAULT '{}' for all metadata columns to prevent empty string issues
+          // Support both 'text' and 'jsonb' types for backwards compatibility
+          // Apply to all tables for consistent behavior and defense-in-depth
+          if (name === 'metadata' && (def.type === 'text' || def.type === 'jsonb') && isNullable) {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];

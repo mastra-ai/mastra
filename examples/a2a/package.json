@@ -24,13 +24,13 @@
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/loggers": "link:../../packages/loggers",
-    "dotenv": "^16.3.1",
+    "dotenv": "^17.2.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "mastra": "latest",
     "tsx": "^4.7.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "overrides": {

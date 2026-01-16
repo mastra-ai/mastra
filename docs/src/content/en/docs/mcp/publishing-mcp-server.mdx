@@ -135,8 +135,8 @@ const mcp = new MCPClient({
 });
 
 // You can then get tools or toolsets from this configuration to use in your agent
-const tools = await mcp.getTools();
-const toolsets = await mcp.getToolsets();
+const tools = await mcp.listTools();
+const toolsets = await mcp.listToolsets();
 ```
 
 Note: If you published without an organization scope, the `args` might just be `["-y", "your-package-name@latest"]`.

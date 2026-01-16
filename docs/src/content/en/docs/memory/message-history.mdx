@@ -67,6 +67,6 @@ const memoryStore = await storage.getStore('memory');
 
 const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
 
-// Convert to AI SDK v5 UIMessage format for UI rendering
+// Convert to AI SDK v5+ UIMessage format for UI rendering
 const uiMessages = toAISdkV5Messages(result?.messages ?? []);
 ```

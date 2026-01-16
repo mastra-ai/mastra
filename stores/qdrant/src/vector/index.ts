@@ -28,6 +28,39 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 
 type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
 
+/**
+ * Supported payload schema types for Qdrant payload indexes.
+ * These correspond to Qdrant's native payload indexing types.
+ * @see https://qdrant.tech/documentation/concepts/indexing/#payload-index
+ */
+export type PayloadSchemaType = 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid';
+
+/**
+ * Parameters for creating a payload index on a Qdrant collection.
+ */
+export interface CreatePayloadIndexParams {
+  /** The name of the collection (index) to create the payload index on. */
+  indexName: string;
+  /** The name of the payload field to index. */
+  fieldName: string;
+  /** The schema type for the payload field. */
+  fieldSchema: PayloadSchemaType;
+  /** Whether to wait for the operation to complete. Defaults to true. */
+  wait?: boolean;
+}
+
+/**
+ * Parameters for deleting a payload index from a Qdrant collection.
+ */
+export interface DeletePayloadIndexParams {
+  /** The name of the collection (index) to delete the payload index from. */
+  indexName: string;
+  /** The name of the payload field index to delete. */
+  fieldName: string;
+  /** Whether to wait for the operation to complete. Defaults to true. */
+  wait?: boolean;
+}
+
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;
 
@@ -586,6 +619,179 @@ export class QdrantVector extends MastraVector {
             ...(filter && { filter: JSON.stringify(filter) }),
             ...(ids && { idsCount: ids.length }),
           },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Creates a payload index on a Qdrant collection to enable efficient filtering on metadata fields.
+   *
+   * This is required for Qdrant Cloud and any Qdrant instance with `strict_mode_config = true`,
+   * where metadata (payload) fields must be explicitly indexed before they can be used for filtering.
+   *
+   * @param params - The parameters for creating the payload index.
+   * @param params.indexName - The name of the collection (index) to create the payload index on.
+   * @param params.fieldName - The name of the payload field to index.
+   * @param params.fieldSchema - The schema type for the field (e.g., 'keyword', 'integer', 'text').
+   * @param params.wait - Whether to wait for the operation to complete. Defaults to true.
+   * @returns A promise that resolves when the index is created (idempotent if index already exists).
+   * @throws Will throw a MastraError if arguments are invalid or if the operation fails.
+   *
+   * @example
+   * ```ts
+   * // Create a keyword index for filtering by source
+   * await qdrant.createPayloadIndex({
+   *   indexName: 'my-collection',
+   *   fieldName: 'source',
+   *   fieldSchema: 'keyword',
+   * });
+   *
+   * // Create an integer index for numeric filtering
+   * await qdrant.createPayloadIndex({
+   *   indexName: 'my-collection',
+   *   fieldName: 'price',
+   *   fieldSchema: 'integer',
+   * });
+   * ```
+   *
+   * @see https://qdrant.tech/documentation/concepts/indexing/#payload-index
+   */
+  async createPayloadIndex({
+    indexName,
+    fieldName,
+    fieldSchema,
+    wait = true,
+  }: CreatePayloadIndexParams): Promise<void> {
+    // Validate inputs
+    const validSchemas: PayloadSchemaType[] = [
+      'keyword',
+      'integer',
+      'float',
+      'geo',
+      'text',
+      'bool',
+      'datetime',
+      'uuid',
+    ];
+
+    if (!indexName || typeof indexName !== 'string' || indexName.trim() === '') {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'INVALID_ARGS'),
+        text: 'indexName must be a non-empty string',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, fieldName, fieldSchema },
+      });
+    }
+
+    if (!fieldName || typeof fieldName !== 'string' || fieldName.trim() === '') {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'INVALID_ARGS'),
+        text: 'fieldName must be a non-empty string',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, fieldName, fieldSchema },
+      });
+    }
+
+    if (!validSchemas.includes(fieldSchema)) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'INVALID_ARGS'),
+        text: `fieldSchema must be one of: ${validSchemas.join(', ')}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, fieldName, fieldSchema },
+      });
+    }
+
+    try {
+      await this.client.createPayloadIndex(indexName, {
+        field_name: fieldName,
+        field_schema: fieldSchema,
+        wait,
+      });
+    } catch (error: any) {
+      const message = error?.message || error?.toString() || '';
+      // Qdrant returns 409 or "exists" message if index already exists - treat as idempotent success
+      if (error?.status === 409 || message.toLowerCase().includes('exists')) {
+        this.logger.info(`Payload index for field "${fieldName}" already exists on collection "${indexName}"`);
+        return;
+      }
+
+      throw new MastraError(
+        {
+          id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, fieldName, fieldSchema },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes a payload index from a Qdrant collection.
+   *
+   * @param params - The parameters for deleting the payload index.
+   * @param params.indexName - The name of the collection (index) to delete the payload index from.
+   * @param params.fieldName - The name of the payload field index to delete.
+   * @param params.wait - Whether to wait for the operation to complete. Defaults to true.
+   * @returns A promise that resolves when the index is deleted (idempotent if index doesn't exist).
+   * @throws Will throw a MastraError if the operation fails.
+   *
+   * @example
+   * ```ts
+   * await qdrant.deletePayloadIndex({
+   *   indexName: 'my-collection',
+   *   fieldName: 'source',
+   * });
+   * ```
+   */
+  async deletePayloadIndex({ indexName, fieldName, wait = true }: DeletePayloadIndexParams): Promise<void> {
+    // Validate inputs
+    if (!indexName || typeof indexName !== 'string' || indexName.trim() === '') {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'DELETE_PAYLOAD_INDEX', 'INVALID_ARGS'),
+        text: 'indexName must be a non-empty string',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, fieldName },
+      });
+    }
+
+    if (!fieldName || typeof fieldName !== 'string' || fieldName.trim() === '') {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'DELETE_PAYLOAD_INDEX', 'INVALID_ARGS'),
+        text: 'fieldName must be a non-empty string',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, fieldName },
+      });
+    }
+
+    try {
+      await this.client.deletePayloadIndex(indexName, fieldName, { wait });
+    } catch (error: any) {
+      const message = error?.message || error?.toString() || '';
+      // If index doesn't exist, treat as idempotent success (already deleted)
+      if (
+        error?.status === 404 ||
+        message.toLowerCase().includes('not found') ||
+        message.toLowerCase().includes('not exist')
+      ) {
+        this.logger.info(`Payload index for field "${fieldName}" does not exist on collection "${indexName}"`);
+        return;
+      }
+
+      throw new MastraError(
+        {
+          id: createVectorErrorId('QDRANT', 'DELETE_PAYLOAD_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, fieldName },
         },
         error,
       );

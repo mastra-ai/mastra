@@ -5,7 +5,7 @@ import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
 import { EntityType, SpanType, wrapMastra } from '../../observability';
-import type { TracingContext } from '../../observability';
+import type { TracingContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -34,7 +34,7 @@ export interface ExecuteStepParams {
   workflowId: string;
   runId: string;
   resourceId?: string;
-  step: Step<string, any, any>;
+  step: Step<string, any, any, any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   executionContext: ExecutionContext;
   restart?: RestartExecutionParams;
@@ -135,13 +135,19 @@ export async function executeStep(
 
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
-  const stepSpan = tracingContext.currentSpan?.createChildSpan({
-    name: `workflow step: '${step.id}'`,
-    type: SpanType.WORKFLOW_STEP,
-    entityType: EntityType.WORKFLOW_STEP,
-    entityId: step.id,
-    input: inputData,
-    tracingPolicy: engine.options?.tracingPolicy,
+  const stepSpan = await engine.createStepSpan({
+    parentSpan: tracingContext.currentSpan,
+    stepId: step.id,
+    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    options: {
+      name: `workflow step: '${step.id}'`,
+      type: SpanType.WORKFLOW_STEP,
+      entityType: EntityType.WORKFLOW_STEP,
+      entityId: step.id,
+      input: inputData,
+      tracingPolicy: engine.options?.tracingPolicy,
+    },
+    executionContext,
   });
 
   const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
@@ -186,12 +192,41 @@ export async function executeStep(
       requestContext,
       tracingContext,
       outputWriter,
-      stepSpan,
+      stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
       perStep,
     });
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
     if (workflowResult !== null) {
+      // End the step span with the nested workflow result
+      if (stepSpan) {
+        if (workflowResult.status === 'failed') {
+          await engine.errorStepSpan({
+            span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
+            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            errorOptions: {
+              error:
+                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+              attributes: { status: 'failed' },
+            },
+          });
+        } else {
+          // For success, suspended, paused, tripwire - end the span normally
+          // Only 'success' has .output, others may have suspendOutput or nothing
+          const output =
+            workflowResult.status === 'success' ? workflowResult.output : (workflowResult as any).suspendOutput;
+
+          await engine.endStepSpan({
+            span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
+            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            endOptions: {
+              output,
+              attributes: { status: workflowResult.status },
+            },
+          });
+        }
+      }
+
       const stepResult = { ...stepInfo, ...workflowResult } as StepResult<any, any, any, any>;
       return {
         result: stepResult,
@@ -249,11 +284,21 @@ export async function executeStep(
         requestContextUpdate: null,
       };
 
+      // For nested workflow steps, pass raw mastra - the nested workflow will
+      // register it on its own engine and wrap it fresh for its own steps.
+      // For regular steps, wrap mastra with current step span for proper tracing.
+      const isNestedWorkflow = step.component === 'WORKFLOW';
+      const mastraForStep = engine.mastra
+        ? isNestedWorkflow
+          ? engine.mastra
+          : wrapMastra(engine.mastra, { currentSpan: stepSpan })
+        : undefined;
+
       const output = await runStep({
         runId,
         resourceId,
         workflowId,
-        mastra: engine.mastra ? wrapMastra(engine.mastra, { currentSpan: stepSpan }) : undefined,
+        mastra: mastraForStep,
         requestContext,
         inputData,
         state: executionContext.state,
@@ -275,7 +320,7 @@ export async function executeStep(
         tracingContext: { currentSpan: stepSpan },
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
-        suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
+        suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
             step,
@@ -439,10 +484,14 @@ export async function executeStep(
   }
 
   if (execResults.status != 'failed') {
-    stepSpan?.end({
-      output: execResults.output,
-      attributes: {
-        status: execResults.status,
+    await engine.endStepSpan({
+      span: stepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      endOptions: {
+        output: execResults.output,
+        attributes: {
+          status: execResults.status,
+        },
       },
     });
   }

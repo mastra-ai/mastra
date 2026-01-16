@@ -40,13 +40,24 @@ export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderC
 }
 
 function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null {
-  if (!config.apiKey) {
-    console.error('[OtelExporter] Dash0 configuration requires apiKey. Tracing will be disabled.');
+  // Read from config or environment variables
+  const apiKey = config.apiKey ?? process.env.DASH0_API_KEY;
+  const configEndpoint = config.endpoint ?? process.env.DASH0_ENDPOINT;
+  const dataset = config.dataset ?? process.env.DASH0_DATASET;
+
+  if (!apiKey) {
+    console.error(
+      '[OtelExporter] Dash0 configuration requires apiKey. ' +
+        'Set DASH0_API_KEY environment variable or pass it in config. Tracing will be disabled.',
+    );
     return null;
   }
 
-  if (!config.endpoint) {
-    console.error('[OtelExporter] Dash0 configuration requires endpoint. Tracing will be disabled.');
+  if (!configEndpoint) {
+    console.error(
+      '[OtelExporter] Dash0 configuration requires endpoint. ' +
+        'Set DASH0_ENDPOINT environment variable or pass it in config. Tracing will be disabled.',
+    );
     return null;
   }
 
@@ -54,17 +65,17 @@ function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null 
   // Endpoint should be like: ingress.us-west-2.aws.dash0.com:4317
   // gRPC endpoints also need /v1/traces suffix
   // Requires: npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
-  let endpoint = config.endpoint;
+  let endpoint = configEndpoint;
   if (!endpoint.includes('/v1/traces')) {
     endpoint = `${endpoint}/v1/traces`;
   }
 
   const headers: Record<string, string> = {
-    authorization: `Bearer ${config.apiKey}`, // lowercase for gRPC metadata
+    authorization: `Bearer ${apiKey}`, // lowercase for gRPC metadata
   };
 
-  if (config.dataset) {
-    headers['dash0-dataset'] = config.dataset; // lowercase for gRPC metadata
+  if (dataset) {
+    headers['dash0-dataset'] = dataset; // lowercase for gRPC metadata
   }
 
   return {
@@ -75,57 +86,80 @@ function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null 
 }
 
 function resolveSignozConfig(config: SignozConfig): ResolvedProviderConfig | null {
-  if (!config.apiKey) {
-    console.error('[OtelExporter] SigNoz configuration requires apiKey. Tracing will be disabled.');
+  // Read from config or environment variables
+  const apiKey = config.apiKey ?? process.env.SIGNOZ_API_KEY;
+  const region = config.region ?? (process.env.SIGNOZ_REGION as 'us' | 'eu' | 'in' | undefined);
+  const configEndpoint = config.endpoint ?? process.env.SIGNOZ_ENDPOINT;
+
+  if (!apiKey) {
+    console.error(
+      '[OtelExporter] SigNoz configuration requires apiKey. ' +
+        'Set SIGNOZ_API_KEY environment variable or pass it in config. Tracing will be disabled.',
+    );
     return null;
   }
 
   // SigNoz uses OTLP endpoint with /v1/traces suffix
-  const endpoint = config.endpoint || `https://ingest.${config.region || 'us'}.signoz.cloud:443/v1/traces`;
+  const endpoint = configEndpoint || `https://ingest.${region || 'us'}.signoz.cloud:443/v1/traces`;
 
   return {
     endpoint,
     headers: {
-      'signoz-ingestion-key': config.apiKey,
+      'signoz-ingestion-key': apiKey,
     },
     protocol: 'http/protobuf',
   };
 }
 
 function resolveNewRelicConfig(config: NewRelicConfig): ResolvedProviderConfig | null {
-  if (!config.apiKey) {
-    console.error('[OtelExporter] New Relic configuration requires apiKey (license key). Tracing will be disabled.');
+  // Read from config or environment variables
+  const apiKey = config.apiKey ?? process.env.NEW_RELIC_LICENSE_KEY;
+  const configEndpoint = config.endpoint ?? process.env.NEW_RELIC_ENDPOINT;
+
+  if (!apiKey) {
+    console.error(
+      '[OtelExporter] New Relic configuration requires apiKey (license key). ' +
+        'Set NEW_RELIC_LICENSE_KEY environment variable or pass it in config. Tracing will be disabled.',
+    );
     return null;
   }
 
   // New Relic recommends HTTP/protobuf over gRPC
   // New Relic uses OTLP endpoint with /v1/traces suffix
-  const endpoint = config.endpoint || 'https://otlp.nr-data.net:443/v1/traces';
+  const endpoint = configEndpoint || 'https://otlp.nr-data.net:443/v1/traces';
 
   return {
     endpoint,
     headers: {
-      'api-key': config.apiKey,
+      'api-key': apiKey,
     },
     protocol: 'http/protobuf',
   };
 }
 
 function resolveTraceloopConfig(config: TraceloopConfig): ResolvedProviderConfig | null {
-  if (!config.apiKey) {
-    console.error('[OtelExporter] Traceloop configuration requires apiKey. Tracing will be disabled.');
+  // Read from config or environment variables
+  const apiKey = config.apiKey ?? process.env.TRACELOOP_API_KEY;
+  const destinationId = config.destinationId ?? process.env.TRACELOOP_DESTINATION_ID;
+  const configEndpoint = config.endpoint ?? process.env.TRACELOOP_ENDPOINT;
+
+  if (!apiKey) {
+    console.error(
+      '[OtelExporter] Traceloop configuration requires apiKey. ' +
+        'Set TRACELOOP_API_KEY environment variable or pass it in config. Tracing will be disabled.',
+    );
     return null;
   }
 
   // Traceloop uses OTLP endpoint with /v1/traces suffix
-  const endpoint = config.endpoint || 'https://api.traceloop.com/v1/traces';
+  const endpoint = configEndpoint || 'https://api.traceloop.com/v1/traces';
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${config.apiKey}`,
+    Authorization: `Bearer ${apiKey}`,
   };
 
-  if (config.destinationId) {
-    headers['x-traceloop-destination-id'] = config.destinationId;
+  if (destinationId) {
+    headers['x-traceloop-destination-id'] = destinationId;
   }
 
   return {
@@ -136,23 +170,26 @@ function resolveTraceloopConfig(config: TraceloopConfig): ResolvedProviderConfig
 }
 
 function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | null {
-  if (!config.apiKey) {
-    console.error('[OtelExporter] Laminar configuration requires apiKey. Tracing will be disabled.');
+  // Read from config or environment variables
+  // LMNR_PROJECT_API_KEY is the standard Laminar environment variable
+  const apiKey = config.apiKey ?? process.env.LMNR_PROJECT_API_KEY;
+  const configEndpoint = config.endpoint ?? process.env.LAMINAR_ENDPOINT;
+
+  if (!apiKey) {
+    console.error(
+      '[OtelExporter] Laminar configuration requires apiKey. ' +
+        'Set LMNR_PROJECT_API_KEY environment variable or pass it in config. Tracing will be disabled.',
+    );
     return null;
   }
 
   // Laminar uses OTLP endpoint with /v1/traces suffix for HTTP
   // They support both gRPC and HTTP, but we'll use HTTP for consistency
-  const endpoint = config.endpoint || 'https://api.lmnr.ai/v1/traces';
+  const endpoint = configEndpoint || 'https://api.lmnr.ai/v1/traces';
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${config.apiKey}`,
+    Authorization: `Bearer ${apiKey}`,
   };
-
-  // Only add team ID header if provided (for backwards compatibility)
-  if (config.teamId) {
-    headers['x-laminar-team-id'] = config.teamId;
-  }
 
   return {
     endpoint,

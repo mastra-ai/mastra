@@ -72,15 +72,15 @@ importers:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
       typescript:
-        specifier: ^5.8.3
-        version: 5.9.2
+        specifier: ^5.9.3
+        version: 5.9.3
       zod:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       msw:
         specifier: ^2.12.2
-        version: 2.12.2(typescript@5.9.2)
+        version: 2.12.2(typescript@5.9.3)
 
 packages:
 
@@ -398,8 +398,8 @@ packages:
     resolution: {integrity: sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA==}
     engines: {node: '>=16'}
 
-  typescript@5.9.2:
-    resolution: {integrity: sha512-CWBzXQrc/qOkhidw1OzBTQuYRbfyxDXJMVJ1XNwUHGROVmuaeiEm3OslpZ1RV96d7SKKjZKrSJu3+t/xlw3R9A==}
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -643,7 +643,7 @@ snapshots:
       chalk: 5.5.0
       diff-match-patch: 1.0.5
 
-  msw@2.12.2(typescript@5.9.2):
+  msw@2.12.2(typescript@5.9.3):
     dependencies:
       '@inquirer/confirm': 5.1.21
       '@mswjs/interceptors': 0.40.0
@@ -664,7 +664,7 @@ snapshots:
       until-async: 3.0.2
       yargs: 17.7.2
     optionalDependencies:
-      typescript: 5.9.2
+      typescript: 5.9.3
     transitivePeerDependencies:
       - '@types/node'
 
@@ -722,7 +722,7 @@ snapshots:
 
   type-fest@4.41.0: {}
 
-  typescript@5.9.2: {}
+  typescript@5.9.3: {}
 
   until-async@3.0.2: {}
 

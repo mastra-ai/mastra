@@ -1,5 +1,5 @@
-import { z, ZodArray, ZodNullable, ZodObject, ZodOptional, ZodRecord } from 'zod';
-import type { ZodRawShape, ZodTypeAny } from 'zod';
+import { z } from 'zod';
+import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
 import type { InferParams, ResponseType, ServerRoute, ServerRouteHandler } from './index';
 
@@ -78,18 +78,35 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
 }
 
 /**
+ * Gets the type name from a Zod schema's internal definition.
+ * Works across zod v3 and v4 by checking _def.typeName.
+ */
+function getZodTypeName(schema: ZodTypeAny): string | undefined {
+  return (schema as any)?._def?.typeName;
+}
+
+/**
  * Checks if a Zod schema represents a complex type that needs JSON parsing from query strings.
  * Complex types: arrays, objects, records (these can't be represented as simple strings)
  * Simple types: strings, numbers, booleans, enums (can use z.coerce for conversion)
+ *
+ * Uses _def.typeName string comparison instead of instanceof to support both zod v3 and v4,
+ * since instanceof checks fail across different zod versions in bundled code.
  */
 function isComplexType(schema: ZodTypeAny): boolean {
-  // Unwrap optional/nullable to check the inner type
+  // Unwrap all optional/nullable layers to check the inner type
+  // Note: .partial() can create nested optionals (e.g., ZodOptional<ZodOptional<ZodObject>>)
   let inner: ZodTypeAny = schema;
-  if (inner instanceof ZodOptional) inner = inner.unwrap();
-  if (inner instanceof ZodNullable) inner = inner.unwrap();
+  let typeName = getZodTypeName(inner);
+
+  while (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
+    // Access innerType directly from _def to avoid version-specific method differences
+    inner = (inner as any)._def.innerType;
+    typeName = getZodTypeName(inner);
+  }
 
   // Complex types that need JSON parsing
-  return inner instanceof ZodArray || inner instanceof ZodRecord || inner instanceof ZodObject;
+  return typeName === 'ZodArray' || typeName === 'ZodRecord' || typeName === 'ZodObject';
 }
 
 /**

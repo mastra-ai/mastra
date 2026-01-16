@@ -52,10 +52,7 @@ export class CloudExporter extends BaseExporter {
 
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     if (!accessToken) {
-      this.setDisabled(
-        'MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.\n' +
-          '🚀 Sign up at https://cloud.mastra.ai to see your AI traces online and obtain your access token.',
-      );
+      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
     }
 
     const endpoint =

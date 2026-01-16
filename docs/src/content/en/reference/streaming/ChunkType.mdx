@@ -1015,6 +1015,11 @@ Stream has completed successfully.
               type: "object",
               description: "Message history",
             },
+            {
+              name: "response",
+              type: "object",
+              description: "Response metadata and messages from the model provider",
+            },
           ],
         },
       ],
@@ -1099,7 +1104,7 @@ Emitted when using output generation with defined schemas. Contains partial or c
     },
     {
       name: "object",
-      type: "PartialSchemaOutput<OUTPUT>",
+      type: "Partial<OUTPUT>",
       description:
         "Partial or complete structured data matching the defined schema. The type is determined by the OUTPUT schema parameter.",
     },

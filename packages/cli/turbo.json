@@ -4,12 +4,12 @@
   "tasks": {
     "build:lib": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
     },
     "build": {
       "dependsOn": ["^build", "build:lib", "@internal/playground#build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/docs/**"]
     }
   }
 }

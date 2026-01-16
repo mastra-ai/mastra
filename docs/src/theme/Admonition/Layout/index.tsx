@@ -3,7 +3,7 @@ import React, { type ReactNode } from "react";
 
 import type { Props } from "@theme/Admonition/Layout";
 
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import {
   GithubTipIcon,
   GithubCautionIcon,
@@ -58,7 +58,7 @@ function AdmonitionContainer({
   return (
     <div
       className={clsx(
-        "mb-4 rounded-[12px] border border-(--border) flex flex-col gap-2 p-4 px-5",
+        "mb-4 rounded-xl border border-(--border) flex flex-col gap-2 p-4",
         classes[type],
         className,
       )}
@@ -73,7 +73,7 @@ function AdmonitionIconType({ title, type }: Pick<Props, "title" | "type">) {
     <div className="flex items-center gap-1.5">
       <span className="shrink-0 size-3">{TypeToEmoji[type]}</span>
       {title ? (
-        <span className="text-[12px] font-mono font-semibold tracking-tight capitalize">
+        <span className="text-xs font-mono font-semibold tracking-tight capitalize">
           {title}
         </span>
       ) : null}
@@ -83,7 +83,7 @@ function AdmonitionIconType({ title, type }: Pick<Props, "title" | "type">) {
 
 function AdmonitionContent({ children }: Pick<Props, "children">) {
   return children ? (
-    <div className="[&>p]:mb-1! [&>:last-child]:mb-0! text-sm">{children}</div>
+    <div className="[&>:last-child]:mb-0! text-sm">{children}</div>
   ) : null;
 }
 

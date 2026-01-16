@@ -33,6 +33,6 @@
     "@types/node": "^24.3.0",
     "mastra": "beta",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   }
 }

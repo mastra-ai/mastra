@@ -30,6 +30,23 @@ interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter
   documentFilter?: MongoDBVectorFilter;
 }
 
+export interface MongoDBVectorConfig {
+  /** Unique identifier for this vector store instance */
+  id: string;
+  /** MongoDB connection string */
+  uri: string;
+  /** Name of the MongoDB database to use */
+  dbName: string;
+  /** Optional MongoDB client options */
+  options?: MongoClientOptions;
+  /**
+   * Path to the field that stores vector embeddings.
+   * Supports nested paths using dot notation (e.g., 'text.contentEmbedding').
+   * @default 'embedding'
+   */
+  embeddingFieldPath?: string;
+}
+
 export interface MongoDBIndexReadyParams {
   indexName: string;
   timeoutMs?: number;
@@ -49,7 +66,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private client: MongoClient;
   private db: Db;
   private collections: Map<string, Collection<MongoDBDocument>>;
-  private readonly embeddingFieldName = 'embedding';
+  private readonly embeddingFieldName: string;
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
   private collectionForValidation: Collection<MongoDBDocument> | null = null;
@@ -59,8 +76,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ id, uri, dbName, options }: { id: string; uri: string; dbName: string; options?: MongoClientOptions }) {
+  constructor({ id, uri, dbName, options, embeddingFieldPath }: MongoDBVectorConfig) {
     super({ id });
+
+    if (!uri) {
+      throw new Error('MongoDBVector requires a connection string. Provide "uri" in the constructor options.');
+    }
+
     const client = new MongoClient(uri, {
       ...options,
       driverInfo: {
@@ -71,6 +93,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.client = client;
     this.db = this.client.db(dbName);
     this.collections = new Map();
+    this.embeddingFieldName = embeddingFieldPath ?? 'embedding';
   }
 
   // Public methods

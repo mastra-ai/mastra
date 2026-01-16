@@ -1,5 +1,15 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix oneOf schema conversion generating invalid JavaScript ([#11626](https://github.com/mastra-ai/mastra/pull/11626))
+
+  The upstream json-schema-to-zod library generates TypeScript syntax (`reduce<z.ZodError[]>`) when converting oneOf schemas. This TypeScript generic annotation fails when evaluated at runtime with Function(), causing schema resolution to fail.
+
+  The fix removes TypeScript generic syntax from the generated output, producing valid JavaScript that can be evaluated at runtime. This resolves issues where MCP tools with oneOf in their output schemas would fail validation.
+
 ## 1.0.0-beta.5
 
 ### Patch Changes

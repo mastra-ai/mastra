@@ -8,7 +8,7 @@ import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
-import type { LoopConditionFunction, Step } from '../step';
+import type { InnerOutput, LoopConditionFunction, Step } from '../step';
 import type { StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
@@ -109,7 +109,7 @@ export class StepExecutor extends MastraBase {
             suspendData: suspendDataToUse,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
-            suspend: async (suspendPayload: any): Promise<any> => {
+            suspend: async (suspendPayload: unknown): Promise<InnerOutput> => {
               const { suspendData, validationError } = await validateStepSuspendData({
                 suspendData: suspendPayload,
                 step,
@@ -120,7 +120,7 @@ export class StepExecutor extends MastraBase {
               }
               suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
             },
-            bail: (result: any) => {
+            bail: (result: any): InnerOutput => {
               bailed = { payload: result };
             },
             // TODO
@@ -269,7 +269,7 @@ export class StepExecutor extends MastraBase {
     iterationCount,
   }: {
     workflowId: string;
-    condition: LoopConditionFunction<any, any, any, any, any>;
+    condition: LoopConditionFunction<any, any, any, any, any, any>;
     runId: string;
     inputData?: any;
     resumeData?: any;

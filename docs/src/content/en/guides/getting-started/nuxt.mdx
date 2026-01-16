@@ -1,0 +1,505 @@
+---
+title: "Nuxt | Frameworks"
+description: "Get started with Mastra and Nuxt"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Integrate Mastra in your Nuxt project
+
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Nuxt by importing and calling the agent directly from your server routes.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience with Vue.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new Nuxt app (optional)
+
+If you already have a Nuxt app, skip to the next step.
+
+Run the following command to [create a new Nuxt app](https://nuxt.com/docs/getting-started/installation):
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm create nuxt@latest mastra-nuxt -- --template minimal --packageManager npm --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm create nuxt@latest mastra-nuxt --template minimal --packageManager pnpm --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn create nuxt@latest mastra-nuxt --template minimal --packageManager yarn --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun create nuxt@latest mastra-nuxt --template minimal --packageManager bun --gitInit --modules
+```
+
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-nuxt`, but you can replace it with any name you want.
+
+## Initialize Mastra
+
+`cd` into your Nuxt project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+cd mastra-nuxt
+npx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+cd mastra-nuxt
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+cd mastra-nuxt
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+cd mastra-nuxt
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your Nuxt server routes in the next steps.
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+</Tabs>
+
+## Create a chat route
+
+Create `server/api/chat.ts`:
+
+```ts title="server/api/chat.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '../../src/mastra';
+
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
+
+export default defineEventHandler(async (event) => {
+  const method = event.method;
+
+  if (method === 'POST') {
+    const params = await readBody(event);
+    const stream = await handleChatStream({
+      mastra,
+      agentId: 'weather-agent',
+      params: {
+        ...params,
+        memory: {
+          ...params.memory,
+          thread: THREAD_ID,
+          resource: RESOURCE_ID,
+        }
+      }
+    });
+
+    return createUIMessageStreamResponse({ stream });
+  }
+
+  if (method === 'GET') {
+    const memory = await mastra.getAgentById('weather-agent').getMemory();
+    let response = null;
+
+    try {
+      response = await memory?.recall({
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      });
+    } catch {
+      console.log('No previous messages found.');
+    }
+
+    const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+    return uiMessages;
+  }
+});
+```
+
+The `POST` handler accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` handler fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Add the chat UI
+
+Replace the contents of `app/app.vue` with the following:
+
+```html title="app/app.vue"
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { Chat } from "@ai-sdk/vue";
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+const chat = new Chat({
+  transport: new DefaultChatTransport({
+    api: '/api/chat',
+  }),
+})
+
+const STATE_TO_LABEL_MAP: Record<string, string> = {
+  'input-streaming': 'Pending',
+  'input-available': 'Running',
+  'output-available': 'Completed',
+  'output-error': 'Error',
+  'output-denied': 'Denied',
+};
+
+const input = ref('');
+
+onMounted(async () => {
+  const res = await fetch('/api/chat');
+  const data = await res.json();
+  chat.messages = [...data];
+});
+
+function handleSubmit() {
+  if (!input.value.trim()) return;
+
+  chat.sendMessage({ text: input.value });
+  input.value = '';
+}
+</script>
+
+<template>
+  <div class="chat-container">
+    <div class="messages">
+      <div v-for="message in chat.messages" :key="message.id" class="message-wrapper">
+        <div
+          v-for="(part, i) in message.parts"
+          :key="`${message.id}-${i}`"
+        >
+          <div
+            v-if="part.type === 'text'"
+            :class="['message', message.role]"
+          >
+            <div class="message-content">
+              {{ part.text }}
+            </div>
+          </div>
+
+          <details
+            v-else-if="part.type?.startsWith('tool-')"
+            class="tool"
+          >
+            <summary class="tool-header">
+              {{ (part as ToolUIPart).type?.split('-').slice(1).join('-') }} -
+              {{ STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available'] }}
+            </summary>
+            <div class="tool-content">
+              <div class="tool-section">
+                <div class="tool-label">Parameters</div>
+                <pre><code>{{ JSON.stringify((part as ToolUIPart).input, null, 2) }}</code></pre>
+              </div>
+              <div class="tool-section">
+                <div class="tool-label">
+                  {{ (part as ToolUIPart).errorText ? 'Error' : 'Result' }}
+                </div>
+                <pre><code>{{ JSON.stringify((part as ToolUIPart).output, null, 2) }}</code></pre>
+                <div v-if="(part as ToolUIPart).errorText" class="tool-error">
+                  {{ (part as ToolUIPart).errorText }}
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <form class="input-form" @submit.prevent="handleSubmit">
+      <input
+        v-model="input"
+        type="text"
+        placeholder="Ask about the weather..."
+        :disabled="chat.status !== 'ready'"
+        class="chat-input"
+      />
+      <button type="submit" class="submit-button" :disabled="chat.status !== 'ready'">
+        Send
+      </button>
+    </form>
+  </div>
+</template>
+
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+*:not(dialog) {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    interpolate-size: allow-keywords;
+  }
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+p {
+  text-wrap: pretty;
+}
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
+.chat-container {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.message {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.message.user {
+  background-color: #3b82f6;
+  color: white;
+  margin-left: auto;
+  max-width: 60%;
+}
+
+.message.assistant {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  max-width: 80%;
+}
+
+.tool {
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.tool-header {
+  padding: 0.75rem 1rem;
+  background-color: #f9fafb;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.tool-content {
+  padding: 1rem;
+  border-top: 1px solid #d1d5db;
+}
+
+.tool-section {
+  margin-bottom: 1rem;
+}
+
+.tool-section:last-child {
+  margin-bottom: 0;
+}
+
+.tool-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.tool pre {
+  background-color: #f3f4f6;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+
+.tool-error {
+  color: #dc2626;
+  margin-top: 0.5rem;
+}
+
+.input-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 1rem;
+}
+
+.chat-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.chat-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.submit-button {
+  padding: 0.75rem 1.5rem;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.submit-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+</style>
+```
+
+This component connects [`Chat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using custom message styling and shows any tool invocations in a collapsible details element.
+
+## Test your agent
+
+1. Run your Nuxt app with `npm run dev`
+2. Open the chat at http://localhost:3000
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+
+## Next steps
+
+Congratulations on building your Mastra agent with Nuxt! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and Nuxt, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)

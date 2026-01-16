@@ -1,7 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ToolInvocation } from 'ai';
 
 /**
  * Extracts text content from a MastraDBMessage.
@@ -183,8 +182,8 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
           } else if (Array.isArray(msg.content)) {
             // Extract text from parts array
             return msg.content
-              .filter(part => part.type === 'text')
-              .map(part => part.text || '')
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text || '')
               .join(' ');
           }
           return '';
@@ -348,7 +347,7 @@ export const createToolInvocation = ({
   toolName: string;
   args: Record<string, any>;
   result: Record<string, any>;
-  state?: ToolInvocation['state'];
+  state?: 'call' | 'partial-call' | 'result';
 }): { toolCallId: string; toolName: string; args: Record<string, any>; result: Record<string, any>; state: string } => {
   return {
     toolCallId,

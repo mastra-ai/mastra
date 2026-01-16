@@ -1378,10 +1378,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           resource.workingMemory && typeof resource.workingMemory === 'object'
             ? JSON.stringify(resource.workingMemory)
             : resource.workingMemory,
-        metadata:
-          resource.metadata && typeof resource.metadata === 'string'
-            ? JSON.parse(resource.metadata)
-            : resource.metadata,
+        metadata: parseMetadata(resource.metadata),
         createdAt: new Date(resource.createdAt),
         updatedAt: new Date(resource.updatedAt),
       };
@@ -1407,7 +1404,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           {
             id: resource.id,
             workingMemory: resource.workingMemory,
-            metadata: JSON.stringify(resource.metadata),
+            metadata: serializeMetadata(resource.metadata),
             createdAt: resource.createdAt.toISOString(),
             updatedAt: resource.updatedAt.toISOString(),
           },
@@ -1419,7 +1416,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         },
       });
 
-      return resource;
+      // Return resource with normalized metadata
+      return {
+        ...resource,
+        metadata: resource.metadata || {},
+      };
     } catch (error) {
       throw new MastraError(
         {

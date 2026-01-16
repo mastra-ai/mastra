@@ -1,5 +1,5 @@
 import { ClientScoreRowData } from '@mastra/client-js';
-import { EntryList } from '@/components/ui/elements';
+import { EntryList } from '@/ds/components/EntryList';
 import { format, isToday } from 'date-fns';
 
 export const scoresListColumns = [

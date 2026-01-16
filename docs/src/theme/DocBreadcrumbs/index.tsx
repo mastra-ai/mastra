@@ -10,8 +10,10 @@ import {
   BreadcrumbsItemLink,
   BreadcrumbsItem,
 } from "@site/src/components/ui/breadcrumbs";
+import BrowserOnly from "@docusaurus/BrowserOnly";
 
 import styles from "./styles.module.css";
+import { CopyPageButton } from "@site/src/components/copy-page-button";
 
 export default function DocBreadcrumbs(): ReactNode {
   const breadcrumbs = useSidebarBreadcrumbs();
@@ -22,7 +24,7 @@ export default function DocBreadcrumbs(): ReactNode {
   }
 
   return (
-    <>
+    <div className="flex flex-wrap gap-2 items-center mb-4 justify-between">
       <DocBreadcrumbsStructuredData breadcrumbs={breadcrumbs} />
       <nav
         className={clsx(
@@ -53,6 +55,7 @@ export default function DocBreadcrumbs(): ReactNode {
           })}
         </ul>
       </nav>
-    </>
+      <BrowserOnly fallback={<div />}>{() => <CopyPageButton />}</BrowserOnly>
+    </div>
   );
 }

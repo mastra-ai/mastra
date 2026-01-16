@@ -2,7 +2,7 @@ import { isEmpty } from 'radash';
 import type z from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
-import { removeUndefinedValues } from '../utils';
+import { isZodType, removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
@@ -32,7 +32,7 @@ export async function validateStepInput({
 
   let validationError: Error | undefined;
 
-  if (validateInputs) {
+  if (validateInputs && isZodType(step.inputSchema)) {
     const inputSchema = step.inputSchema;
 
     const validatedInput = await inputSchema.safeParseAsync(prevOutput);
@@ -68,7 +68,7 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
 
   const resumeSchema = step.resumeSchema;
 
-  if (resumeSchema) {
+  if (resumeSchema && isZodType(resumeSchema)) {
     const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
     if (!validatedResumeData.success) {
       const errors = getZodErrors(validatedResumeData.error);
@@ -107,7 +107,7 @@ export async function validateStepSuspendData({
 
   const suspendSchema = step.suspendSchema;
 
-  if (suspendSchema && validateInputs) {
+  if (suspendSchema && validateInputs && isZodType(suspendSchema)) {
     const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
     if (!validatedSuspendData.success) {
       const errors = getZodErrors(validatedSuspendData.error!);
@@ -146,7 +146,7 @@ export async function validateStepStateData({
 
   const stateSchema = step.stateSchema;
 
-  if (stateSchema && validateInputs) {
+  if (stateSchema && validateInputs && isZodType(stateSchema)) {
     const validatedStateData = await stateSchema.safeParseAsync(stateData);
     if (!validatedStateData.success) {
       const errors = getZodErrors(validatedStateData.error!);

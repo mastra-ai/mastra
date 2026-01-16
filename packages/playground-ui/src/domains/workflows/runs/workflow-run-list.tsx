@@ -3,14 +3,14 @@ import { Icon } from '@/ds/icons';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
+import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from 'date-fns';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Badge } from '@/ds/components/Badge';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { useInView } from '@/hooks';
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
 
 export interface WorkflowRunListProps {
@@ -61,7 +61,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
           </ThreadItem>
 
           {actualRuns.length === 0 && (
-            <Txt variant="ui-md" className="text-icon3 py-3 px-5">
+            <Txt variant="ui-md" className="text-neutral3 py-3 px-5">
               Your run history will appear here once you run the workflow
             </Txt>
           )}
@@ -74,7 +74,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                     <WorkflowRunStatusBadge status={run.snapshot.status} />
                   </div>
                 )}
-                <span className="truncate max-w-32 text-muted-foreground">{run.runId}</span>
+                <span className="truncate max-w-32 text-neutral3">{run.runId}</span>
                 <span>
                   {typeof run?.snapshot === 'string'
                     ? ''
@@ -135,7 +135,7 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
 
   if (status === 'canceled') {
     return (
-      <Badge variant="default" icon={<CircleSlash className="text-icon3" />}>
+      <Badge variant="default" icon={<CircleSlash className="text-neutral3" />}>
         {status}
       </Badge>
     );
@@ -143,7 +143,7 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
 
   if (status === 'pending' || status === 'waiting') {
     return (
-      <Badge variant="default" icon={<Clock className="text-icon3" />}>
+      <Badge variant="default" icon={<Clock className="text-neutral3" />}>
         {status}
       </Badge>
     );

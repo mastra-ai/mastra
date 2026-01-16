@@ -59,7 +59,12 @@ export abstract class BaseExporter implements ObservabilityExporter {
   protected logger: IMastraLogger;
 
   /** Whether this exporter is disabled */
-  protected isDisabled: boolean = false;
+  #disabled: boolean = false;
+
+  /** Public getter for disabled state */
+  get isDisabled(): boolean {
+    return this.#disabled;
+  }
 
   /**
    * Initialize the base exporter with logger
@@ -110,7 +115,7 @@ export abstract class BaseExporter implements ObservabilityExporter {
    * @param reason - Reason why the exporter is disabled
    */
   protected setDisabled(reason: string): void {
-    this.isDisabled = true;
+    this.#disabled = true;
     this.logger.warn(`${this.name} disabled: ${reason}`);
   }
 

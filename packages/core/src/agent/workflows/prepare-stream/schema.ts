@@ -32,7 +32,7 @@ const coreToolSchema = z.object({
     z.any(), // Zod schema or other schema types - validated at tool execution
   ]),
   outputSchema: z.union([z.record(z.string(), z.any()), z.any()]).optional(),
-  execute: z.function(z.tuple([z.any(), z.any()]), z.promise(z.any())).optional(),
+  execute: z.optional(z.function(z.tuple([z.any(), z.any()]), z.promise(z.any()))),
   type: z.union([z.literal('function'), z.literal('provider-defined'), z.undefined()]).optional(),
   args: z.record(z.string(), z.any()).optional(),
 });

@@ -107,16 +107,18 @@ describe('createToolCallStep tool approval workflow', () => {
     const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
 
     // Assert: Verify approval flow and execution prevention
-    expect(controller.enqueue).toHaveBeenCalledWith({
-      type: 'tool-call-approval',
-      runId: 'test-run',
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
-      },
-    });
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-call-approval',
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        payload: expect.objectContaining({
+          toolCallId: 'test-call-id',
+          toolName: 'test-tool',
+          args: { param: 'test' },
+        }),
+      }),
+    );
 
     // Wait for flushMessagesBeforeSuspension to complete before suspend is called
     await new Promise(resolve => setImmediate(resolve));
@@ -173,7 +175,6 @@ describe('createToolCallStep tool approval workflow', () => {
       expect.objectContaining({
         toolCallId: inputData.toolCallId,
         messages: [],
-        resumeData,
       }),
     );
     expect(suspend).not.toHaveBeenCalled();

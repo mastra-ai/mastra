@@ -82,7 +82,7 @@ test('running the workflow (form) - long condition', async ({ page }) => {
 
 test('running the workflow (json) - short condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
-  await page.getByRole('textbox').fill('{"text":"A"}');
+  await page.locator('.cm-content').fill('{"text":"A"}');
   await page.getByRole('button', { name: 'Run' }).click();
 
   await runWorkflow(page);
@@ -91,7 +91,7 @@ test('running the workflow (json) - short condition', async ({ page }) => {
 
 test('running the workflow (json) - long condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
-  await page.getByRole('textbox').fill('{"text":"SuperLongTextToStartWith"}');
+  await page.locator('.cm-content').fill('{"text":"SuperLongTextToStartWith"}');
   await page.getByRole('button', { name: 'Run' }).click();
 
   await runWorkflow(page);
@@ -103,7 +103,7 @@ test('resuming a workflow', async ({ page }) => {
   await page.getByRole('button', { name: 'Run' }).click();
   await runWorkflow(page);
 
-  await page.getByRole('textbox').fill('Hello');
+  await page.getByRole('textbox', { name: 'User Input' }).fill('Hello');
   await page.getByRole('button', { name: 'Resume workflow' }).click();
   const nodes = await page.locator('[data-workflow-node]');
 
@@ -116,8 +116,8 @@ async function checkShortPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-    `1{2  \"reason\": \"Please provide user input to continue\"3}`,
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
+    `\"reason\": \"Please provide user input to continue\"`,
   );
 }
 
@@ -126,8 +126,8 @@ async function checkLongPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-    `1{2  \"reason\": \"Please provide user input to continue\"3}`,
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
+    `\"reason\": \"Please provide user input to continue\"`,
   );
 }
 

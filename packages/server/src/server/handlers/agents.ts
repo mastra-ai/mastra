@@ -20,6 +20,7 @@ import {
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
+  agentExecutionLegacyBodySchema,
   generateResponseSchema,
   streamResponseSchema,
   providersResponseSchema,
@@ -33,6 +34,8 @@ import {
   modelConfigIdPathParams,
   enhanceInstructionsBodySchema,
   enhanceInstructionsResponseSchema,
+  approveNetworkToolCallBodySchema,
+  declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -547,7 +550,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 
       validateBody({ messages });
 
-      const result = await agent.generate(messages, {
+      const result = await agent.generate<unknown>(messages, {
         ...rest,
         abortSignal,
       });
@@ -565,7 +568,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   path: '/api/agents/:agentId/generate-legacy',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: generateResponseSchema,
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
@@ -607,7 +610,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   path: '/api/agents/:agentId/stream-legacy',
   responseType: 'datastream-response' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
@@ -728,7 +731,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       const { messages, ...rest } = params;
       validateBody({ messages });
 
-      const streamResult = await agent.stream(messages, {
+      const streamResult = await agent.stream<unknown>(messages, {
         ...rest,
         abortSignal,
       });
@@ -838,7 +841,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema.extend({ thread: z.string().optional() }),
+  bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
@@ -855,16 +858,79 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       const streamResult = await agent.network(messages, {
         ...params,
-        memory: {
-          thread: params.thread ?? params.threadId ?? '',
-          resource: params.resourceId ?? '',
-          options: params.memory?.options ?? {},
-        },
       });
 
       return streamResult;
     } catch (error) {
       return handleError(error, 'error streaming agent loop response');
+    }
+  },
+});
+
+export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/approve-network-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveNetworkToolCallBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Approve network tool call',
+  description: 'Approves a pending network tool call and continues network agent execution',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.approveNetworkToolCall({
+        ...params,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error approving network tool call');
+    }
+  },
+});
+
+export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/decline-network-tool-call',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineNetworkToolCallBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Decline network tool call',
+  description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.declineNetworkToolCall({
+        ...params,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error declining network tool call');
     }
   },
 });
@@ -1064,6 +1130,8 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
   return null;
 }
 
+type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSchema>;
+
 export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/instructions/enhance',
@@ -1105,7 +1173,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
         },
       );
 
-      return await result.object;
+      return (await result.object) as unknown as EnhanceInstructionsResponse;
     } catch (error) {
       return handleError(error, 'Error enhancing instructions');
     }

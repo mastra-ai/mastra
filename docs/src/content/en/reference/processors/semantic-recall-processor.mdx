@@ -144,10 +144,12 @@ import { PgVector } from "@mastra/pg";
 import { openai } from "@ai-sdk/openai";
 
 const storage = new PostgresStorage({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 
 const vector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.DATABASE_URL,
 });
 

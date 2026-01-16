@@ -66,7 +66,13 @@ export type MongoDBConfig =
     });
 
 export type DatabaseConfig = MongoDBBaseConfig & {
-  url: string;
+  /** MongoDB connection string */
+  uri?: string;
+  /**
+   * MongoDB connection string
+   * @deprecated Use `uri` instead
+   */
+  url?: string;
   dbName: string;
   options?: MongoClientOptions;
 };
@@ -87,7 +93,13 @@ export type MongoDBDomainConfig =
       indexes?: MongoDBIndexConfig[];
     }
   | {
-      url: string;
+      /** MongoDB connection string */
+      uri?: string;
+      /**
+       * MongoDB connection string
+       * @deprecated Use `uri` instead
+       */
+      url?: string;
       dbName: string;
       options?: MongoClientOptions;
       disableInit?: boolean;

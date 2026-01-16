@@ -45,9 +45,8 @@ const storage = new DynamoDBStore({
 
 // Initialize vector store (if using semantic recall)
 const vector = new PineconeVector({
+  id: 'dynamodb-pinecone',
   apiKey: process.env.PINECONE_API_KEY,
-  environment: process.env.PINECONE_ENVIRONMENT,
-  index: process.env.PINECONE_INDEX,
 });
 
 // Memory combines storage (like DynamoDBStore) with an optional vector store for recall

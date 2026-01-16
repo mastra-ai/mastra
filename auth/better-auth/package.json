@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "better-auth": "^1.2.0"
+    "better-auth": "^1.4.5"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -38,7 +38,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "files": [

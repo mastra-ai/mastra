@@ -28,6 +28,7 @@ interface ToolResultContent {
 }
 
 interface FinalResult {
+  result?: any;
   text?: string;
   messages?: NestedMessage[];
 }
@@ -52,7 +53,8 @@ interface ChildMessage {
 }
 
 export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMessage[] => {
-  return messages.map(message => {
+  const messagesLength = messages.length;
+  return messages.map((message, index) => {
     // Check if message contains network execution data
     const networkPart = message.parts.find(
       (part): part is { type: 'text'; text: string } =>
@@ -123,10 +125,13 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           }
 
           // Build the result object
-          const result = {
-            childMessages: childMessages,
-            result: finalResult?.text || '',
-          };
+          const result =
+            primitiveType === 'tool'
+              ? finalResult?.result
+              : {
+                  childMessages: childMessages,
+                  result: finalResult?.text || '',
+                };
 
           // Return the transformed message with dynamic-tool part
           const nextMessage = {
@@ -147,7 +152,13 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
               mode: 'network' as const,
               selectionReason: selectionReason,
               agentInput: json.input,
-              from: primitiveType === 'agent' ? ('AGENT' as const) : ('WORKFLOW' as const),
+              hasMoreMessages: index < messagesLength - 1,
+              from:
+                primitiveType === 'agent'
+                  ? ('AGENT' as const)
+                  : primitiveType === 'tool'
+                    ? ('TOOL' as const)
+                    : ('WORKFLOW' as const),
             },
           } as MastraUIMessage;
 

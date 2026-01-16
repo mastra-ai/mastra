@@ -65,7 +65,7 @@ export type ExamplesInput = z.infer<typeof examplesInputSchema>;
 
 export const examplesTool = {
   name: 'mastraExamples',
-  description: `Get code examples from the Mastra.ai examples directory. 
+  description: `[🌐 REMOTE] Get code examples from the Mastra.ai examples directory. 
     Without a specific example name, lists all available examples. 
     With an example name, returns the full source code of that example.
     You can also use keywords from the user query to find relevant examples, but prioritize example names.`,

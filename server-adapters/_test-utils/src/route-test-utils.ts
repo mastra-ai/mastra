@@ -13,7 +13,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
-  if (field === 'fields') return 'status'; // For workflow execution result field filtering
+  if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
 
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';

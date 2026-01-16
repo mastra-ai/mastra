@@ -3,6 +3,31 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { builtinModules } from 'node:module';
 
+/** The detected JavaScript runtime environment */
+export type RuntimePlatform = 'node' | 'bun';
+
+/**
+ * The esbuild/bundler platform setting.
+ * - 'node': Assumes Node.js environment, externalizes built-in modules
+ * - 'browser': Assumes browser environment, polyfills Node APIs
+ * - 'neutral': Runtime-agnostic, preserves all globals as-is (used for Bun)
+ */
+export type BundlerPlatform = 'node' | 'browser' | 'neutral';
+
+/**
+ * Detect the current JavaScript runtime environment.
+ *
+ * This is used by the bundler to determine the appropriate esbuild platform
+ * setting. When running under Bun, we need to use 'neutral' platform to
+ * preserve Bun-specific globals (like Bun.s3).
+ */
+export function detectRuntime(): RuntimePlatform {
+  if (process.versions?.bun) {
+    return 'bun';
+  }
+  return 'node';
+}
+
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
 

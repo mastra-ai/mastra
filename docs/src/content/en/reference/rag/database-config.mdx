@@ -213,11 +213,10 @@ whereDocument: { "$contains": "API documentation" }
       }
     });
 
-    await vectorTool.execute({
-      context: { queryText: 'search query' },
-      mastra,
-      requestContext
-    });
+    await vectorTool.execute(
+      { queryText: 'search query' },
+      { mastra, requestContext }
+    );
     ```
 
   </TabItem>

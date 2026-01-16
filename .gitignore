@@ -48,3 +48,5 @@ mastra-cli.json
 *storybook.log
 storybook-static
 test-output.log
+
+.playwright-mcp

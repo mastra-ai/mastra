@@ -1,6 +1,13 @@
 import { posix } from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule, normalizeStudioBase } from './utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  getPackageName,
+  getCompiledDepCachePath,
+  slash,
+  findNativePackageModule,
+  normalizeStudioBase,
+  detectRuntime,
+} from './utils';
 
 describe('getPackageName', () => {
   it('should return the full scoped package name for scoped packages', () => {
@@ -504,5 +511,36 @@ describe('normalizeStudioBase', () => {
       expect(normalizeStudioBase('/Admin')).toBe('/Admin');
       expect(normalizeStudioBase('MyApp')).toBe('/MyApp');
     });
+  });
+});
+
+/**
+ * Tests for runtime detection utilities
+ * @see GitHub Issue #11253: Bun S3 API's not working inside Mastra Workflows
+ */
+describe('detectRuntime', () => {
+  const originalBunVersion = process.versions.bun;
+
+  beforeEach(() => {
+    // Clean up bun version before each test
+    delete (process.versions as Record<string, string | undefined>).bun;
+  });
+
+  afterEach(() => {
+    // Restore original bun version
+    if (originalBunVersion) {
+      (process.versions as Record<string, string | undefined>).bun = originalBunVersion;
+    } else {
+      delete (process.versions as Record<string, string | undefined>).bun;
+    }
+  });
+
+  it('should return "node" when process.versions.bun is not present', () => {
+    expect(detectRuntime()).toBe('node');
+  });
+
+  it('should return "bun" when process.versions.bun is present', () => {
+    (process.versions as Record<string, string | undefined>).bun = '1.0.0';
+    expect(detectRuntime()).toBe('bun');
   });
 });

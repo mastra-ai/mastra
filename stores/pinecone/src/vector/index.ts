@@ -15,6 +15,7 @@ import type {
 import { Pinecone } from '@pinecone-database/pinecone';
 import type {
   IndexStatsDescription,
+  PineconeConfiguration,
   QueryOptions,
   RecordSparseValues,
   ServerlessSpecCloudEnum,
@@ -23,6 +24,46 @@ import type {
 
 import { PineconeFilterTranslator } from './filter';
 import type { PineconeVectorFilter } from './filter';
+
+/**
+ * Configuration for PineconeVector.
+ *
+ * Extends the Pinecone client configuration with Mastra-specific fields.
+ * All Pinecone configuration options are supported (apiKey, controllerHostUrl,
+ * fetchApi, additionalHeaders, sourceTag).
+ *
+ * @example
+ * ```typescript
+ * // Simple API key config
+ * const vector = new PineconeVector({
+ *   id: 'my-pinecone',
+ *   apiKey: 'your-api-key',
+ * });
+ *
+ * // With custom controller host
+ * const vector = new PineconeVector({
+ *   id: 'my-pinecone',
+ *   apiKey: 'your-api-key',
+ *   controllerHostUrl: 'https://api.pinecone.io',
+ * });
+ *
+ * // With index creation defaults
+ * const vector = new PineconeVector({
+ *   id: 'my-pinecone',
+ *   apiKey: 'your-api-key',
+ *   cloud: 'gcp',
+ *   region: 'us-central1',
+ * });
+ * ```
+ */
+export type PineconeVectorConfig = PineconeConfiguration & {
+  /** The unique identifier for this vector store instance. */
+  id: string;
+  /** The cloud provider for new index creation. Defaults to 'aws'. */
+  cloud?: ServerlessSpecCloudEnum;
+  /** The region for new index creation. Defaults to 'us-east-1'. */
+  region?: string;
+};
 
 interface PineconeIndexStats extends IndexStats {
   namespaces?: IndexStatsDescription['namespaces'];
@@ -70,31 +111,13 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
   /**
    * Creates a new PineconeVector client.
-   * @param id - The unique identifier for this vector store instance.
-   * @param apiKey - The API key for Pinecone.
-   * @param environment - The environment for Pinecone.
-   * @param cloud - The cloud provider for Pinecone.
-   * @param region - The region for Pinecone.
+   *
+   * @param config - Configuration options for the Pinecone client.
+   * @see {@link PineconeVectorConfig} for all available options.
    */
-  constructor({
-    id,
-    apiKey,
-    environment,
-    cloud,
-    region,
-  }: {
-    id: string;
-    apiKey: string;
-    environment?: string;
-    region?: string;
-    cloud?: ServerlessSpecCloudEnum;
-  }) {
+  constructor({ id, cloud, region, ...pineconeConfig }: PineconeVectorConfig) {
     super({ id });
-    const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
-    if (environment) {
-      opts['controllerHostUrl'] = environment;
-    }
-    this.client = new Pinecone(opts);
+    this.client = new Pinecone(pineconeConfig);
     this.cloud = cloud || 'aws';
     this.region = region || 'us-east-1';
   }

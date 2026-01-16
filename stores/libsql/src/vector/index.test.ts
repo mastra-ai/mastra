@@ -10,7 +10,7 @@ describe('LibSQLVector', () => {
 
   beforeAll(async () => {
     vectorDB = new LibSQLVector({
-      connectionUrl: 'file::memory:?cache=shared',
+      url: 'file::memory:?cache=shared',
       id: 'libsql-test',
     });
   });
@@ -1675,7 +1675,7 @@ describe('LibSQLVector', () => {
 
 // Use the shared test suite with factory pattern
 const libSQLVectorDB = new LibSQLVector({
-  connectionUrl: 'file::memory:?cache=shared',
+  url: 'file::memory:?cache=shared',
   id: 'libsql-shared-test',
 });
 

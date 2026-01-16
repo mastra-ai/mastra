@@ -49,6 +49,11 @@ describe('nodeModulesExtensionResolver', () => {
       expect(result).toBeNull();
     });
 
+    it('absolute windows paths', async () => {
+      const result = await resolveId('C:\\absolute\\path', '/project/src/index.ts');
+      expect(result).toBeNull();
+    });
+
     it('imports without an importer path', async () => {
       const result = await resolveId('lodash', undefined);
       expect(result).toBeNull();

@@ -1,4 +1,10 @@
-import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
+import {
+  TitleExtractor,
+  SummaryExtractor,
+  QuestionsAnsweredExtractor,
+  KeywordExtractor,
+  SchemaExtractor,
+} from './extractors';
 import type { BaseNode } from './schema';
 import { Document as Chunk, NodeRelationship, ObjectType } from './schema';
 
@@ -38,8 +44,12 @@ export class MDocument {
     this.type = type;
   }
 
-  async extractMetadata({ title, summary, questions, keywords }: ExtractParams): Promise<MDocument> {
+  async extractMetadata({ title, summary, questions, keywords, schema }: ExtractParams): Promise<MDocument> {
     const transformations = [];
+
+    if (schema) {
+      transformations.push(new SchemaExtractor(schema));
+    }
 
     if (typeof summary !== 'undefined') {
       transformations.push(new SummaryExtractor(typeof summary === 'boolean' ? {} : summary));
@@ -214,7 +224,7 @@ export class MDocument {
         const textSplitter = new RecursiveCharacterTransformer({
           maxSize: options.maxSize,
           overlap: options.overlap,
-          keepSeparator: options.keepSeparator,
+          separatorPosition: options.separatorPosition,
           addStartIndex: options.addStartIndex,
           stripWhitespace: options.stripWhitespace,
         });
@@ -235,7 +245,7 @@ export class MDocument {
         const textSplitter = new RecursiveCharacterTransformer({
           maxSize: options.maxSize,
           overlap: options.overlap,
-          keepSeparator: options.keepSeparator,
+          separatorPosition: options.separatorPosition,
           addStartIndex: options.addStartIndex,
           stripWhitespace: options.stripWhitespace,
         });
@@ -310,7 +320,7 @@ export class MDocument {
       sentenceEnders: options?.sentenceEnders,
       fallbackToWords: options?.fallbackToWords,
       fallbackToCharacters: options?.fallbackToCharacters,
-      keepSeparator: options?.keepSeparator,
+      separatorPosition: options?.separatorPosition,
       lengthFunction: options?.lengthFunction,
       addStartIndex: options?.addStartIndex,
       stripWhitespace: options?.stripWhitespace,

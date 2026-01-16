@@ -79,8 +79,14 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       }
     }
 
-    // Setup default config if enabled
+    // Setup default config if enabled (deprecated)
     if (config.default?.enabled) {
+      console.warn(
+        '[Mastra Observability] The "default: { enabled: true }" configuration is deprecated and will be removed in a future version. ' +
+          'Please use explicit configs with DefaultExporter, CloudExporter, and SensitiveDataFilter instead. ' +
+          'See https://mastra.ai/docs/observability/tracing/overview for the recommended configuration.',
+      );
+
       const defaultInstance = new DefaultObservabilityInstance({
         serviceName: 'mastra',
         name: 'default',

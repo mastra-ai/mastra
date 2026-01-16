@@ -77,6 +77,42 @@ describe('Lance vector store tests', () => {
 
         expect(stats?.metric).toBe('l2');
       });
+
+      it('should default tableName to indexName when tableName is not provided', async () => {
+        const tableName = 'vector';
+
+        const generateTableData = (numRows: number) => {
+          return Array.from({ length: numRows }, (_, i) => ({
+            id: String(i + 1),
+            vector: Array.from({ length: 3 }, () => Math.random()),
+          }));
+        };
+
+        const existingTables = await vectorDB.listTables();
+        if (existingTables.includes(tableName)) {
+          await vectorDB.deleteTable(tableName);
+        }
+
+        await vectorDB.createTable(tableName, generateTableData(300));
+
+        // Call createIndex without tableName - it should default to indexName
+        await vectorDB.createIndex({
+          indexName: 'vector',
+          dimension: 3,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            numPartitions: 1,
+            numSubVectors: 1,
+          },
+        });
+
+        const stats = await vectorDB.describeIndex({ indexName: 'vector_idx' });
+        expect(stats).toBeDefined();
+        expect(stats?.dimension).toBe(3);
+
+        await vectorDB.deleteTable(tableName);
+      });
     });
 
     describe('list indexes', () => {
@@ -170,8 +206,9 @@ describe('Lance vector store tests', () => {
       const deleteIndexTestTable = 'delete-index-test-table' + Date.now();
       const indexColumnName = 'vector';
 
+      // Clean up tables from previous test runs to ensure isolation
       beforeAll(async () => {
-        vectorDB.deleteAllTables();
+        await vectorDB.deleteAllTables();
       });
 
       it('should delete an existing index', async () => {
@@ -215,8 +252,9 @@ describe('Lance vector store tests', () => {
   describe('Create table operations', () => {
     const testTableName = 'test-table' + Date.now();
 
+    // Clean up tables from previous test runs to ensure isolation
     beforeAll(async () => {
-      vectorDB.deleteAllTables();
+      await vectorDB.deleteAllTables();
     });
 
     it('should throw error when no data is provided', async () => {
@@ -301,13 +339,29 @@ describe('Lance vector store tests', () => {
       });
 
       it('should upsert vectors in an existing table', async () => {
+        // Table starts with 300 background rows (metadata.text = 'test')
+        // Verify background rows exist before upsert
+        const backgroundResults = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundResults.length).toBeGreaterThan(0);
+        const initialBackgroundCount = backgroundResults.length;
+
         const testVectors = [
           [0.1, 0.2, 0.3],
           [0.4, 0.5, 0.6],
           [0.7, 0.8, 0.9],
         ];
 
-        const testMetadata = [{ text: 'First vector' }, { text: 'Second vector' }, { text: 'Third vector' }];
+        const testMetadata = [
+          { text: 'upsert-test-first' },
+          { text: 'upsert-test-second' },
+          { text: 'upsert-test-third' },
+        ];
 
         const ids = await vectorDB.upsert({
           indexName: testTableIndexColumn,
@@ -319,6 +373,26 @@ describe('Lance vector store tests', () => {
         expect(ids).toHaveLength(3);
         expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+        // Verify our new data exists using filter
+        let newResults = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: testVectors[0],
+          topK: 500,
+          filter: { text: { $like: 'upsert-test-%' } },
+        });
+        expect(newResults).toHaveLength(3);
+
+        // Verify background rows STILL exist (upsert should ADD, not REPLACE)
+        const backgroundAfterUpsert = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundAfterUpsert.length).toBe(initialBackgroundCount);
+
         // Test upsert with provided IDs (update existing vectors)
         const updatedVectors = [
           [1.1, 1.2, 1.3],
@@ -327,9 +401,9 @@ describe('Lance vector store tests', () => {
         ];
 
         const updatedMetadata = [
-          { text: 'First vector updated' },
-          { text: 'Second vector updated' },
-          { text: 'Third vector updated' },
+          { text: 'upsert-test-first-updated' },
+          { text: 'upsert-test-second-updated' },
+          { text: 'upsert-test-third-updated' },
         ];
 
         const updatedIds = await vectorDB.upsert({
@@ -341,18 +415,58 @@ describe('Lance vector store tests', () => {
         });
 
         expect(updatedIds).toEqual(ids);
+
+        // Verify background rows still exist after update
+        const backgroundAfterUpdate = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundAfterUpdate.length).toBe(initialBackgroundCount);
+
+        // Verify original test rows are gone (replaced by updated ones)
+        const originalResults = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: testVectors[0],
+          topK: 500,
+          filter: { text: { $like: 'upsert-test-%' } },
+        });
+        // Should only find the updated rows, not the original ones
+        expect(originalResults.every(r => r.metadata?.text?.includes('-updated'))).toBe(true);
+
+        // Verify updated data exists
+        newResults = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: updatedVectors[0],
+          topK: 500,
+          filter: { text: { $like: 'upsert-test-%-updated' } },
+        });
+        expect(newResults).toHaveLength(3);
+        expect(newResults.some(r => r.metadata?.text === 'upsert-test-first-updated')).toBe(true);
       });
 
-      it('should throw error when upserting to non-existent table', async () => {
+      it('should auto-create table when upserting to non-existent table', async () => {
         const nonExistentTable = 'non-existent-table-' + Date.now();
 
-        await expect(
-          vectorDB.upsert({
-            indexName: testTableIndexColumn,
-            tableName: nonExistentTable,
-            vectors: [[0.1, 0.2, 0.3]],
-          }),
-        ).rejects.toThrow('does not exist');
+        // Upsert should auto-create the table
+        const ids = await vectorDB.upsert({
+          indexName: testTableIndexColumn,
+          tableName: nonExistentTable,
+          vectors: [[0.1, 0.2, 0.3]],
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Verify table was created
+        const tables = await vectorDB.listTables();
+        expect(tables).toContain(nonExistentTable);
+
+        // Cleanup
+        await vectorDB.deleteTable(nonExistentTable);
       });
     });
 
@@ -388,13 +502,28 @@ describe('Lance vector store tests', () => {
       });
 
       it('should query vectors from an existing table', async () => {
+        // Verify background rows exist before upsert
+        const backgroundBefore = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundBefore.length).toBeGreaterThan(0);
+        const initialBackgroundCount = backgroundBefore.length;
+
         const testVectors = [
           [0.1, 0.2, 0.3],
           [0.4, 0.5, 0.6],
           [0.7, 0.8, 0.9],
         ];
 
-        const testMetadata = [{ text: 'First vector' }, { text: 'Second vector' }, { text: 'Third vector' }];
+        const testMetadata = [
+          { text: 'query-test-first' },
+          { text: 'query-test-second' },
+          { text: 'query-test-third' },
+        ];
 
         const ids = await vectorDB.upsert({
           indexName: testTableIndexColumn,
@@ -406,35 +535,49 @@ describe('Lance vector store tests', () => {
         expect(ids).toHaveLength(3);
         expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+        // Use filter to isolate our test data from background rows
         const results = await vectorDB.query({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           queryVector: testVectors[0],
           columns: ['id', 'metadata_text', 'vector'],
-          topK: 3,
+          topK: 10,
           includeVector: true,
+          filter: { text: { $like: 'query-test-%' } },
         });
 
         expect(results).toHaveLength(3);
         const sortedResultIds = results.map(res => res.id).sort();
-        const sortedIds = ids.sort();
+        const sortedIds = [...ids].sort();
         expect(sortedResultIds).to.deep.equal(sortedIds);
-        expect(results[0].metadata?.text).toBe('First vector');
-        expect(results[1].metadata?.text).toBe('Second vector');
-        expect(results[2].metadata?.text).toBe('Third vector');
+
+        // Verify metadata (results are sorted by similarity, not insertion order)
+        const texts = results.map(r => r.metadata?.text).sort();
+        expect(texts).to.deep.equal(['query-test-first', 'query-test-second', 'query-test-third']);
+
+        // Verify background rows are preserved after upsert
+        const backgroundAfter = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundAfter.length).toBe(initialBackgroundCount);
       });
 
-      it('should throw error when querying from non-existent table', async () => {
+      it('should return empty array when querying from non-existent table', async () => {
         const nonExistentTable = 'non-existent-table-' + Date.now();
 
-        await expect(
-          vectorDB.query({
-            indexName: testTableIndexColumn,
-            tableName: nonExistentTable,
-            columns: ['id', 'vector', 'metadata'],
-            queryVector: [0.1, 0.2, 0.3],
-          }),
-        ).rejects.toThrowError(new RegExp(`Table '${nonExistentTable}'`));
+        // Query should return empty array, not throw
+        const results = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: nonExistentTable,
+          columns: ['id', 'vector', 'metadata'],
+          queryVector: [0.1, 0.2, 0.3],
+        });
+
+        expect(results).toEqual([]);
       });
     });
 
@@ -470,37 +613,64 @@ describe('Lance vector store tests', () => {
       });
 
       it('should update vector and metadata by id', async () => {
+        // Verify background rows exist before upsert
+        const backgroundBefore = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundBefore.length).toBeGreaterThan(0);
+        const initialBackgroundCount = backgroundBefore.length;
+
+        // Use unique metadata to identify this test's data
+        const uniquePrefix = 'update-both-test-' + Date.now();
+
         const ids = await vectorDB.upsert({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           vectors: [[0.1, 0.2, 0.3]],
-          metadata: [{ text: 'First vector' }],
+          metadata: [{ text: uniquePrefix }],
         });
 
         expect(ids).toHaveLength(1);
         expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+        // Verify background rows are preserved after upsert
+        const backgroundAfterUpsert = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundAfterUpsert.length).toBe(initialBackgroundCount);
+
+        const updatedText = uniquePrefix + '-updated';
         await vectorDB.updateVector({
           indexName: testTableIndexColumn,
           id: ids[0],
           update: {
             vector: [0.4, 0.5, 0.6],
-            metadata: { text: 'Updated vector' },
+            metadata: { text: updatedText },
           },
         });
 
+        // Use filter to isolate our test data from background rows
         const res = await vectorDB.query({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           queryVector: [0.4, 0.5, 0.6],
           columns: ['id', 'metadata_text', 'vector'],
-          topK: 3,
+          topK: 10,
           includeVector: true,
+          filter: { text: { $like: uniquePrefix + '%' } },
         });
 
         expect(res).toHaveLength(1);
         expect(res[0].id).toBe(ids[0]);
-        expect(res[0].metadata?.text).to.equal('Updated vector');
+        expect(res[0].metadata?.text).to.equal(updatedText);
 
         // Fix decimal points in the response vector
         const fixedVector = res[0].vector?.map(num => Number(num.toFixed(1)));
@@ -508,16 +678,41 @@ describe('Lance vector store tests', () => {
       });
 
       it('should only update existing vector', async () => {
+        // Verify background rows exist before upsert
+        const backgroundBefore = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundBefore.length).toBeGreaterThan(0);
+        const initialBackgroundCount = backgroundBefore.length;
+
+        // Use unique metadata to identify this test's data
+        const uniqueMetadata = 'vector-only-update-test-' + Date.now();
+
         const ids = await vectorDB.upsert({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           vectors: [[0.1, 0.2, 0.3]],
-          metadata: [{ text: 'Vector only update test' }],
+          metadata: [{ text: uniqueMetadata }],
         });
 
         expect(ids).toHaveLength(1);
         expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+        // Verify background rows are preserved after upsert
+        const backgroundAfterUpsert = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundAfterUpsert.length).toBe(initialBackgroundCount);
+
+        // Update only the vector, not the metadata
         await vectorDB.updateVector({
           indexName: testTableIndexColumn,
           id: ids[0],
@@ -526,18 +721,21 @@ describe('Lance vector store tests', () => {
           },
         });
 
+        // Use filter to isolate our test data from background rows
         const res = await vectorDB.query({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           queryVector: [0.4, 0.5, 0.6],
           columns: ['id', 'metadata_text', 'vector'],
-          topK: 3,
+          topK: 10,
           includeVector: true,
+          filter: { text: uniqueMetadata },
         });
 
         expect(res).toHaveLength(1);
         expect(res[0].id).toBe(ids[0]);
-        expect(res[0].metadata?.text).to.equal('Vector only update test');
+        // Metadata should be unchanged
+        expect(res[0].metadata?.text).to.equal(uniqueMetadata);
 
         // Fix decimal points in the response vector
         const fixedVector = res[0].vector?.map(num => Number(num.toFixed(1)));
@@ -545,38 +743,66 @@ describe('Lance vector store tests', () => {
       });
 
       it('should only update existing vector metadata', async () => {
+        // Verify background rows exist before upsert
+        const backgroundBefore = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundBefore.length).toBeGreaterThan(0);
+        const initialBackgroundCount = backgroundBefore.length;
+
+        // Use unique metadata prefix to identify this test's data
+        const uniquePrefix = 'metadata-only-update-test-' + Date.now();
+
         const ids = await vectorDB.upsert({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           vectors: [[0.1, 0.2, 0.3]],
-          metadata: [{ text: 'Metadata only update test' }],
+          metadata: [{ text: uniquePrefix }],
         });
 
         expect(ids).toHaveLength(1);
         expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+        // Verify background rows are preserved after upsert
+        const backgroundAfterUpsert = await vectorDB.query({
+          indexName: testTableIndexColumn,
+          tableName: testTableName,
+          queryVector: [0.5, 0.5, 0.5],
+          topK: 500,
+          filter: { text: 'test' },
+        });
+        expect(backgroundAfterUpsert.length).toBe(initialBackgroundCount);
+
+        // Update only metadata, not the vector
+        const updatedText = uniquePrefix + '-updated';
         await vectorDB.updateVector({
           indexName: testTableIndexColumn,
           id: ids[0],
           update: {
-            metadata: { text: 'Updated metadata' },
+            metadata: { text: updatedText },
           },
         });
 
+        // Use filter to isolate our test data from background rows
         const res = await vectorDB.query({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           queryVector: [0.1, 0.2, 0.3],
           columns: ['id', 'metadata_text', 'vector'],
-          topK: 3,
+          topK: 10,
           includeVector: true,
+          filter: { text: { $like: uniquePrefix + '%' } },
         });
 
         expect(res).toHaveLength(1);
         expect(res[0].id).toBe(ids[0]);
-        expect(res[0].metadata?.text).to.equal('Updated metadata');
+        expect(res[0].metadata?.text).to.equal(updatedText);
 
-        // Fix decimal points in the response vector
+        // Vector should be unchanged
         const fixedVector = res[0].vector?.map(num => Number(num.toFixed(1)));
         expect(fixedVector).toEqual([0.1, 0.2, 0.3]);
       });
@@ -587,7 +813,8 @@ describe('Lance vector store tests', () => {
       const testTableIndexColumn = 'vector';
 
       beforeAll(async () => {
-        vectorDB.deleteAllTables();
+        // Clean up tables from previous test runs to ensure isolation
+        await vectorDB.deleteAllTables();
 
         const generateTableData = (numRows: number) => {
           return Array.from({ length: numRows }, (_, i) => ({
@@ -625,21 +852,24 @@ describe('Lance vector store tests', () => {
           indexName: testTableIndexColumn,
           tableName: testTableName,
           vectors: testVectors,
-          metadata: [{ text: 'First vector' }, { text: 'Second vector' }],
+          metadata: [{ text: 'delete-test-first' }, { text: 'delete-test-second' }],
         });
 
         expect(ids).toHaveLength(2);
 
+        // Query with filter to find our specific vectors (table has 300+ background rows)
         let results = await vectorDB.query({
           indexName: testTableIndexColumn,
           tableName: testTableName,
           queryVector: [0.1, 0.2, 0.3],
-          columns: ['id', 'metadata_text'],
-          topK: 3,
+          topK: 500,
           includeVector: true,
+          filter: { text: { $like: 'delete-test-%' } },
         });
 
-        expect(results).toHaveLength(2);
+        // Verify both our vectors exist
+        expect(results.some(r => r.id === ids[0])).toBe(true);
+        expect(results.some(r => r.id === ids[1])).toBe(true);
 
         await vectorDB.deleteVector({
           indexName: testTableIndexColumn,
@@ -650,13 +880,14 @@ describe('Lance vector store tests', () => {
           indexName: testTableIndexColumn,
           tableName: testTableName,
           queryVector: [0.1, 0.2, 0.3],
-          columns: ['id', 'metadata_text'],
-          topK: 3,
+          topK: 500,
           includeVector: true,
+          filter: { text: { $like: 'delete-test-%' } },
         });
 
-        expect(results).toHaveLength(1);
-        expect(results[0].id).toBe(ids[1]);
+        // Verify first vector is gone, second still exists
+        expect(results.some(r => r.id === ids[0])).toBe(false);
+        expect(results.some(r => r.id === ids[1])).toBe(true);
       });
     });
   });
@@ -694,39 +925,77 @@ describe('Lance vector store tests', () => {
     });
 
     it('should query vectors with metadata', async () => {
+      // Verify background rows exist before upsert
+      const backgroundBefore = await vectorDB.query({
+        indexName: testTableIndexColumn,
+        tableName: testTableName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 500,
+        filter: { text: 'test' },
+      });
+      expect(backgroundBefore.length).toBeGreaterThan(0);
+      const initialBackgroundCount = backgroundBefore.length;
+
+      // Use unique metadata to identify this test's data
+      const uniqueText = 'query-metadata-test-' + Date.now();
       const testVectors = [[0.1, 0.2, 0.3]];
       const ids = await vectorDB.upsert({
         indexName: testTableIndexColumn,
         tableName: testTableName,
         vectors: testVectors,
-        metadata: [{ text: 'First vector', newText: 'hi' }],
+        metadata: [{ text: uniqueText, newText: 'hi' }],
       });
 
       expect(ids).toHaveLength(1);
       expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+      // Use filter to isolate our test data from background rows
       const res = await vectorDB.query({
         indexName: testTableIndexColumn,
         tableName: testTableName,
         queryVector: testVectors[0],
         columns: ['id', 'metadata_text', 'metadata_newText', 'vector'],
-        topK: 3,
+        topK: 10,
         includeVector: true,
+        filter: { text: uniqueText },
       });
 
       expect(res).toHaveLength(1);
       expect(res[0].id).toBe(ids[0]);
-      expect(res[0].metadata?.text).to.equal('First vector');
+      expect(res[0].metadata?.text).to.equal(uniqueText);
       expect(res[0].metadata?.newText).to.equal('hi');
+
+      // Verify background rows are preserved after upsert
+      const backgroundAfter = await vectorDB.query({
+        indexName: testTableIndexColumn,
+        tableName: testTableName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 500,
+        filter: { text: 'test' },
+      });
+      expect(backgroundAfter.length).toBe(initialBackgroundCount);
     });
 
     it('should query vectors with filter', async () => {
+      // Verify background rows exist before upsert
+      const backgroundBefore = await vectorDB.query({
+        indexName: testTableIndexColumn,
+        tableName: testTableName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 500,
+        filter: { text: 'test' },
+      });
+      expect(backgroundBefore.length).toBeGreaterThan(0);
+      const initialBackgroundCount = backgroundBefore.length;
+
+      // Use unique metadata to identify this test's data
+      const uniqueText = 'query-filter-test-' + Date.now();
       const testVectors = [[0.1, 0.2, 0.3]];
       const ids = await vectorDB.upsert({
         indexName: testTableIndexColumn,
         tableName: testTableName,
         vectors: testVectors,
-        metadata: [{ text: 'First vector', newText: 'hi' }],
+        metadata: [{ text: uniqueText, newText: 'hi' }],
       });
 
       expect(ids).toHaveLength(1);
@@ -737,51 +1006,67 @@ describe('Lance vector store tests', () => {
         tableName: testTableName,
         queryVector: testVectors[0],
         columns: ['id', 'metadata_text', 'metadata_newText', 'vector'],
-        topK: 3,
+        topK: 10,
         includeVector: true,
-        filter: { text: 'First vector' },
+        filter: { text: uniqueText },
       });
 
       expect(res).toHaveLength(1);
       expect(res[0].id).toBe(ids[0]);
-      expect(res[0].metadata?.text).to.equal('First vector');
+      expect(res[0].metadata?.text).to.equal(uniqueText);
       expect(res[0].metadata?.newText).to.equal('hi');
+
+      // Verify background rows are preserved after upsert
+      const backgroundAfter = await vectorDB.query({
+        indexName: testTableIndexColumn,
+        tableName: testTableName,
+        queryVector: [0.5, 0.5, 0.5],
+        topK: 500,
+        filter: { text: 'test' },
+      });
+      expect(backgroundAfter.length).toBe(initialBackgroundCount);
     });
 
     it('should query vectors if filter columns array is not provided', async () => {
+      // Use unique metadata to identify this test's data
+      const uniqueText = 'query-no-columns-test-' + Date.now();
       const testVectors = [[0.1, 0.2, 0.3]];
       const ids = await vectorDB.upsert({
         indexName: testTableIndexColumn,
         tableName: testTableName,
         vectors: testVectors,
-        metadata: [{ text: 'First vector', newText: 'hi' }],
+        metadata: [{ text: uniqueText, newText: 'hi' }],
       });
 
       expect(ids).toHaveLength(1);
       expect(ids.every(id => typeof id === 'string')).toBe(true);
 
+      // Query without specifying columns - should return all columns including metadata
       const res = await vectorDB.query({
         indexName: testTableIndexColumn,
         tableName: testTableName,
         queryVector: testVectors[0],
-        topK: 3,
+        topK: 10,
         includeVector: true,
-        filter: { text: 'First vector' },
+        filter: { text: uniqueText },
       });
 
       expect(res).toHaveLength(1);
       expect(res[0].id).toBe(ids[0]);
-      expect(res[0].metadata?.text).toBeUndefined();
-      expect(res[0].metadata?.newText).toBeUndefined();
+      // When columns are not specified, all columns including metadata should be returned
+      expect(res[0].metadata?.text).toBe(uniqueText);
+      expect(res[0].metadata?.newText).toBe('hi');
     });
 
     it('should query vectors with all columns when the include all columns flag is true', async () => {
+      // Use unique metadata to identify this test's data
+      const uniqueText = 'query-all-columns-test-' + Date.now();
       const testVectors = [[0.1, 0.2, 0.3]];
       const ids = await vectorDB.upsert({
         indexName: testTableIndexColumn,
         tableName: testTableName,
         vectors: testVectors,
-        metadata: [{ text: 'First vector', newText: 'hi' }],
+        metadata: [{ text: uniqueText, newText: 'hi' }],
       });
 
       expect(ids).toHaveLength(1);
@@ -791,9 +1076,9 @@ describe('Lance vector store tests', () => {
         indexName: testTableIndexColumn,
         tableName: testTableName,
         queryVector: testVectors[0],
-        topK: 3,
+        topK: 10,
         includeVector: true,
-        filter: { text: 'First vector' },
+        filter: { text: uniqueText },
         includeAllColumns: true,
       });
 
@@ -803,7 +1088,7 @@ describe('Lance vector store tests', () => {
 
       expect(res).toHaveLength(1);
       expect(res[0].id).toBe(ids[0]);
-      expect(res[0].metadata?.text).toBe('First vector');
+      expect(res[0].metadata?.text).toBe(uniqueText);
       expect(res[0].metadata?.newText).toBe('hi');
     });
   });
@@ -869,6 +1154,7 @@ describe('Lance vector store tests', () => {
       });
 
       it('should not throw error when filter is not provided', async () => {
+        // Query without filter - should return topK results from the table
         const res = await vectorDB.query({
           indexName: testTableIndexColumn,
           tableName: testTableName,
@@ -878,7 +1164,9 @@ describe('Lance vector store tests', () => {
           includeAllColumns: true,
         });
 
-        expect(res).toHaveLength(1);
+        // Should return up to topK results (3) from the background rows
+        expect(res.length).toBeGreaterThan(0);
+        expect(res.length).toBeLessThanOrEqual(3);
       });
     });
 
@@ -1487,6 +1775,281 @@ describe('Lance vector store tests', () => {
           const isMatch = item.metadata?.status === 'active' || item.metadata?.tags === null;
           expect(isMatch).toBe(true);
         });
+      });
+    });
+  });
+
+  describe('Memory integration compatibility', () => {
+    // These tests verify that LanceVectorStore works with Memory's calling pattern:
+    // 1. createIndex (without tableName, only indexName)
+    // 2. upsert (without tableName, only indexName)
+    // 3. query (without tableName, only indexName)
+
+    describe('createIndex without tableName', () => {
+      it('should create table and index when table does not exist', async () => {
+        const indexName = 'memory_compat_create_' + Date.now();
+
+        // Call createIndex without tableName (like Memory does)
+        // Should create the table automatically
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // Verify table was created
+        const tables = await vectorDB.listTables();
+        expect(tables).toContain(indexName);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      it('should work when table already exists', async () => {
+        const tableName = 'memory_compat_existing_' + Date.now();
+
+        // Create table with data first
+        const generateTableData = (numRows: number) => {
+          return Array.from({ length: numRows }, (_, i) => ({
+            id: String(i + 1),
+            vector: Array.from({ length: 3 }, () => Math.random()),
+          }));
+        };
+        await vectorDB.createTable(tableName, generateTableData(300));
+
+        // Call createIndex with tableName explicitly (for existing tables)
+        await vectorDB.createIndex({
+          tableName,
+          indexName: 'vector',
+          dimension: 3,
+          metric: 'cosine',
+          indexConfig: { type: 'ivfflat', numPartitions: 1, numSubVectors: 1 },
+        });
+
+        // Should not throw - index created on existing table
+        const tables = await vectorDB.listTables();
+        expect(tables).toContain(tableName);
+
+        // Cleanup
+        await vectorDB.deleteTable(tableName);
+      });
+    });
+
+    describe('query without tableName', () => {
+      it('should return empty array when table does not exist', async () => {
+        const indexName = 'memory_compat_query_nonexistent_' + Date.now();
+
+        // Query without tableName on non-existent table
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        });
+
+        // Should return empty array, not throw
+        expect(results).toEqual([]);
+      });
+
+      it('should return results when table exists with data', async () => {
+        const indexName = 'memory_compat_query_existing_' + Date.now();
+
+        // Create table with data
+        const generateTableData = (numRows: number) => {
+          return Array.from({ length: numRows }, (_, i) => ({
+            id: String(i + 1),
+            vector: Array.from({ length: 3 }, () => Math.random()),
+          }));
+        };
+        await vectorDB.createTable(indexName, generateTableData(10));
+
+        // Query without tableName - should default to indexName
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        });
+
+        expect(results.length).toBeGreaterThan(0);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+    });
+
+    describe('upsert without tableName', () => {
+      it('should add vectors to existing table', async () => {
+        const indexName = 'memory_compat_upsert_' + Date.now();
+
+        // First create table via createIndex (like Memory does)
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // Then upsert without tableName
+        const ids = await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+          ],
+          metadata: [{ message_id: 'msg1' }, { message_id: 'msg2' }],
+        });
+
+        expect(ids).toHaveLength(2);
+
+        // Verify data was added by querying
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        });
+
+        expect(results.length).toBe(2);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+    });
+
+    describe('full Memory-like flow', () => {
+      it('should handle empty recall (query before any upsert)', async () => {
+        const indexName = 'memory_flow_empty_' + Date.now();
+
+        // Memory flow: createIndex first
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // Then query (recall) - should return empty, not throw
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+        });
+
+        expect(results).toEqual([]);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      it('should handle save then recall flow', async () => {
+        const indexName = 'memory_flow_save_recall_' + Date.now();
+
+        // 1. createIndex (Memory does this first)
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // 2. upsert (Memory saves messages)
+        await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9],
+          ],
+          metadata: [
+            { message_id: 'msg1', thread_id: 'thread1' },
+            { message_id: 'msg2', thread_id: 'thread1' },
+            { message_id: 'msg3', thread_id: 'thread1' },
+          ],
+        });
+
+        // 3. query (Memory recalls similar messages)
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 2,
+        });
+
+        expect(results.length).toBe(2);
+        expect(results[0].id).toBeDefined();
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+    });
+
+    describe('schema mismatch handling', () => {
+      it('should filter extra columns when upserting to non-empty table with different schema', async () => {
+        const tableName = 'schema_mismatch_extra_cols_' + Date.now();
+
+        // Create table with initial data (establishes schema with metadata_field1)
+        await vectorDB.createTable(tableName, [{ id: '1', vector: [0.1, 0.2, 0.3], metadata_field1: 'value1' }]);
+
+        // Upsert with different metadata fields (metadata_field2 not in schema)
+        // The extra column should be filtered out
+        const ids = await vectorDB.upsert({
+          tableName,
+          indexName: 'vector',
+          vectors: [[0.4, 0.5, 0.6]],
+          metadata: [{ field2: 'value2' }], // Different field than schema - will be dropped
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Query to verify data was added
+        const results = await vectorDB.query({
+          tableName,
+          indexName: 'vector',
+          queryVector: [0.4, 0.5, 0.6],
+          topK: 5,
+          includeAllColumns: true,
+        });
+
+        expect(results.length).toBe(2); // Original + new row
+        // New row should have metadata_field1 as null (from schema), not field2
+        const newRow = results.find(r => r.id === ids[0]);
+        expect(newRow).toBeDefined();
+        expect(newRow?.metadata?.field2).toBeUndefined(); // Dropped
+        expect(newRow?.metadata?.field1).toBeNull(); // Set to null for schema column
+
+        // Cleanup
+        await vectorDB.deleteTable(tableName);
+      });
+
+      it('should set missing schema columns to null when upserting partial data', async () => {
+        const tableName = 'schema_mismatch_missing_cols_' + Date.now();
+
+        // Create table with schema including metadata_field1 and metadata_field2
+        await vectorDB.createTable(tableName, [
+          { id: '1', vector: [0.1, 0.2, 0.3], metadata_field1: 'value1', metadata_field2: 'value2' },
+        ]);
+
+        // Upsert with only field1 (field2 missing from incoming data)
+        const ids = await vectorDB.upsert({
+          tableName,
+          indexName: 'vector',
+          vectors: [[0.4, 0.5, 0.6]],
+          metadata: [{ field1: 'new_value1' }], // field2 not provided
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Query to verify data - field2 should be null for new row
+        const results = await vectorDB.query({
+          tableName,
+          indexName: 'vector',
+          queryVector: [0.4, 0.5, 0.6],
+          topK: 5,
+          includeAllColumns: true,
+        });
+
+        const newRow = results.find(r => r.id === ids[0]);
+        expect(newRow).toBeDefined();
+        expect(newRow?.metadata?.field1).toBe('new_value1');
+        // field2 should be null (not undefined) since it's in schema but not in data
+        expect(newRow?.metadata?.field2).toBeNull();
+
+        // Cleanup
+        await vectorDB.deleteTable(tableName);
       });
     });
   });

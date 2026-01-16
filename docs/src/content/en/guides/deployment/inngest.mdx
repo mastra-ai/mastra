@@ -311,6 +311,92 @@ When you include custom functions:
 
 This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
 
+## Using with other frameworks
+
+The default `serve` function uses Hono internally. If you're using a different web framework like Express, Fastify, or Koa, use the `createServe` factory function with the appropriate Inngest adapter.
+
+### Express
+
+```ts title="src/server.ts"
+import express from "express";
+import { createServe } from "@mastra/inngest";
+import { serve as expressAdapter } from "inngest/express";
+import { mastra, inngest } from "./mastra";
+
+const app = express();
+
+// Body parsing middleware required for Inngest
+app.use(express.json());
+
+const handler = createServe(expressAdapter)({ mastra, inngest });
+app.use("/api/inngest", handler);
+
+app.listen(3000);
+```
+
+### Fastify
+
+```ts title="src/server.ts"
+import Fastify from "fastify";
+import { createServe } from "@mastra/inngest";
+import { serve as fastifyAdapter } from "inngest/fastify";
+import { mastra, inngest } from "./mastra";
+
+const fastify = Fastify();
+
+// JSON parsing is handled by Fastify's default content-type parser
+const handler = createServe(fastifyAdapter)({ mastra, inngest });
+
+fastify.route({
+  method: ["GET", "POST", "PUT"],
+  url: "/api/inngest",
+  handler,
+});
+
+fastify.listen({ port: 3000 });
+```
+
+### Koa
+
+```ts title="src/server.ts"
+import Koa from "koa";
+import Router from "@koa/router";
+import bodyParser from "koa-bodyparser";
+import { createServe } from "@mastra/inngest";
+import { serve as koaAdapter } from "inngest/koa";
+import { mastra, inngest } from "./mastra";
+
+const app = new Koa();
+const router = new Router();
+
+// Body parsing middleware required for Inngest
+app.use(bodyParser());
+
+const handler = createServe(koaAdapter)({ mastra, inngest });
+router.all("/api/inngest", handler);
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(3000);
+```
+
+### Next.js
+
+```ts title="app/api/inngest/route.ts"
+import { createServe } from "@mastra/inngest";
+import { serve as nextAdapter } from "inngest/next";
+import { mastra, inngest } from "@/mastra";
+
+const handler = createServe(nextAdapter)({ mastra, inngest });
+
+export { handler as GET, handler as POST, handler as PUT };
+```
+
+### Available adapters
+
+The `createServe` function works with any Inngest adapter. See the [Inngest serve documentation](https://www.inngest.com/docs/reference/serve) for a complete list of available adapters including AWS Lambda, Cloudflare Workers, and more.
+
 ## Flow control
 
 Inngest workflows support flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These options are configured in the `createWorkflow()` call and help manage workflow execution at scale.

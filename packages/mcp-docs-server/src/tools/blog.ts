@@ -105,7 +105,7 @@ export type BlogInput = z.infer<typeof blogInputSchema>;
 export const blogTool = {
   name: 'mastraBlog',
   description:
-    'Get Mastra.ai blog content. Without a URL, returns a list of all blog posts. With a URL, returns the specific blog post content in markdown format. The blog contains changelog posts as well as announcements and posts about Mastra features and AI news',
+    '[🌐 REMOTE] Get Mastra.ai blog content. Without a URL, returns a list of all blog posts. With a URL, returns the specific blog post content in markdown format. The blog contains changelog posts as well as announcements and posts about Mastra features and AI news',
   parameters: blogInputSchema,
   execute: async (args: BlogInput) => {
     void logger.debug('Executing mastraBlog tool', { url: args.url });

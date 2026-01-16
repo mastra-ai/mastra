@@ -117,6 +117,46 @@ describe('Memory Handlers', () => {
     });
   });
 
+  /**
+   * Issue #11765: LIST_MESSAGES_ROUTE should gracefully handle agents without memory
+   * https://github.com/mastra-ai/mastra/issues/11765
+   *
+   * When the playground UI loads messages for a sub-agent without memory configured,
+   * it calls GET /api/memory/threads/:threadId/messages?agentId=<subAgentId>.
+   * This should return empty messages instead of throwing HTTPException(400).
+   */
+  describe('listMessagesHandler - Issue #11765', () => {
+    it('should return empty messages when agent has no memory configured (not throw)', async () => {
+      // Setup: Agent WITHOUT memory configured
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+        // NOTE: No memory property set
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      // BUG: Currently throws HTTPException(400, 'Memory is not initialized')
+      // EXPECTED: Should return empty messages instead
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        page: 0,
+        perPage: 10,
+      });
+
+      // This is the expected behavior - graceful empty response
+      expect(result).toEqual({ messages: [], uiMessages: [] });
+    });
+  });
+
   describe('listThreadsHandler', () => {
     it('should throw error when memory is not initialized', async () => {
       const mastra = new Mastra({
@@ -707,7 +747,7 @@ describe('Memory Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
     });
 
-    it('should throw error when storage is not initialized', async () => {
+    it('should return empty messages when storage is not initialized (Issue #11765)', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -719,14 +759,14 @@ describe('Memory Handlers', () => {
           }),
         },
       });
-      await expect(
-        LIST_MESSAGES_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          threadId: 'test-thread',
-          agentId: 'testAgent',
-          page: 0,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
+      // Should return empty messages instead of throwing
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        agentId: 'testAgent',
+        page: 0,
+      });
+      expect(result).toEqual({ messages: [], uiMessages: [] });
     });
 
     it('should throw 404 when thread is not found', async () => {

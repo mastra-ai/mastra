@@ -57,7 +57,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 const conversationMemory = new Memory({
-  storage: new LibSQLStore({ url: ":memory:" }),
+  storage: new LibSQLStore({ id: 'conversation-store', url: ":memory:" }),
 });
 
 const mastra = new Mastra({

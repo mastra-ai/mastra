@@ -13,8 +13,11 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
+import type { WorkflowSnapshotEntityData } from '../../../entities/utils';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { getTtlProps } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
@@ -41,9 +44,13 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
 
 export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   private service: Service<Record<string, any>>;
+  private ttlConfig?: DynamoDBTtlConfig;
+
   constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = resolveDynamoDBConfig(config);
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -168,16 +175,17 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       const now = new Date();
-      // Prepare data including the 'entity' type
-      const data = {
-        entity: 'workflow_snapshot', // Add entity type
+      const data: WorkflowSnapshotEntityData = {
+        entity: 'workflow_snapshot',
         workflow_name: workflowName,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
         createdAt: (createdAt ?? now).toISOString(),
         updatedAt: (updatedAt ?? now).toISOString(),
         resourceId,
+        ...getTtlProps('workflow_snapshot', this.ttlConfig),
       };
+
       // Use upsert instead of create to handle both create and update cases
       await this.service.entities.workflow_snapshot.upsert(data).go();
     } catch (error) {

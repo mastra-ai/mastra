@@ -139,10 +139,11 @@ mastra.addGateway(new MyPrivateGateway());
 Reference models from your custom gateway using the gateway ID as prefix:
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'my-agent',
+  id: 'my-agent',
+  name: 'My Agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1', // Uses MyPrivateGateway
 });
@@ -204,6 +205,7 @@ If you're not running in development mode or need immediate type updates:
 **Option 1: Use type assertion (simplest)**
 ```typescript
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1' as any, // Bypass type checking
@@ -224,6 +226,7 @@ type CustomModelId =
 type AllModelIds = ModelRouterModelId | CustomModelId;
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1' satisfies AllModelIds,

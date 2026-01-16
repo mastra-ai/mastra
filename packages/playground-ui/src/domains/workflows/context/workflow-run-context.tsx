@@ -3,7 +3,7 @@ import { createContext, useEffect, useMemo, useState, type Dispatch, type SetSta
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks';
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { useWorkflow, useWorkflowRunExecutionResult } from '@/hooks';
+import { useWorkflow, useWorkflowRun } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
 import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
 
@@ -72,7 +72,7 @@ export function WorkflowRunProvider({
       ? undefined
       : 5000;
 
-  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRunExecutionResult(
+  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRun(
     workflowId,
     initialRunId ?? '',
     refetchExecResultInterval,

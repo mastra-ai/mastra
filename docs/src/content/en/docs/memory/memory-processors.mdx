@@ -115,7 +115,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: "memory-vector",
       apiKey: process.env.PINECONE_API_KEY!,
-      environment: "us-east-1",
     }),
     embedder: new OpenAIEmbedder({
       model: "text-embedding-3-small",
@@ -178,7 +177,7 @@ If you manually add a memory processor to `inputProcessors` or `outputProcessors
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { MessageHistory } from "@mastra/memory/processors";
+import { MessageHistory } from "@mastra/core/processors";
 import { TokenLimiter } from "@mastra/core/processors";
 import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
@@ -273,7 +272,7 @@ const agent = new Agent({
 // If the guardrail aborts, nothing is saved to memory
 const result = await agent.generate("Hello");
 if (result.tripwire) {
-  console.log("Blocked:", result.tripwireReason);
+  console.log("Blocked:", result.tripwire.reason);
   // Memory is empty - no messages were persisted
 }
 ```

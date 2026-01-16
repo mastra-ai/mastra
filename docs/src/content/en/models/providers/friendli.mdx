@@ -48,18 +48,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "friendli/deepseek-ai/DeepSeek-R1-0528",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B",
     "imageInput": false,
     "audioInput": false,
@@ -70,6 +58,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 1
+  },
+  {
+    "model": "friendli/LGAI-EXAONE/K-EXAONE-236B-A23B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "friendli/meta-llama-3.1-8b-instruct",

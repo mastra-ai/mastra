@@ -69,9 +69,10 @@ export class PIIDetectionProcessor implements Processor<'pii-detection', { detec
  * Detects potentially harmful or toxic content.
  * Demonstrates: TripWire with metadata and scoring
  */
-export class ToxicityCheckProcessor
-  implements Processor<'toxicity-check', { toxicityScore: number; categories: string[]; action: string }>
-{
+export class ToxicityCheckProcessor implements Processor<
+  'toxicity-check',
+  { toxicityScore: number; categories: string[]; action: string }
+> {
   readonly id = 'toxicity-check' as const;
   readonly name = 'Toxicity Check Processor';
 
@@ -119,9 +120,10 @@ export class ToxicityCheckProcessor
  * Checks response quality and requests retries for poor responses.
  * Demonstrates: TripWire with retry capability and retryCount tracking
  */
-export class ResponseQualityProcessor
-  implements Processor<'response-quality', { qualityScore: number; issues: string[]; retryCount: number }>
-{
+export class ResponseQualityProcessor implements Processor<
+  'response-quality',
+  { qualityScore: number; issues: string[]; retryCount: number }
+> {
   readonly id = 'response-quality' as const;
   readonly name = 'Response Quality Processor';
 

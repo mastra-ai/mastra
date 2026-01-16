@@ -1,6 +1,39 @@
-# Inngest Workflow
+# Inngest Workflow with Observability
 
-This example demonstrates how to build an Inngest workflow with Mastra.
+This example demonstrates how to build an Inngest workflow with Mastra, including observability/tracing to capture workflow execution details.
+
+## Observability
+
+This example includes Mastra's observability features to trace workflow execution. When you run the workflow, you'll see trace events in the console:
+
+```
+🚀 SPAN_STARTED
+   Type: workflow_run
+   Name: activity-planning-workflow-step2-if-else
+   ID: <span-id>
+   Trace ID: <trace-id>
+────────────────────────────────────────────────────────────────────────────────
+🚀 SPAN_STARTED
+   Type: workflow_step
+   Name: fetch-weather
+   ...
+────────────────────────────────────────────────────────────────────────────────
+✅ SPAN_ENDED
+   Type: workflow_step
+   Name: fetch-weather
+   Duration: 1234ms
+   Output: { "date": "...", "maxTemp": 25, ... }
+```
+
+This proves that Mastra's observability captures:
+
+- **Workflow execution** (`workflow_run` spans)
+- **Individual step execution** (`workflow_step` spans)
+- **Agent/model calls** (`agent_run`, `model_generation` spans)
+- **Step inputs and outputs**
+- **Timing information**
+
+See the [Observability Configuration](#observability-configuration) section for details on configuring exporters.
 
 ## Setup
 
@@ -527,3 +560,72 @@ const workflow = createWorkflow({
 All flow control features are optional. If not specified, workflows run with Inngest's default behavior. Flow control configuration is validated by Inngest's native implementation, ensuring compatibility and correctness.
 
 For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
+
+## Observability Configuration
+
+This example uses `@mastra/observability` to trace workflow execution. The configuration is in `index.ts`:
+
+```ts
+import { Observability, ConsoleExporter, DefaultExporter } from '@mastra/observability';
+
+const observability = new Observability({
+  configs: {
+    default: {
+      serviceName: 'inngest-workflow-example',
+      sampling: { type: 'always' }, // Sample all traces
+      exporters: [
+        new ConsoleExporter(), // Logs traces to console
+        new DefaultExporter(), // Persists traces to storage
+      ],
+    },
+  },
+});
+
+export const mastra = new Mastra({
+  // ... other config
+  observability,
+});
+```
+
+### Using Production Exporters
+
+For production, you can use other exporters:
+
+**Langfuse:**
+
+```ts
+import { LangfuseExporter } from '@mastra/langfuse';
+
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+});
+```
+
+**Datadog:**
+
+```ts
+import { DatadogExporter } from '@mastra/datadog';
+
+new DatadogExporter({
+  mlApp: 'my-app',
+  apiKey: process.env.DD_API_KEY,
+});
+```
+
+**OpenTelemetry:**
+
+```ts
+import { OtelExporter } from '@mastra/otel-exporter';
+
+new OtelExporter({
+  provider: {
+    signoz: {
+      endpoint: 'https://ingest.signoz.io',
+      apiKey: process.env.SIGNOZ_API_KEY,
+    },
+  },
+});
+```
+
+For more information, see the [Mastra Observability documentation](https://mastra.ai/docs/observability).

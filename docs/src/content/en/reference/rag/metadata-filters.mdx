@@ -293,6 +293,24 @@ const results = await store.query({
 
 - Supports advanced filtering with nested conditions
 - Payload (metadata) fields must be explicitly indexed for filtering
+- Use `createPayloadIndex()` to index fields you want to filter on:
+
+```typescript
+// Index a field before filtering on it
+await store.createPayloadIndex({
+  indexName: "my_index",
+  fieldName: "source",
+  fieldSchema: "keyword", // 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'
+});
+
+// Now filtering works
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  filter: { source: "document-a" },
+});
+```
+
 - Efficient handling of geo-spatial queries
 - Special handling for null and empty values
 - Vector-specific filtering capabilities

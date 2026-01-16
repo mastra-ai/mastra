@@ -1,5 +1,5 @@
 import Link from "@docusaurus/Link";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import type { Props } from "@theme/PaginatorNavLink";
 import { type ReactNode } from "react";
 

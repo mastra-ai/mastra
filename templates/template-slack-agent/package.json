@@ -20,13 +20,13 @@
     "@mastra/core": "beta",
     "@mastra/libsql": "beta",
     "@mastra/memory": "beta",
-    "@slack/web-api": "^7.9.2",
+    "@slack/web-api": "^7.13.0",
     "supports-color": "^10.2.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
     "mastra": "beta",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

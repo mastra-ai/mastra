@@ -1,5 +1,4 @@
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
-import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList } from '../../agent';
@@ -10,10 +9,10 @@ import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
+import { globalEmbeddingCache } from './embedding-cache';
 
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
-const DEFAULT_CACHE_MAX_SIZE = 1000; // Maximum number of cached embeddings
 
 export interface SemanticRecallOptions {
   /**
@@ -129,11 +128,12 @@ export class SemanticRecall implements Processor {
   private logger?: IMastraLogger;
   private embedderOptions?: MastraEmbeddingOptions;
 
-  // LRU cache for embeddings: contentHash -> embedding vector
-  private embeddingCache: LRUCache<string, number[]>;
-
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
+
+  // Cache for index dimension validation (per-process)
+  // Prevents redundant API calls when index already validated
+  private indexValidationCache = new Map<string, { dimension: number }>();
 
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
@@ -145,11 +145,6 @@ export class SemanticRecall implements Processor {
     this.indexName = options.indexName;
     this.logger = options.logger;
     this.embedderOptions = options.embedderOptions;
-
-    // Initialize LRU cache for embeddings
-    this.embeddingCache = new LRUCache<string, number[]>({
-      max: DEFAULT_CACHE_MAX_SIZE,
-    });
 
     // Normalize messageRange to object format
     if (typeof options.messageRange === 'number') {
@@ -416,9 +411,9 @@ export class SemanticRecall implements Processor {
     embeddings: number[][];
     dimension: number;
   }> {
-    // Check cache first
+    // Check global cache first
     const contentHash = await this.hashContent(content, indexName);
-    const cachedEmbedding = this.embeddingCache.get(contentHash);
+    const cachedEmbedding = globalEmbeddingCache.get(contentHash);
 
     if (cachedEmbedding) {
       return {
@@ -436,9 +431,9 @@ export class SemanticRecall implements Processor {
       ...(this.embedderOptions as any),
     });
 
-    // Cache the first embedding
+    // Cache the first embedding in global cache
     if (result.embeddings[0]) {
-      this.embeddingCache.set(contentHash, result.embeddings[0]);
+      globalEmbeddingCache.set(contentHash, result.embeddings[0]);
     }
 
     return {
@@ -463,20 +458,25 @@ export class SemanticRecall implements Processor {
 
   /**
    * Ensure vector index exists with correct dimensions
+   * Uses in-memory cache to avoid redundant validation calls
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
-    // Check if index exists
-    const indexes = await this.vector.listIndexes();
-    const indexExists = indexes.includes(indexName);
-
-    if (!indexExists) {
-      // Create index if it doesn't exist
-      await this.vector.createIndex({
-        indexName,
-        dimension,
-        metric: 'cosine',
-      });
+    // Check cache first - if already validated in this process, skip
+    const cached = this.indexValidationCache.get(indexName);
+    if (cached?.dimension === dimension) {
+      return;
     }
+
+    // Always call createIndex - it's idempotent and validates dimensions
+    // Vector stores handle the "already exists" case and validate dimensions
+    await this.vector.createIndex({
+      indexName,
+      dimension,
+      metric: 'cosine',
+    });
+
+    // Cache the validated dimension to avoid redundant calls
+    this.indexValidationCache.set(indexName, { dimension });
   }
 
   /**

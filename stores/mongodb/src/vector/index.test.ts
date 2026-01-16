@@ -2,6 +2,80 @@ import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
+// Tests for GitHub issue #6563 - Configurable embedding field path
+// https://github.com/mastra-ai/mastra/issues/6563
+describe('MongoDBVector embedding field path configuration (#6563)', () => {
+  it('should accept an optional embeddingFieldPath parameter', () => {
+    // User wants to store embeddings in a nested field like text.contentEmbedding
+    expect(() => {
+      new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        embeddingFieldPath: 'text.contentEmbedding',
+      });
+    }).not.toThrow();
+  });
+
+  it('should default to "embedding" when embeddingFieldPath is not provided', () => {
+    const vectorDB = new MongoDBVector({
+      id: 'test',
+      uri: 'mongodb://localhost:27017',
+      dbName: 'test_db',
+    });
+
+    // Access the private property via type assertion for testing
+    // @ts-expect-error - accessing private property for test validation
+    expect(vectorDB.embeddingFieldName).toBe('embedding');
+  });
+
+  it('should use custom embedding field path when provided', () => {
+    const vectorDB = new MongoDBVector({
+      id: 'test',
+      uri: 'mongodb://localhost:27017',
+      dbName: 'test_db',
+      embeddingFieldPath: 'nested.embedding.vector',
+    });
+
+    // Access the private property via type assertion for testing
+    // @ts-expect-error - accessing private property for test validation
+    expect(vectorDB.embeddingFieldName).toBe('nested.embedding.vector');
+  });
+});
+
+// Tests for GitHub issue #11697 - MongoDBVector constructor
+// https://github.com/mastra-ai/mastra/issues/11697
+describe('MongoDBVector constructor (#11697)', () => {
+  it('should accept "uri" parameter', () => {
+    expect(() => {
+      new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+      });
+    }).not.toThrow();
+  });
+
+  it('should work with MongoDB Atlas connection strings', () => {
+    expect(() => {
+      new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb+srv://user:pass@cluster.mongodb.net',
+        dbName: 'test_db',
+      });
+    }).not.toThrow();
+  });
+
+  it('should throw clear error when uri is not provided', () => {
+    expect(() => {
+      new MongoDBVector({
+        id: 'test',
+        dbName: 'test_db',
+      } as any);
+    }).toThrow(/uri|connection/i);
+  });
+});
+
 // Give tests enough time to complete database operations
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
 

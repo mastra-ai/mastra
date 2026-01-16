@@ -122,7 +122,7 @@ const result = await agent.generate('How do I protect my data online?');
 
 if (result.tripwire) {
   console.log('❌ Response failed validation:');
-  console.log(result.tripwireReason);
+  console.log(result.tripwire.reason);
 } else {
   console.log('✅ Response passed validation:');
   console.log(result.text);
@@ -161,7 +161,7 @@ const result = await agent.generate("What's the weather like today?");
 
 if (result.tripwire) {
   console.log('❌ Response failed validation:');
-  console.log(result.tripwireReason);
+  console.log(result.tripwire.reason);
 } else {
   console.log('✅ Response passed validation:');
   console.log(result.text);
@@ -289,7 +289,7 @@ When using `ResponseValidator`, the processor:
 ### Failed validation
 
 - **Missing keywords**: Any missing required keyword sets `result.tripwire = true`
-- **Detailed error**: `result.tripwireReason` specifies which keyword was missing
+- **Detailed error**: `result.tripwire.reason` specifies which keyword was missing
 - **Immediate blocking**: Response is blocked before being returned to the user
 - **No exceptions**: Check `result.tripwire` instead of using try/catch blocks
 

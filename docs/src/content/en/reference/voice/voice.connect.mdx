@@ -104,7 +104,7 @@ import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 const realtimeVoice = new OpenAIRealtimeVoice();
 const voice = new CompositeVoice({
-  realtimeProvider: realtimeVoice,
+  realtime: realtimeVoice,
 });
 // This will use the OpenAIRealtimeVoice provider
 await voice.connect();

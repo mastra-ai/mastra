@@ -90,5 +90,50 @@ describe('watcher', () => {
         }),
       );
     });
+
+    describe('platform parameter handling', () => {
+      it('forwards "node" platform to bundler', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+
+        await getInputOptions('test-entry.js', 'node');
+
+        expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+          expect.stringMatching('test-entry.js'),
+          expect.objectContaining({
+            dependencies: expect.any(Map),
+            externalDependencies: expect.any(Set),
+            workspaceMap: expect.any(Map),
+          }),
+          'node',
+          undefined,
+          expect.objectContaining({
+            isDev: true,
+          }),
+        );
+      });
+
+      it('forwards "neutral" platform to bundler for Bun runtime support', async () => {
+        // When running under Bun, callers should pass 'neutral' to preserve
+        // Bun-specific globals (like Bun.s3). The watcher correctly forwards
+        // whatever platform value is passed to it.
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+
+        await getInputOptions('test-entry.js', 'neutral');
+
+        expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+          expect.stringMatching('test-entry.js'),
+          expect.objectContaining({
+            dependencies: expect.any(Map),
+            externalDependencies: expect.any(Set),
+            workspaceMap: expect.any(Map),
+          }),
+          'neutral',
+          undefined,
+          expect.objectContaining({
+            isDev: true,
+          }),
+        );
+      });
+    });
   });
 });

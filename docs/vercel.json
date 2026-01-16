@@ -497,42 +497,42 @@
     },
     {
       "source": "/guides/deployment/vercel-deployer",
-      "destination": "/docs/deployment/cloud-providers/vercel-deployer",
+      "destination": "/guides/v1/deployment/vercel-deployer",
       "permanent": true
     },
     {
       "source": "/guides/deployment/netlify-deployer",
-      "destination": "/docs/deployment/cloud-providers/netlify-deployer",
+      "destination": "/guides/v1/deployment/netlify-deployer",
       "permanent": true
     },
     {
       "source": "/guides/deployment/digital-ocean",
-      "destination": "/docs/deployment/cloud-providers/digital-ocean",
+      "destination": "/guides/v1/deployment/digital-ocean",
       "permanent": true
     },
     {
       "source": "/guides/deployment/cloudflare-deployer",
-      "destination": "/docs/deployment/cloud-providers/cloudflare-deployer",
+      "destination": "/guides/v1/deployment/cloudflare-deployer",
       "permanent": true
     },
     {
       "source": "/guides/deployment/azure-app-services",
-      "destination": "/docs/deployment/cloud-providers/azure-app-services",
+      "destination": "/guides/v1/deployment/azure-app-services",
       "permanent": true
     },
     {
       "source": "/guides/deployment/aws-lambda",
-      "destination": "/docs/deployment/cloud-providers/aws-lambda",
+      "destination": "/guides/v1/deployment/aws-lambda",
       "permanent": true
     },
     {
       "source": "/guides/deployment/amazon-ec2",
-      "destination": "/docs/deployment/cloud-providers/amazon-ec2",
+      "destination": "/guides/v1/deployment/amazon-ec2",
       "permanent": true
     },
     {
       "source": "/guides/deployment",
-      "destination": "/docs/deployment/cloud-providers",
+      "destination": "/docs/v1/deployment/cloud-providers",
       "permanent": true
     },
     {
@@ -557,7 +557,27 @@
     },
     {
       "source": "/examples/v1",
-      "destination": "/docs/v1",
+      "destination": "/docs/v1/getting-started/start",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/core/setTelemetry",
+      "destination": "/reference/v1/logging/pino-logger",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/workflows/workflow-methods/sendEvent",
+      "destination": "/docs/v1/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/workflows/workflow-methods/waitForEvent",
+      "destination": "/docs/v1/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/memory/query",
+      "destination": "/reference/v1/memory/recall",
       "permanent": true
     }
   ]

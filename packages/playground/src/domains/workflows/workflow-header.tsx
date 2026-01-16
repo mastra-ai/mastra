@@ -51,12 +51,6 @@ export function WorkflowHeader({
 
           <DividerIcon />
 
-          <Button as={Link} to={`/workflows/${workflowId}/graph`}>
-            Graph
-          </Button>
-
-          <DividerIcon />
-
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
             Traces
           </Button>

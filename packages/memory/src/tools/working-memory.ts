@@ -14,8 +14,13 @@ import type { ZodType } from 'zod';
  */
 export function deepMergeWorkingMemory(
   existing: Record<string, unknown> | null | undefined,
-  update: Record<string, unknown>,
+  update: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
+  // Handle null/undefined/empty updates - preserve existing or return empty object
+  if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
+    return existing && typeof existing === 'object' ? { ...existing } : {};
+  }
+
   if (!existing || typeof existing !== 'object') {
     return update;
   }
@@ -132,6 +137,12 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
             // If existing data is not valid JSON, start fresh
             existingData = null;
           }
+        }
+
+        // Handle case where LLM passes empty object or no memory field
+        if (inputData.memory === undefined || inputData.memory === null) {
+          // No data to update - return existing data unchanged
+          return { success: true, message: 'No memory data provided, existing memory unchanged.' };
         }
 
         let newData: unknown;

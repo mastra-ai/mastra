@@ -210,7 +210,6 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
     });
 
     const stream = await agent.stream('Execute the test tool', {
-      format: 'aisdk',
       maxSteps: 5,
     });
 

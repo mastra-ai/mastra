@@ -4,12 +4,12 @@ import { Icon } from '@/ds/icons/Icon';
 import { toast } from 'sonner';
 import { Txt } from '@/ds/components/Txt';
 import { usePlaygroundStore } from '@/store/playground-store';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { useLinkComponent } from '@/lib/framework';
@@ -48,7 +48,7 @@ export const RequestContext = () => {
     }
   };
 
-  const buttonClass = 'text-icon3 hover:text-icon6';
+  const buttonClass = 'text-neutral3 hover:text-neutral6';
 
   const formatRequestContext = async () => {
     if (!isValidJson(requestContextValue)) {
@@ -64,7 +64,7 @@ export const RequestContext = () => {
     <TooltipProvider>
       <div>
         <div className="flex items-center justify-between pb-2">
-          <Txt as="label" variant="ui-md" className="text-icon3">
+          <Txt as="label" variant="ui-md" className="text-neutral3">
             Request Context (JSON)
           </Txt>
 
@@ -115,7 +115,7 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
   return (
     <div className="max-w-3xl p-5 overflow-y-scroll h-full">
       <div className="rounded-lg p-4 pb-5 bg-surface4 shadow-md space-y-3 border border-border1 mb-5">
-        <Txt as="p" variant="ui-lg" className="text-icon3">
+        <Txt as="p" variant="ui-lg" className="text-neutral3">
           Mastra provides request context, which is a system based on dependency injection that enables you to configure
           your agents and tools with runtime variables. If you find yourself creating several different agents that do
           very similar things, request context allows you to combine them into one agent.

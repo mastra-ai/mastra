@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';

@@ -94,6 +94,57 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm build
   pnpm build:docs-mcp         # MCP documentation server
   ```
 
+## Testing Local Changes
+
+Testing local changes to Mastra follows a simple three-step pattern:
+
+1. Make your changes to the relevant package(s)
+2. Build the packages
+3. Test your changes inside the `examples/agent` project
+
+### Step 1: Make Your Changes
+
+Edit the necessary source files. Take note of the affected packages so that you can filter by them in the next step.
+
+### Step 2: Build the Packages
+
+From the monorepo root, build the packages you modified:
+
+```bash
+# Watch a specific package for faster iteration
+pnpm turbo watch build --filter="@mastra/core"
+
+# Watch multiple packages at once
+pnpm turbo watch build --filter="@mastra/core" --filter="mastra"
+
+# Watch all packages (not recommended, use --filter instead)
+pnpm turbo watch build
+
+# Fallback: Build everything once (if watch mode is not needed)
+pnpm build
+```
+
+Using `pnpm turbo watch build` automatically rebuilds packages when you make changes, eliminating the need to manually rebuild after every modification. If you're unsure which packages depend on your changes, run `pnpm turbo watch build` without a filter to watch everything.
+
+### Step 3: Test your changes
+
+Open a new terminal window and navigate to `examples/agent`. Install its dependencies:
+
+```bash
+cd examples/agent
+pnpm install --ignore-workspace
+```
+
+It's important that you use `--ignore-workspace` as otherwise the dependencies won't be installed correctly.
+
+Afterwards you can start the Mastra development server:
+
+```shell
+pnpm mastra:dev
+```
+
+Whenever you make changes to the source code, the `turbo watch` process from step 2 will rebuild the packages. You then can restart the development server to see your changes.
+
 ## Testing
 
 Mastra uses Vitest for testing. You can run all tests or only specific packages.

@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: Debug a GitHub issue
 ---
 

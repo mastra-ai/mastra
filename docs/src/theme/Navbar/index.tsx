@@ -1,6 +1,5 @@
 import Link from "@docusaurus/Link";
-import { GithubStarCount } from "@site/src/components/github-star-count";
-import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
+import { GitHubIconLink } from "@site/src/components/github-icon-link";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import { type ReactNode } from "react";
@@ -15,22 +14,19 @@ function NavbarContentDesktop() {
         <Link href="/docs/v1">
           <Logo />
         </Link>
-        <div className="hidden min-[1145px]:block">
+        <div className="hidden lg:block">
           <TabSwitcher />
-        </div>
-        <div className="w-[200px] hidden min-[996px]:block min-[1145px]:hidden">
-          <MobileDocsDropdown className="rounded-md h-8" />
         </div>
       </div>
 
       <div className="flex gap-2 items-center">
         <div className="flex items-center">
-          <GithubStarCount />
+          <GitHubIconLink />
         </div>
 
-        <div className="hidden @[798px]:block">
-          <div className="flex gap-2 items-center">
-            <SearchContainer locale="en" />
+        <div className="flex gap-2 items-center">
+          <SearchContainer locale="en" />
+          <div className="hidden lg:block">
             <AskAI />
           </div>
         </div>

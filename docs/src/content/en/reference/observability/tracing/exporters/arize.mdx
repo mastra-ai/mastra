@@ -50,27 +50,27 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
       name: "endpoint",
       type: "string",
       description:
-        "Collector endpoint for trace exports (e.g., 'http://localhost:6006/v1/traces' for Phoenix). Required for Phoenix. Optional for Arize AX (defaults to https://otlp.arize.com/v1/traces).",
+        "Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.",
       required: false,
     },
     {
       name: "apiKey",
       type: "string",
       description:
-        "API key for authentication. Required for Phoenix Cloud and Arize AX. Optional for self-hosted Phoenix.",
+        "API key for authentication. Falls back to ARIZE_API_KEY or PHOENIX_API_KEY env var.",
       required: false,
     },
     {
       name: "spaceId",
       type: "string",
       description:
-        "Arize AX space identifier. Required when sending traces to Arize AX.",
+        "Arize AX space identifier. Falls back to ARIZE_SPACE_ID env var. Required for Arize AX.",
       required: false,
     },
     {
       name: "projectName",
       type: "string",
-      description: "Project name added as OpenInference resource attribute",
+      description: "Project name. Falls back to ARIZE_PROJECT_NAME or PHOENIX_PROJECT_NAME env var.",
       required: false,
     },
     {
@@ -134,6 +134,16 @@ async shutdown(): Promise<void>
 Flushes pending data and shuts down the client.
 
 ## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+// For Phoenix: Set PHOENIX_ENDPOINT, PHOENIX_API_KEY, PHOENIX_PROJECT_NAME
+// For Arize AX: Set ARIZE_SPACE_ID, ARIZE_API_KEY, ARIZE_PROJECT_NAME
+const exporter = new ArizeExporter();
+```
 
 ### Phoenix Configuration
 

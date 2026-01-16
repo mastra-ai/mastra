@@ -132,15 +132,15 @@ function sanitizeSpanName(name: string): string {
   return name.replace(/[^\p{L}\p{N}._ -]/gu, '');
 }
 
-function getSpanIdentifier(span: AnyExportedSpan): string | null {
+function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
   switch (span.type) {
     case SpanType.MODEL_GENERATION: {
       const attrs = span.attributes as ModelGenerationAttributes;
-      return attrs?.model ?? 'unknown';
+      return attrs?.model;
     }
 
     default:
-      return span.entityName ?? span.entityId ?? 'unknown';
+      return span.entityName ?? span.entityId;
   }
 }
 

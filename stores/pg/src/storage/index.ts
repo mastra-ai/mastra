@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import {
   validateConfig,
@@ -67,7 +68,8 @@ export class PostgresStore extends MastraStorage {
     try {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
-      this.schema = config.schemaName || 'public';
+      // Validate schema name to prevent SQL injection
+      this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 
       if (isPoolConfig(config)) {
         this.#pool = config.pool;

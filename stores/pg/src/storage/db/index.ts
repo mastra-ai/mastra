@@ -472,7 +472,7 @@ export class PgDB extends MastraBase {
           SELECT 1 FROM information_schema.tables
           WHERE table_schema = $1 AND table_name = $2
         )`,
-        [this.schemaName || 'mastra', tableName],
+        [this.schemaName || 'public', tableName],
       );
 
       if (tableExists?.exists) {

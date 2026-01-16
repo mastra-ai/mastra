@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Link from "@docusaurus/Link";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 
 const sluggify = (str: string) =>
   str

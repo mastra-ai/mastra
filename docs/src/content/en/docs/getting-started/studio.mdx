@@ -1,6 +1,6 @@
 ---
 title: "Studio | Getting Started"
-description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+description: Learn how to use Mastra Studio, the interactive development environment for building and testing your agents locally.
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
@@ -108,66 +108,14 @@ You can explore all available endpoints in the OpenAPI specification at http://l
 To explore the API interactively, visit the Swagger UI at http://localhost:4111/swagger-ui. Here, you can discover endpoints and test them directly from your browser.
 
 :::info
-The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set `server.build.openAPIDocs` and `server.build.swaggerUI` to `true` respectively.
+The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/v1/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/v1/configuration#serverbuild) to `true` respectively.
 :::
 
 ## Configuration
 
-### Port and Host
+By default, Studio runs at http://localhost:4111. You can change the [`host`](/reference/v1/configuration#serverhost), [`port`](/reference/v1/configuration#serverport), and [`studioBase`](/reference/v1/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
 
-By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
-
-```typescript
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  server: {
-    port: 8080,
-    host: "0.0.0.0",
-  },
-});
-```
-
-### Sub-path Hosting
-
-You can host the Mastra Studio on a sub-path of your existing application using the `studioBase` configuration:
-
-```typescript
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  server: {
-    studioBase: "/my-mastra-studio",
-  },
-});
-```
-
-This is particularly useful when:
-- Integrating with existing applications
-- Using authentication tools like Cloudflare Zero Trust that benefit from shared domains
-- Managing multiple services under a single domain
-
-**Example URLs:**
-- Default: `http://localhost:4111/` (studio at root)
-- With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
-
-### Local HTTPS
-
-Mastra supports local HTTPS development through the [`--https`](/reference/v1/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
-
-```typescript
-import { Mastra } from "@mastra/core";
-import fs from "node:fs";
-
-export const mastra = new Mastra({
-  server: {
-    https: {
-      key: fs.readFileSync("path/to/key.pem"),
-      cert: fs.readFileSync("path/to/cert.pem"),
-    },
-  },
-});
-```
+Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/v1/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/v1/configuration#serverhttps) to learn more.
 
 ## Next steps
 

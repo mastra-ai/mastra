@@ -6,6 +6,21 @@ Standards and conventions for building the local studio in `packages/playground`
 
 ---
 
+## Commands
+
+### Local Commands (run from `packages/playground`)
+
+- `pnpm dev`: Start Vite development server
+- `pnpm build`: Build the playground with Vite
+- `pnpm build:watch`: Build in watch mode
+- `pnpm preview`: Preview the production build
+- `pnpm lint`: Run ESLint
+
+### Root Commands (run from monorepo root)
+
+- `pnpm dev:playground`: Start dev servers for playground, playground-ui, and react client SDK
+- `pnpm build:cli`: Build the CLI (includes playground and playground-ui as dependencies)
+
 ## Package Architecture
 
 ### Scope
@@ -151,6 +166,78 @@ export function App({ a, b }: AppProps) {
 }
 ```
 
+### Memoization & Performance
+
+- **FORBIDDEN**: Using `useCallback` or `useMemo` for typical operations
+- Only use `useCallback`/`useMemo` as a **last resort** for very expensive computations (e.g., processing 200+ entries)
+- **REQUIRED**: Use React 19.2's `useEffectEvent` instead of `useCallback` for event handlers
+
+```tsx
+// ✅ Good - useEffectEvent for event handlers (React 19.2+)
+import { useEffectEvent } from 'react';
+
+export function App() {
+  const onSubmit = useEffectEvent((data: FormData) => {
+    // handle submission
+  });
+
+  return <Form onSubmit={onSubmit} />;
+}
+
+// ❌ Bad - useCallback for simple event handlers
+export function App() {
+  const onSubmit = useCallback((data: FormData) => {
+    // handle submission
+  }, []);
+
+  return <Form onSubmit={onSubmit} />;
+}
+```
+
+```tsx
+// ✅ Good - useMemo ONLY for expensive computations (200+ items)
+const sortedItems = useMemo(() => {
+  return hugeDataset.sort((a, b) => a.value - b.value);
+}, [hugeDataset]); // hugeDataset has 500+ entries
+
+// ❌ Bad - useMemo for simple derivations
+const fullName = useMemo(() => {
+  return `${firstName} ${lastName}`;
+}, [firstName, lastName]);
+
+// ✅ Good - derive directly instead
+const fullName = `${firstName} ${lastName}`;
+```
+
+### Side Effects
+
+- **REQUIRED**: Isolate every `useEffect` into a custom hook
+- Direct `useEffect` usage in components creates noise and reduces readability
+- Custom hooks encapsulate side effects and make components cleaner
+
+```tsx
+// ✅ Good - useEffect isolated in custom hook
+function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+}
+
+export function AgentPage({ agent }: AgentPageProps) {
+  useDocumentTitle(`Agent: ${agent.name}`);
+  return <div>{agent.name}</div>;
+}
+
+// ❌ Bad - useEffect directly in component
+export function AgentPage({ agent }: AgentPageProps) {
+  useEffect(() => {
+    document.title = `Agent: ${agent.name}`;
+  }, [agent.name]);
+
+  return <div>{agent.name}</div>;
+}
+```
+
 ---
 
 ## Key Principles
@@ -160,3 +247,8 @@ export function App({ a, b }: AppProps) {
 - All data-fetching hooks must come from `packages/playground-ui`
 - Pages should be thin wrappers around `playground-ui` components
 - When in doubt, add functionality to `playground-ui` instead
+
+
+## E2E Testing (MUST DO)
+
+On every change to this package, you MUST use the `e2e-frontend-validation` skill

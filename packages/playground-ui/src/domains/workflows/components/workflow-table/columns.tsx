@@ -26,7 +26,7 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
               )}
             </div>
           }
-          description={undefined}
+          description={workflow.description}
           meta={undefined}
         />
       );
@@ -45,7 +45,7 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
       return (
         <Cell>
           <div className="flex justify-end items-center gap-2">
-            <Badge icon={<Footprints />} className="!h-button-md">
+            <Badge icon={<Footprints />} className="!h-form-sm">
               {stepsCount} step{stepsCount > 1 ? 's' : ''}
             </Badge>
           </div>

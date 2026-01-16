@@ -128,37 +128,8 @@ export function fullStreamTests({
         },
       });
 
-      const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
-      expect(data).toMatchObject([
-        { type: 'start' },
-        { request: {}, type: 'start-step', warnings: [] },
-        { id: 'text-1', providerMetadata: undefined, type: 'text-start' },
-        { id: 'text-1', providerMetadata: undefined, text: 'Hello', type: 'text-delta' },
-        { id: 'text-1', providerMetadata: undefined, text: ', ', type: 'text-delta' },
-        { id: 'text-1', providerMetadata: undefined, text: 'world!', type: 'text-delta' },
-        { id: 'text-1', providerMetadata: undefined, type: 'text-end' },
-        {
-          finishReason: 'stop',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'response-id',
-            modelId: 'response-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-          },
-          type: 'finish-step',
-          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-          type: 'finish',
-        },
-      ]);
+      const data = await convertAsyncIterableToArray(result.fullStream);
+      expect(data).toMatchSnapshot();
     });
 
     it('should send text deltas', async () => {
@@ -211,36 +182,8 @@ export function fullStreamTests({
         },
       });
 
-      const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
-      expect(data).toMatchObject([
-        { type: 'start' },
-        { request: {}, type: 'start-step', warnings: [] },
-        { id: 'text-1', type: 'text-start' },
-        { id: 'text-1', text: 'Hello', type: 'text-delta' },
-        { id: 'text-1', text: ', ', type: 'text-delta' },
-        { id: 'text-1', text: 'world!', type: 'text-delta' },
-        { id: 'text-1', type: 'text-end' },
-        {
-          finishReason: 'stop',
-          response: {
-            headers: undefined,
-            id: 'response-id',
-            modelId: 'response-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-          },
-          type: 'finish-step',
-          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-          type: 'finish',
-        },
-      ]);
+      const data = await convertAsyncIterableToArray(result.fullStream);
+      expect(data).toMatchSnapshot();
     });
 
     it('should send reasoning deltas', async () => {
@@ -320,205 +263,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchObject([
-        {
-          type: 'start',
-        },
-        {
-          request: {},
-          type: 'start-step',
-          warnings: [],
-        },
-        {
-          id: '1',
-          providerMetadata: undefined,
-          type: 'reasoning-start',
-        },
-        {
-          id: '1',
-          providerMetadata: undefined,
-          text: 'I will open the conversation',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '1',
-          providerMetadata: undefined,
-          text: ' with witty banter.',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '1',
-          providerMetadata: {
-            testProvider: {
-              signature: '1234567890',
-            },
-          },
-          text: '',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '1',
-          providerMetadata: undefined,
-          type: 'reasoning-end',
-        },
-        {
-          id: '2',
-          providerMetadata: {
-            testProvider: {
-              redactedData: 'redacted-reasoning-data',
-            },
-          },
-          type: 'reasoning-start',
-        },
-        {
-          id: '2',
-          providerMetadata: undefined,
-          type: 'reasoning-end',
-        },
-        {
-          id: '3',
-          providerMetadata: undefined,
-          type: 'reasoning-start',
-        },
-        {
-          id: '3',
-          providerMetadata: undefined,
-          text: ' Once the user has relaxed,',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '3',
-          providerMetadata: undefined,
-          text: ' I will pry for valuable information.',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '3',
-          providerMetadata: {
-            testProvider: {
-              signature: '1234567890',
-            },
-          },
-          type: 'reasoning-end',
-        },
-        {
-          id: '4',
-          providerMetadata: {
-            testProvider: {
-              signature: '1234567890',
-            },
-          },
-          type: 'reasoning-start',
-        },
-        {
-          id: '4',
-          providerMetadata: undefined,
-          text: ' I need to think about',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '4',
-          providerMetadata: undefined,
-          text: ' this problem carefully.',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '4',
-          providerMetadata: {
-            testProvider: {
-              signature: '0987654321',
-            },
-          },
-          type: 'reasoning-end',
-        },
-        {
-          id: '5',
-          providerMetadata: {
-            testProvider: {
-              signature: '1234567890',
-            },
-          },
-          type: 'reasoning-start',
-        },
-        {
-          id: '5',
-          providerMetadata: undefined,
-          text: ' The best solution',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '5',
-          providerMetadata: undefined,
-          text: ' requires careful',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '5',
-          providerMetadata: undefined,
-          text: ' consideration of all factors.',
-          type: 'reasoning-delta',
-        },
-        {
-          id: '5',
-          providerMetadata: {
-            testProvider: {
-              signature: '0987654321',
-            },
-          },
-          type: 'reasoning-end',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          type: 'text-start',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: 'Hi',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: ' there!',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          type: 'text-end',
-        },
-        {
-          finishReason: 'stop',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-          },
-          type: 'finish-step',
-          usage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-          type: 'finish',
-        },
-      ]);
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     // https://github.com/mastra-ai/mastra/issues/9005
@@ -560,7 +305,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      await convertAsyncIterableToArray(result.fullStream);
 
       // Check that reasoning was stored in messageList even though deltas were empty
       const responseMessages = messageList.get.response.db();
@@ -614,48 +359,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchObject([
-        { type: 'start' },
-        { request: {}, type: 'start-step', warnings: [] },
-        {
-          id: '123',
-          providerMetadata: { provider: { custom: 'value' } },
-          sourceType: 'url',
-          title: 'Example',
-          type: 'source',
-          url: 'https://example.com',
-        },
-        { id: 'text-1', type: 'text-start' },
-        { id: 'text-1', text: 'Hello!', type: 'text-delta' },
-        { id: 'text-1', type: 'text-end' },
-        {
-          id: '456',
-          providerMetadata: { provider: { custom: 'value2' } },
-          sourceType: 'url',
-          title: 'Example 2',
-          type: 'source',
-          url: 'https://example.com/2',
-        },
-        {
-          finishReason: 'stop',
-          response: {
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-          },
-          type: 'finish-step',
-          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-          type: 'finish',
-        },
-      ]);
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     it('should send files', async () => {
@@ -687,36 +391,9 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      const converted = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const converted = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(converted).toMatchObject([
-        { type: 'start' },
-        { request: {}, type: 'start-step', warnings: [] },
-        { file: { base64Data: 'Hello World', mediaType: 'text/plain', type: 'file' }, type: 'file' },
-        { id: 'text-1', type: 'text-start' },
-        { id: 'text-1', text: 'Hello!', type: 'text-delta' },
-        { id: 'text-1', type: 'text-end' },
-        { file: { base64Data: 'QkFVRw==', mediaType: 'image/jpeg', type: 'file' }, type: 'file' },
-        {
-          finishReason: 'stop',
-          response: {
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-          },
-          type: 'finish-step',
-          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-          type: 'finish',
-        },
-      ]);
+      expect(converted).toMatchSnapshot();
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
@@ -765,76 +442,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchObject([
-        {
-          type: 'start',
-        },
-        {
-          request: {},
-          type: 'start-step',
-          warnings: [],
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          type: 'text-start',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: 'Hello',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: ', ',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: 'world!',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          type: 'text-end',
-        },
-        {
-          finishReason: 'stop',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'id-2000',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion: modelVersion,
-            },
-            modelProvider: 'mock-provider',
-            modelVersion: modelVersion,
-            timestamp: new Date('1970-01-01T00:00:02.000Z'),
-          },
-          type: 'finish-step',
-          usage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-          type: 'finish',
-        },
-      ]);
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     it('should send tool calls', async () => {
@@ -926,7 +534,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
     });
 
     it('should send tool call deltas', async () => {
@@ -1021,105 +629,9 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchObject([
-        {
-          type: 'start',
-        },
-        {
-          request: {},
-          type: 'start-step',
-          warnings: [],
-        },
-        {
-          dynamic: false,
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerExecuted: undefined,
-          providerMetadata: undefined,
-          toolName: 'test-tool',
-          type: 'tool-input-start',
-        },
-        {
-          delta: '{"',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          delta: 'value',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          delta: '":"',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          delta: 'Spark',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          delta: 'le',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          delta: ' Day',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          delta: '"}',
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-delta',
-        },
-        {
-          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          providerMetadata: undefined,
-          type: 'tool-input-end',
-        },
-        {
-          input: {
-            value: 'Sparkle Day',
-          },
-          providerExecuted: undefined,
-          providerMetadata: undefined,
-          toolCallId: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-          toolName: 'test-tool',
-          type: 'tool-call',
-        },
-        {
-          finishReason: 'tool-calls',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-            timestamp: new Date('1970-01-01T00:00:00.000Z'),
-          },
-          type: 'finish-step',
-          usage: expectedNormalizedUsage2,
-        },
-        {
-          finishReason: 'tool-calls',
-          totalUsage: expectedNormalizedUsage2,
-          type: 'finish',
-        },
-      ]);
+      expect(fullStream).toMatchSnapshot();
     });
 
     it('should send tool results', async () => {
@@ -1178,7 +690,7 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
       expect(fullStream).toMatchSnapshot();
     });
@@ -1235,68 +747,9 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchObject([
-        {
-          type: 'start',
-        },
-        {
-          request: {},
-          type: 'start-step',
-          warnings: [],
-        },
-        {
-          input: {
-            value: 'value',
-          },
-          providerExecuted: undefined,
-          providerMetadata: undefined,
-          toolCallId: 'call-1',
-          toolName: 'tool1',
-          type: 'tool-call',
-        },
-        {
-          input: {
-            value: 'value',
-          },
-          output: 'value-result',
-          providerExecuted: undefined,
-          toolCallId: 'call-1',
-          toolName: 'tool1',
-          type: 'tool-result',
-        },
-        {
-          finishReason: 'stop',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion: modelVersion,
-            },
-            timestamp: new Date('1970-01-01T00:00:00.000Z'),
-          },
-          type: 'finish-step',
-          usage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-          type: 'finish',
-        },
-      ]);
+      expect(fullStream).toMatchSnapshot();
       vi.useFakeTimers();
       vi.setSystemTime(mockDate);
     });
@@ -1346,76 +799,9 @@ export function fullStreamTests({
         },
       });
 
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchObject([
-        {
-          type: 'start',
-        },
-        {
-          request: {},
-          type: 'start-step',
-          warnings: [],
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          type: 'text-start',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: 'Hello',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: ', ',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          text: 'world!',
-          type: 'text-delta',
-        },
-        {
-          id: 'text-1',
-          providerMetadata: undefined,
-          type: 'text-end',
-        },
-        {
-          finishReason: 'stop',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-            timestamp: new Date('1970-01-01T00:00:00.000Z'),
-          },
-          type: 'finish-step',
-          usage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: {
-            inputTokens: 3,
-            outputTokens: 10,
-            totalTokens: 13,
-          },
-          type: 'finish',
-        },
-      ]);
+      expect(fullStream).toMatchSnapshot();
     });
   });
 }

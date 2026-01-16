@@ -9,6 +9,7 @@ import { ChatbotSidebarProvider } from "./DocRoot/Layout/ChatbotSidebar/context"
 export default function Root({ children }: { children: React.ReactNode }) {
   const { siteConfig } = useDocusaurusContext();
   const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string;
+  const kapaGroupId = siteConfig.customFields.kapaGroupId as string | undefined;
   const posthogApiKey = siteConfig.customFields.posthogApiKey as string;
   const posthogHost =
     (siteConfig.customFields.posthogHost as string) ||
@@ -21,7 +22,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
         api_host: posthogHost,
       }}
     >
-      <KapaProvider integrationId={kapaIntegrationId || ""}>
+      <KapaProvider
+        integrationId={kapaIntegrationId || ""}
+        {...(kapaGroupId && { sourceGroupIDsInclude: [kapaGroupId] })}
+      >
         <Toaster />
         <CookieConsent />
         <ChatbotSidebarProvider defaultHidden={true}>

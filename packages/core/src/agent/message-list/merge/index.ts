@@ -1,0 +1,1 @@
+export { MessageMerger } from './MessageMerger';

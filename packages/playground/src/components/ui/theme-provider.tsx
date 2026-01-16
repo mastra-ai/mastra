@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useContext, useEffect, useState } from 'react';
 
 type Theme = 'dark' | 'light' | 'system';
@@ -37,7 +35,7 @@ export function ThemeProvider({ children, defaultTheme = 'system' }: ThemeProvid
   return <ThemeProviderContext.Provider value={{ theme, setTheme }}>{children}</ThemeProviderContext.Provider>;
 }
 
-export const useTheme = () => {
+const useTheme = () => {
   const context = useContext(ThemeProviderContext);
   if (context === undefined) throw new Error('useTheme must be used within a ThemeProvider');
   return context;

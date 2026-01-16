@@ -70,8 +70,8 @@ const advancedTools = () => {};
 const baseTools = () => {};
 
 export const testTool = createTool({
-  execute: async ({ requestContext }) => {
-    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise" ? advancedTools : baseTools;
   },

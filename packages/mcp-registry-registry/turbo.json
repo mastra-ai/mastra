@@ -3,11 +3,11 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "dependsOn": ["^build"]
     },
     "build:cli": {
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "dependsOn": ["^build"]
     },
     "test": {

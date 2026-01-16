@@ -7,13 +7,13 @@ import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/components/scrollable-container';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { columns } from './columns';
 import { WorkflowTableData } from './types';
 import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface WorkflowTableProps {
   workflows: Record<string, GetWorkflowResponse>;

@@ -16,7 +16,7 @@ export const createDocumentChunkerTool = ({
 }: {
   doc: MDocument;
   params?: ChunkParams;
-}): ReturnType<typeof createTool> => {
+}) => {
   return createTool({
     id: `Document Chunker ${params.strategy} ${params.maxSize}`,
     inputSchema: z.object({}),
