@@ -112,13 +112,13 @@ function App() {
                   </Layout>
                 }
               >
-                {isMastraPlatform ? (
+                {isMastraPlatform ? null : (
                   <>
                     <Route path="/settings" element={<StudioSettingsPage />} />
                     <Route path="/templates" element={<Templates />} />
                     <Route path="/templates/:templateSlug" element={<Template />} />
                   </>
-                ) : null}
+                )}
 
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
