@@ -418,6 +418,22 @@ export class LaminarExporter extends BaseExporter {
     }
   }
 
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    if (this.isDisabled || !this.processor) return;
+
+    try {
+      await this.processor.forceFlush();
+      this.logger.debug('[LaminarExporter] Flushed pending spans');
+    } catch (error) {
+      this.logger.error('[LaminarExporter] Error flushing spans', { error });
+    }
+  }
+
   async shutdown(): Promise<void> {
     try {
       await this.processor?.shutdown();

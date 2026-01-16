@@ -1245,8 +1245,33 @@ export abstract class TrackingExporter<
   }
 
   // ============================================================================
-  // Shutdown Hooks (Override in subclass as needed)
+  // Flush and Shutdown Hooks (Override in subclass as needed)
   // ============================================================================
+
+  /**
+   * Hook called by flush() to perform vendor-specific flush logic.
+   * Override to send buffered data to the vendor's API.
+   *
+   * Unlike _postShutdown(), this method should NOT release resources,
+   * as the exporter will continue to be used after flushing.
+   */
+  protected async _flush(): Promise<void> {}
+
+  /**
+   * Force flush any buffered data without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   *
+   * Subclasses should override _flush() to implement vendor-specific flush logic.
+   */
+  async flush(): Promise<void> {
+    if (this.isDisabled) {
+      return;
+    }
+
+    this.logger.debug(`${this.name}: Flushing`);
+    await this._flush();
+  }
 
   /**
    * Hook called at the start of shutdown, before cancelling timers and aborting spans.
