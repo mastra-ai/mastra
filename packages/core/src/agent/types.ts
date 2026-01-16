@@ -108,8 +108,8 @@ export interface AgentCreateOptions {
 export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
-  maxRetries?: number; //defaults to 0
-  enabled?: boolean; //defaults to true
+  maxRetries?: number; // defaults to agent-level maxRetries
+  enabled?: boolean; // defaults to true
 };
 
 export interface AgentConfig<
