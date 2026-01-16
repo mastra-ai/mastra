@@ -252,7 +252,15 @@ export class MemoryMSSQL extends MemoryStorage {
           } else {
             const paramName = `metadata${metadataIndex}`;
             whereClauses.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
-            params[paramName] = JSON.stringify(value).replace(/^"|"$/g, '');
+            // JSON_VALUE returns strings directly, numbers as strings, booleans as 'true'/'false'
+            // Don't use JSON.stringify as it escapes quotes/backslashes which JSON_VALUE doesn't
+            if (typeof value === 'string') {
+              params[paramName] = value;
+            } else if (typeof value === 'boolean') {
+              params[paramName] = value ? 'true' : 'false';
+            } else {
+              params[paramName] = String(value);
+            }
           }
           metadataIndex++;
         }

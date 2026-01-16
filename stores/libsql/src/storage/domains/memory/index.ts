@@ -763,11 +763,32 @@ export class MemoryLibSQL extends MemoryStorage {
       // Keys are validated above to prevent SQL injection
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
-          // Compare directly with the value, converting to string for consistent comparison
-          whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
-          // For strings, pass directly. For other types, SQLite handles the comparison.
-          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
+          // Handle null values specially: json_extract returns SQL NULL for JSON null,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            whereClauses.push(`json_extract(metadata, '$.${key}') IS NULL`);
+          } else if (typeof value === 'boolean') {
+            // json_extract returns 1 for true, 0 for false (integers, not strings)
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            queryParams.push(value ? 1 : 0);
+          } else if (typeof value === 'number') {
+            // Numbers are returned as-is by json_extract
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            queryParams.push(value);
+          } else if (typeof value === 'string') {
+            // Strings are returned unquoted by json_extract
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            queryParams.push(value);
+          } else {
+            // Objects and arrays are not supported for filtering
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${typeof value}`,
+              details: { key, valueType: typeof value },
+            });
+          }
         }
       }
 
