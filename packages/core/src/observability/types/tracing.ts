@@ -388,7 +388,7 @@ export const spanScoreSchema = z.object({
 export type SpanScore = z.infer<typeof spanScoreSchema>;
 
 /** Schema for arguments when adding a score to a span (scorerName optional, defaults to scorerId) */
-const addScoreArgsSchema = z.object({
+const _addScoreArgsSchema = z.object({
   scorerId: z.string().describe('ID of the scorer'),
   scorerName: z.string().optional().describe('Display name of the scorer (defaults to scorerId if not provided)'),
   score: z.number().describe('Numeric score value'),
@@ -398,7 +398,7 @@ const addScoreArgsSchema = z.object({
 });
 
 /** Arguments for adding a score to a span */
-export type AddScoreArgs = z.infer<typeof addScoreArgsSchema>;
+export type AddScoreArgs = z.infer<typeof _addScoreArgsSchema>;
 
 // ============================================================================
 // Span Interfaces
