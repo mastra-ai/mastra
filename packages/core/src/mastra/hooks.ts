@@ -6,13 +6,6 @@ import type { MastraStorage } from '../storage';
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
-    const storage = mastra.getStorage();
-
-    if (!storage) {
-      mastra.getLogger()?.warn('Storage not found, skipping score validation and saving');
-      return;
-    }
-
     const entityId = hookData.entity.id as string;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
@@ -46,43 +39,32 @@ export function createOnScorerHook(mastra: Mastra) {
         output,
       });
 
-      let spanId;
-      let traceId;
       const currentSpan = hookData.tracingContext?.currentSpan;
+
+      // Add score to span and trigger update event so it gets exported to DefaultExporter
       if (currentSpan && currentSpan.isValid) {
-        spanId = currentSpan.id;
-        traceId = currentSpan.traceId;
-      }
-
-      const payload = {
-        ...rest,
-        ...runResult,
-        entityId,
-        scorerId: scorerId,
-        spanId,
-        traceId,
-        metadata: {
-          structuredOutput: !!structuredOutput,
-        },
-      };
-      await validateAndSaveScore(storage, payload);
-
-      // Add score to span and trigger update event so it gets exported
-      if (currentSpan && spanId && traceId) {
         try {
           currentSpan.addScore({
             scorerId: scorerToUse.scorer.id,
             scorerName: scorerToUse.scorer.name,
             score: runResult.score as number,
             reason: runResult.reason as string,
+            source: hookData.source,
             metadata: {
+              input,
+              output,
               ...(runResult.preprocessStepResult ? { preprocessStepResult: runResult.preprocessStepResult } : {}),
               ...(runResult.analyzeStepResult ? { analyzeStepResult: runResult.analyzeStepResult } : {}),
+              ...(runResult.preprocessPrompt ? { preprocessPrompt: runResult.preprocessPrompt } : {}),
+              ...(runResult.analyzePrompt ? { analyzePrompt: runResult.analyzePrompt } : {}),
+              ...(runResult.generateScorePrompt ? { generateScorePrompt: runResult.generateScorePrompt } : {}),
+              ...(runResult.generateReasonPrompt ? { generateReasonPrompt: runResult.generateReasonPrompt } : {}),
+              ...(hookData.additionalContext ? { additionalContext: hookData.additionalContext } : {}),
+              ...(hookData.requestContext ? { requestContext: hookData.requestContext } : {}),
             },
           });
 
           // Trigger a span update event so the score gets exported
-
           currentSpan.update({});
         } catch (addScoreError) {
           mastra.getLogger()?.warn(`Failed to add score to span: ${addScoreError}`);

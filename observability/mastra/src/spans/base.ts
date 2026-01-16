@@ -224,6 +224,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       reason: args.reason,
       metadata: args.metadata,
       timestamp: Date.now(),
+      source: args.source,
     });
   }
 

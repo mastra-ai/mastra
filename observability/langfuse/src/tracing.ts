@@ -392,6 +392,7 @@ export class LangfuseExporter extends TrackingExporter<
           value: score.score,
           ...(span.metadata?.sessionId ? { sessionId: span.metadata.sessionId } : {}),
           comment: score.reason,
+          // metadata: score.metadata,
           metadata: score.metadata,
           dataType: 'NUMERIC',
         });

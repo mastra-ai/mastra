@@ -381,6 +381,7 @@ export const spanScoreSchema = z.object({
   reason: z.string().optional().describe('Optional explanation for the score'),
   metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata (from runResult, not span metadata)'),
   timestamp: z.number().describe('Timestamp when score was added'),
+  source: z.enum(['LIVE', 'TEST']).optional().describe('Whether this is a live or test score'),
 });
 
 /** Score data attached to a span */
@@ -393,6 +394,7 @@ const addScoreArgsSchema = z.object({
   score: z.number().describe('Numeric score value'),
   reason: z.string().optional().describe('Optional explanation for the score'),
   metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata (from runResult, not span metadata)'),
+  source: z.enum(['LIVE', 'TEST']).optional().describe('Whether this is a live or test score'),
 });
 
 /** Arguments for adding a score to a span */

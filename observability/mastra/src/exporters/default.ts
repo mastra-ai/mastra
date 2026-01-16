@@ -3,6 +3,7 @@ import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra
 import { TracingEventType } from '@mastra/core/observability';
 import type {
   MastraStorage,
+  ScoresStorage,
   CreateSpanRecord,
   UpdateSpanRecord,
   ObservabilityStorage,
@@ -92,6 +93,10 @@ export class DefaultExporter extends BaseExporter {
 
   #storage?: MastraStorage;
   #observability?: ObservabilityStorage;
+  #scoresStore?: ScoresStorage;
+  #savedScores: Map<string, number> = new Map(); // key -> timestamp
+  private static readonly SCORE_DEDUP_TTL_MS = 60 * 60 * 1000; // 1 hour
+  private static readonly MAX_SAVED_SCORES = 1000;
   #config: DefaultExporterConfig;
   #resolvedStrategy: TracingStorageStrategy;
   private buffer: BatchBuffer;
@@ -144,6 +149,12 @@ export class DefaultExporter extends BaseExporter {
     if (!this.#storage) {
       this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
       return;
+    }
+
+    this.#scoresStore = await this.#storage.getStore('scores');
+    if (!this.#scoresStore) {
+      this.logger.debug('Scores storage not available. Scores will not be persisted.');
+      // Continue - scores storage is optional, tracing should still work
     }
 
     this.#observability = await this.#storage.getStore('observability');
@@ -236,26 +247,15 @@ export class DefaultExporter extends BaseExporter {
               sequenceNumber: this.getNextSequence(spanKey),
             });
           } else if (event.exportedSpan.scores?.length) {
-            // Out-of-order case with scores: update directly to ensure scores are persisted
-            const span = event.exportedSpan;
-            this.#observability!.updateSpan({
-              traceId: span.traceId,
-              spanId: span.id,
-              updates: this.buildUpdateRecord(span),
-            }).catch(error => {
-              this.logger.error('Failed to update span with scores (out-of-order)', {
-                error: error instanceof Error ? error.message : String(error),
-                spanId: span.id,
-                traceId: span.traceId,
-              });
-            });
+            // Score-only update after span completed - this is expected async scorer behavior
+            // Scores are saved separately via saveSpanScoresToStore, no span update needed
           } else {
-            // Out-of-order case without scores: log and skip
+            // Out-of-order case: log and skip (scores are saved separately via saveSpanScoresToStore)
             this.handleOutOfOrderUpdate(event);
             this.buffer.outOfOrderCount++;
           }
         }
-        // insert-only ignores SPAN_UPDATED
+        // insert-only ignores SPAN_UPDATED for span storage (scores are saved separately)
         break;
 
       case TracingEventType.SPAN_ENDED:
@@ -439,9 +439,6 @@ export class DefaultExporter extends BaseExporter {
       error: span.errorInfo ?? null,
       isEvent: span.isEvent,
 
-      // Evaluation scores
-      scores: span.scores ?? null,
-
       // Timestamps
       startedAt: span.startTime,
       endedAt: span.endTime ?? null,
@@ -459,7 +456,6 @@ export class DefaultExporter extends BaseExporter {
       input: span.input,
       output: span.output,
       error: span.errorInfo ?? null,
-      scores: span.scores ?? null,
     };
   }
 
@@ -491,6 +487,7 @@ export class DefaultExporter extends BaseExporter {
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
           });
+          await this.saveSpanScoresToStore(span);
           break;
         case TracingEventType.SPAN_ENDED:
           await observability.updateSpan({
@@ -513,6 +510,16 @@ export class DefaultExporter extends BaseExporter {
   private handleBatchWithUpdatesEvent(event: TracingEvent): void {
     this.addToBuffer(event);
 
+    // Save scores immediately
+    if (event.type === TracingEventType.SPAN_UPDATED && event.exportedSpan.scores?.length) {
+      this.saveSpanScoresToStore(event.exportedSpan).catch(error => {
+        this.logger.warn('Failed to save scores for span', {
+          spanId: event.exportedSpan.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
     if (this.shouldFlush()) {
       // Immediate flush for size/emergency triggers
       this.flush().catch(error => {
@@ -530,7 +537,17 @@ export class DefaultExporter extends BaseExporter {
    * Handles insert-only strategy - only processes SPAN_ENDED events in batches
    */
   private handleInsertOnlyEvent(event: TracingEvent): void {
-    // Only process SPAN_ENDED events for insert-only strategy
+    // Save scores immediately regardless of event type (scores arrive via SPAN_UPDATED after SPAN_ENDED)
+    if (event.type === TracingEventType.SPAN_UPDATED && event.exportedSpan.scores?.length) {
+      this.saveSpanScoresToStore(event.exportedSpan).catch(error => {
+        this.logger.warn('Failed to save scores for span', {
+          spanId: event.exportedSpan.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
+    // Only process SPAN_ENDED events for span storage in insert-only strategy
     if (event.type === TracingEventType.SPAN_ENDED) {
       this.addToBuffer(event);
 
@@ -546,7 +563,7 @@ export class DefaultExporter extends BaseExporter {
         this.scheduleFlush();
       }
     }
-    // Ignore SPAN_STARTED and SPAN_UPDATED events
+    // SPAN_STARTED and SPAN_UPDATED events are ignored for span storage (but scores are still saved above)
   }
 
   /**
@@ -704,6 +721,58 @@ export class DefaultExporter extends BaseExporter {
     }
   }
 
+  private async saveSpanScoresToStore(span: AnyExportedSpan): Promise<void> {
+    if (!this.#scoresStore || !span.scores?.length) return;
+
+    const now = Date.now();
+    if (this.#savedScores.size > DefaultExporter.MAX_SAVED_SCORES) {
+      this.logger.warn('Score deduplication set exceeded limit, clearing', {
+        size: this.#savedScores.size,
+        limit: DefaultExporter.MAX_SAVED_SCORES,
+      });
+      for (const [key, timestamp] of this.#savedScores) {
+        if (now - timestamp > DefaultExporter.SCORE_DEDUP_TTL_MS) {
+          this.#savedScores.delete(key);
+        }
+      }
+    }
+
+    for (const score of span.scores) {
+      const scoreKey = `${span.traceId}:${span.id}:${score.scorerId}:${score.timestamp}`;
+      if (this.#savedScores.has(scoreKey)) continue;
+
+      try {
+        await this.#scoresStore.saveScore({
+          ...score.metadata,
+          scorerId: score.scorerId,
+          score: score.score,
+          reason: score.reason,
+          source: score.source || 'LIVE',
+          entityId: span.entityId || span.id,
+          entityType: this.normalizeEntityType(span.entityType),
+          entity: { id: span.entityId || span.id, name: span.entityName || span.name },
+          scorer: { id: score.scorerId, name: score.scorerName },
+          traceId: span.traceId,
+          spanId: span.id,
+          runId: (span.metadata?.runId as string) || span.traceId,
+          threadId: span.metadata?.threadId as string | undefined,
+          resourceId: span.metadata?.resourceId as string | undefined,
+        });
+        this.#savedScores.set(scoreKey, now);
+      } catch (error) {
+        this.logger.warn('Failed to save score', { scoreKey, error });
+      }
+    }
+  }
+
+  // Observability layer uses: EntityType.AGENT = 'agent' (lowercase)
+  // Evals layer expects: 'AGENT' | 'WORKFLOW' | SpanType values like 'agent_run'
+  private normalizeEntityType(entityType: string | undefined): string | undefined {
+    if (entityType === 'agent') return 'AGENT';
+    if (entityType === 'workflow') return 'WORKFLOW';
+    return entityType; // SpanType values like 'agent_run' pass through as-is
+  }
+
   async shutdown(): Promise<void> {
     // Clear any pending timer
     if (this.#flushTimer) {
@@ -724,6 +793,9 @@ export class DefaultExporter extends BaseExporter {
         });
       }
     }
+
+    this.#savedScores.clear();
+    this.allCreatedSpans.clear();
 
     this.logger.info('DefaultExporter shutdown complete');
   }

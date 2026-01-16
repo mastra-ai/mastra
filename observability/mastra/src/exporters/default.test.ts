@@ -742,4 +742,260 @@ describe('DefaultExporter', () => {
       };
     }
   });
+
+  describe('Score storage', () => {
+    let mockScoresStore: any;
+    let mockObservabilityStoreForScores: any;
+    let mockStorageForScores: any;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+
+      mockScoresStore = {
+        saveScore: vi.fn().mockResolvedValue({ score: 'saved' }),
+      };
+
+      mockObservabilityStoreForScores = {
+        tracingStrategy: {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        },
+        createSpan: vi.fn().mockResolvedValue(undefined),
+        updateSpan: vi.fn().mockResolvedValue(undefined),
+      };
+
+      // Create mockStorage that returns both observability and scores stores
+      mockStorageForScores = {
+        getStore: vi.fn().mockImplementation((domain: string) => {
+          if (domain === 'observability') return Promise.resolve(mockObservabilityStoreForScores);
+          if (domain === 'scores') return Promise.resolve(mockScoresStore);
+          return Promise.resolve(null);
+        }),
+        constructor: { name: 'MockStorage' },
+      };
+
+      mockMastra.getStorage.mockReturnValue(mockStorageForScores);
+    });
+
+    function createMockEventWithScores(
+      type: TracingEventType,
+      traceId: string,
+      spanId: string,
+      scores: any[],
+      extra: any = {},
+    ): TracingEvent {
+      return {
+        type,
+        exportedSpan: {
+          id: spanId,
+          traceId,
+          type: SpanType.AGENT_RUN,
+          name: 'test-span',
+          startTime: new Date(),
+          endTime: type === TracingEventType.SPAN_ENDED ? new Date() : undefined,
+          scores,
+          entityId: extra.entityId || spanId,
+          entityType: extra.entityType || 'AGENT',
+          entityName: extra.entityName || 'test-agent',
+          metadata: extra.metadata || {},
+          input: extra.input || 'test input',
+          output: extra.output || 'test output',
+          ...extra,
+        } as any as AnyExportedSpan,
+      };
+    }
+
+    it('should save scores from span.scores to scores store', async () => {
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const timestamp = Date.now();
+      const spanWithScores = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [
+        {
+          scorerId: 'scorer-1',
+          scorerName: 'Test Scorer',
+          score: 0.85,
+          reason: 'Good response',
+          source: 'TEST',
+          timestamp,
+          metadata: {
+            input: 'scorer input',
+            output: 'scorer output',
+            preprocessPrompt: 'preprocess prompt',
+          },
+        },
+      ]);
+
+      await exporter.exportTracingEvent(spanWithScores);
+
+      // Wait for async score saving
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer-1',
+          score: 0.85,
+          reason: 'Good response',
+          source: 'TEST',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          input: 'scorer input',
+          output: 'scorer output',
+          preprocessPrompt: 'preprocess prompt',
+        }),
+      );
+    });
+
+    it('should normalize entityType from lowercase to uppercase', async () => {
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const timestamp = Date.now();
+      const spanWithScores = createMockEventWithScores(
+        TracingEventType.SPAN_UPDATED,
+        'trace-1',
+        'span-1',
+        [{ scorerId: 'scorer-1', score: 0.5, source: 'TEST', timestamp }],
+        { entityType: 'agent' }, // lowercase
+      );
+
+      await exporter.exportTracingEvent(spanWithScores);
+
+      // Wait for async score saving
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'AGENT', // Should be uppercase
+        }),
+      );
+    });
+
+    it('should deduplicate scores with same key', async () => {
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const timestamp = Date.now();
+      const score = {
+        scorerId: 'scorer-1',
+        scorerName: 'Test Scorer',
+        score: 0.85,
+        source: 'TEST',
+        timestamp, // Same timestamp = same score key
+      };
+
+      // Send same span twice with same score (same traceId:spanId:scorerId:timestamp)
+      const event1 = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [score]);
+      const event2 = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [score]);
+
+      await exporter.exportTracingEvent(event1);
+      await new Promise(resolve => setImmediate(resolve));
+
+      await exporter.exportTracingEvent(event2);
+      await new Promise(resolve => setImmediate(resolve));
+
+      // Score should only be saved once (deduplication by scoreKey)
+      expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    });
+
+    it('should save different scores with different timestamps', async () => {
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const timestamp1 = Date.now();
+      const timestamp2 = Date.now() + 1000; // Different timestamp
+
+      const event1 = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [
+        { scorerId: 'scorer-1', score: 0.85, source: 'TEST', timestamp: timestamp1 },
+      ]);
+      const event2 = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [
+        { scorerId: 'scorer-1', score: 0.9, source: 'TEST', timestamp: timestamp2 },
+      ]);
+
+      await exporter.exportTracingEvent(event1);
+      await new Promise(resolve => setImmediate(resolve));
+
+      await exporter.exportTracingEvent(event2);
+      await new Promise(resolve => setImmediate(resolve));
+
+      // Both scores should be saved (different timestamps = different keys)
+      expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle missing scores store gracefully', async () => {
+      mockStorageForScores.getStore.mockImplementation((domain: string) => {
+        if (domain === 'observability') return Promise.resolve(mockObservabilityStoreForScores);
+        if (domain === 'scores') return Promise.resolve(null); // No scores store
+        return Promise.resolve(null);
+      });
+
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const spanWithScores = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [
+        { scorerId: 'scorer-1', score: 0.5, source: 'TEST', timestamp: Date.now() },
+      ]);
+
+      // Should not throw
+      await expect(exporter.exportTracingEvent(spanWithScores)).resolves.not.toThrow();
+
+      // saveScore should not be called since store is not available
+      expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+    });
+
+    it('should handle saveScore errors gracefully', async () => {
+      mockScoresStore.saveScore.mockRejectedValue(new Error('DB error'));
+
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const spanWithScores = createMockEventWithScores(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1', [
+        { scorerId: 'scorer-1', score: 0.5, source: 'TEST', timestamp: Date.now() },
+      ]);
+
+      // Should not throw
+      await expect(exporter.exportTracingEvent(spanWithScores)).resolves.not.toThrow();
+
+      // Wait for async score saving to complete
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockLogger.warn).toHaveBeenCalledWith('Failed to save score', expect.any(Object));
+    });
+
+    it('should include entity and scorer info in saved score', async () => {
+      const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+      await exporter.init({ mastra: mockMastra });
+
+      const spanWithScores = createMockEventWithScores(
+        TracingEventType.SPAN_UPDATED,
+        'trace-1',
+        'span-1',
+        [
+          {
+            scorerId: 'scorer-1',
+            scorerName: 'Test Scorer',
+            score: 0.85,
+            source: 'TEST',
+            timestamp: Date.now(),
+          },
+        ],
+        {
+          entityId: 'agent-123',
+          entityName: 'My Agent',
+          entityType: 'AGENT',
+        },
+      );
+
+      await exporter.exportTracingEvent(spanWithScores);
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityId: 'agent-123',
+          entity: { id: 'agent-123', name: 'My Agent' },
+          scorer: { id: 'scorer-1', name: 'Test Scorer' },
+        }),
+      );
+    });
+  });
 });
