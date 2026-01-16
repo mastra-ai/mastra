@@ -369,8 +369,13 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/default-exporter",
-                  label: "Default",
+                  id: "observability/tracing/exporters/arize",
+                  label: "Arize",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/braintrust",
+                  label: "Braintrust",
                 },
                 {
                   type: "doc",
@@ -384,18 +389,13 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/arize",
-                  label: "Arize",
-                },
-                {
-                  type: "doc",
-                  id: "observability/tracing/exporters/braintrust",
-                  label: "Braintrust",
-                },
-                {
-                  type: "doc",
                   id: "observability/tracing/exporters/datadog",
                   label: "Datadog",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/default-exporter",
+                  label: "Default",
                 },
                 {
                   type: "doc",
