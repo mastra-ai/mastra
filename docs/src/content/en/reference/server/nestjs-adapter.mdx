@@ -1,0 +1,260 @@
+---
+title: "Reference: NestJS Adapter | Server"
+description: "API reference for the @mastra/nestjs server adapter."
+packages:
+  - "@mastra/nestjs"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# NestJS Adapter
+
+The `@mastra/nestjs` package provides a server adapter for running Mastra with [NestJS](https://nestjs.com). It supports both Express (default) and Fastify platforms with automatic detection.
+
+:::info
+
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+
+:::
+
+## Installation
+
+Install the NestJS adapter along with your preferred platform:
+
+```bash
+# For Express (default)
+npm install @mastra/nestjs@beta @nestjs/core @nestjs/common @nestjs/platform-express express
+
+# For Fastify
+npm install @mastra/nestjs@beta @nestjs/core @nestjs/common @nestjs/platform-fastify fastify
+```
+
+## Usage example
+
+### Express platform (default)
+
+```typescript title="server.ts"
+import { NestFactory } from '@nestjs/core';
+import { Module } from '@nestjs/common';
+import { MastraServer } from '@mastra/nestjs';
+import { mastra } from './mastra';
+
+@Module({})
+class AppModule {}
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const server = new MastraServer({ app, mastra });
+
+  await server.init();
+
+  await app.listen(4111);
+  console.log('Server running on port 4111');
+}
+
+bootstrap();
+```
+
+### Fastify platform
+
+```typescript title="server.ts"
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Module } from '@nestjs/common';
+import { MastraServer } from '@mastra/nestjs';
+import { mastra } from './mastra';
+
+@Module({})
+class AppModule {}
+
+async function bootstrap() {
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter()
+  );
+  const server = new MastraServer({ app, mastra });
+
+  await server.init();
+
+  // Fastify requires listening on all interfaces for external access
+  await app.listen(4111, '0.0.0.0');
+  console.log('Server running on port 4111');
+}
+
+bootstrap();
+```
+
+## Platform detection
+
+The adapter automatically detects which NestJS platform you're using (Express or Fastify) based on the HTTP adapter. You can check the detected platform:
+
+```typescript
+const server = new MastraServer({ app, mastra });
+console.log(server.getPlatformType()); // 'express' or 'fastify'
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "INestApplication",
+      description: "NestJS application instance (Express or Fastify)",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "Stream redaction config. When true, redacts sensitive data from streams.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Platform differences
+
+| Aspect | Express | Fastify |
+|--------|---------|---------|
+| Context storage | `res.locals` | `request` object |
+| Body parsing | Handled by NestJS | Handled by NestJS |
+| Streaming | `res.write()` / `res.end()` | `reply.hijack()` + raw stream |
+| Listen address | `app.listen(port)` | `app.listen(port, '0.0.0.0')` |
+
+## Adding custom routes
+
+Add routes using NestJS controllers or directly on the underlying HTTP adapter:
+
+```typescript title="server.ts"
+import { Controller, Get, Module } from '@nestjs/common';
+
+@Controller()
+class HealthController {
+  @Get('health')
+  health() {
+    return { status: 'ok' };
+  }
+}
+
+@Module({
+  controllers: [HealthController],
+})
+class AppModule {}
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const server = new MastraServer({ app, mastra });
+
+  await server.init();
+
+  // Or add routes directly after init
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/custom', (req, res) => {
+    res.json({ custom: 'route' });
+  });
+
+  await app.listen(4111);
+}
+```
+
+## Accessing context
+
+Context access depends on the platform. The adapter stores Mastra context on the request/response objects:
+
+### Express platform
+
+```typescript
+// In Express middleware or route handler
+app.use((req, res, next) => {
+  const mastra = res.locals.mastra;
+  const requestContext = res.locals.requestContext;
+  const abortSignal = res.locals.abortSignal;
+  next();
+});
+```
+
+### Fastify platform
+
+```typescript
+// In Fastify hook or route handler
+app.addHook('preHandler', (request, reply, done) => {
+  const mastra = request.mastra;
+  const requestContext = request.requestContext;
+  const abortSignal = request.abortSignal;
+  done();
+});
+```
+
+## Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+
+```typescript
+const server = new MastraServer({ app, mastra });
+
+// Add your middleware first
+app.use(loggingMiddleware);
+
+server.registerContextMiddleware();
+
+// Middleware that needs Mastra context
+app.use(customMiddleware);
+
+server.registerAuthMiddleware();
+await server.registerRoutes();
+```
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
+- [Express Adapter](/reference/v1/server/express-adapter) - Express-specific setup
+- [Fastify Adapter](/reference/v1/server/fastify-adapter) - Fastify-specific setup
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes

@@ -4,6 +4,9 @@ description: "Manually configure a Mastra server using Hono or Express adapters.
 packages:
   - "@mastra/express"
   - "@mastra/hono"
+  - "@mastra/fastify"
+  - "@mastra/koa"
+  - "@mastra/nestjs"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -35,6 +38,7 @@ Mastra currently provides these official server adapters:
 - [@mastra/hono](/reference/v1/server/hono-adapter)
 - [@mastra/fastify](/reference/v1/server/fastify-adapter)
 - [@mastra/koa](/reference/v1/server/koa-adapter)
+- [@mastra/nestjs](/reference/v1/server/nestjs-adapter)
 
 You can build your own adapter, read [custom adapters](/docs/v1/server/custom-adapters) for details.
 
@@ -65,6 +69,12 @@ npm install @mastra/fastify@beta
 
 ```bash
 npm install @mastra/koa@beta
+```
+  </TabItem>
+  <TabItem value="nestjs" label="NestJS">
+
+```bash
+npm install @mastra/nestjs@beta
 ```
   </TabItem>
 </Tabs>
@@ -195,6 +205,54 @@ app.listen(port, () => {
 :::info
 
 See the [Koa Adapter](/reference/v1/server/koa-adapter) documentation for full configuration options.
+
+:::
+
+  </TabItem>
+  <TabItem value="nestjs" label="NestJS">
+
+```typescript {9} title="src/nestjs-server.ts"
+import { NestFactory } from '@nestjs/core';
+import { Module } from '@nestjs/common';
+import { MastraServer } from '@mastra/nestjs';
+import { mastra } from './mastra';
+
+@Module({})
+class AppModule {}
+
+const app = await NestFactory.create(AppModule);
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+await app.listen(4111);
+console.log('Server running on port 4111');
+```
+
+For Fastify platform:
+
+```typescript {10} title="src/nestjs-fastify-server.ts"
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Module } from '@nestjs/common';
+import { MastraServer } from '@mastra/nestjs';
+import { mastra } from './mastra';
+
+@Module({})
+class AppModule {}
+
+const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+await app.listen(4111, '0.0.0.0');
+console.log('Server running on port 4111');
+```
+
+:::info
+
+See the [NestJS Adapter](/reference/v1/server/nestjs-adapter) documentation for full configuration options.
 
 :::
 
@@ -403,6 +461,9 @@ See [MCP](/docs/v1/mcp/overview) for configuration details and how to set up MCP
 
 - [Hono Adapter](/reference/v1/server/hono-adapter) - Hono-specific setup
 - [Express Adapter](/reference/v1/server/express-adapter) - Express-specific setup
+- [Fastify Adapter](/reference/v1/server/fastify-adapter) - Fastify-specific setup
+- [Koa Adapter](/reference/v1/server/koa-adapter) - Koa-specific setup
+- [NestJS Adapter](/reference/v1/server/nestjs-adapter) - NestJS-specific setup
 - [Custom Adapters](/docs/v1/server/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/v1/server/mastra-server) - Using `mastra build` instead
 - [Authentication](/docs/v1/server/auth) - Configuring auth for your server

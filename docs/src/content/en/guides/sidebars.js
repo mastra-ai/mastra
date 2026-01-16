@@ -53,6 +53,11 @@ const sidebars = {
           id: "getting-started/hono",
           label: "Hono",
         },
+        {
+          type: "doc",
+          id: "getting-started/nestjs",
+          label: "NestJS",
+        },
       ],
     },
     {

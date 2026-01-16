@@ -56,7 +56,7 @@
     "test:cli": "pnpm --filter ./packages/cli test",
     "test:deployer": "pnpm --filter ./packages/deployer test",
     "test:server": "pnpm --filter ./packages/server test",
-    "test:server-adapters": "pnpm --filter ./server-adapters/hono test && pnpm --filter ./server-adapters/express test",
+    "test:server-adapters": "pnpm --filter \"./server-adapters/*\" --filter \"!@internal/server-adapter-test-utils\" test",
     "test:core": "pnpm --filter ./packages/core test",
     "test:core:zod": "pnpm --filter ./packages/core test:types:zod",
     "test:mcp": "pnpm --filter ./packages/mcp test",

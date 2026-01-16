@@ -1,0 +1,142 @@
+---
+title: "NestJS | Frameworks"
+description: "Get started with Mastra and NestJS"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Integrate Mastra in your NestJS project
+
+In this guide, you'll build a tool-calling AI agent using Mastra and NestJS. Using the [NestJS server adapter](/reference/v1/server/nestjs-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server. The adapter supports both Express and Fastify platforms.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new NestJS app (optional)
+
+If you already have a NestJS app, skip to the next step.
+
+Create a new NestJS project using the CLI:
+
+```bash
+npm i -g @nestjs/cli
+nest new my-mastra-app
+cd my-mastra-app
+```
+
+## Initialize Mastra
+
+Inside your NestJS project directory, run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash
+npx mastra@beta init
+```
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll pass the `src/mastra/index.ts` file to the NestJS server adapter later.
+
+## Add server adapter
+
+Install the NestJS server adapter package:
+
+```bash
+npm install @mastra/nestjs@beta
+```
+
+Open your main entry file (typically `src/main.ts`) and add the required import and initialization code:
+
+<Tabs>
+<TabItem value="express" label="Express (default)">
+
+```typescript {2-3,8-9} title="src/main.ts"
+import { NestFactory } from '@nestjs/core';
+import { MastraServer } from '@mastra/nestjs';
+import { mastra } from './mastra';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const server = new MastraServer({ app, mastra });
+  await server.init();
+
+  await app.listen(process.env.PORT ?? 3000);
+  console.log(`Server running on http://localhost:${process.env.PORT ?? 3000}`);
+}
+bootstrap();
+```
+
+</TabItem>
+<TabItem value="fastify" label="Fastify">
+
+First, install the Fastify platform:
+
+```bash
+npm install @nestjs/platform-fastify fastify
+```
+
+Then update your main file:
+
+```typescript {2-4,9-10} title="src/main.ts"
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { MastraServer } from '@mastra/nestjs';
+import { mastra } from './mastra';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
+  const server = new MastraServer({ app, mastra });
+  await server.init();
+
+  // Fastify requires '0.0.0.0' to listen on all interfaces
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  console.log(`Server running on http://localhost:${process.env.PORT ?? 3000}`);
+}
+bootstrap();
+```
+
+</TabItem>
+</Tabs>
+
+The ⁠`MastraServer` is initialized with the NestJS `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
+
+## Test your agent
+
+By default, Mastra's endpoints are added under the `/api` subpath and use your agent/workflow IDs. The default `weather-agent` created by `mastra init` is available at `/api/agents/weather-agent`.
+
+Start your NestJS server:
+
+```bash
+npm run start:dev
+```
+
+In a separate terminal window, use `curl` to ask the weather agent:
+
+```bash
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+## Next steps
+
+Congratulations on building your Mastra agent with NestJS!
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with NestJS:
+
+- [Server Adapters](/docs/v1/server/server-adapters)
+- [NestJS Adapter Reference](/reference/v1/server/nestjs-adapter)
