@@ -157,13 +157,16 @@ export abstract class BaseExporter implements ObservabilityExporter {
    * Apply the customSpanFormatter if configured.
    * This is called automatically by exportTracingEvent before _exportTracingEvent.
    *
+   * Supports both synchronous and asynchronous formatters. If the formatter
+   * returns a Promise, it will be awaited.
+   *
    * @param event - The incoming tracing event
    * @returns The (possibly modified) event to process
    */
-  protected applySpanFormatter(event: TracingEvent): TracingEvent {
+  protected async applySpanFormatter(event: TracingEvent): Promise<TracingEvent> {
     if (this.baseConfig.customSpanFormatter) {
       try {
-        const formattedSpan = this.baseConfig.customSpanFormatter(event.exportedSpan);
+        const formattedSpan = await this.baseConfig.customSpanFormatter(event.exportedSpan);
         return {
           ...event,
           exportedSpan: formattedSpan,
@@ -191,7 +194,7 @@ export abstract class BaseExporter implements ObservabilityExporter {
     if (this.isDisabled) {
       return;
     }
-    const processedEvent = this.applySpanFormatter(event);
+    const processedEvent = await this.applySpanFormatter(event);
     await this._exportTracingEvent(processedEvent);
   }
 

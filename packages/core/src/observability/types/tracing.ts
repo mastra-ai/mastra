@@ -1183,18 +1183,20 @@ export interface SpanOutputProcessor {
  * Span object before export, this formatter operates on the ExportedSpan data structure
  * after the span has been prepared for export.
  *
- * Use cases:
+ * Formatters can be synchronous or asynchronous, enabling use cases like:
  * - Extract plain text from structured AI SDK messages for better readability
  * - Transform input/output format for specific vendor requirements
  * - Add or remove fields based on the target platform
  * - Redact or transform sensitive data in a vendor-specific way
+ * - Enrich spans with data from external APIs (async)
+ * - Perform database lookups to add context (async)
  *
  * @param span - The exported span to format
- * @returns The formatted span (can be the same object with modifications, or a new object)
+ * @returns The formatted span (sync) or a Promise resolving to the formatted span (async)
  *
  * @example
  * ```typescript
- * // Custom formatter that extracts plain text from AI messages
+ * // Synchronous formatter that extracts plain text from AI messages
  * const plainTextFormatter: CustomSpanFormatter = (span) => {
  *   if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
  *     const userMessage = span.input.find(m => m.role === 'user');
@@ -1206,13 +1208,22 @@ export interface SpanOutputProcessor {
  *   return span;
  * };
  *
+ * // Async formatter that enriches spans with external data
+ * const enrichmentFormatter: CustomSpanFormatter = async (span) => {
+ *   const userData = await fetchUserData(span.metadata?.userId);
+ *   return {
+ *     ...span,
+ *     metadata: { ...span.metadata, userName: userData.name },
+ *   };
+ * };
+ *
  * // Use with an exporter
  * new BraintrustExporter({
  *   customSpanFormatter: plainTextFormatter,
  * });
  * ```
  */
-export type CustomSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan;
+export type CustomSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan | Promise<AnyExportedSpan>;
 
 // ============================================================================
 // Tracing Config Selector Interfaces

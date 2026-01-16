@@ -629,9 +629,10 @@ Mastra provides two ways to transform span data before it reaches your observabi
 | Configuration level | Observability config | Per-exporter |
 | Operates on | Internal `Span` object | Exported `ExportedSpan` data |
 | Applies to | All exporters | Single exporter |
-| Use case | Security, filtering, enrichment | Platform-specific formatting |
+| Async support | No | Yes |
+| Use case | Security, filtering, enrichment | Platform-specific formatting, async enrichment |
 
-Use **span processors** for transformations that should apply to all exporters (like redacting sensitive data). Use **custom span formatters** when different exporters need different representations of the same data (like plain text for one platform and structured data for another).
+Use **span processors** for synchronous transformations that should apply to all exporters (like redacting sensitive data). Use **custom span formatters** when different exporters need different representations of the same data (like plain text for one platform and structured data for another), or when you need to perform asynchronous operations like fetching data from external APIs.
 
 ### Span Processors
 
@@ -684,13 +685,14 @@ Processors are executed in the order they're defined, allowing you to chain mult
 
 ### Custom Span Formatters
 
-Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations.
+Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
 
 #### Use Cases
 
 - **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
 - **Transform input/output formats** - Customize how data appears in specific platforms
 - **Platform-specific field mapping** - Add or remove fields based on platform requirements
+- **Async data enrichment** - Fetch additional context from external APIs or databases
 
 #### Configuration
 
@@ -735,7 +737,7 @@ export const mastra = new Mastra({
 
 #### Chaining Multiple Formatters
 
-Use `chainFormatters` to combine multiple formatters:
+Use `chainFormatters` to combine multiple formatters. Chains support both sync and async formatters:
 
 ```ts
 import { chainFormatters } from "@mastra/observability";
@@ -754,6 +756,68 @@ const exporter = new BraintrustExporter({
   customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
 });
 ```
+
+#### Async Formatters
+
+Custom span formatters support asynchronous operations, enabling use cases like fetching data from external APIs or databases to enrich your spans:
+
+```ts
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Async formatter that enriches spans with user data
+const userEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  const userId = span.metadata?.userId;
+  if (!userId) return span;
+
+  // Fetch user data from your API or database
+  const userData = await fetchUserData(userId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      userName: userData.name,
+      userEmail: userData.email,
+      department: userData.department,
+    },
+  };
+};
+
+// Async formatter that looks up additional context
+const contextEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  if (span.type !== SpanType.AGENT_RUN) return span;
+
+  // Fetch experiment configuration
+  const experimentConfig = await getExperimentConfig(span.metadata?.experimentId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      experimentVariant: experimentConfig?.variant,
+      experimentGroup: experimentConfig?.group,
+    },
+  };
+};
+
+// Use async formatters with an exporter
+const exporter = new BraintrustExporter({
+  customSpanFormatter: userEnrichmentFormatter,
+});
+
+// Or chain sync and async formatters together
+const exporter = new LangfuseExporter({
+  customSpanFormatter: chainFormatters([
+    plainTextFormatter,           // sync
+    userEnrichmentFormatter,      // async
+    contextEnrichmentFormatter,   // async
+  ]),
+});
+```
+
+:::note
+Async formatters add latency to span export. Keep async operations fast (under 100ms) to avoid slowing down your application. Consider using caching for frequently accessed data.
+:::
 
 ## Serialization Options
 
