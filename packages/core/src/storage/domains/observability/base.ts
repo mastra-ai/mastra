@@ -5,6 +5,8 @@ import type {
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
   CreateSpanArgs,
+  DeleteTracesOlderThanArgs,
+  DeleteTracesOlderThanResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
   GetSpanArgs,
@@ -152,6 +154,23 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch deleting traces',
+    });
+  }
+
+  /**
+   * Deletes all traces where the root span's startedAt is before the specified date.
+   * This is useful for implementing data retention policies.
+   *
+   * @param args.beforeDate - Delete traces with startedAt before this date
+   * @param args.filters - Optional filters to scope which traces are deleted
+   * @returns The number of traces deleted
+   */
+  async deleteTracesOlderThan(_args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_TRACES_OLDER_THAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting traces by date',
     });
   }
 }

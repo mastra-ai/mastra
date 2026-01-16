@@ -1,5 +1,13 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
-import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
+  UpdateWorkflowStateOptions,
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+} from '../../types';
 import { StorageDomain } from '../base';
 
 export abstract class WorkflowsStorage extends StorageDomain {
@@ -56,4 +64,21 @@ export abstract class WorkflowsStorage extends StorageDomain {
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
   abstract deleteWorkflowRunById(args: { runId: string; workflowName: string }): Promise<void>;
+
+  /**
+   * Deletes all workflow runs where createdAt is before the specified date.
+   * This is useful for implementing data retention policies.
+   *
+   * @param args.beforeDate - Delete workflow runs created before this date
+   * @param args.filters - Optional filters to scope which workflow runs are deleted
+   * @returns The number of workflow runs deleted
+   */
+  async deleteWorkflowRunsOlderThan(_args: DeleteWorkflowRunsOlderThanArgs): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    throw new MastraError({
+      id: 'WORKFLOWS_STORAGE_DELETE_RUNS_OLDER_THAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting workflow runs by date',
+    });
+  }
 }
