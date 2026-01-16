@@ -8,12 +8,13 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
+import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
+import type { InferOutput } from '../schema/standard-schema.types';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
 import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
-import type { ZodLikeSchema } from '../types/zod-compat';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
@@ -201,7 +202,9 @@ export type PathsToStringProps<T> =
         }[keyof T]
       : never;
 
-export type ExtractSchemaType<T extends ZodLikeSchema> = T extends ZodLikeSchema<infer V> ? V : never;
+export type ExtractSchemaType<T extends StandardSchemaWithJSON> = T extends StandardSchemaWithJSON
+  ? InferOutput<T>
+  : never;
 
 export type ExtractSchemaFromStep<
   TStep extends Step<any, any, any, any, any, any, any>,
@@ -534,11 +537,11 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
  */
 export type StepParams<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 > = {
   id: TStepId;
   description?: string;
@@ -550,11 +553,11 @@ export type StepParams<
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
-    TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-    z.infer<TInputSchema>,
-    z.infer<TOutputSchema>,
-    TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-    TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+    TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+    InferPublicSchema<TInputSchema>,
+    InferPublicSchema<TOutputSchema>,
+    TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+    TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
     DefaultEngineType
   >;
 };
@@ -697,9 +700,9 @@ export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, 
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
-  inputSchema: SchemaWithValidation<TInput>;
-  outputSchema: SchemaWithValidation<TOutput>;
-  stateSchema?: SchemaWithValidation<TState>;
+  inputSchema: PublicSchema<TInput>;
+  outputSchema: PublicSchema<TOutput>;
+  stateSchema?: PublicSchema<TState>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {

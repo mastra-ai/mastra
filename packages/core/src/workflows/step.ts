@@ -3,7 +3,8 @@ import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema/schema';
+import type { InferZodLikeSchema } from '../stream/base/schema';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
@@ -33,11 +34,13 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   suspendData?: TSuspend;
   retryCount: number;
   tracingContext: TracingContext;
-  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['inputSchema']> : T;
+  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any>
+    ? InferStandardSchemaOutput<T['inputSchema']>
+    : T;
   getStepResult<TOutput>(step: string): TOutput;
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
-  ): InferZodLikeSchema<TStep['outputSchema']>;
+  ): InferStandardSchemaOutput<TStep['outputSchema']>;
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
@@ -87,11 +90,11 @@ export interface Step<
 > {
   id: TStepId;
   description?: string;
-  inputSchema: SchemaWithValidation<TInput>;
-  outputSchema: SchemaWithValidation<TOutput>;
-  resumeSchema?: SchemaWithValidation<TResume>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  stateSchema?: SchemaWithValidation<TState>;
+  inputSchema: StandardSchemaWithJSON<TInput>;
+  outputSchema: StandardSchemaWithJSON<TOutput>;
+  resumeSchema?: StandardSchemaWithJSON<TResume>;
+  suspendSchema?: StandardSchemaWithJSON<TSuspend>;
+  stateSchema?: StandardSchemaWithJSON<TState>;
   execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;

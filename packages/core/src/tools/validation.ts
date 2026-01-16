@@ -1,11 +1,73 @@
-import type { z } from 'zod';
-import type { SchemaWithValidation } from '../stream/base/schema';
-import { isZodArray, isZodObject } from '../utils/zod-utils';
+import type { StandardSchemaWithJSON } from '../schema/schema';
+import type { StandardSchemaIssue } from '../schema/standard-schema';
 
-export interface ValidationError<T = any> {
+/**
+ * Formatted validation errors structure.
+ * Contains `errors` array for messages at this level, and `fields` for nested field errors.
+ */
+export type FormattedValidationErrors<T = unknown> = {
+  errors: string[];
+  fields: T extends object ? { [K in keyof T]?: FormattedValidationErrors<T[K]> } : unknown;
+};
+
+export interface ValidationError<T = unknown> {
   error: true;
   message: string;
-  validationErrors: z.ZodFormattedError<T>;
+  validationErrors: FormattedValidationErrors<T>;
+}
+/**
+ * Extracts a string key from a path segment (handles both PropertyKey and PathSegment objects).
+ */
+function getPathKey(segment: PropertyKey | { key: PropertyKey }): string {
+  if (typeof segment === 'object' && segment !== null && 'key' in segment) {
+    return String(segment.key);
+  }
+  return String(segment);
+}
+
+/**
+ * Creates an empty FormattedValidationErrors object.
+ */
+function createEmptyErrors(): { errors: string[]; fields: Record<string, unknown> } {
+  return { errors: [], fields: {} };
+}
+
+/**
+ * Builds a formatted errors object from standard schema validation issues.
+ *
+ * @param issues Array of validation issues from standard schema validation
+ * @returns Formatted errors object with nested structure based on paths
+ */
+function buildFormattedErrors<T>(issues: readonly StandardSchemaIssue[]): FormattedValidationErrors<T> {
+  const result = createEmptyErrors();
+
+  for (const issue of issues) {
+    if (!issue.path || issue.path.length === 0) {
+      // Root-level error
+      result.errors.push(issue.message);
+    } else {
+      // Nested error - build path through fields
+      let current = result;
+      for (let i = 0; i < issue.path.length; i++) {
+        const key = getPathKey(issue.path[i]!);
+        if (i === issue.path.length - 1) {
+          // Last segment - add the error message
+          if (!current.fields[key]) {
+            current.fields[key] = createEmptyErrors();
+          }
+          (current.fields[key] as { errors: string[]; fields: Record<string, unknown> }).errors.push(issue.message);
+        } else {
+          // Intermediate segment - ensure object exists
+          if (!current.fields[key]) {
+            current.fields[key] = createEmptyErrors();
+          }
+          current = current.fields[key] as { errors: string[]; fields: Record<string, unknown> };
+        }
+      }
+    }
+  }
+
+  return result as FormattedValidationErrors<T>;
 }
 
 /**
@@ -27,40 +89,44 @@ function truncateForLogging(data: unknown, maxLength: number = 200): string {
 }
 
 /**
- * Validates raw suspend data against a Zod schema.
+ * Validates raw suspend data against a schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against
  * @param suspendData The raw suspend data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolSuspendData<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+export function validateToolSuspendData<T = unknown>(
+  schema: StandardSchemaWithJSON<T> | undefined,
   suspendData: unknown,
   toolId?: string,
-): { data: T | unknown; error?: ValidationError<T> } {
+): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
   // If no schema, return suspend data as-is
-  if (!schema || !('safeParse' in schema)) {
-    return { data: suspendData };
+  if (!schema) {
+    return { data: suspendData as T };
   }
 
-  // Validate the input directly - no unwrapping needed in v1.0
-  const validation = schema.safeParse(suspendData);
+  // Validate the input using standard schema interface
+  const validation = schema['~standard'].validate(suspendData);
 
-  if (validation.success) {
-    return { data: validation.data };
+  if (validation instanceof Promise) {
+    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+  }
+
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: suspendData, error };
+  return { error };
 }
 
 /**
@@ -72,18 +138,20 @@ export function validateToolSuspendData<T = any>(
  * @param input The input to normalize
  * @returns The normalized input (original value, {}, or [])
  */
-function normalizeNullishInput(schema: SchemaWithValidation<unknown>, input: unknown): unknown {
-  if (input !== undefined && input !== null) {
+function normalizeNullishInput(schema: StandardSchemaWithJSON<any>, input: unknown): unknown {
+  if (typeof input !== 'undefined' && input !== null) {
     return input;
   }
 
+  const jsonSchema = schema['~standard'].jsonSchema.input({ target: 'draft-07' });
+
   // Check if schema is an array type (using typeName to avoid dual-package hazard)
-  if (isZodArray(schema)) {
+  if (jsonSchema.type === 'array') {
     return [];
   }
 
   // Check if schema is an object type (using typeName to avoid dual-package hazard)
-  if (isZodObject(schema)) {
+  if (jsonSchema.type === 'object') {
     return {};
   }
 
@@ -147,21 +215,21 @@ function convertUndefinedToNull(input: unknown): unknown {
 }
 
 /**
- * Validates raw input data against a Zod schema.
+ * Validates raw input data against a schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against (or undefined to skip validation)
  * @param input The raw input data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolInput<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+export function validateToolInput<T = unknown>(
+  schema: StandardSchemaWithJSON<T> | undefined,
   input: unknown,
   toolId?: string,
-): { data: T | unknown; error?: ValidationError<T> } {
+): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
   // If no schema, return input as-is
-  if (!schema || !('safeParse' in schema)) {
-    return { data: input };
+  if (!schema) {
+    return { data: input as T };
   }
 
   // Normalize undefined/null input to appropriate default for the schema type
@@ -176,58 +244,65 @@ export function validateToolInput<T = any>(
   normalizedInput = convertUndefinedToNull(normalizedInput);
 
   // Validate the normalized input
-  const validation = schema.safeParse(normalizedInput);
+  const validation = schema['~standard'].validate(normalizedInput);
 
-  if (validation.success) {
-    return { data: validation.data };
+  if (validation instanceof Promise) {
+    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+  }
+
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: input, error };
+  return { error };
 }
 
 /**
- * Validates tool output data against a Zod schema.
+ * Validates tool output data against a schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against
  * @param output The output data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolOutput<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+export function validateToolOutput<T = unknown>(
+  schema: StandardSchemaWithJSON<T> | undefined,
   output: unknown,
   toolId?: string,
   suspendCalled?: boolean,
-): { data: T | unknown; error?: ValidationError<T> } {
+): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
   // If no schema, return output as-is
-  if (!schema || !('safeParse' in schema) || suspendCalled) {
-    return { data: output };
+  if (!schema || suspendCalled) {
+    return { data: output as T };
   }
 
-  // Validate the output
-  const validation = schema.safeParse(output);
+  // Validate the output using standard schema interface
+  const validation = schema['~standard'].validate(output);
+  if (validation instanceof Promise) {
+    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+  }
 
-  if (validation.success) {
-    return { data: validation.data };
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: output, error };
+  return { error };
 }

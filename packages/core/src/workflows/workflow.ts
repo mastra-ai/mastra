@@ -22,6 +22,8 @@ import { ProcessorRunner } from '../processors';
 import type { Processor } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
+import { toStandardSchema } from '../schema/schema';
+import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { InferSchemaOutput, InferZodLikeSchema, OutputSchema, SchemaWithValidation } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
@@ -30,7 +32,6 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
-import { isZodType } from '../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
@@ -72,7 +73,7 @@ import type {
   StepParams,
   OutputWriter,
 } from './types';
-import { createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { createTimeTravelExecutionParams } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -154,20 +155,20 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -200,9 +201,9 @@ export function createStep<TStepId extends string, TStepOutput>(
  */
 export function createStep<
   TSchemaIn,
+  TSchemaOut,
   TSuspend,
   TResume,
-  TSchemaOut,
   TContext extends ToolExecutionContext<TSuspend, TResume>,
   TId extends string,
 >(
@@ -225,8 +226,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  z.infer<typeof ProcessorStepInputSchema>,
-  z.infer<typeof ProcessorStepOutputSchema>,
+  InferPublicSchema<typeof ProcessorStepInputSchema>,
+  InferPublicSchema<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -239,20 +240,20 @@ export function createStep<TProcessorId extends string>(
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -290,30 +291,33 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 
 function createStepFromParams<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 > {
+  // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
+  // but we need it to match the inferred generic types. The public overloads ensure
+  // type safety for consumers.
   return {
     id: params.id,
     description: params.description,
-    inputSchema: params.inputSchema,
-    stateSchema: params.stateSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
+    inputSchema: toStandardSchema(params.inputSchema),
+    stateSchema: params.stateSchema ? toStandardSchema(params.stateSchema) : undefined,
+    outputSchema: toStandardSchema(params.outputSchema),
+    resumeSchema: params.resumeSchema ? toStandardSchema(params.resumeSchema) : undefined,
+    suspendSchema: params.suspendSchema ? toStandardSchema(params.suspendSchema) : undefined,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -1202,9 +1206,9 @@ export class Workflow<
 {
   public id: TWorkflowId;
   public description?: string | undefined;
-  public inputSchema: SchemaWithValidation<TInput>;
-  public outputSchema: SchemaWithValidation<TOutput>;
-  public stateSchema?: SchemaWithValidation<TState>;
+  public inputSchema: StandardSchemaWithJSON<TInput>;
+  public outputSchema: StandardSchemaWithJSON<TOutput>;
+  public stateSchema?: StandardSchemaWithJSON<TState>;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -1243,9 +1247,9 @@ export class Workflow<
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
-    this.inputSchema = inputSchema;
-    this.outputSchema = outputSchema;
-    this.stateSchema = stateSchema;
+    this.inputSchema = toStandardSchema(inputSchema);
+    this.outputSchema = toStandardSchema(outputSchema);
+    this.stateSchema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
@@ -2441,8 +2445,8 @@ export class Run<
   streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
-  protected stateSchema?: SchemaWithValidation<TState>;
-  protected inputSchema?: SchemaWithValidation<TInput>;
+  protected stateSchema?: StandardSchemaWithJSON<TState>;
+  protected inputSchema?: StandardSchemaWithJSON<TInput>;
 
   protected cleanup?: () => void;
 
@@ -2455,8 +2459,8 @@ export class Run<
     workflowId: string;
     runId: string;
     resourceId?: string;
-    stateSchema?: SchemaWithValidation<TState>;
-    inputSchema?: SchemaWithValidation<TInput>;
+    stateSchema?: StandardSchemaWithJSON<TState>;
+    inputSchema?: StandardSchemaWithJSON<TInput>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -2526,85 +2530,51 @@ export class Run<
     }
   }
 
-  protected async _validateInput(inputData?: TInput) {
-    let inputDataToUse = inputData;
+  async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
+    const validatedInputData = await schema['~standard'].validate(data);
 
-    if (this.validateInputs && this.inputSchema && isZodType(this.inputSchema)) {
-      const validatedInputData = await this.inputSchema.safeParseAsync(inputData);
-
-      if (!validatedInputData.success) {
-        const errors = getZodErrors(validatedInputData.error);
-        throw new Error('Invalid input data: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
-      }
-
-      inputDataToUse = validatedInputData.data;
+    if (validatedInputData.issues) {
+      throw new Error(
+        `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+      );
     }
 
-    return inputDataToUse;
+    return validatedInputData.value;
+  }
+
+  protected async _validateInput(inputData?: TInput) {
+    if (!this.validateInputs || !this.inputSchema) {
+      return inputData;
+    }
+
+    return this.#validateSchema(this.inputSchema, inputData, 'input data');
   }
 
   protected async _validateInitialState(initialState?: TState) {
-    let initialStateToUse = initialState;
-    if (this.validateInputs) {
-      let stateSchema = this.stateSchema;
-
-      if (stateSchema && isZodType(stateSchema)) {
-        const validatedInitialState = await stateSchema.safeParseAsync(initialState);
-
-        if (!validatedInitialState.success) {
-          const errors = getZodErrors(validatedInitialState.error);
-          throw new Error(
-            'Invalid initial state: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
-        }
-
-        initialStateToUse = validatedInitialState.data;
-      }
+    if (!this.validateInputs || !this.stateSchema) {
+      return initialState;
     }
 
-    return initialStateToUse;
+    return this.#validateSchema(this.stateSchema, initialState, 'initial data');
   }
 
   protected async _validateResumeData<TResume>(resumeData: TResume, suspendedStep?: StepWithComponent) {
-    let resumeDataToUse = resumeData;
-
-    if (suspendedStep && suspendedStep.resumeSchema && this.validateInputs && isZodType(suspendedStep.resumeSchema)) {
-      const resumeSchema = suspendedStep.resumeSchema;
-
-      const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
-
-      if (!validatedResumeData.success) {
-        const errors = getZodErrors(validatedResumeData.error);
-        throw new Error('Invalid resume data: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
-      }
-
-      resumeDataToUse = validatedResumeData.data;
+    if (!this.validateInputs || !suspendedStep?.resumeSchema) {
+      return resumeData;
     }
 
-    return resumeDataToUse;
+    return this.#validateSchema(suspendedStep.resumeSchema, resumeData, 'resume data');
   }
 
   protected async _validateTimetravelInputData<TInput>(
     inputData: TInput,
     step: Step<string, any, TInput, any, any, any, TEngineType>,
   ) {
-    let inputDataToUse = inputData;
-
-    if (step && step.inputSchema && this.validateInputs && isZodType(step.inputSchema)) {
-      const inputSchema = step.inputSchema;
-
-      const validatedInputData = await inputSchema.safeParseAsync(inputData);
-
-      if (!validatedInputData.success) {
-        const errors = getZodErrors(validatedInputData.error);
-        const errorMessages = errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-        throw new Error('Invalid inputData: \n' + errorMessages);
-      }
-
-      inputDataToUse = validatedInputData.data;
+    if (!this.validateInputs || !step?.inputSchema) {
+      return inputData;
     }
 
-    return inputDataToUse;
+    return this.#validateSchema(step.inputSchema, inputData, 'input data');
   }
 
   protected async _start({

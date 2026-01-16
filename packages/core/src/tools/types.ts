@@ -14,7 +14,7 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import type { PublicSchema } from '../schema/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
@@ -266,15 +266,10 @@ export interface ToolAction<
 > {
   id: TId;
   description: string;
-  inputSchema?: SchemaWithValidation<TSchemaIn>;
-  outputSchema?: SchemaWithValidation<TSchemaOut>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  resumeSchema?: SchemaWithValidation<TResume>;
-  /**
-   * Optional MCP-specific properties.
-   * Only populated when the tool is being used in an MCP context.
-   */
-  mcp?: MCPToolProperties;
+  inputSchema?: PublicSchema<TSchemaIn>;
+  outputSchema?: PublicSchema<TSchemaOut>;
+  suspendSchema?: PublicSchema<TSuspend>;
+  resumeSchema?: PublicSchema<TResume>;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
