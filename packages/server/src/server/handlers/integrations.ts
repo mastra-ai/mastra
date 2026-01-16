@@ -45,10 +45,56 @@ import {
   SmitheryProvider,
   ArcadeProvider,
   ComposioProvider,
-  type MCPIntegrationMetadata,
-  type SmitheryIntegrationMetadata,
+  type MCPMetadata,
+  type SmitheryMetadata,
+  type ProviderMetadata,
+  type ToolProvider,
+  type AuthorizableProvider,
 } from '@mastra/core/integrations';
 import { createMCPProvider } from './mcp-tool-provider';
+import type { Mastra } from '@mastra/core';
+
+/**
+ * Helper to get a tool provider from Mastra instance with fallback to deprecated global registry.
+ * This maintains backward compatibility while supporting the new instance-based approach.
+ */
+function getToolProvider(mastra: Mastra, providerName: string): ToolProvider {
+  // First try to get from Mastra instance (new approach)
+  const provider = mastra.getToolProvider(providerName);
+  if (provider) {
+    return provider;
+  }
+
+  // Fallback to deprecated global registry for backward compatibility
+  // This will log a deprecation warning
+  return getProvider(providerName as any);
+}
+
+/**
+ * Helper to get an authorizable provider (for OAuth flows).
+ */
+function getAuthorizableProvider(mastra: Mastra, providerName: string): AuthorizableProvider | null {
+  const provider = getToolProvider(mastra, providerName);
+  // Check if provider implements AuthorizableProvider interface
+  if (provider && 'authorize' in provider && typeof (provider as any).authorize === 'function') {
+    return provider as unknown as AuthorizableProvider;
+  }
+  return null;
+}
+
+/**
+ * Helper to list providers - prefers Mastra instance, falls back to global registry.
+ */
+async function getProviderStatuses(mastra: Mastra) {
+  // Check if any providers are registered with the Mastra instance
+  const instanceProviders = mastra.listToolProviders();
+  if (instanceProviders.length > 0) {
+    return mastra.getToolProviderStatuses();
+  }
+
+  // Fallback to deprecated global registry
+  return listProviders();
+}
 
 // ============================================================================
 // Route Definitions
@@ -185,7 +231,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
       // Handle MCP and Smithery providers similarly (both use MCP connection)
       if (provider === 'mcp' || provider === 'smithery') {
         // MCP/Smithery requires either URL (http) or command (stdio) in metadata
-        const mcpMetadata = metadata as MCPIntegrationMetadata | SmitheryIntegrationMetadata | undefined;
+        const mcpMetadata = metadata as MCPMetadata | SmitheryMetadata | undefined;
         if (!mcpMetadata) {
           throw new HTTPException(400, {
             message: `${provider === 'smithery' ? 'Smithery' : 'MCP'} provider requires metadata with transport configuration`,
@@ -242,7 +288,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
             provider,
             enabled: enabled ?? true,
             selectedToolkits: ['mcp-server'], // MCP/Smithery uses a single virtual toolkit
-            metadata,
+            metadata: metadata as ProviderMetadata | undefined,
             ownerId,
           },
         });
@@ -283,7 +329,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
       }
 
       // Get the provider (Composio/Arcade)
-      const toolProvider = getProvider(provider);
+      const toolProvider = getToolProvider(mastra, provider);
 
       // Check provider connection status
       const status = await toolProvider.getStatus();
@@ -301,7 +347,7 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
           provider,
           enabled: enabled ?? true,
           selectedToolkits,
-          metadata,
+          metadata: metadata as ProviderMetadata | undefined,
           ownerId,
         },
       });
@@ -442,7 +488,7 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
         name,
         enabled,
         selectedToolkits,
-        metadata,
+        metadata: metadata as ProviderMetadata | undefined,
         ownerId,
       });
 
@@ -452,7 +498,7 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
           // Handle MCP provider differently
           if (updatedIntegration.provider === 'mcp' || updatedIntegration.provider === 'smithery') {
             // Use existing metadata since the update request doesn't include connection info
-            const mcpMetadata = existing.metadata as MCPIntegrationMetadata | undefined;
+            const mcpMetadata = existing.metadata as MCPMetadata | undefined;
             if (!mcpMetadata) {
               console.error('MCP integration missing metadata:', { integrationId, existing });
               throw new Error('MCP integration is missing metadata');
@@ -526,7 +572,7 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
             }
           } else {
             // Composio/Arcade providers
-            const toolProvider = getProvider(updatedIntegration.provider);
+            const toolProvider = getToolProvider(mastra, updatedIntegration.provider);
 
             // Delete old cached tools
             await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
@@ -670,9 +716,9 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   summary: 'List integration providers',
   description: 'Returns all available integration providers with connection status',
   tags: ['Integrations'],
-  handler: async () => {
+  handler: async ({ mastra }) => {
     try {
-      const providers = await listProviders();
+      const providers = await getProviderStatuses(mastra);
 
       return { providers };
     } catch (error) {
@@ -694,7 +740,7 @@ export const LIST_PROVIDER_TOOLKITS_ROUTE = createRoute({
   summary: 'List provider toolkits',
   description: 'Fetches available toolkits from the specified integration provider',
   tags: ['Integrations'],
-  handler: async ({ provider, search, category, limit, cursor }) => {
+  handler: async ({ mastra, provider, search, category, limit, cursor }) => {
     try {
       // Validate provider type
       if (provider !== 'composio' && provider !== 'arcade' && provider !== 'mcp' && provider !== 'smithery') {
@@ -705,7 +751,8 @@ export const LIST_PROVIDER_TOOLKITS_ROUTE = createRoute({
 
       // Smithery - list servers as toolkits
       if (provider === 'smithery') {
-        const smitheryProvider = new SmitheryProvider();
+        // Try to get from Mastra instance, fallback to creating new instance
+        const smitheryProvider = (mastra.getToolProvider('smithery') as ToolProvider) || new SmitheryProvider();
         const response = await smitheryProvider.listToolkits({
           search,
           category,
@@ -730,7 +777,7 @@ export const LIST_PROVIDER_TOOLKITS_ROUTE = createRoute({
         };
       }
 
-      const toolProvider = getProvider(provider);
+      const toolProvider = getToolProvider(mastra, provider);
 
       // Check provider connection status
       const status = await toolProvider.getStatus();
@@ -767,7 +814,20 @@ export const LIST_PROVIDER_TOOLS_ROUTE = createRoute({
   summary: 'List provider tools',
   description: 'Fetches available tools from the specified integration provider',
   tags: ['Integrations'],
-  handler: async ({ provider, toolkitSlug, toolkitSlugs, search, limit, cursor, url, headers, command, args, env }) => {
+  handler: async ({
+    mastra,
+    provider,
+    toolkitSlug,
+    toolkitSlugs,
+    search,
+    limit,
+    cursor,
+    url,
+    headers,
+    command,
+    args,
+    env,
+  }) => {
     try {
       // Validate provider type
       if (provider !== 'composio' && provider !== 'arcade' && provider !== 'mcp' && provider !== 'smithery') {
@@ -855,7 +915,7 @@ export const LIST_PROVIDER_TOOLS_ROUTE = createRoute({
         }
       }
 
-      const toolProvider = getProvider(provider);
+      const toolProvider = getToolProvider(mastra, provider);
 
       // Check provider connection status
       const status = await toolProvider.getStatus();
@@ -925,7 +985,7 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
 
       // Handle MCP provider differently
       if (integration.provider === 'mcp' || integration.provider === 'smithery') {
-        const mcpMetadata = integration.metadata as MCPIntegrationMetadata | undefined;
+        const mcpMetadata = integration.metadata as MCPMetadata | undefined;
         if (!mcpMetadata) {
           throw new HTTPException(400, {
             message: 'MCP integration is missing metadata',
@@ -993,7 +1053,7 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
       }
 
       // Get the provider (Composio/Arcade)
-      const toolProvider = getProvider(integration.provider);
+      const toolProvider = getToolProvider(mastra, integration.provider);
 
       // Check provider connection status
       const status = await toolProvider.getStatus();
@@ -1194,9 +1254,10 @@ export const LIST_SMITHERY_SERVERS_ROUTE = createRoute({
   summary: 'Search Smithery servers',
   description: 'Search the Smithery registry for MCP servers',
   tags: ['Integrations', 'Smithery'],
-  handler: async ({ q, page, pageSize }) => {
+  handler: async ({ mastra, q, page, pageSize }) => {
     try {
-      const smitheryProvider = new SmitheryProvider();
+      // Try to get from Mastra instance, fallback to creating new instance
+      const smitheryProvider = (mastra.getToolProvider('smithery') as SmitheryProvider) || new SmitheryProvider();
       const response = await smitheryProvider.searchServers({
         query: q,
         page,
@@ -1221,9 +1282,10 @@ export const GET_SMITHERY_SERVER_ROUTE = createRoute({
   summary: 'Get Smithery server details',
   description: 'Get detailed information about a specific MCP server from Smithery, including connection details',
   tags: ['Integrations', 'Smithery'],
-  handler: async ({ qualifiedName }) => {
+  handler: async ({ mastra, qualifiedName }) => {
     try {
-      const smitheryProvider = new SmitheryProvider();
+      // Try to get from Mastra instance, fallback to creating new instance
+      const smitheryProvider = (mastra.getToolProvider('smithery') as SmitheryProvider) || new SmitheryProvider();
 
       // Get server info
       const server = await smitheryProvider.getServer(qualifiedName);
@@ -1263,9 +1325,10 @@ export const ARCADE_AUTHORIZE_ROUTE = createRoute({
   summary: 'Authorize Arcade toolkit',
   description: 'Initiate OAuth authorization for an Arcade toolkit that requires authentication',
   tags: ['Integrations', 'Arcade'],
-  handler: async ({ toolkitSlug, userId }) => {
+  handler: async ({ mastra, toolkitSlug, userId }) => {
     try {
-      const arcadeProvider = new ArcadeProvider();
+      // Try to get from Mastra instance, fallback to creating new instance
+      const arcadeProvider = (mastra.getToolProvider('arcade') as ArcadeProvider) || new ArcadeProvider();
       const response = await arcadeProvider.authorize(toolkitSlug, userId);
       return response;
     } catch (error) {
@@ -1340,10 +1403,11 @@ export const COMPOSIO_AUTHORIZE_ROUTE = createRoute({
   summary: 'Authorize Composio toolkit',
   description: 'Initiate OAuth authorization for a Composio toolkit that requires authentication',
   tags: ['Integrations', 'Composio'],
-  handler: async ({ toolkitSlug, userId, callbackUrl }) => {
+  handler: async ({ mastra, toolkitSlug, userId, callbackUrl }) => {
     try {
-      const composioProvider = new ComposioProvider();
-      const response = await composioProvider.authorize(toolkitSlug, userId, callbackUrl);
+      // Try to get from Mastra instance, fallback to creating new instance
+      const composioProvider = (mastra.getToolProvider('composio') as ComposioProvider) || new ComposioProvider();
+      const response = await composioProvider.authorize(toolkitSlug, userId, { callbackUrl });
       return response;
     } catch (error) {
       return handleError(error, 'Error initiating Composio authorization');
@@ -1363,9 +1427,10 @@ export const COMPOSIO_AUTH_STATUS_ROUTE = createRoute({
   summary: 'Check Composio auth status',
   description: 'Check the status of a pending Composio authorization',
   tags: ['Integrations', 'Composio'],
-  handler: async ({ authorizationId }) => {
+  handler: async ({ mastra, authorizationId }) => {
     try {
-      const composioProvider = new ComposioProvider();
+      // Try to get from Mastra instance, fallback to creating new instance
+      const composioProvider = (mastra.getToolProvider('composio') as ComposioProvider) || new ComposioProvider();
       const response = await composioProvider.checkAuthorizationStatus(authorizationId);
       return response;
     } catch (error) {

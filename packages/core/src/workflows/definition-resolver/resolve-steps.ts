@@ -19,6 +19,7 @@ import type {
 } from '../../storage/types';
 import type { Step } from '../step';
 import { createStep } from '../workflow';
+import { parseToolId, type IntegrationProviderType, type MCPIntegrationMetadata } from '../../integrations';
 
 import { evaluateRef, evaluateInputMapping, type EvaluationContext, type VariableRef } from './evaluate-ref';
 import { jsonSchemaToZod } from './json-schema-to-zod';
@@ -152,6 +153,12 @@ export function resolveAgentStep(mastra: Mastra, stepId: string, def: AgentStepD
 
 /**
  * Resolves a tool step definition.
+ *
+ * Supports both regular tools (code-defined and agent tools) and
+ * integration tools from providers like Composio, Arcade, MCP, and Smithery.
+ *
+ * Integration tool IDs follow the format: `provider_toolkitSlug_toolSlug`
+ * (e.g., `composio_github_GITHUB_CREATE_ISSUE`)
  */
 export function resolveToolStep(mastra: Mastra, stepId: string, def: ToolStepDef): Step {
   return createStep({
@@ -206,26 +213,206 @@ export function resolveToolStep(mastra: Mastra, stepId: string, def: ToolStepDef
         }
       }
 
-      if (!tool) {
-        throw new Error(`Tool "${def.toolId}" not found (checked global tools and agent tools)`);
-      }
-
-      if (!tool.execute) {
-        throw new Error(`Tool "${def.toolId}" does not have an execute function`);
-      }
-
       // Build evaluation context and resolve inputs
       const context = buildEvaluationContext(getInitData, getStepResult);
       const toolInput = evaluateInputMapping(def.input, context);
 
-      // Execute tool with (input, context) signature
-      const result = await tool.execute(toolInput, {
-        mastra: stepMastra,
-        requestContext,
-        tracingContext,
-      });
+      // If tool found in code, execute it directly
+      if (tool) {
+        if (!tool.execute) {
+          throw new Error(`Tool "${def.toolId}" does not have an execute function`);
+        }
 
-      return result;
+        // Execute tool with (input, context) signature
+        const result = await tool.execute(toolInput, {
+          mastra: stepMastra,
+          requestContext,
+          tracingContext,
+        });
+
+        return result;
+      }
+
+      // Check if it's an integration tool (format: provider_toolkitSlug_toolSlug)
+      const parsedToolId = parseToolId(def.toolId);
+
+      if (parsedToolId.valid) {
+        // It's an integration tool - look up cached tool from storage
+        const storage = stepMastra?.getStorage();
+
+        if (!storage) {
+          throw new Error(
+            `Integration tool "${def.toolId}" requires storage to be configured. ` +
+              `Storage is needed to look up cached integration tools.`,
+          );
+        }
+
+        const integrationsStore = await storage.getStore('integrations');
+
+        if (!integrationsStore) {
+          throw new Error(
+            `Integration tool "${def.toolId}" requires integrations store. ` +
+              `Make sure storage is properly configured with integrations support.`,
+          );
+        }
+
+        // Find the cached tool by provider and toolkit
+        const { provider, toolkitSlug, toolSlug } = parsedToolId;
+
+        const cachedToolsResult = await integrationsStore.listCachedTools({
+          provider: provider as IntegrationProviderType,
+          toolkitSlug,
+        });
+
+        const cachedTool = cachedToolsResult.tools?.find((t: any) => t.toolSlug === toolSlug);
+
+        if (!cachedTool) {
+          throw new Error(
+            `Integration tool "${def.toolId}" not found in cached tools. ` +
+              `Make sure the integration is set up and tools are cached.`,
+          );
+        }
+
+        // Execute integration tool based on provider
+        if (provider === 'mcp' || provider === 'smithery') {
+          // MCP/Smithery tools require integration metadata for transport config
+          const integration = await integrationsStore.getIntegrationById({ id: cachedTool.integrationId });
+
+          if (!integration) {
+            throw new Error(`Integration not found for MCP tool "${def.toolId}"`);
+          }
+
+          const mcpMetadata = integration.metadata as MCPIntegrationMetadata | undefined;
+
+          if (!mcpMetadata) {
+            throw new Error(`MCP integration metadata not found for "${def.toolId}"`);
+          }
+
+          // Dynamically import MCPClient from @mastra/mcp
+          // Use variable to avoid TypeScript's static module resolution
+          const mcpPackage = '@mastra/mcp';
+          let MCPClient: any;
+          try {
+            const mcpModule = await import(/* webpackIgnore: true */ mcpPackage);
+            MCPClient = mcpModule.MCPClient;
+          } catch {
+            throw new Error(
+              `MCP tool execution requires @mastra/mcp package. ` + `Install it with: npm install @mastra/mcp`,
+            );
+          }
+
+          // Build server config based on transport type
+          const transport = mcpMetadata.transport || (mcpMetadata.url ? 'http' : 'stdio');
+          const serverConfig =
+            transport === 'http'
+              ? {
+                  url: new URL(mcpMetadata.url!),
+                  requestInit: mcpMetadata.headers ? { headers: mcpMetadata.headers } : undefined,
+                  connectTimeout: 10000,
+                }
+              : {
+                  command: mcpMetadata.command!,
+                  args: mcpMetadata.args,
+                  env: mcpMetadata.env,
+                };
+
+          const client = new MCPClient({
+            id: `workflow-mcp-${Date.now()}`,
+            servers: { server: serverConfig },
+            timeout: 30000,
+          });
+
+          try {
+            // Get available tools and find the one we need
+            const availableTools = await client.listTools();
+            const toolEntries = Object.entries(availableTools as Record<string, any>);
+
+            // Find the tool - it might be prefixed with 'server_'
+            const toolEntry = toolEntries.find(
+              ([name]) =>
+                name === cachedTool.toolSlug ||
+                name === `server_${cachedTool.toolSlug}` ||
+                name.endsWith(`_${cachedTool.toolSlug}`),
+            );
+
+            if (!toolEntry) {
+              throw new Error(
+                `MCP tool "${cachedTool.toolSlug}" not found. Available tools: ${toolEntries.map(([n]) => n).join(', ')}`,
+              );
+            }
+
+            const [, mcpTool] = toolEntry as [string, any];
+
+            if (!mcpTool.execute) {
+              throw new Error(`MCP tool "${cachedTool.toolSlug}" does not have an execute function`);
+            }
+
+            // Execute the tool
+            const result = await mcpTool.execute(toolInput, {});
+            return result;
+          } finally {
+            await client.disconnect();
+          }
+        }
+
+        // Composio/Arcade tools - use executeTool from integrations
+        // Get the integration to access credentials/metadata
+        const integration = await integrationsStore.getIntegrationById({ id: cachedTool.integrationId });
+
+        if (!integration) {
+          throw new Error(`Integration not found for tool "${def.toolId}"`);
+        }
+
+        const { executeTool } = await import('../../integrations');
+
+        // Build execution options based on provider
+        const executionOptions: {
+          connectedAccountId?: string;
+          userId?: string;
+        } = {};
+
+        if (provider === 'composio') {
+          // Composio needs connectedAccountId and userId (entity_id) for authentication
+          // Frontend stores userId, but we also check entityId for backward compatibility
+          const composioMetadata = integration.metadata as
+            | { connectedAccountId?: string; entityId?: string; userId?: string }
+            | undefined;
+          if (composioMetadata?.connectedAccountId) {
+            executionOptions.connectedAccountId = composioMetadata.connectedAccountId;
+          }
+          // Check both userId (frontend) and entityId (legacy) for user identification
+          if (composioMetadata?.userId) {
+            executionOptions.userId = composioMetadata.userId;
+          } else if (composioMetadata?.entityId) {
+            executionOptions.userId = composioMetadata.entityId;
+          }
+        } else if (provider === 'arcade') {
+          // Arcade needs userId for authentication
+          const arcadeMetadata = integration.metadata as { userId?: string } | undefined;
+          if (arcadeMetadata?.userId) {
+            executionOptions.userId = arcadeMetadata.userId;
+          }
+        }
+
+        const result = await executeTool(
+          provider,
+          cachedTool.toolSlug,
+          toolInput as Record<string, unknown>,
+          executionOptions,
+        );
+
+        if (!result.success) {
+          const errorDetails = result.error?.details
+            ? ` Details: ${typeof result.error.details === 'string' ? result.error.details : JSON.stringify(result.error.details)}`
+            : '';
+          throw new Error(`${result.error?.message || 'Tool execution failed'}${errorDetails}`);
+        }
+
+        return result.output;
+      }
+
+      // Tool not found anywhere
+      throw new Error(`Tool "${def.toolId}" not found (checked global tools, agent tools, and integration tools)`);
     },
   }) as Step;
 }

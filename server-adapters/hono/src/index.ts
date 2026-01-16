@@ -349,17 +349,23 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         };
 
         // Check route permission requirement (EE feature)
+        // Only enforce if RBAC is configured - skip permission check when RBAC is disabled
         if (route.requiresPermission) {
-          const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+          const serverConfig = this.mastra.getServer();
+          const rbacEnabled = !!serverConfig?.rbac;
 
-          if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
-            return c.json(
-              {
-                error: 'Forbidden',
-                message: `Missing required permission: ${route.requiresPermission}`,
-              },
-              403,
-            );
+          if (rbacEnabled) {
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+
+            if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
+              return c.json(
+                {
+                  error: 'Forbidden',
+                  message: `Missing required permission: ${route.requiresPermission}`,
+                },
+                403,
+              );
+            }
           }
         }
 

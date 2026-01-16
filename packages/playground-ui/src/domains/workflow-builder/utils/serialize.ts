@@ -85,7 +85,8 @@ export function serializeGraph(nodes: BuilderNode[], edges: BuilderEdge[]): Seri
   }
 
   // Build stepGraph by traversing from trigger
-  const stepGraph = buildStepGraph(nodes, edges, warnings);
+  // Pass the steps object so we only include steps that were successfully serialized
+  const stepGraph = buildStepGraph(nodes, edges, warnings, steps);
 
   return { stepGraph, steps, nodeComments, warnings };
 }
@@ -205,8 +206,14 @@ function nodeToStepDef(node: BuilderNode): DeclarativeStepDefinition | null {
 
 /**
  * Build stepGraph by traversing edges from trigger node
+ * @param steps - The successfully serialized steps (only include these in stepGraph)
  */
-function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[], warnings: string[]): DefinitionStepFlowEntry[] {
+function buildStepGraph(
+  nodes: BuilderNode[],
+  edges: BuilderEdge[],
+  warnings: string[],
+  steps: Record<string, DeclarativeStepDefinition>,
+): DefinitionStepFlowEntry[] {
   const stepGraph: DefinitionStepFlowEntry[] = [];
 
   // Find trigger node
@@ -368,14 +375,17 @@ function buildStepGraph(nodes: BuilderNode[], edges: BuilderEdge[], warnings: st
       }
 
       default: {
-        // Regular step entry
-        stepGraph.push({
-          type: 'step',
-          step: {
-            id: node.id,
-            description: node.data.description,
-          },
-        });
+        // Regular step entry - only add if the step was successfully serialized
+        // This prevents stepGraph from referencing steps that don't exist in the steps object
+        if (steps[node.id]) {
+          stepGraph.push({
+            type: 'step',
+            step: {
+              id: node.id,
+              description: node.data.description,
+            },
+          });
+        }
         break;
       }
     }

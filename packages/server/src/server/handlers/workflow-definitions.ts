@@ -11,6 +11,8 @@ import {
   deleteWorkflowDefinitionResponseSchema,
 } from '../schemas/workflow-definitions';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { parseToolId } from '@mastra/core/integrations';
+import type { IntegrationProviderType } from '@mastra/core/integrations';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './workflow-definition-versions';
@@ -110,6 +112,32 @@ async function validateWorkflowDefinition(
               }
             } catch {
               // Error getting agent tools
+            }
+          }
+        }
+
+        // Check integration tools (cached tools from providers like Composio, Arcade, MCP, Smithery)
+        if (!toolFound) {
+          const parsedToolId = parseToolId(stepDef.toolId);
+          if (parsedToolId.valid) {
+            try {
+              const storage = mastra.getStorage?.();
+              if (storage) {
+                const integrationsStore = await storage.getStore('integrations');
+                if (integrationsStore) {
+                  const { provider, toolkitSlug, toolSlug } = parsedToolId;
+                  const cachedToolsResult = await integrationsStore.listCachedTools({
+                    provider: provider as IntegrationProviderType,
+                    toolkitSlug,
+                  });
+                  const cachedTool = cachedToolsResult.tools?.find((t: any) => t.toolSlug === toolSlug);
+                  if (cachedTool) {
+                    toolFound = true;
+                  }
+                }
+              }
+            } catch {
+              // Error checking integration tools
             }
           }
         }

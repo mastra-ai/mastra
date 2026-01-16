@@ -317,12 +317,48 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
                 }
 
                 // Execute via provider API using executeTool from @mastra/core for non-MCP providers
+                // Get the integration to access credentials/metadata
+                const integration = await integrationsStore.getIntegrationById({ id: cachedTool.integrationId });
+                if (!integration) {
+                  throw new HTTPException(404, { message: 'Integration not found for tool' });
+                }
+
                 const { executeTool } = await import('@mastra/core/integrations');
+
+                // Build execution options based on provider
+                const executionOptions: {
+                  connectedAccountId?: string;
+                  userId?: string;
+                } = {};
+
+                if (cachedTool.provider === 'composio') {
+                  // Composio needs connectedAccountId and userId (entity_id) for authentication
+                  // Frontend stores userId, but we also check entityId for backward compatibility
+                  const composioMetadata = integration.metadata as
+                    | { connectedAccountId?: string; entityId?: string; userId?: string }
+                    | undefined;
+                  if (composioMetadata?.connectedAccountId) {
+                    executionOptions.connectedAccountId = composioMetadata.connectedAccountId;
+                  }
+                  // Check both userId (frontend) and entityId (legacy) for user identification
+                  if (composioMetadata?.userId) {
+                    executionOptions.userId = composioMetadata.userId;
+                  } else if (composioMetadata?.entityId) {
+                    executionOptions.userId = composioMetadata.entityId;
+                  }
+                } else if (cachedTool.provider === 'arcade') {
+                  // Arcade needs userId for authentication
+                  const arcadeMetadata = integration.metadata as { userId?: string } | undefined;
+                  if (arcadeMetadata?.userId) {
+                    executionOptions.userId = arcadeMetadata.userId;
+                  }
+                }
 
                 const result = await executeTool(
                   cachedTool.provider,
                   cachedTool.toolSlug,
                   (data || {}) as Record<string, unknown>,
+                  executionOptions,
                 );
 
                 if (!result.success) {
