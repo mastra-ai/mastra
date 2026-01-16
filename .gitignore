@@ -50,7 +50,3 @@ storybook-static
 test-output.log
 
 .playwright-mcp
-
-# Ralph Wiggum loop planning files (not part of codebase)
-.ralph-wiggum/
-run-ralph-wiggum.sh
