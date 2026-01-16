@@ -148,6 +148,7 @@ import { buildTracingOptions } from "@mastra/observability";
 import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
 
+// Reads credentials from LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL env vars
 const langfuse = new Langfuse();
 
 // Fetch the prompt from Langfuse Prompt Management
