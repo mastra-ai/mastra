@@ -192,7 +192,9 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
             settled = true;
             request.raw.unpipe(busboy);
             busboy.removeAllListeners();
-            reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+            const error = new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`);
+            (error as any).statusCode = 413;
+            reject(error);
           }
         });
         file.on('end', () => {
@@ -327,7 +329,7 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
     }
   }
 
-  async registerRoute(route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(route: ServerRoute, { prefix = '' }: { prefix?: string }): Promise<void> {
     const fullPath = `${prefix}${route.path}`;
     const bodyLimitOptions = this.options.bodyLimitOptions;
     const shouldApplyBodyLimit = bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
@@ -354,7 +356,7 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
       }
 
       // Parse and validate body
-      if (params.body) {
+      if (params.body !== undefined) {
         try {
           params.body = await this.server.parseBody(route, params.body);
         } catch (error) {

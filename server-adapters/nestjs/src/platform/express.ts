@@ -182,7 +182,9 @@ export class ExpressPlatformAdapter implements PlatformAdapter {
             settled = true;
             request.unpipe(busboy);
             busboy.removeAllListeners();
-            reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+            const error = new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`);
+            (error as any).status = 413;
+            reject(error);
           }
         });
         file.on('end', () => {
@@ -333,7 +335,7 @@ export class ExpressPlatformAdapter implements PlatformAdapter {
       }
 
       // Parse and validate body
-      if (params.body) {
+      if (params.body !== undefined) {
         try {
           params.body = await this.server.parseBody(route, params.body);
         } catch (error) {
@@ -379,7 +381,7 @@ export class ExpressPlatformAdapter implements PlatformAdapter {
       }
     };
 
-    const path = `${prefix}${route.path}`;
+    const path = `${prefix || ''}${route.path}`;
     const method = route.method.toLowerCase();
 
     // Register route with Express
