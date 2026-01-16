@@ -5,8 +5,8 @@
   "description": "Example demonstrating the unified Workspace API with filesystem, skills, and search",
   "version": "0.0.1",
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.24",
-    "@ai-sdk/provider": "^2.0.0",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/provider": "^3.0.0",
     "@mastra/core": "beta",
     "@mastra/libsql": "beta",
     "@mastra/memory": "beta",
