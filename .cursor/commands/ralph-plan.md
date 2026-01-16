@@ -130,7 +130,9 @@ Does this capture the goal correctly? Should I adjust anything?
 
 ## Output Format
 
-When the plan is finalized, present the complete ralph command in a code block that the user can copy directly:
+When the plan is finalized, present the complete ralph command in a code block that the user can copy directly.
+
+**Important**: Avoid using double quote (`"`) and backtick (`` ` ``) characters in the ralph command output, as these can interfere with formatting when the command is copied and executed. Use single quotes (`'`) instead, or rephrase to avoid quotes entirely.
 
 ```
 <background>
