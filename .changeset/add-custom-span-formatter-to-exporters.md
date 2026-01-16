@@ -3,12 +3,12 @@
 '@mastra/observability': patch
 ---
 
-Added `customSpanFormatter` option to exporters for per-exporter span transformation. This allows different formatting for different observability platforms (e.g., plain text for Braintrust, structured data for Langfuse). Formatters support both synchronous and asynchronous operations, enabling use cases like async data enrichment from external APIs.
+Added `customSpanFormatter` option to exporters for per-exporter span transformation. This allows different formatting per exporter and supports both synchronous and asynchronous operations, including async data enrichment.
 
 **Configuration example:**
 
 ```ts
-import { BraintrustExporter } from "@mastra/braintrust";
+import { DefaultExporter } from "@mastra/observability";
 import { SpanType } from "@mastra/core/observability";
 import type { CustomSpanFormatter } from "@mastra/core/observability";
 
@@ -27,7 +27,7 @@ const enrichmentFormatter: CustomSpanFormatter = async (span) => {
   return { ...span, metadata: { ...span.metadata, userName: userData.name } };
 };
 
-const exporter = new BraintrustExporter({
+const exporter = new DefaultExporter({
   customSpanFormatter: plainTextFormatter,
 });
 ```
