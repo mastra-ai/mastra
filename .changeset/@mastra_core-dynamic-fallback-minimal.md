@@ -25,4 +25,8 @@ const agent = new Agent({
 });
 ```
 
+**Fixes included:**
+- Dynamic model fallbacks now properly inherit agent-level `maxRetries` when not explicitly specified
+- `getModelList()` now correctly handles dynamic functions that return arrays
+
 Closes #11951
