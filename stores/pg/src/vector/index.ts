@@ -352,7 +352,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         case 'jaccard':
           // Jaccard distance: lower is better, transform to similarity score
           return {
-            operator: '<#>',
+            operator: '<%>',
             scoreTransform: score => 1 / (1 + score),
           };
         default:
@@ -405,20 +405,24 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     // IVFFlat: Only supports bit with Hamming distance
     if (indexType === 'ivfflat') {
-      if (vectorType !== 'bit' || metric !== 'hamming') {
+      // IVFFlat doesn't support sparsevec at all
+      if (vectorType === 'sparsevec') {
         throw new MastraError({
           id: createVectorErrorId('PG', 'CREATE_INDEX', 'INVALID_INDEX_COMPATIBILITY'),
-          text:
-            `IVFFlat index only supports 'bit' vector type with 'hamming' metric. ` +
-            `For other vector types or metrics, use 'hnsw' or 'flat' index type.`,
+          text: `IVFFlat index does not support 'sparsevec' vector type. Use 'hnsw' or 'flat' index type instead.`,
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
-          details: {
-            vectorType,
-            metric,
-            indexType,
-            supportedCombinations: [{ vectorType: 'bit', metric: 'hamming', indexType: 'ivfflat' }],
-          },
+          details: { vectorType, metric, indexType },
+        });
+      }
+      // IVFFlat with bit only supports hamming
+      if (vectorType === 'bit' && metric !== 'hamming') {
+        throw new MastraError({
+          id: createVectorErrorId('PG', 'CREATE_INDEX', 'INVALID_INDEX_COMPATIBILITY'),
+          text: `IVFFlat index with 'bit' vector type only supports 'hamming' metric.`,
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { vectorType, metric, indexType },
         });
       }
       return;
@@ -664,6 +668,34 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Get the properly qualified vector type for this index
       const indexInfo = await this.getIndexInfo({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType);
+
+      // Validate sparsevec element count before any DB insert
+      if (indexInfo.vectorType === 'sparsevec') {
+        for (let i = 0; i < vectors.length; i++) {
+          const vector = vectors[i];
+          // Sparse vectors have indices and values arrays
+          if (vector && typeof vector === 'object' && 'indices' in vector && 'values' in vector) {
+            const elementCount = (vector as { indices: number[]; values: number[] }).indices.length;
+            if (elementCount > MAX_SPARSEVEC_ELEMENTS) {
+              throw new MastraError({
+                id: createVectorErrorId('PG', 'UPSERT', 'SPARSEVEC_ELEMENT_LIMIT'),
+                text:
+                  `sparsevec indexed vectors can have at most ${MAX_SPARSEVEC_ELEMENTS} non-zero elements, ` +
+                  `but got ${elementCount} elements.`,
+                domain: ErrorDomain.MASTRA_VECTOR,
+                category: ErrorCategory.USER,
+                details: {
+                  vectorType: 'sparsevec' as const,
+                  elementCount,
+                  maxElements: MAX_SPARSEVEC_ELEMENTS,
+                  indexName,
+                  vectorId: vectorIds[i],
+                },
+              });
+            }
+          }
+        }
+      }
 
       for (let i = 0; i < vectors.length; i++) {
         const query = `
@@ -1334,6 +1366,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           ? 'dotproduct'
           : 'cosine';
 
+      // Parse distance metric from operator class for bit/sparsevec types
+      let distanceMetric: BitDistanceMetric | SparsevecDistanceMetric | undefined;
+      if (vectorType === 'bit' && operator_class.startsWith('bit_')) {
+        const suffix = operator_class.replace('bit_', '').replace('_ops', '');
+        if (suffix === 'hamming' || suffix === 'jaccard') {
+          distanceMetric = suffix;
+        }
+      } else if (vectorType === 'sparsevec' && operator_class.startsWith('sparsevec_')) {
+        const suffix = operator_class.replace('sparsevec_', '').replace('_ops', '');
+        if (suffix === 'l2' || suffix === 'cosine' || suffix === 'inner_product') {
+          distanceMetric = suffix;
+        }
+      }
+
       // Parse index configuration
       const config: { m?: number; efConstruction?: number; lists?: number } = {};
 
@@ -1353,6 +1399,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         metric,
         type: index_method as 'flat' | 'hnsw' | 'ivfflat',
         vectorType,
+        distanceMetric,
         config,
       };
     } catch (e: any) {
