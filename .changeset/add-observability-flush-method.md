@@ -1,10 +1,16 @@
 ---
 "@mastra/core": minor
-"@mastra/observability": minor
-"@mastra/otel-exporter": minor
-"@mastra/otel-bridge": minor
-"@mastra/langfuse": minor
-"@mastra/posthog": minor
+"@mastra/observability": patch
+"@mastra/otel-exporter": patch
+"@mastra/otel-bridge": patch
+"@mastra/langfuse": patch
+"@mastra/posthog": patch
+"@mastra/datadog": patch
+"@mastra/laminar": patch
+"@mastra/sentry": patch
+"@mastra/arize": patch
+"@mastra/braintrust": patch
+"@mastra/langsmith": patch
 ---
 
 Added flush() method to observability exporters and instances for serverless environments
@@ -32,6 +38,10 @@ In serverless environments, you may need to ensure all spans are exported before
 - CloudExporter (Mastra Cloud)
 - OtelExporter (OpenTelemetry)
 - OtelBridge (OpenTelemetry bridge)
+- DatadogExporter (Datadog LLM Observability)
+- LaminarExporter (Laminar)
+- SentryExporter (Sentry)
+- ArizeExporter (Arize Phoenix)
 - TrackingExporter and its subclasses (Langfuse, LangSmith, Braintrust, PostHog)
 
 Closes #11372

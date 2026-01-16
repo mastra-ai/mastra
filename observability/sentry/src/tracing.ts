@@ -578,8 +578,26 @@ export class SentryExporter extends BaseExporter {
   }
 
   // ============================================================================
-  // Shutdown
+  // Flush and Shutdown
   // ============================================================================
+
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    if (!this.initialized) return;
+
+    try {
+      // Sentry.flush() sends any pending events to Sentry
+      // The timeout is in milliseconds
+      await Sentry.flush(2000);
+      this.logger.debug('Sentry exporter: Flushed pending events');
+    } catch (error) {
+      this.logger.error('Sentry exporter: Error flushing events', { error });
+    }
+  }
 
   async shutdown(): Promise<void> {
     for (const [spanId, spanData] of this.spanMap.entries()) {
