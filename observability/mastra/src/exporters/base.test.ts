@@ -4,7 +4,7 @@
 
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { TracingEvent, AnyExportedSpan, CustomSpanFormatter } from '@mastra/core/observability';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 import { chainFormatters } from './span-formatters';
