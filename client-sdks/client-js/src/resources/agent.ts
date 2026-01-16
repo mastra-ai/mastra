@@ -1280,7 +1280,10 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async network(params: NetworkStreamParams): Promise<
+  async network(
+    messages: MessageListInput,
+    params: Omit<NetworkStreamParams, 'messages'>,
+  ): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1291,7 +1294,10 @@ export class Agent extends BaseResource {
   > {
     const response: Response = await this.request(`/api/agents/${this.agentId}/network`, {
       method: 'POST',
-      body: params,
+      body: {
+        messages,
+        ...params,
+      },
       stream: true,
     });
 

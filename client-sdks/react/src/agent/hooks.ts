@@ -242,8 +242,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const runId = uuid();
 
-    const response = await agent.network({
-      messages: coreUserMessages,
+    const response = await agent.network(coreUserMessages, {
       maxSteps,
       modelSettings: {
         frequencyPenalty,
