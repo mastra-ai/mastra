@@ -324,7 +324,6 @@ const sidebars = {
           id: "memory/listThreadsByResourceId",
           label: ".listThreadsByResourceId()",
         },
-        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/recall", label: ".recall()" },
       ],
     },
@@ -395,6 +394,16 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/datadog",
+                  label: "DatadogExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/laminar",
+                  label: "LaminarExporter",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/langfuse",
                   label: "LangfuseExporter",
                 },
@@ -412,6 +421,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/posthog",
                   label: "PostHogExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/sentry",
+                  label: "SentryExporter",
                 },
               ],
             },
@@ -524,7 +538,9 @@ const sidebars = {
       items: [
         { type: "doc", id: "server/create-route", label: "createRoute()" },
         { type: "doc", id: "server/express-adapter", label: "Express Adapter" },
+        { type: "doc", id: "server/fastify-adapter", label: "Fastify Adapter" },
         { type: "doc", id: "server/hono-adapter", label: "Hono Adapter" },
+        { type: "doc", id: "server/koa-adapter", label: "Koa Adapter" },
         {
           type: "doc",
           id: "server/mastra-server",
@@ -546,7 +562,7 @@ const sidebars = {
         {
           type: "doc",
           id: "storage/composite",
-          label: "Storage Composition",
+          label: "Composite Storage",
         },
         {
           type: "doc",

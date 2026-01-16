@@ -2810,7 +2810,7 @@ console.log(response.object);
 
 :::info
 
-Visit [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+Visit [.generate()](/reference/v1/agents/generate) for a full list of configuration options.
 
 :::
 
@@ -4060,6 +4060,8 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 - Natural language understanding tasks
 - Nuanced context evaluation
 
+**What “prompt object” means:** Instead of a function, the step is an object with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`). That object tells Mastra to run the judge LLM for the step and store the structured output in `results.<step>StepResult`.
+
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
 ### Initializing a Scorer
@@ -4085,6 +4087,49 @@ const glutenCheckerScorer = createScorer({
 ```
 
 The judge configuration is only needed if you plan to use prompt objects in any step. Individual steps can override this default configuration with their own judge settings.
+
+If all steps are function-based, the judge is never called and there is no judge output. To see LLM output, define at least one step as a prompt object and read the corresponding step result (for example, `results.analyzeStepResult`).
+
+#### Minimal judge example (prompt object)
+
+This example uses a prompt object in `analyze`, so the judge runs and its structured output is available as `results.analyzeStepResult`.
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import { z } from "zod";
+
+const quoteSourcesScorer = createScorer({
+  id: "quote-sources",
+  description: "Check if the response includes sources",
+  judge: {
+    model: "openai/gpt-4.1-nano",
+    instructions: "You are a strict evaluator.",
+  },
+})
+  .analyze({
+    description: "Detect whether sources are present",
+    outputSchema: z.object({
+      hasSources: z.boolean(),
+      sources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => `
+Does the response contain sources? Extract them as a list.
+
+Response:
+${run.output}
+`,
+  })
+  .generateScore(({ results }) => (results.analyzeStepResult.hasSources ? 1 : 0));
+
+// Run the scorer and inspect judge output
+const result = await quoteSourcesScorer.run({
+  input: "What is the capital of France?",
+  output: "Paris is the capital of France [1]. Source: [1] Wikipedia",
+});
+
+console.log(result.score);              // 1
+console.log(result.analyzeStepResult);  // { hasSources: true, sources: ["Wikipedia"] }
+```
 
 #### Agent Type for Agent Evaluation
 
@@ -4425,8 +4470,6 @@ Provides human-readable explanations for the score using another LLM call.
 
 The reason generation step creates explanations that help users understand why a particular score was assigned, using both the boolean result and the specific gluten sources identified by the analysis step.
 
-````
-
 ## High gluten-free example
 
 ```typescript title="src/example-high-gluten-free.ts"
@@ -4438,7 +4481,7 @@ const result = await glutenCheckerScorer.run({
 console.log('Score:', result.score);
 console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
 console.log('Reason:', result.reason);
-````
+```
 
 ### High gluten-free output
 
@@ -5417,6 +5460,13 @@ Integrate Mastra with SvelteKit
     Add AI agents to your Astro site
   </CardGridItem>
   <CardGridItem
+    title="Nuxt"
+    href="/guides/v1/getting-started/nuxt"
+    logo={<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 512 512" fill="none"><path d="M281.44 397.667H438.32C443.326 397.667 448.118 395.908 452.453 393.427C456.789 390.946 461.258 387.831 463.76 383.533C466.262 379.236 468.002 374.36 468 369.399C467.998 364.437 466.266 359.563 463.76 355.268L357.76 172.947C355.258 168.65 352.201 165.534 347.867 163.053C343.532 160.573 337.325 158.813 332.32 158.813C327.315 158.813 322.521 160.573 318.187 163.053C313.852 165.534 310.795 168.65 308.293 172.947L281.44 219.587L227.733 129.13C225.229 124.834 222.176 120.307 217.84 117.827C213.504 115.346 208.713 115 203.707 115C198.701 115 193.909 115.346 189.573 117.827C185.238 120.307 180.771 124.834 178.267 129.13L46.8267 355.268C44.3208 359.563 44.0022 364.437 44 369.399C43.9978 374.36 44.3246 379.235 46.8267 383.533C49.3288 387.83 53.7979 390.946 58.1333 393.427C62.4688 395.908 67.2603 397.667 72.2667 397.667H171.2C210.401 397.667 238.934 380.082 258.827 346.787L306.88 263.4L332.32 219.587L410.053 352.44H306.88L281.44 397.667ZM169.787 352.44H100.533L203.707 174.36L256 263.4L221.361 323.784C208.151 345.387 193.089 352.44 169.787 352.44Z" fill="#00DC82"/></svg>}
+  >
+    Integrate Mastra with Nuxt
+  </CardGridItem>
+  <CardGridItem
     title="Express"
     href="/guides/v1/getting-started/express"
     logo={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 861.6297 500" width="32" height="32"><path d="M822.05434 464.78529c-23.57102 8.91305-50.08664-1.16881-61.78139-23.49073l-112.4692-155.53981-16.30803-21.72701-130.51543 177.49688c-11.00437 21.35391-36.14786 31.22309-58.7396 23.05618l168.14149-225.57746L453.94772 35.178469c23.20955-8.38407 49.07747.715704 61.98587 21.727011l116.55901 157.4569L749.74175 57.518928c11.0937-21.002063 36.16603-30.356097 58.30506-21.752557l-60.70782 80.543289-82.23033 107.02469c-9.6735 8.63851-9.6735 23.77308 0 32.41158l156.61338 209.03936ZM39.626477 236.19163l13.700796-67.66046C90.953337 34.743916 244.32044-20.928337 349.83703 61.941017 411.61839 110.45615 427.0318 179.1902 424.01558 256.64057H75.94892C70.325459 394.9777 170.14188 478.51165 297.82 435.87559c42.0737-15.33669 73.74401-50.3044 84.17297-93.75842 6.74816-21.72701 17.89283-25.45896 38.29067-19.1709-6.89256 53.65922-37.9963 101.20027-84.40304 129.00732-77.62638 42.45286-173.75024 30.1679-238.204672-30.44338-31.082401-34.94215-49.844311-79.11186-53.49956-125.76104 0-7.66837-2.556118-14.82549-4.345401-21.727-.170408-12.89987-.255612-25.51006-.255612-37.83054zm36.756986-9.35539H391.14389c-1.96821-100.27654-65.2577-171.413323-149.66074-172.077907C147.52023 53.480264 80.294322 123.05782 76.153409 226.40169Z" fill="currentColor"/></svg>}
@@ -5441,7 +5491,7 @@ Have a use case in mind? Start with a pre-built [template](https://mastra.ai/tem
 
 ---
 title: "Studio | Getting Started"
-description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+description: Learn how to use Mastra Studio, the interactive development environment for building and testing your agents locally.
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
@@ -5702,7 +5752,7 @@ Workflow traces capture each step in the run, including transitions, branching, 
 
 ## Logs
 
-The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#project-dashboard) displays detailed information for debugging and monitoring your application's behavior.
+The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#dashboard) displays detailed information for debugging and monitoring your application's behavior.
 
 ![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
 
@@ -6782,7 +6832,7 @@ const memoryStore = await storage.getStore('memory');
 
 const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
 
-// Convert to AI SDK v5 UIMessage format for UI rendering
+// Convert to AI SDK v5+ UIMessage format for UI rendering
 const uiMessages = toAISdkV5Messages(result?.messages ?? []);
 ```
 
@@ -7119,8 +7169,6 @@ You might want to disable semantic recall in scenarios like:
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent's trace output, alongside recent message history (if configured).
 
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).
-
 
 ---
 title: "Storage | Memory"
@@ -7139,11 +7187,11 @@ packages:
 For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
 
 
-```typescript 
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: "file:./mastra.db",
@@ -7152,7 +7200,7 @@ const mastra = new Mastra({
 ```
 On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
-## Supported Providers
+## Supported providers
 
 Each provider page includes installation instructions, configuration parameters, and usage examples:
 
@@ -7171,19 +7219,19 @@ Each provider page includes installation instructions, configuration parameters,
 libSQL is the easiest way to get started because it doesn’t require running a separate database server
 :::
 
-## Configuration Scope
+## Configuration scope
 
 You can configure storage at two different scopes:
 
 ### Instance-level storage
 
-Add storage to your Mastra instance so all agents share the same memory provider:
+Add storage to your Mastra instance so all agents, workflows, observability traces and scores share the same memory provider:
 
-```typescript 
+```typescript
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
@@ -7195,16 +7243,51 @@ const agent1 = new Agent({ id: "agent-1", memory: new Memory() });
 const agent2 = new Agent({ id: "agent-2", memory: new Memory() });
 ```
 
+This is useful when all primitives share the same storage backend and have similar performance, scaling, and operational requirements.
+
+#### Composite storage
+
+Add storage to your Mastra instance using `MastraStorage` and configure individual storage domains to use different storage providers.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { WorkflowsPG } from "@mastra/pg";
+import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+
+export const mastra = new Mastra({
+  storage: new MastraStorage({
+    id: "composite",
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      observability: new ObservabilityStorageClickhouse({
+        url: process.env.CLICKHOUSE_URL,
+        username: process.env.CLICKHOUSE_USERNAME,
+        password: process.env.CLICKHOUSE_PASSWORD,
+      }),
+    },
+  }),
+});
+```
+
+This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
+
+:::info
+See [Storage Domains](/reference/v1/storage/composite#storage-domains) for more information.
+:::
+
 ### Agent-level storage
 
-Add storage to a specific agent when you need data boundaries or compliance requirements:
+Agent-level storage overrides storage configured at the instance-level. Add storage to a specific agent when you need data boundaries or compliance requirements:
 
-```typescript 
+```typescript title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
 
-const agent = new Agent({
+export const agent = new Agent({
   id: "agent",
   memory: new Memory({
     storage: new PostgresStore({
@@ -7217,7 +7300,7 @@ const agent = new Agent({
 
 This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
 
-## Threads and Resources
+## Threads and resources
 
 Mastra organizes memory into threads using two identifiers:
 
@@ -7226,7 +7309,7 @@ Mastra organizes memory into threads using two identifiers:
 
 Both identifiers are required for agents to store and recall information:
 
-```typescript 
+```typescript
 const stream = await agent.stream("message for agent", {
   memory: {
     thread: "convo_123",
@@ -7245,7 +7328,7 @@ Mastra can automatically generate descriptive thread titles based on the user's 
 
 Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
 
-```typescript 
+```typescript
 export const testAgent = new Agent({
   id: "test-agent",
   memory: new Memory({
@@ -7280,7 +7363,7 @@ Semantic recall uses vector embeddings to retrieve relevant past messages based 
 
 The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
 
-```typescript 
+```typescript
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
@@ -7288,7 +7371,7 @@ import { PostgresStore } from "@mastra/pg";
 import { PineconeVector } from "@mastra/pinecone";
 
 // Instance-level vector configuration
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: process.env.DATABASE_URL,
@@ -7296,7 +7379,7 @@ const mastra = new Mastra({
 });
 
 // Agent-level vector configuration
-const agent = new Agent({
+export const agent = new Agent({
   id: "agent",
   memory: new Memory({
     vector: new PineconeVector({
@@ -7414,13 +7497,15 @@ const memory = new Memory({
 
 ### Usage with Agents
 
-When using resource-scoped memory, make sure to pass the `resourceId` parameter:
+When using resource-scoped memory, make sure to pass the `resource` parameter in the memory options:
 
 ```typescript
-// Resource-scoped memory requires resourceId
+// Resource-scoped memory requires resource
 const response = await agent.generate("Hello!", {
-  threadId: "conversation-123",
-  resourceId: "user-alice-456", // Same user across different threads
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456", // Same user across different threads
+  },
 });
 ```
 
@@ -7673,8 +7758,10 @@ const thread = await memory.createThread({
 
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
-  threadId: thread.id,
-  resourceId: "user-456",
+  memory: {
+    thread: thread.id,
+    resource: "user-456",
+  },
 });
 // Response: "Your blood type is O+."
 ```
@@ -8800,6 +8887,42 @@ Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
+## Troubleshooting
+
+### Native module ABI mismatch
+
+If you see errors like:
+
+```
+Error: No native build was found for runtime=node abi=137 platform=linuxglibc arch=x64
+```
+
+This indicates a Node.js version compatibility issue with `dd-trace`'s native modules. These native modules are **optional** and provide performance monitoring features.
+
+**Solutions:**
+
+1. **Use Node.js 22.x**: Native modules have the best compatibility with Node.js 22.x.
+
+2. **Ignore native module warnings**: The native modules (`@datadog/native-metrics`, `@datadog/native-appsec`, etc.) are optional. If they fail to load, core tracing functionality still works.
+
+### Bundler externals configuration
+
+When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    externals: [
+      "dd-trace",
+      "@datadog/native-metrics",
+      "@datadog/native-appsec",
+      "@datadog/native-iast-taint-tracking",
+      "@datadog/pprof",
+    ],
+  },
+});
+```
+
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -8991,6 +9114,111 @@ new DefaultExporter({
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [CloudExporter](/docs/v1/observability/tracing/exporters/cloud)
 - [Storage Configuration](/docs/v1/memory/storage)
+
+
+---
+title: "Laminar Exporter | Tracing | Observability"
+description: "Send traces to Laminar for LLM observability, evaluation, and analysis"
+packages:
+  - "@mastra/laminar"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Laminar Exporter
+[EN] Source: https://mastra.ai/en/docs/observability/tracing/exporters/laminar
+
+[Laminar](https://laminar.sh/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/laminar@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Laminar Project**: Create/select a project in Laminar
+2. **Project API Key**: Copy from Laminar Project Settings
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=lmnr_...
+
+# Optional
+LMNR_BASE_URL=https://api.lmnr.ai
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [new LaminarExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [
+          new LaminarExporter({
+            apiKey: process.env.LMNR_PROJECT_API_KEY!,
+            baseUrl: process.env.LMNR_BASE_URL, // Optional
+            endpoint: process.env.LAMINAR_ENDPOINT, // Optional
+            realtime: process.env.NODE_ENV === "development", // Optional
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Using Tags
+
+Tags help you categorize and filter traces in the Laminar dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Laminar Documentation](https://docs.laminar.sh)
 
 
 ---
@@ -9394,7 +9622,7 @@ All providers support zero-config setup via environment variables. Set the appro
 | SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
 | New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
 | Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)        |
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional)                           |
 
 ## Provider Configurations
 
@@ -9588,7 +9816,7 @@ new OtelExporter({
 
 ### Laminar
 
-[Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
+[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
 
 #### Zero-Config Setup
 
@@ -9598,7 +9826,6 @@ LMNR_PROJECT_API_KEY=your-api-key
 
 # Optional
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
 ```
 
 ```typescript title="src/mastra/index.ts"
@@ -9612,11 +9839,16 @@ new OtelExporter({
   provider: {
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
-      // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
     },
   },
 });
 ```
+
+:::tip Laminar-Native Exporter
+
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/v1/observability/tracing/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+
+:::
 
 ### Datadog
 
@@ -10055,10 +10287,11 @@ In addition to the internal exporters, Mastra supports integration with popular 
 
 - **[Arize](/docs/v1/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/v1/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
+  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -10846,7 +11079,7 @@ Mastra automatically creates spans for:
 - [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
 - [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
-- [MLflow](/reference/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
+- [MLflow](/docs/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
 - [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Bridges
@@ -14144,6 +14377,8 @@ packages:
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/server"
+  - "@mastra/fastify"
+  - "@mastra/koa"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -14157,9 +14392,12 @@ A custom adapter translates between Mastra's route definitions and your framewor
 
 :::info
 
-For Hono or Express, use the provided adapters instead:
+Use any of these prebuilt server adapters:
+
 - [@mastra/hono](/reference/v1/server/hono-adapter)
 - [@mastra/express](/reference/v1/server/express-adapter)
+- [@mastra/fastify](/reference/v1/server/fastify-adapter)
+- [@mastra/koa](/reference/v1/server/koa-adapter)
 
 :::
 
@@ -14440,7 +14678,7 @@ constructor(options: {
 }
 ```
 
-See [Server Adapters](/docs/v1/server/server-adapters#constructor-options) for full documentation on each option.
+See [Server Adapters](/docs/v1/server/server-adapters) for full documentation on each option.
 
 ## Full example
 
@@ -14716,7 +14954,7 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+Visit [.generate()](/reference/v1/client-js/agents#generate) for more information.
 
 :::
 
@@ -14753,7 +14991,7 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+Visit [.stream()](/reference/v1/client-js/agents#stream) for more information.
 
 :::
 
@@ -15399,7 +15637,6 @@ for (const [key, value] of ctx.entries()) {
 
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
-- [Tool Request Context](../mcp/overview#using-requestcontext)
 - [Server Middleware](/docs/v1/server/middleware)
 
 
@@ -15429,16 +15666,20 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server/mastra-server).
 
+If you want to use [Studio](/docs/v1/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/v1/cli/mastra#mastra-studio) to only launch the Studio UI.
+
 :::
 
 ## Available adapters
 
-Mastra currently provides two official server adapters:
+Mastra currently provides these official server adapters:
 
-- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter
-- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter
+- [@mastra/express](/reference/v1/server/express-adapter)
+- [@mastra/hono](/reference/v1/server/hono-adapter)
+- [@mastra/fastify](/reference/v1/server/fastify-adapter)
+- [@mastra/koa](/reference/v1/server/koa-adapter)
 
-You can build your own adapter, read [Custom Adapters](/docs/v1/server/custom-adapters) for details.
+You can build your own adapter, read [custom adapters](/docs/v1/server/custom-adapters) for details.
 
 ## Installation
 
@@ -15455,6 +15696,18 @@ npm install @mastra/express@beta
 
 ```bash
 npm install @mastra/hono@beta
+```
+  </TabItem>
+  <TabItem value="fastify" label="Fastify">
+
+```bash
+npm install @mastra/fastify@beta
+```
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```bash
+npm install @mastra/koa@beta
 ```
   </TabItem>
 </Tabs>
@@ -15483,6 +15736,12 @@ app.listen(4111, () => {
 });
 ```
 
+:::info
+
+See the [Express Adapter](/reference/v1/server/express-adapter) documentation for full configuration options.
+
+:::
+
   </TabItem>
   <TabItem value="hono" label="Hono">
 
@@ -15503,14 +15762,87 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
 });
 ```
 
+:::info
+
+See the [Hono Adapter](/reference/v1/server/hono-adapter) documentation for full configuration options.
+
+:::
+
   </TabItem>
-</Tabs>
+  <TabItem value="fastify" label="Fastify">
+
+```typescript {6} title="src/fastify-server.ts"
+import Fastify from 'fastify';
+import { MastraServer } from '@mastra/fastify';
+import { mastra } from './mastra';
+
+const app = Fastify();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.get('/health', async request => {
+  const mastraInstance = request.mastra;
+  const agents = Object.keys(mastraInstance.listAgents());
+  return { status: 'ok', agents };
+});
+
+const port = 4111;
+
+app.listen({ port }, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
 
 :::info
 
-See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter) docs for full configuration options.
+See the [Fastify Adapter](/reference/v1/server/fastify-adapter) documentation for full configuration options.
 
 :::
+
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```typescript {9} title="src/koa-server.ts"
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { MastraServer } from '@mastra/koa';
+import { mastra } from './mastra';
+
+const app = new Koa();
+app.use(bodyParser()); // Required for body parsing
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.use(async (ctx, next) => {
+  if (ctx.path === '/health' && ctx.method === 'GET') {
+    const mastraInstance = ctx.state.mastra;
+    const agents = Object.keys(mastraInstance.listAgents());
+    ctx.body = { status: 'ok', agents };
+    return;
+  }
+  await next();
+});
+
+const port = 4111;
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
+
+:::info
+
+See the [Koa Adapter](/reference/v1/server/koa-adapter) documentation for full configuration options.
+
+:::
+
+  </TabItem>
+</Tabs>
 
 ## Initialization flow
 
@@ -15980,7 +16312,7 @@ Mastra supports real-time, incremental responses from agents and workflows, allo
 
 Mastra's streaming API adapts based on your model version:
 
-- **`.stream()`**: For V2 models, supports **AI SDK v5** (`LanguageModelV2`).
+- **`.stream()`**: For V2 models, supports **AI SDK v5** and later (`LanguageModelV2`).
 - **`.streamLegacy()`**: For V1 models, supports **AI SDK v4** (`LanguageModelV1`).
 
 ## Streaming with agents
@@ -16029,11 +16361,11 @@ An agent stream provides access to various response properties:
 - **`stream.finishReason`**: The reason the agent stopped streaming.
 - **`stream.usage`**: Token usage information.
 
-### AI SDK v5 Compatibility
+### AI SDK v5+ Compatibility
 
-AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+AI SDK v5 (and later) uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
 
-For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
+For integration with AI SDK v5+, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
 ```typescript {2,9-12}
 import { toAISdkV5Stream } from "@mastra/ai-sdk";
@@ -16044,13 +16376,13 @@ const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
 ]);
 
-// Convert to AI SDK v5 compatible stream
+// Convert to AI SDK v5+ compatible stream
 const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
 
-// Use with AI SDK v5 methods
+// Use with AI SDK v5+ methods
 ```
 
-For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+For converting messages to AI SDK v5+ format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
 ```typescript {1,4}
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
@@ -21808,7 +22140,7 @@ You can also use dynamic workflow routing, see the [`workflowRoute()` reference 
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -26371,8 +26703,11 @@ In this guide, you'll build a tool-calling AI agent using Mastra, then connect i
 You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
 <figure>
+
 ![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
+
 <figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
+
 </figure>
 
 ## Before you begin
@@ -26744,6 +27079,514 @@ When you're ready, read more about how Mastra integrates with AI SDK UI and Next
 
 
 ---
+title: "Nuxt | Frameworks"
+description: "Get started with Mastra and Nuxt"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Integrate Mastra in your Nuxt project
+[EN] Source: https://mastra.ai/en/guides/getting-started/nuxt
+
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Nuxt by importing and calling the agent directly from your server routes.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience with Vue.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new Nuxt app (optional)
+
+If you already have a Nuxt app, skip to the next step.
+
+Run the following command to [create a new Nuxt app](https://nuxt.com/docs/getting-started/installation):
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm create nuxt@latest mastra-nuxt -- --template minimal --packageManager npm --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm create nuxt@latest mastra-nuxt --template minimal --packageManager pnpm --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn create nuxt@latest mastra-nuxt --template minimal --packageManager yarn --gitInit --modules
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun create nuxt@latest mastra-nuxt --template minimal --packageManager bun --gitInit --modules
+```
+
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-nuxt`, but you can replace it with any name you want.
+
+## Initialize Mastra
+
+`cd` into your Nuxt project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+cd mastra-nuxt
+npx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+cd mastra-nuxt
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+cd mastra-nuxt
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+cd mastra-nuxt
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your Nuxt server routes in the next steps.
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/vue ai
+```
+
+</TabItem>
+</Tabs>
+
+## Create a chat route
+
+Create `server/api/chat.ts`:
+
+```ts title="server/api/chat.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '../../src/mastra';
+
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
+
+export default defineEventHandler(async (event) => {
+  const method = event.method;
+
+  if (method === 'POST') {
+    const params = await readBody(event);
+    const stream = await handleChatStream({
+      mastra,
+      agentId: 'weather-agent',
+      params: {
+        ...params,
+        memory: {
+          ...params.memory,
+          thread: THREAD_ID,
+          resource: RESOURCE_ID,
+        }
+      }
+    });
+
+    return createUIMessageStreamResponse({ stream });
+  }
+
+  if (method === 'GET') {
+    const memory = await mastra.getAgentById('weather-agent').getMemory();
+    let response = null;
+
+    try {
+      response = await memory?.recall({
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      });
+    } catch {
+      console.log('No previous messages found.');
+    }
+
+    const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+    return uiMessages;
+  }
+});
+```
+
+The `POST` handler accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` handler fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Add the chat UI
+
+Replace the contents of `app/app.vue` with the following:
+
+```html title="app/app.vue"
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { Chat } from "@ai-sdk/vue";
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+const chat = new Chat({
+  transport: new DefaultChatTransport({
+    api: '/api/chat',
+  }),
+})
+
+const STATE_TO_LABEL_MAP: Record<string, string> = {
+  'input-streaming': 'Pending',
+  'input-available': 'Running',
+  'output-available': 'Completed',
+  'output-error': 'Error',
+  'output-denied': 'Denied',
+};
+
+const input = ref('');
+
+onMounted(async () => {
+  const res = await fetch('/api/chat');
+  const data = await res.json();
+  chat.messages = [...data];
+});
+
+function handleSubmit() {
+  if (!input.value.trim()) return;
+
+  chat.sendMessage({ text: input.value });
+  input.value = '';
+}
+</script>
+
+<template>
+  <div class="chat-container">
+    <div class="messages">
+      <div v-for="message in chat.messages" :key="message.id" class="message-wrapper">
+        <div
+          v-for="(part, i) in message.parts"
+          :key="`${message.id}-${i}`"
+        >
+          <div
+            v-if="part.type === 'text'"
+            :class="['message', message.role]"
+          >
+            <div class="message-content">
+              {{ part.text }}
+            </div>
+          </div>
+
+          <details
+            v-else-if="part.type?.startsWith('tool-')"
+            class="tool"
+          >
+            <summary class="tool-header">
+              {{ (part as ToolUIPart).type?.split('-').slice(1).join('-') }} -
+              {{ STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available'] }}
+            </summary>
+            <div class="tool-content">
+              <div class="tool-section">
+                <div class="tool-label">Parameters</div>
+                <pre><code>{{ JSON.stringify((part as ToolUIPart).input, null, 2) }}</code></pre>
+              </div>
+              <div class="tool-section">
+                <div class="tool-label">
+                  {{ (part as ToolUIPart).errorText ? 'Error' : 'Result' }}
+                </div>
+                <pre><code>{{ JSON.stringify((part as ToolUIPart).output, null, 2) }}</code></pre>
+                <div v-if="(part as ToolUIPart).errorText" class="tool-error">
+                  {{ (part as ToolUIPart).errorText }}
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <form class="input-form" @submit.prevent="handleSubmit">
+      <input
+        v-model="input"
+        type="text"
+        placeholder="Ask about the weather..."
+        :disabled="chat.status !== 'ready'"
+        class="chat-input"
+      />
+      <button type="submit" class="submit-button" :disabled="chat.status !== 'ready'">
+        Send
+      </button>
+    </form>
+  </div>
+</template>
+
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+*:not(dialog) {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    interpolate-size: allow-keywords;
+  }
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+p {
+  text-wrap: pretty;
+}
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
+.chat-container {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.message {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.message.user {
+  background-color: #3b82f6;
+  color: white;
+  margin-left: auto;
+  max-width: 60%;
+}
+
+.message.assistant {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  max-width: 80%;
+}
+
+.tool {
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.tool-header {
+  padding: 0.75rem 1rem;
+  background-color: #f9fafb;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.tool-content {
+  padding: 1rem;
+  border-top: 1px solid #d1d5db;
+}
+
+.tool-section {
+  margin-bottom: 1rem;
+}
+
+.tool-section:last-child {
+  margin-bottom: 0;
+}
+
+.tool-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.tool pre {
+  background-color: #f3f4f6;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+
+.tool-error {
+  color: #dc2626;
+  margin-top: 0.5rem;
+}
+
+.input-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 1rem;
+}
+
+.chat-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.chat-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.submit-button {
+  padding: 0.75rem 1.5rem;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.submit-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+</style>
+```
+
+This component connects [`Chat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using custom message styling and shows any tool invocations in a collapsible details element.
+
+## Test your agent
+
+1. Run your Nuxt app with `npm run dev`
+2. Open the chat at http://localhost:3000
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+
+## Next steps
+
+Congratulations on building your Mastra agent with Nuxt! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and Nuxt, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+
+
+---
 title: "Quickstart"
 description: Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 ---
@@ -26821,7 +27664,7 @@ This creates a new directory for your project with a `src/mastra` folder contain
 
 :::tip
 
-You can use [flags](/reference/v1/cli/create-mastra#cli-flags)  with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates)
+You can use [flags](/reference/v1/cli/create-mastra#cli-flags) with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates).
 
 :::
 
@@ -29884,7 +30727,6 @@ The bot maintains conversation context through memory and delivers responses tha
 ---
 title: "Overview"
 description: "Guides on building with Mastra"
-showCopyButton: false
 ---
 
 import { CardGrid, CardGridItem } from "@site/src/components/CardGrid";
@@ -30335,7 +31177,7 @@ npx @mastra/codemod@beta v1/agent-processor-methods .
 
 ### Default options method renames for AI SDK versions
 
-Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5+) APIs. This change helps developers understand which AI SDK version they're targeting.
 
 To migrate, update method names based on which AI SDK version you're using.
 
@@ -30346,7 +31188,7 @@ To migrate, update method names based on which AI SDK version you're using.
 + const options = await agent.getDefaultGenerateOptionsLegacy();
 + const streamOptions = await agent.getDefaultStreamOptionsLegacy();
 
-  // For new AI SDK v5 (default)
+  // For new AI SDK v5+ (default)
   const streamOptions = await agent.getDefaultStreamOptions();
 ```
 
@@ -30434,7 +31276,7 @@ This behavior is enabled by default. If you need access to the full request data
 
 ### `generateVNext` and `streamVNext` methods
 
-The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5+ compatibility but are now the standard implementation.
 
 To migrate, use the standard `generate()` and `stream()` methods.
 
@@ -30553,23 +31395,55 @@ The step results now also include tripwire information:
 
 ### `prepareStep` messages format
 
-The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5+ model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
 
-If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
 
 ```diff
   agent.generate({
     prompt: 'Hello',
     prepareStep: async ({ messages, messageList }) => {
--     // messages was AI SDK v5 ModelMessage format
+-     // messages was AI SDK v5+ ModelMessage format
 -     console.log(messages[0].content);
 +     // messages is now MastraDBMessage format
-+     // Use messageList to get AI SDK v5 format if needed:
++     // Use messageList to get AI SDK v5+ format if needed:
 +     const aiSdkMessages = messageList.get.all.aiV5.model();
 
       return { toolChoice: 'auto' };
     },
   });
+```
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from `agent.stream()` and `agent.generate()`. Use the `memory` option instead, which provides a cleaner API for memory configuration.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+```diff
+  await agent.stream('Hello', {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.stream('Hello', {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
 ```
 
 
@@ -30635,6 +31509,69 @@ description: "Learn how to migrate client SDK changes when upgrading to v1."
 Client SDK changes align with server-side API updates including renamed utilities, updated pagination, and type naming conventions.
 
 ## Changed
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from agent method calls. Use the `memory` option instead, which provides a cleaner API for memory configuration. This applies to both `@mastra/client-js` and `@mastra/react` packages.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+**Using `@mastra/client-js`:**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+  await agent.generate({
+    messages: [...],
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+
+  await agent.stream({
+    messages: [...],
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+**Using `@mastra/react` `useChat` hook:**
+
+The `useChat` hook internally passes the memory option when you provide a `threadId`. No changes are needed in your component code if you're using the hook's built-in memory handling. However, if you were manually passing options to `sendMessage`, update them accordingly:
+
+```diff
+  const { sendMessage } = useChat({ agentId: 'my-agent' });
+
+  await sendMessage({
+    message: 'Hello',
+    mode: 'stream',
+-   threadId: 'thread-123',
++   threadId: 'thread-123', // Still works - internally converted to memory option
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.generate({
+  messages: [...],
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```
 
 ### Client SDK types from `Get*` to `List*`
 
@@ -34775,12 +35712,12 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo="https://models.dev/logos/azure-openai.svg"
     />    <CardGridItem
       title="Netlify"
-      description="52 models"
+      description="53 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="138 models"
+      description="139 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -34806,7 +35743,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 52 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 53 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -34892,6 +35829,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-2025-12-11` |
+| `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
 | `openai/gpt-5.2-pro-2025-12-11` |
 | `openai/o3` |
@@ -34912,7 +35850,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 138 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 139 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -35039,6 +35977,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-chat-latest` |
+| `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
 | `openai/gpt-oss-120b` |
 | `openai/gpt-oss-120b:exacto` |
@@ -35327,7 +36266,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 69+ AI providers and 1751+ models through Mastra's model router."
+description: "Access 70+ AI providers and 1828+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35340,7 +36279,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1751 models from 69 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1828 models from 70 providers through a single API.
 
 ## Features
 
@@ -35468,7 +36407,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 62 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 63 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -36323,7 +37262,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://routellm.abacus.ai/v1/chat/completions",
+    url: "https://routellm.abacus.ai/v1",
     id: "abacus/Qwen-QwQ-32B",
     apiKey: process.env.ABACUS_API_KEY,
     headers: {
@@ -41786,7 +42725,7 @@ const agent = new Agent({
 
 ---
 title: "Firmware | Models | Mastra"
-description: "Use Firmware models with Mastra. 16 models available."
+description: "Use Firmware models with Mastra. 18 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -41796,7 +42735,7 @@ description: "Use Firmware models with Mastra. 16 models available."
 # <img src="https://models.dev/logos/firmware.svg" alt="Firmware logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Firmware
 [EN] Source: https://mastra.ai/en/models/providers/firmware
 
-Access 16 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
+Access 18 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
 
 Learn more in the [Firmware documentation](https://firmware.ai).
 
@@ -41811,7 +42750,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "firmware/anthropic/claude-haiku-4-5-20251001"
+  model: "firmware/claude-haiku-4-5-20251001"
 });
 
 // Generate a response
@@ -41835,7 +42774,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "firmware/anthropic/claude-haiku-4-5-20251001",
+    "model": "firmware/claude-haiku-4-5-20251001",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41847,7 +42786,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/anthropic/claude-opus-4-5",
+    "model": "firmware/claude-opus-4-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41859,7 +42798,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/anthropic/claude-sonnet-4-5-20250929",
+    "model": "firmware/claude-sonnet-4-5-20250929",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41871,7 +42810,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/deepseek/deepseek-chat",
+    "model": "firmware/deepseek-chat",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -41883,7 +42822,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/deepseek/deepseek-coder",
+    "model": "firmware/deepseek-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -41895,7 +42834,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/deepseek/deepseek-reasoner",
+    "model": "firmware/deepseek-reasoner",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -41907,7 +42846,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-2.5-flash",
+    "model": "firmware/gemini-2.5-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41919,7 +42858,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-2.5-pro",
+    "model": "firmware/gemini-2.5-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41931,7 +42870,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-3-flash-preview",
+    "model": "firmware/gemini-3-flash-preview",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41943,7 +42882,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/google/gemini-3-pro-preview",
+    "model": "firmware/gemini-3-pro-preview",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -41955,7 +42894,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/openai/gpt-4o",
+    "model": "firmware/gpt-4o",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41967,7 +42906,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/openai/gpt-5",
+    "model": "firmware/gpt-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41979,7 +42918,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/openai/gpt-5.2",
+    "model": "firmware/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "firmware/gpt-5-nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.05,
+    "outputCost": 0.4
+  },
+  {
+    "model": "firmware/gpt-5.2",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -41991,7 +42954,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/xai/grok-4-fast-non-reasoning",
+    "model": "firmware/grok-4-fast-non-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -42003,7 +42966,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/xai/grok-4-fast-reasoning",
+    "model": "firmware/grok-4-fast-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -42015,7 +42978,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "firmware/xai/grok-code-fast-1",
+    "model": "firmware/grok-code-fast-1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -42039,7 +43002,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://app.firmware.ai/api/v1",
-    id: "firmware/anthropic/claude-haiku-4-5-20251001",
+    id: "firmware/claude-haiku-4-5-20251001",
     apiKey: process.env.FIRMWARE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -42057,8 +43020,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "firmware/xai/grok-code-fast-1"
-      : "firmware/anthropic/claude-haiku-4-5-20251001";
+      ? "firmware/grok-code-fast-1"
+      : "firmware/claude-haiku-4-5-20251001";
   }
 });
 ```
@@ -45295,7 +46258,7 @@ const agent = new Agent({
 
 ---
 title: "iFlow | Models | Mastra"
-description: "Use iFlow models with Mastra. 20 models available."
+description: "Use iFlow models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45305,7 +46268,7 @@ description: "Use iFlow models with Mastra. 20 models available."
 # <img src="https://models.dev/logos/iflowcn.svg" alt="iFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />iFlow
 [EN] Source: https://mastra.ai/en/models/providers/iflowcn
 
-Access 20 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
+Access 14 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
 
 Learn more in the [iFlow documentation](https://platform.iflow.cn/en/docs).
 
@@ -45368,36 +46331,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "iflowcn/deepseek-v3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "iflowcn/deepseek-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "iflowcn/deepseek-v3.2-chat",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 64000,
     "inputCost": null,
@@ -45436,30 +46375,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "iflowcn/kimi-k2-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "iflowcn/minimax-m2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131100,
     "inputCost": null,
     "outputCost": null
   },
@@ -45512,18 +46427,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "iflowcn/qwen3-coder",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "iflowcn/qwen3-coder-plus",
     "imageInput": false,
     "audioInput": false,
@@ -45570,18 +46473,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "iflowcn/tstars2.0",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />
@@ -45614,7 +46505,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "iflowcn/tstars2.0"
+      ? "iflowcn/qwen3-vl-plus"
       : "iflowcn/deepseek-r1";
   }
 });
@@ -45754,7 +46645,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
 <CardGrid>
     <CardGridItem
       title="OpenAI"
-      description="39 models"
+      description="40 models"
       href="/models/v1/providers/openai"
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
@@ -45849,7 +46740,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/fireworks-ai.svg"
     />    <CardGridItem
       title="Firmware"
-      description="16 models"
+      description="18 models"
       href="/models/v1/providers/firmware"
       logo="https://models.dev/logos/firmware.svg"
     />    <CardGridItem
@@ -45874,7 +46765,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/huggingface.svg"
     />    <CardGridItem
       title="iFlow"
-      description="20 models"
+      description="14 models"
       href="/models/v1/providers/iflowcn"
       logo="https://models.dev/logos/iflowcn.svg"
     />    <CardGridItem
@@ -45953,6 +46844,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/nebius"
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
+      title="NovitaAI"
+      description="77 models"
+      href="/models/v1/providers/novita-ai"
+      logo="https://models.dev/logos/novita-ai.svg"
+    />    <CardGridItem
       title="Nvidia"
       description="66 models"
       href="/models/v1/providers/nvidia"
@@ -45964,7 +46860,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/ollama-cloud.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="26 models"
+      description="27 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -49261,6 +50157,1020 @@ const agent = new Agent({
 
 
 ---
+title: "NovitaAI | Models | Mastra"
+description: "Use NovitaAI models with Mastra. 77 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/novita-ai.svg" alt="NovitaAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NovitaAI
+[EN] Source: https://mastra.ai/en/models/providers/novita-ai
+
+Access 77 NovitaAI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
+
+Learn more in the [NovitaAI documentation](https://novita.ai/docs/guides/introduction).
+
+```bash
+NOVITA_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "novita-ai/baichuan/baichuan-m2-32b"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [NovitaAI documentation](https://novita.ai/docs/guides/introduction) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "novita-ai/baichuan/baichuan-m2-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.07,
+    "outputCost": 0.07
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-21B-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-21B-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-300b-a47b-paddle",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 123000,
+    "maxOutput": 12000,
+    "inputCost": 0.28,
+    "outputCost": 1.1
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-vl-28b-a3b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 30000,
+    "maxOutput": 8000,
+    "inputCost": 1.4,
+    "outputCost": 5.6
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-vl-28b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.39,
+    "outputCost": 0.39
+  },
+  {
+    "model": "novita-ai/baidu/ernie-4.5-vl-424b-a47b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 123000,
+    "maxOutput": 16000,
+    "inputCost": 0.42,
+    "outputCost": 1.25
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-ocr",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.03,
+    "outputCost": 0.03
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-prover-v2-671b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 160000,
+    "inputCost": 0.7,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 32768,
+    "inputCost": 0.7,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-0528-qwen3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": 0.06,
+    "outputCost": 0.09
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-distill-llama-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 0.8
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-r1-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 16000,
+    "inputCost": 0.7,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.27,
+    "outputCost": 1.12
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 16000,
+    "inputCost": 0.4,
+    "outputCost": 1.3
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.1-terminus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.269,
+    "outputCost": 0.4
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v3.2-exp",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
+    "model": "novita-ai/google/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 98304,
+    "maxOutput": 16384,
+    "inputCost": 0.119,
+    "outputCost": 0.2
+  },
+  {
+    "model": "novita-ai/gryphe/mythomax-l2-13b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 4096,
+    "maxOutput": 3200,
+    "inputCost": 0.09,
+    "outputCost": 0.09
+  },
+  {
+    "model": "novita-ai/kwaipilot/kat-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "novita-ai/kwaipilot/kat-coder-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8000,
+    "inputCost": 0.51,
+    "outputCost": 0.74
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.04,
+    "outputCost": 0.04
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3.1-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.02,
+    "outputCost": 0.05
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-3.3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 120000,
+    "inputCost": 0.135,
+    "outputCost": 0.4
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.27,
+    "outputCost": 0.85
+  },
+  {
+    "model": "novita-ai/meta-llama/llama-4-scout-17b-16e-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.18,
+    "outputCost": 0.59
+  },
+  {
+    "model": "novita-ai/microsoft/wizardlm-2-8x22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65535,
+    "maxOutput": 8000,
+    "inputCost": 0.62,
+    "outputCost": 0.62
+  },
+  {
+    "model": "novita-ai/minimax/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/minimax/minimax-m2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/minimaxai/minimax-m1-80k",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 40000,
+    "inputCost": 0.55,
+    "outputCost": 2.2
+  },
+  {
+    "model": "novita-ai/mistralai/mistral-nemo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 60288,
+    "maxOutput": 16000,
+    "inputCost": 0.04,
+    "outputCost": 0.17
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k2-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.57,
+    "outputCost": 2.3
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "novita-ai/nousresearch/hermes-2-pro-llama-3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.14,
+    "outputCost": 0.14
+  },
+  {
+    "model": "novita-ai/openai/gpt-oss-120b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.05,
+    "outputCost": 0.25
+  },
+  {
+    "model": "novita-ai/openai/gpt-oss-20b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.04,
+    "outputCost": 0.15
+  },
+  {
+    "model": "novita-ai/paddlepaddle/paddleocr-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.02,
+    "outputCost": 0.02
+  },
+  {
+    "model": "novita-ai/qwen/qwen-2.5-72b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 8192,
+    "inputCost": 0.38,
+    "outputCost": 0.4
+  },
+  {
+    "model": "novita-ai/qwen/qwen-mt-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.75
+  },
+  {
+    "model": "novita-ai/qwen/qwen2.5-7b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.07,
+    "outputCost": 0.07
+  },
+  {
+    "model": "novita-ai/qwen/qwen2.5-vl-72b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.8,
+    "outputCost": 0.8
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-235b-a22b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 20000,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.09,
+    "outputCost": 0.58
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 3
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-30b-a3b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 20000,
+    "inputCost": 0.09,
+    "outputCost": 0.45
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-32b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 20000,
+    "inputCost": 0.1,
+    "outputCost": 0.45
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-4b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 20000,
+    "inputCost": 0.03,
+    "outputCost": 0.03
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-8b-fp8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 20000,
+    "inputCost": 0.035,
+    "outputCost": 0.138
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-coder-30b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.27
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 1.3
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 2.11,
+    "outputCost": 8.45
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 1.5
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 1.5
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-omni-30b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 16384,
+    "inputCost": 0.25,
+    "outputCost": 0.97
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-omni-30b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 16384,
+    "inputCost": 0.25,
+    "outputCost": 0.97
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-235b-a22b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 1.5
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-235b-a22b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.98,
+    "outputCost": 3.95
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-30b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.2,
+    "outputCost": 0.7
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-30b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.2,
+    "outputCost": 1
+  },
+  {
+    "model": "novita-ai/qwen/qwen3-vl-8b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.08,
+    "outputCost": 0.5
+  },
+  {
+    "model": "novita-ai/sao10k/l3-70b-euryale-v2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 1.48,
+    "outputCost": 1.48
+  },
+  {
+    "model": "novita-ai/sao10k/l3-8b-lunaris",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "novita-ai/sao10k/L3-8B-Stheno-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 32000,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "novita-ai/sao10k/l31-70b-euryale-v2.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 1.48,
+    "outputCost": 1.48
+  },
+  {
+    "model": "novita-ai/skywork/r1v4-lite",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "novita-ai/xiaomimimo/mimo-v2-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "novita-ai/zai-org/autoglm-phone-9b-multilingual",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.035,
+    "outputCost": 0.138
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.13,
+    "outputCost": 0.85
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 1.8
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.55,
+    "outputCost": 2.2
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "novita-ai/zai-org/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.novita.ai/openai",
+    id: "novita-ai/baichuan/baichuan-m2-32b",
+    apiKey: process.env.NOVITA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "novita-ai/zai-org/glm-4.7"
+      : "novita-ai/baichuan/baichuan-m2-32b";
+  }
+});
+```
+
+
+
+
+---
 title: "Nvidia | Models | Mastra"
 description: "Use Nvidia models with Mastra. 66 models available."
 ---
@@ -50401,7 +52311,7 @@ npm install ollama-ai-provider-v2
 
 ---
 title: "OpenAI | Models | Mastra"
-description: "Use OpenAI models with Mastra. 39 models available."
+description: "Use OpenAI models with Mastra. 40 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -50412,7 +52322,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 [EN] Source: https://mastra.ai/en/models/providers/openai
 
-Access 39 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 40 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -50741,6 +52651,18 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 16384,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "openai/gpt-5.2-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
     "inputCost": 1.75,
     "outputCost": 14
   },
@@ -51098,7 +53020,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 26 models available."
+description: "Use OpenCode Zen models with Mastra. 27 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -51108,7 +53030,7 @@ description: "Use OpenCode Zen models with Mastra. 26 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 26 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 27 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -51388,6 +53310,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "opencode/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "opencode/gpt-5.2-codex",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -54118,12 +56052,12 @@ description: "Use SiliconFlow (China) models with Mastra. 72 models available."
 # <img src="https://models.dev/logos/siliconflow-cn.svg" alt="SiliconFlow (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow (China)
 [EN] Source: https://mastra.ai/en/models/providers/siliconflow-cn
 
-Access 72 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
+Access 72 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_CN_API_KEY` environment variable.
 
 Learn more in the [SiliconFlow (China) documentation](https://cloud.siliconflow.com/models).
 
 ```bash
-SILICONFLOW_API_KEY=your-api-key
+SILICONFLOW_CN_API_KEY=your-api-key
 ```
 
 ```typescript
@@ -55034,7 +56968,7 @@ const agent = new Agent({
   model: {
     url: "https://api.siliconflow.cn/v1",
     id: "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct",
-    apiKey: process.env.SILICONFLOW_API_KEY,
+    apiKey: process.env.SILICONFLOW_CN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
     }
@@ -60398,13 +62332,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
         "Callback fired after each generation step.",
     },
     {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.resource instead. Identifier for the resource/user.",
-    },
-    {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
@@ -60454,13 +62381,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.thread instead. Thread identifier for conversation continuity.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -61270,7 +63190,7 @@ await agent.generateLegacy("message for agent");
 
 :::info
 
-The new `.generate()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved streaming support. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.generate()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved streaming support. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 
@@ -62738,13 +64658,13 @@ await agent.network(`
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT> | undefined>",
+      type: "Promise<OUTPUT | undefined>",
       description:
         "A promise that resolves to the structured output object. Only available when structuredOutput option is provided. Resolves to undefined if no schema was specified.",
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "A stream of partial objects during structured output generation. Useful for streaming partial results as they're being generated.",
     },
@@ -63151,7 +65071,7 @@ Use [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route) if you want to crea
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -63795,7 +65715,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # toAISdkV5Messages()
 [EN] Source: https://mastra.ai/en/reference/ai-sdk/to-ai-sdk-v5-messages
 
-Converts messages from various input formats to AI SDK V5 UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5 `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
+Converts messages from various input formats to AI SDK V5 (and later) UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5+ `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
 
 ## Usage example
 
@@ -63843,7 +65763,7 @@ export default function Chat() {
 
 ## Returns
 
-Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
+Returns an array of AI SDK V5+ `UIMessage` objects with the following structure:
 
 <PropertiesTable
   content={[
@@ -64040,7 +65960,7 @@ Use [`handleWorkflowStream()`](/reference/v1/ai-sdk/handle-workflow-stream) if y
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/v1/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -64955,7 +66875,7 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/v1/getting-started/studio#local-https).
+Enable local HTTPS support. [Learn more](/reference/v1/configuration#serverhttps).
 
 #### `--inspect`
 
@@ -65295,12 +67215,14 @@ const response = await agent.generate(
 );
 ```
 
-You can also use the simplified string format:
+You can also use the simplified string format with memory options:
 
 ```typescript
 const response = await agent.generate("Hello, how are you?", {
-  threadId: "thread-1",
-  resourceId: "resource-1",
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
 });
 ```
 
@@ -65319,11 +67241,14 @@ response.processDataStream({
 });
 ```
 
-You can also use the simplified string format:
+You can also use the simplified string format with memory options:
 
 ```typescript
 const response = await agent.stream("Tell me a story", {
-  threadId: "thread-1",
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
   clientTools: { colorChangeTool },
 });
 
@@ -71817,6 +73742,8 @@ Mastra provides a unified `createScorer` factory that allows you to define custo
 
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
+**Prompt object steps** are step configurations expressed as objects with `description` + `createPrompt` (and `outputSchema` for `preprocess`/`analyze`). These steps invoke the judge LLM. **Function steps** are plain functions and never call the judge.
+
 ```typescript
 import { createScorer } from "@mastra/core/evals";
 
@@ -71903,6 +73830,10 @@ This function returns a scorer builder that you can chain step methods onto. See
     },
   ]}
 />
+
+The judge only runs for steps defined as **prompt objects** (`preprocess`, `analyze`, `generateScore`, `generateReason` in prompt mode). If you use function steps only, the judge is never called and there is no LLM output to inspect. In that case, any score/reason must be produced by your functions.
+
+When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult`, `analyzeStepResult`, or the value consumed by `calculateScore` in `generateScore`).
 
 ## Type Safety
 
@@ -76174,7 +78105,6 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Overview"
 description: "Reference documentation on Mastra's APIs and tools"
-showCopyButton: false
 packages:
   - "@mastra/core"
 ---
@@ -77049,7 +78979,7 @@ console.log(response.text);
 - [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads concept)
 - [getThreadById](/reference/v1/memory/getThreadById)
 - [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
-- [query](/reference/v1/memory/query)
+- [recall](/reference/v1/memory/recall)
 
 
 ---
@@ -77510,200 +79440,6 @@ export const agent = new Agent({
 - [deleteMessages](/reference/v1/memory/deleteMessages)
 - [cloneThread](/reference/v1/memory/cloneThread)
 - [Clone Utility Methods](/reference/v1/memory/clone-utilities)
-
-
----
-title: "Reference: Memory.query() | Memory"
-description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
-packages:
-  - "@mastra/ai-sdk"
----
-
-# Memory.query()
-[EN] Source: https://mastra.ai/en/reference/memory/query
-
-:::warning[Deprecated]
-The `Memory.query()` method has been renamed to [`Memory.recall()`](/reference/v1/memory/recall). This page is kept for reference, but please use `recall()` in new code.
-:::
-
-the `.query()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
-
-## Usage Example
-
-```typescript
-await memory?.query({ threadId: "user-123" });
-```
-
-## Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "threadId",
-      type: "string",
-      description:
-        "The unique identifier of the thread to retrieve messages from",
-      isOptional: false,
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      description:
-        "Optional ID of the resource that owns the thread. If provided, validates thread ownership",
-      isOptional: true,
-    },
-    {
-      name: "vectorSearchString",
-      type: "string",
-      description:
-        "Search string for finding semantically similar messages. Requires semantic recall to be enabled in threadConfig.",
-      isOptional: true,
-    },
-    {
-      name: "perPage",
-      type: "number | false",
-      description:
-        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination.",
-      isOptional: true,
-    },
-    {
-      name: "page",
-      type: "number",
-      description:
-        "Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
-      isOptional: true,
-    },
-    {
-      name: "include",
-      type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
-      description:
-        "Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise).",
-      isOptional: true,
-    },
-    {
-      name: "filter",
-      type: "{ dateRange?: { start?: Date; end?: Date } }",
-      description:
-        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
-      isOptional: true,
-    },
-    {
-      name: "orderBy",
-      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
-      description:
-        "Sort order for retrieved messages. Defaults to descending by creation date.",
-      isOptional: true,
-    },
-    {
-      name: "threadConfig",
-      type: "MemoryConfig",
-      description:
-        "Configuration options for message retrieval and semantic search",
-      isOptional: true,
-    },
-
-  ]}
-/>
-
-### threadConfig parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      description:
-        "Number of most recent messages to retrieve. Set to false to disable.",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-      description:
-        "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "workingMemory",
-      type: "WorkingMemory",
-      description:
-        "Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
-      isOptional: true,
-      defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
-    },
-    {
-      name: "threads",
-      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-      description:
-        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
-      isOptional: true,
-      defaultValue: "{ generateTitle: false }",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "messages",
-      type: "MastraDBMessage[]",
-      description: "Array of retrieved messages in the database format",
-    },
-  ]}
-/>
-
-## Extended usage example
-
-```typescript title="src/test-memory.ts"
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("agent");
-const memory = await agent.getMemory();
-
-// Retrieve messages with pagination
-const { messages } = await memory!.query({
-  threadId: "thread-123",
-  perPage: 50,
-  vectorSearchString: "What messages are there?",
-  include: [
-    {
-      id: "msg-123",
-    },
-    {
-      id: "msg-456",
-      withPreviousMessages: 3,
-      withNextMessages: 1,
-    },
-  ],
-  threadConfig: {
-    semanticRecall: true,
-  },
-});
-
-console.log(messages); // MastraDBMessage[]
-
-// Fetch all messages without pagination
-const allMessages = await memory!.query({
-  threadId: "thread-123",
-  perPage: false, // Fetch all
-});
-
-// Convert to AI SDK format if needed
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-const uiMessages = toAISdkV5Messages(messages);
-```
-
-### Related
-
-- [Memory Class Reference](/reference/v1/memory/memory-class)
-- [Getting Started with Memory](/docs/v1/memory/overview)
-- [Semantic Recall](/docs/v1/memory/semantic-recall)
-- [createThread](/reference/v1/memory/createThread)
 
 
 ---
@@ -79471,6 +81207,140 @@ const customExporter = new DefaultExporter({
 
 
 ---
+title: "Reference: LaminarExporter | Observability"
+description: Laminar exporter for Tracing
+packages:
+  - "@mastra/laminar"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LaminarExporter
+[EN] Source: https://mastra.ai/en/reference/observability/tracing/exporters/laminar
+
+Sends Tracing data to Laminar via OTLP/HTTP (protobuf).
+
+## Constructor
+
+```typescript
+new LaminarExporter(config?: LaminarExporterConfig)
+```
+
+## LaminarExporterConfig
+
+```typescript
+interface LaminarExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  endpoint?: string;
+  headers?: Record<string, string>;
+  realtime?: boolean;
+  disableBatch?: boolean;
+  batchSize?: number;
+  timeoutMillis?: number;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "baseUrl",
+      type: "string",
+      description: "Laminar base URL (used for trace exports + scoring). Falls back to LMNR_BASE_URL env var (default: https://api.lmnr.ai).",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "OTLP/HTTP traces endpoint (ends with /v1/traces). Falls back to LAMINAR_ENDPOINT env var (default: `${baseUrl}/v1/traces`).",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "Additional headers to include in OTLP requests (merged with Authorization).",
+      required: false,
+    },
+    {
+      name: "realtime",
+      type: "boolean",
+      description: "Flush after each span for immediate visibility (default: false).",
+      required: false,
+    },
+    {
+      name: "disableBatch",
+      type: "boolean",
+      description: "Disable batching (SimpleSpanProcessor). Default: false.",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "Max spans per batch (BatchSpanProcessor). Default: 512.",
+      required: false,
+    },
+    {
+      name: "timeoutMillis",
+      type: "number",
+      description: "OTLP export timeout in milliseconds. Default: 30000.",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to Laminar.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending data and shuts down the exporter.
+
+## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { LaminarExporter } from "@mastra/laminar";
+
+// Reads from LMNR_PROJECT_API_KEY, LMNR_BASE_URL, LAMINAR_ENDPOINT
+const exporter = new LaminarExporter();
+```
+
+### Explicit Configuration
+
+```typescript
+import { LaminarExporter } from "@mastra/laminar";
+
+const exporter = new LaminarExporter({
+  apiKey: process.env.LMNR_PROJECT_API_KEY,
+  baseUrl: "https://api.lmnr.ai",
+  realtime: true,
+});
+```
+
+
+---
 title: "Reference: LangfuseExporter | Observability"
 description: Langfuse exporter for Tracing
 packages:
@@ -79987,7 +81857,6 @@ interface TraceloopConfig {
 ```typescript
 interface LaminarConfig {
   apiKey?: string;
-  teamId?: string;
   endpoint?: string;
 }
 ```
@@ -79998,12 +81867,6 @@ interface LaminarConfig {
       name: "apiKey",
       type: "string",
       description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "teamId",
-      type: "string",
-      description: "Team identifier. Falls back to LAMINAR_TEAM_ID env var.",
       required: false,
     },
     {
@@ -84054,6 +85917,25 @@ const processor = new TokenLimiterProcessor({
   ]}
 />
 
+## Error behavior
+
+When used as an input processor, `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
+
+- **Empty messages**: If there are no messages to process, a TripWire is thrown because you cannot send an LLM request with no messages.
+- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you cannot send an LLM request with only system messages and no user/assistant messages.
+
+```typescript
+import { TripWire } from "@mastra/core/agent";
+
+try {
+  await agent.generate("Hello");
+} catch (error) {
+  if (error instanceof TripWire) {
+    console.log("Token limit error:", error.message);
+  }
+}
+```
+
 ## Extended usage example
 
 ### As an input processor (limit context window)
@@ -87322,21 +89204,13 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 ## Installation
 
-<Steps>
-
-<StepItem>
-
 Install the Express adapter and Express framework:
 
 ```bash
 npm install @mastra/express@beta express
 ```
 
-</StepItem>
-
-<StepItem>
-
-Create your server file:
+## Usage example
 
 ```typescript title="server.ts"
 import express from 'express';
@@ -87354,42 +89228,11 @@ app.listen(4111, () => {
 });
 ```
 
-</StepItem>
-
-</Steps>
-
 :::note
 
 Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
 
 :::
-
-## Full example
-
-```typescript title="server.ts"
-import express from 'express';
-import { MastraServer } from '@mastra/express';
-import { mastra } from './mastra';
-
-const app = express();
-app.use(express.json());
-
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
-  openapiPath: '/openapi.json',
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
-  },
-  streamOptions: { redact: true },
-});
-
-await server.init();
-
-app.listen(4111);
-```
 
 ## Constructor parameters
 
@@ -87548,7 +89391,7 @@ app.use((req, res, next) => {
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -87557,7 +89400,139 @@ For custom middleware ordering, call each method separately instead of `init()`.
 ## Related
 
 - [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
-- [Hono Adapter](/reference/v1/server/hono-adapter) - Alternative adapter
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+
+
+---
+title: "Reference: Fastify Adapter | Server"
+description: "API reference for the @mastra/fastify server adapter."
+packages:
+  - "@mastra/fastify"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Fastify Adapter
+[EN] Source: https://mastra.ai/en/reference/server/fastify-adapter
+
+The `@mastra/fastify` package provides a server adapter for running Mastra with [Fastify](https://fastify.dev).
+
+:::info
+
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+
+:::
+
+## Installation
+
+Install the Fastify adapter and Fastify framework:
+
+```bash
+npm install @mastra/fastify@beta fastify
+```
+
+## Usage example
+
+```typescript title="server.ts"
+import Fastify from 'fastify';
+import { MastraServer } from '@mastra/fastify';
+import { mastra } from './mastra';
+
+const app = Fastify({ logger: true });
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.listen({ port: 3000 }, (err, address) => {
+  if (err) {
+    console.error(err);
+    process.exit(1);
+  }
+  console.log(`Server running on ${address}`);
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "FastifyInstance",
+      description: "Fastify app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "BodyLimitOptions",
+      typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "StreamOptions",
+      typeDescription: "{ redact?: boolean }",
+      description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolsInput",
+      typeDescription: "Record<string, ToolAction | VercelTool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+
+## Examples
+
+- [Fastify Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-fastify-adapter) - Basic Fastify server setup
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
 
@@ -87586,21 +89561,13 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 ## Installation
 
-<Steps>
-
-<StepItem>
-
 Install the Hono adapter and Hono framework:
 
 ```bash
 npm install @mastra/hono@beta hono
 ```
 
-</StepItem>
-
-<StepItem>
-
-Create your server file:
+## Usage example
 
 ```typescript title="server.ts"
 import { Hono } from 'hono';
@@ -87609,36 +89576,6 @@ import { mastra } from './mastra';
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 const server = new MastraServer({ app, mastra });
-
-await server.init();
-
-export default app;
-```
-
-</StepItem>
-
-</Steps>
-
-## Full example
-
-```typescript title="server.ts"
-import { Hono } from 'hono';
-import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
-import { mastra } from './mastra';
-
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
-  openapiPath: '/openapi.json',
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
-  },
-  streamOptions: { redact: true },
-});
 
 await server.init();
 
@@ -87794,7 +89731,7 @@ app.use('*', async (c, next) => {
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -87803,7 +89740,138 @@ For custom middleware ordering, call each method separately instead of `init()`.
 ## Related
 
 - [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
-- [Express Adapter](/reference/v1/server/express-adapter) - Alternative adapter
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+
+
+---
+title: "Reference: Koa Adapter | Server"
+description: "API reference for the @mastra/koa server adapter."
+packages:
+  - "@mastra/koa"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Koa Adapter
+[EN] Source: https://mastra.ai/en/reference/server/koa-adapter
+
+The `@mastra/koa` package provides a server adapter for running Mastra with [Koa](https://koajs.com).
+
+:::info
+
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+
+:::
+
+## Installation
+
+Install the Koa adapter and Koa framework:
+
+```bash
+npm install @mastra/koa@beta koa koa-bodyparser
+```
+
+## Usage example
+
+```typescript title="server.ts"
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { MastraServer } from '@mastra/koa';
+import { mastra } from './mastra';
+
+const app = new Koa();
+app.use(bodyParser());
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.listen(3000, () => {
+  console.log('Server running on http://localhost:3000');
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Koa",
+      description: "Koa app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "BodyLimitOptions",
+      typeDescription: "{ maxSize: number, onError: (error: unknown) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "StreamOptions",
+      typeDescription: "{ redact?: boolean }",
+      description: "Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolsInput",
+      typeDescription: "Record<string, ToolAction | VercelTool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+
+## Examples
+
+- [Koa Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-koa-adapter) - Basic Koa server setup
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
 
@@ -88719,7 +90787,7 @@ For Workers deployments, `keyPrefix` is used to isolate data within a namespace;
 
 
 ---
-title: "Reference: Storage Composition | Storage"
+title: "Reference: Composite Storage | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
 packages:
   - "@mastra/clickhouse"
@@ -88728,26 +90796,26 @@ packages:
   - "@mastra/pg"
 ---
 
-# Storage Composition
+# Composite Storage
 [EN] Source: https://mastra.ai/en/reference/storage/composite
 
-MastraStorage can compose storage domains from different adapters. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
+`MastraStorage` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
 
 ## Installation
 
-MastraStorage is included in `@mastra/core`:
+`MastraStorage` is included in `@mastra/core`:
 
 ```bash
 npm install @mastra/core@beta
 ```
 
-You'll also need to install the storage adapters you want to compose:
+You'll also need to install the storage providers you want to compose:
 
 ```bash
 npm install @mastra/pg@beta @mastra/libsql@beta
 ```
 
-## Storage Domains
+## Storage domains
 
 Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
 
@@ -88765,13 +90833,13 @@ Mastra organizes storage into five specialized domains, each handling a specific
 
 Import domain classes directly from each store package and compose them:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new MastraStorage({
     id: "composite",
     domains: {
@@ -88787,7 +90855,7 @@ const mastra = new Mastra({
 
 Use `default` to specify a fallback storage, then override specific domains:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { PostgresStore } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
@@ -88798,7 +90866,7 @@ const pgStore = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
 });
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage: new MastraStorage({
     id: "composite",
     default: pgStore,
@@ -88875,9 +90943,9 @@ const mastra = new Mastra({
 
 ## Initialization
 
-MastraStorage initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
+`MastraStorage` initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { MastraStorage } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { Mastra } from "@mastra/core";
@@ -88891,7 +90959,7 @@ const storage = new MastraStorage({
   },
 });
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   storage, // init() called automatically
 });
 ```
@@ -88916,7 +90984,7 @@ const memoryStore = await storage.getStore("memory");
 const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
-## Use Cases
+## Use cases
 
 ### Separate databases for different workloads
 
@@ -92401,7 +94469,7 @@ Emitted when using output generation with defined schemas. Contains partial or c
     },
     {
       name: "object",
-      type: "PartialSchemaOutput<OUTPUT>",
+      type: "Partial<OUTPUT>",
       description:
         "Partial or complete structured data matching the defined schema. The type is determined by the OUTPUT schema parameter.",
     },
@@ -92707,7 +94775,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "Stream of progressive structured object updates when using output schemas. Emits partial objects as they're built up, allowing real-time visualization of structured data generation.",
       properties: [
@@ -92716,7 +94784,7 @@ These properties provide real-time access to model outputs as they're generated:
           parameters: [
             {
               name: "PartialSchemaOutput",
-              type: "PartialSchemaOutput<OUTPUT>",
+              type: "Partial<OUTPUT>",
               description:
                 "Partially completed object matching the defined schema",
             },
@@ -92726,7 +94794,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "elementStream",
-      type: "ReadableStream<InferSchemaOutput<OUTPUT> extends (infer T)[] ? T : never>",
+      type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
       description:
         "Stream of individual array elements when the output schema defines an array type. Each element is emitted as it's completed rather than waiting for the entire array.",
     },
@@ -92747,7 +94815,7 @@ These properties resolve to final values after the stream completes:
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT>>",
+      type: "Promise<OUTPUT>",
       description:
         "The complete structured object response when using output schemas. Validated against the schema before resolving. Rejects if validation fails.",
       properties: [
@@ -92756,7 +94824,7 @@ These properties resolve to final values after the stream completes:
           parameters: [
             {
               name: "InferSchemaOutput",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               description:
                 "Fully typed object matching the exact schema definition",
             },
@@ -93002,7 +95070,7 @@ These properties resolve to final values after the stream completes:
             },
             {
               name: "object",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               isOptional: true,
               description: "Structured output if schema was provided",
             },
@@ -93206,7 +95274,7 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 # Agent.stream()
 [EN] Source: https://mastra.ai/en/reference/streaming/agents/stream
 
-The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5 compatibility.
+The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5+ compatibility.
 
 ## Usage example
 
@@ -93542,13 +95610,6 @@ const stream = await agent.stream("message for agent");
         "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
     },
     {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-    },
-    {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
@@ -93602,13 +95663,6 @@ const stream = await agent.stream("message for agent");
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -93898,9 +95952,9 @@ for await (const chunk of stream.fullStream) {
 const fullText = await stream.text;
 ```
 
-### AI SDK v5 Format
+### AI SDK v5+ Format
 
-To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
+To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
 
 ```ts title="index.ts"
 import { stepCountIs, createUIMessageStreamResponse } from "ai";
@@ -94543,7 +96597,7 @@ await agent.streamLegacy("message for agent", {
 
 :::info
 
-The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.stream()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 
@@ -113808,10 +115862,6 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Related
-
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)
-
 
 ---
 title: "Reference: Workflow.sleepUntil() | Workflows"
@@ -113874,10 +115924,6 @@ export const testWorkflow = createWorkflow({...})
   .then(step2)
   .commit();
 ```
-
-## Related
-
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)
 
 
 ---

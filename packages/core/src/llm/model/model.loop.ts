@@ -138,7 +138,7 @@ export class MastraLLMVNext extends MastraBase {
     ];
   }
 
-  stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+  stream<Tools extends ToolSet, OUTPUT = undefined>({
     resumeContext,
     runId,
     stopWhen = stepCountIs(5),

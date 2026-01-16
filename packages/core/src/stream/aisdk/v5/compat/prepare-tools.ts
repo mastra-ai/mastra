@@ -24,15 +24,19 @@ type PreparedTool =
 type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
 
 /**
- * Checks if a tool is a provider tool by examining its id property.
- * Provider tools have an id in the format '<provider>.<tool_name>' (e.g., 'openai.web_search').
- * This works for both V5 and V6 provider tools.
+ * Checks if a tool is a provider-defined tool from the AI SDK.
+ * Provider tools (like openai.tools.webSearch()) are created by the AI SDK with:
+ * - type: "provider-defined" (AI SDK v5) or "provider" (AI SDK v6)
+ * - id: in format 'provider.tool_name' (e.g., 'openai.web_search')
  */
 function isProviderTool(tool: unknown): tool is { id: string; args?: Record<string, unknown> } {
   if (typeof tool !== 'object' || tool === null) return false;
   const t = tool as Record<string, unknown>;
-  // Check for id property with provider prefix format
-  return typeof t.id === 'string' && t.id.includes('.');
+
+  // Provider tools have type: "provider-defined" (v5) or "provider" (v6)
+  // This is the reliable marker set by the AI SDK's createProviderDefinedToolFactory
+  const isProviderType = t.type === 'provider-defined' || t.type === 'provider';
+  return isProviderType && typeof t.id === 'string';
 }
 
 /**
