@@ -172,6 +172,7 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
   private parseMultipartFormData(request: FastifyRequest, maxFileSize?: number): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const result: Record<string, unknown> = {};
+      let settled = false;
 
       const busboy = new Busboy({
         headers: { 'content-type': request.headers['content-type'] as string },
@@ -180,21 +181,29 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
 
       busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
         const chunks: Buffer[] = [];
-        let limitExceeded = false;
 
-        file.on('data', (chunk: Buffer) => chunks.push(chunk));
+        file.on('data', (chunk: Buffer) => {
+          if (!settled) {
+            chunks.push(chunk);
+          }
+        });
         file.on('limit', () => {
-          limitExceeded = true;
-          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+          if (!settled) {
+            settled = true;
+            request.raw.unpipe(busboy);
+            busboy.removeAllListeners();
+            reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+          }
         });
         file.on('end', () => {
-          if (!limitExceeded) {
+          if (!settled) {
             result[fieldname] = Buffer.concat(chunks);
           }
         });
       });
 
       busboy.on('field', (fieldname: string, value: string) => {
+        if (settled) return;
         try {
           result[fieldname] = JSON.parse(value);
         } catch {
@@ -202,8 +211,18 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
         }
       });
 
-      busboy.on('finish', () => resolve(result));
-      busboy.on('error', (error: Error) => reject(error));
+      busboy.on('finish', () => {
+        if (!settled) {
+          settled = true;
+          resolve(result);
+        }
+      });
+      busboy.on('error', (error: Error) => {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      });
 
       // CRITICAL: Pipe raw request, not Fastify request
       request.raw.pipe(busboy);
@@ -304,7 +323,7 @@ export class FastifyPlatformAdapter implements PlatformAdapter {
         }
       }
     } else {
-      reply.status(500);
+      await reply.status(500).send({ error: 'Unsupported response type' });
     }
   }
 

@@ -133,11 +133,11 @@ export class MastraServer extends MastraServerBase<INestApplication, unknown, un
   }
 
   registerContextMiddleware(): void {
-    return this.platformAdapter.registerContextMiddleware();
+    this.platformAdapter.registerContextMiddleware();
   }
 
   registerAuthMiddleware(): void {
-    return this.platformAdapter.registerAuthMiddleware();
+    this.platformAdapter.registerAuthMiddleware();
   }
 }
 

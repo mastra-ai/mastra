@@ -211,7 +211,7 @@ See the [Koa Adapter](/reference/v1/server/koa-adapter) documentation for full c
   </TabItem>
   <TabItem value="nestjs" label="NestJS">
 
-```typescript {9} title="src/nestjs-server.ts"
+```typescript {10} title="src/nestjs-server.ts"
 import { NestFactory } from '@nestjs/core';
 import { Module } from '@nestjs/common';
 import { MastraServer } from '@mastra/nestjs';
@@ -231,7 +231,7 @@ console.log('Server running on port 4111');
 
 For Fastify platform:
 
-```typescript {10} title="src/nestjs-fastify-server.ts"
+```typescript {11} title="src/nestjs-fastify-server.ts"
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Module } from '@nestjs/common';
