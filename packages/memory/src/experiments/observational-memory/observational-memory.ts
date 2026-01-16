@@ -352,12 +352,24 @@ export interface ObservationDebugEvent {
   sessionTokens?: number;
   totalPendingTokens?: number;
   threshold?: number;
+  /** Input token count (for reflection events) */
+  inputTokens?: number;
+  /** Number of active observations (for reflection events) */
+  activeObservationsLength?: number;
+  /** Output token count after reflection */
+  outputTokens?: number;
   /** The observations that were generated */
   observations?: string;
   /** Previous observations (before this event) */
   previousObservations?: string;
   /** Observer's raw output */
   rawObserverOutput?: string;
+  /** LLM usage from Observer/Reflector calls */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
 }
 
 /**
@@ -1065,6 +1077,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     currentTask?: string;
     suggestedContinuation?: string;
     patterns?: Record<string, string[]>;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
 
@@ -1101,27 +1114,38 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const parsed = parseObserverOutput(result.text);
 
+    // Extract usage from result (totalUsage or usage)
+    const usage = result.totalUsage ?? result.usage;
+
     return {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
       // Only include patterns if observer patterns are enabled
       patterns: this.observerRecognizePatterns ? parsed.patterns : undefined,
+      usage: usage
+        ? {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+          }
+        : undefined,
     };
   }
 
   /**
    * Call the Observer agent for multiple threads in a single batched request.
    * This is more efficient than calling the Observer for each thread individually.
-   * Returns per-thread results with observations, currentTask, and suggestedContinuation.
+   * Returns per-thread results with observations, currentTask, and suggestedContinuation,
+   * plus the total usage for the batch.
    */
   private async callMultiThreadObserver(
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
     existingPatterns?: Record<string, string[]>,
-  ): Promise<
-    Map<
+  ): Promise<{
+    results: Map<
       string,
       {
         observations: string;
@@ -1129,8 +1153,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         suggestedContinuation?: string;
         patterns?: Record<string, string[]>;
       }
-    >
-  > {
+    >;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  }> {
     // Create a multi-thread observer agent with the special system prompt
     const agent = new Agent({
       id: 'multi-thread-observer',
@@ -1232,7 +1257,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
     }
 
-    return results;
+    // Extract usage from result
+    const usage = result.totalUsage ?? result.usage;
+
+    return {
+      results,
+      usage: usage
+        ? {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+          }
+        : undefined,
+    };
   }
 
   /**
@@ -1243,7 +1280,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observations: string,
     manualPrompt?: string,
     patterns?: Record<string, string[]>,
-  ): Promise<{ observations: string; suggestedContinuation?: string; patterns?: Record<string, string[]> }> {
+  ): Promise<{
+    observations: string;
+    suggestedContinuation?: string;
+    patterns?: Record<string, string[]>;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  }> {
     writeDebugEntry('callReflector:start', {
       inputObservationsLength: observations.length,
       inputObservationsPreview: observations.slice(0, 500),
@@ -1270,6 +1312,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
 
+    // Track total usage across attempts
+    let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
     // First attempt
     let prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, false);
     let result = await this.withRetry(
@@ -1284,6 +1329,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       3,
       'Reflector',
     );
+
+    // Accumulate usage from first attempt
+    const firstUsage = result.totalUsage ?? result.usage;
+    if (firstUsage) {
+      totalUsage.inputTokens += firstUsage.inputTokens ?? 0;
+      totalUsage.outputTokens += firstUsage.outputTokens ?? 0;
+      totalUsage.totalTokens += firstUsage.totalTokens ?? 0;
+    }
 
     let parsed = parseReflectorOutput(result.text);
     let reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
@@ -1308,6 +1361,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         3,
         'Reflector (compression retry)',
       );
+
+      // Accumulate usage from retry attempt
+      const retryUsage = result.totalUsage ?? result.usage;
+      if (retryUsage) {
+        totalUsage.inputTokens += retryUsage.inputTokens ?? 0;
+        totalUsage.outputTokens += retryUsage.outputTokens ?? 0;
+        totalUsage.totalTokens += retryUsage.totalTokens ?? 0;
+      }
 
       parsed = parseReflectorOutput(result.text);
       reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
@@ -1338,6 +1399,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       suggestedContinuation: parsed.suggestedContinuation,
       patterns: parsed.patterns,
+      usage: totalUsage.totalTokens > 0 ? totalUsage : undefined,
     };
   }
 
@@ -2043,6 +2105,7 @@ ${formattedMessages}
           role: m.role,
           content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
         })),
+        usage: result.usage,
       });
 
       // Check for reflection (pass threadId so patterns can be cleared)
@@ -2343,19 +2406,21 @@ ${formattedMessages}
       debugger;
       const batchPromises = batches.map(async (batch, batchIndex) => {
         omDebug(`[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads`);
-        const results = await this.callMultiThreadObserver(
+        const batchResult = await this.callMultiThreadObserver(
           existingObservations,
           batch.threadMap,
           batch.threadIds,
           existingPatterns,
         );
-        omDebug(`[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${results.size} threads`);
-        return results;
+        omDebug(
+          `[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${batchResult.results.size} threads`,
+        );
+        return batchResult;
       });
 
       const batchResults = await Promise.all(batchPromises);
 
-      // Merge all batch results into a single map
+      // Merge all batch results into a single map and accumulate usage
       const multiThreadResults = new Map<
         string,
         {
@@ -2365,9 +2430,16 @@ ${formattedMessages}
           patterns?: Record<string, string[]>;
         }
       >();
+      let totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       for (const batchResult of batchResults) {
-        for (const [threadId, result] of batchResult) {
+        for (const [threadId, result] of batchResult.results) {
           multiThreadResults.set(threadId, result);
+        }
+        // Accumulate usage from each batch
+        if (batchResult.usage) {
+          totalBatchUsage.inputTokens += batchResult.usage.inputTokens ?? 0;
+          totalBatchUsage.outputTokens += batchResult.usage.outputTokens ?? 0;
+          totalBatchUsage.totalTokens += batchResult.usage.totalTokens ?? 0;
         }
       }
 
@@ -2469,7 +2541,8 @@ ${formattedMessages}
           );
         }
 
-        // Emit debug event for observation complete
+        // Emit debug event for observation complete (usage is for the entire batch, added to first thread only)
+        const isFirstThread = observationResults.indexOf(obsResult) === 0;
         this.emitDebugEvent({
           type: 'observation_complete',
           timestamp: new Date(),
@@ -2482,6 +2555,8 @@ ${formattedMessages}
             role: m.role,
             content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
           })),
+          // Add batch usage to first thread's event only (to avoid double-counting)
+          usage: isFirstThread && totalBatchUsage.totalTokens > 0 ? totalBatchUsage : undefined,
         });
       }
 
@@ -2577,6 +2652,16 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     await this.storage.setReflectingFlag(record.id, true);
 
+    // Emit reflection_triggered debug event
+    this.emitDebugEvent({
+      type: 'reflection_triggered',
+      timestamp: new Date(),
+      threadId: _threadId ?? 'unknown',
+      resourceId: record.resourceId ?? '',
+      inputTokens: observationTokens,
+      activeObservationsLength: record.activeObservations?.length ?? 0,
+    });
+
     try {
       // Only pass patterns to Reflector if reflector patterns are enabled
       const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
@@ -2601,6 +2686,18 @@ ${formattedMessages}
       writeDebugEntry('maybeReflect:complete', {
         recordId: record.id,
         reflectionTokenCount,
+      });
+
+      // Emit reflection_complete debug event with usage
+      this.emitDebugEvent({
+        type: 'reflection_complete',
+        timestamp: new Date(),
+        threadId: _threadId ?? 'unknown',
+        resourceId: record.resourceId ?? '',
+        inputTokens: observationTokens,
+        outputTokens: reflectionTokenCount,
+        observations: reflectResult.observations,
+        usage: reflectResult.usage,
       });
 
       // Note: Patterns from the Reflector are preserved in the new OM record.

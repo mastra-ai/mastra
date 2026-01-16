@@ -105,6 +105,106 @@ function calculateMetrics(results: EvaluationResult[]): BenchmarkMetrics {
   return metrics;
 }
 
+// Helper to load preparation token usage from om-debug.jsonl files
+interface PreparationTokenUsage {
+  observerInputTokens: number;
+  observerOutputTokens: number;
+  reflectorInputTokens: number;
+  reflectorOutputTokens: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  questionCount: number;
+}
+
+async function loadPreparationTokenUsage(
+  preparedDataDir: string,
+  memoryConfig: string,
+  questionIds?: string[],
+): Promise<PreparationTokenUsage | null> {
+  const usage: PreparationTokenUsage = {
+    observerInputTokens: 0,
+    observerOutputTokens: 0,
+    reflectorInputTokens: 0,
+    reflectorOutputTokens: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    questionCount: 0,
+  };
+
+  try {
+    const configDir = join(preparedDataDir, 'longmemeval_s', memoryConfig);
+    if (!existsSync(configDir)) {
+      return null;
+    }
+
+    const questionDirs = await readdir(configDir);
+    const dirsToProcess = questionIds
+      ? questionDirs.filter(d => questionIds.includes(d))
+      : questionDirs;
+
+    for (const questionDir of dirsToProcess) {
+      const debugFile = join(configDir, questionDir, 'om-debug.jsonl');
+      if (!existsSync(debugFile)) continue;
+
+      try {
+        const content = await readFile(debugFile, 'utf-8');
+        
+        // Parse pretty-printed JSON objects
+        // Each event starts with { (possibly with content on same line) and ends with } on its own line
+        const events: any[] = [];
+        let currentJson = '';
+        let braceCount = 0;
+        
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          
+          // Check if this line starts a new JSON object
+          if (braceCount === 0 && trimmed.startsWith('{')) {
+            currentJson = line;
+            braceCount = (trimmed.match(/{/g) || []).length - (trimmed.match(/}/g) || []).length;
+          } else if (braceCount > 0) {
+            currentJson += '\n' + line;
+            braceCount += (trimmed.match(/{/g) || []).length;
+            braceCount -= (trimmed.match(/}/g) || []).length;
+          }
+          
+          // If we've closed all braces, parse the JSON
+          if (braceCount === 0 && currentJson) {
+            try {
+              events.push(JSON.parse(currentJson));
+            } catch {
+              // Skip malformed JSON
+            }
+            currentJson = '';
+          }
+        }
+
+        for (const event of events) {
+          if (event.usage && event.usage.inputTokens) {
+            if (event.type === 'observation_complete') {
+              usage.observerInputTokens += event.usage.inputTokens || 0;
+              usage.observerOutputTokens += event.usage.outputTokens || 0;
+            } else if (event.type === 'reflection_complete') {
+              usage.reflectorInputTokens += event.usage.inputTokens || 0;
+              usage.reflectorOutputTokens += event.usage.outputTokens || 0;
+            }
+          }
+        }
+        usage.questionCount++;
+      } catch {
+        // Skip files that can't be read
+      }
+    }
+
+    usage.totalInputTokens = usage.observerInputTokens + usage.reflectorInputTokens;
+    usage.totalOutputTokens = usage.observerOutputTokens + usage.reflectorOutputTokens;
+
+    return usage.questionCount > 0 ? usage : null;
+  } catch {
+    return null;
+  }
+}
+
 program.name('longmemeval').description('LongMemEval benchmark for Mastra Memory').version('0.1.0');
 
 // Helper to show available variants and configs
@@ -916,15 +1016,32 @@ program
         }
 
         // Token usage summary (if available)
+        const formatTokens = (n: number) => n.toLocaleString();
+        
         if (metrics.total_usage) {
-          const formatTokens = (n: number) => n.toLocaleString();
           console.log(
-            chalk.gray('Token Usage:'),
+            chalk.gray('Answering Tokens:'),
             chalk.cyan(formatTokens(metrics.total_usage.inputTokens)),
             chalk.gray('input,'),
             chalk.cyan(formatTokens(metrics.total_usage.outputTokens)),
             chalk.gray('output'),
             chalk.gray(`(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/q)`),
+          );
+        }
+
+        // Load preparation token usage from om-debug.jsonl files
+        const prepUsage = await loadPreparationTokenUsage(
+          './prepared-data',
+          run.config.memoryConfig,
+        );
+        if (prepUsage && prepUsage.totalInputTokens > 0) {
+          console.log(
+            chalk.gray('Preparation Tokens:'),
+            chalk.cyan(formatTokens(prepUsage.totalInputTokens)),
+            chalk.gray('input,'),
+            chalk.cyan(formatTokens(prepUsage.totalOutputTokens)),
+            chalk.gray('output'),
+            chalk.gray(`(Observer: ${formatTokens(prepUsage.observerInputTokens)}, Reflector: ${formatTokens(prepUsage.reflectorInputTokens)})`),
           );
         }
       }
