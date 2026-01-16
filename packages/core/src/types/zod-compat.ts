@@ -1,4 +1,4 @@
-import type { z } from 'zod/v3';
+import type { z } from 'zod';
 
 /**
  * Type compatibility layer for Zod v3 and v4

@@ -8477,25 +8477,6 @@ Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and Ope
 
 This exporter implements the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
 
-## Using Tags
-
-Tags help you categorize and filter traces in Phoenix and Arize AX. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear as the `tag.tags` attribute following OpenInference conventions and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -8600,25 +8581,6 @@ new BraintrustExporter({
   logLevel: "info", // Diagnostic logging: debug | info | warn | error
 });
 ```
-
-## Using Tags
-
-Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
@@ -9214,19 +9176,6 @@ export const mastra = new Mastra({
 });
 ```
 
-## Using Tags
-
-Tags help you categorize and filter traces in the Laminar dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -9384,10 +9333,8 @@ import { buildTracingOptions } from "@mastra/observability";
 import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
 
-const langfuse = new Langfuse({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-});
+// Reads credentials from LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL env vars
+const langfuse = new Langfuse();
 
 // Fetch the prompt from Langfuse Prompt Management
 const prompt = await langfuse.getPrompt("customer-support");
@@ -9398,15 +9345,6 @@ export const supportAgent = new Agent({
   model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
-## Using Tags
-
-Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
   },
 });
 ```
@@ -9444,12 +9382,6 @@ You can link prompts using either:
 - All three fields
 
 When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
-Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
 
 ## Related
 
@@ -10034,25 +9966,6 @@ Install the suggested package for your provider.
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
 
-## Using Tags
-
-Tags help you categorize and filter traces in your observability platform. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
@@ -10194,26 +10107,6 @@ new PosthogExporter({
   enablePrivacyMode: true, // Removes $ai_input and $ai_output_choices
 });
 ```
-
-## Using Tags
-
-Tags help you categorize and filter traces in PostHog's AI analytics. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are added as event properties where the tag name is the key and the value is set to `true`. In PostHog's trace view, filter by a tag using the `is set` filter (e.g., "production is set" shows all traces with the production tag). Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
 
 ## Related
 
@@ -10510,9 +10403,10 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
-- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
+- **[PostHog](/docs/v1/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
 - **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
+- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
+  - Supports: Dash0, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -33039,12 +32933,12 @@ Need help with the migration? Join our [Discord community](https://discord.gg/BT
 
 ### Update all Mastra packages to `beta` tag
 
-Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility.
+Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility (all `@mastra/*` packages and `mastra`).
 
 Here's how you update the most commonly used packages:
 
 ```shell
-npm install @mastra/core@beta mastra@beta @mastra/loggers@beta @mastra/memory@beta
+npm install @mastra/core@beta @mastra/loggers@beta @mastra/memory@beta mastra@beta
 ```
 
 Install any other Mastra package with the `@beta` tag and you'll get the latest beta version available. Be sure to update all Mastra packages (especially if you're in a monorepo) to avoid version mismatches.
@@ -33068,7 +32962,9 @@ npx @mastra/codemod@beta v1
 :::
 
 :::note[Database Migration Required]
+
 If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#database-migration) for details.
+
 :::
 
 ## Breaking Changes by Area
@@ -36554,7 +36450,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 70+ AI providers and 1830+ models through Mastra's model router."
+description: "Access 70+ AI providers and 1833+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36567,7 +36463,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1830 models from 70 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1833 models from 70 providers through a single API.
 
 ## Features
 
@@ -36866,7 +36762,7 @@ You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts 
 
 ---
 title: "Abacus | Models | Mastra"
-description: "Use Abacus models with Mastra. 52 models available."
+description: "Use Abacus models with Mastra. 55 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36876,7 +36772,7 @@ description: "Use Abacus models with Mastra. 52 models available."
 # <img src="https://models.dev/logos/abacus.svg" alt="Abacus logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Abacus
 [EN] Source: https://mastra.ai/en/models/providers/abacus
 
-Access 52 Abacus models through Mastra's model router. Authentication is handled automatically using the `ABACUS_API_KEY` environment variable.
+Access 55 Abacus models through Mastra's model router. Authentication is handled automatically using the `ABACUS_API_KEY` environment variable.
 
 Learn more in the [Abacus documentation](https://abacus.ai).
 
@@ -36891,7 +36787,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "abacus/Qwen-QwQ-32B"
+  model: "abacus/Qwen/QwQ-32B"
 });
 
 // Generate a response
@@ -36999,7 +36895,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "abacus/deepseek-ai-DeepSeek-R1",
+    "model": "abacus/deepseek-ai/DeepSeek-R1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37011,7 +36907,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7
   },
   {
-    "model": "abacus/deepseek-ai-DeepSeek-V3.1-Terminus",
+    "model": "abacus/deepseek-ai/DeepSeek-V3.1-Terminus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37023,7 +36919,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "abacus/deepseek-ai-DeepSeek-V3.2",
+    "model": "abacus/deepseek-ai/DeepSeek-V3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37035,7 +36931,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "abacus/deepseek-deepseek-v3.1",
+    "model": "abacus/deepseek/deepseek-v3.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37043,8 +36939,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 0.55,
-    "outputCost": 1.66
+    "inputCost": 0.14,
+    "outputCost": 0.28
   },
   {
     "model": "abacus/gemini-2.0-flash-001",
@@ -37251,6 +37147,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 14
   },
   {
+    "model": "abacus/gpt-5.2-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.5,
+    "outputCost": 12
+  },
+  {
     "model": "abacus/grok-4-0709",
     "imageInput": true,
     "audioInput": false,
@@ -37323,7 +37231,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.79
   },
   {
-    "model": "abacus/meta-llama-Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "model": "abacus/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -37335,7 +37243,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "abacus/meta-llama-Meta-Llama-3.1-405B-Instruct-Turbo",
+    "model": "abacus/meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37347,7 +37255,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.5
   },
   {
-    "model": "abacus/meta-llama-Meta-Llama-3.1-70B-Instruct",
+    "model": "abacus/meta-llama/Meta-Llama-3.1-70B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37359,7 +37267,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "abacus/meta-llama-Meta-Llama-3.1-8B-Instruct",
+    "model": "abacus/meta-llama/Meta-Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37419,7 +37327,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.4
   },
   {
-    "model": "abacus/openai-gpt-oss-120b",
+    "model": "abacus/openai/gpt-oss-120b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -37443,7 +37351,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.79
   },
   {
-    "model": "abacus/Qwen-Qwen2.5-72B-Instruct",
+    "model": "abacus/Qwen/Qwen2.5-72B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37455,7 +37363,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.38
   },
   {
-    "model": "abacus/Qwen-Qwen3-235B-A22B-Instruct-2507",
+    "model": "abacus/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37467,7 +37375,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "abacus/Qwen-Qwen3-32B",
+    "model": "abacus/Qwen/Qwen3-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37479,7 +37387,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.29
   },
   {
-    "model": "abacus/qwen-qwen3-coder-480b-a35b-instruct",
+    "model": "abacus/Qwen/qwen3-coder-480b-a35b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37491,19 +37399,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "abacus/qwen-qwen3-Max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 1.2,
-    "outputCost": 6
-  },
-  {
-    "model": "abacus/Qwen-QwQ-32B",
+    "model": "abacus/Qwen/QwQ-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37515,7 +37411,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "abacus/zai-org-glm-4.5",
+    "model": "abacus/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 1.2,
+    "outputCost": 6
+  },
+  {
+    "model": "abacus/route-llm",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "abacus/zai-org/glm-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37527,7 +37447,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.2
   },
   {
-    "model": "abacus/zai-org-glm-4.6",
+    "model": "abacus/zai-org/glm-4.6",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37537,6 +37457,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "abacus/zai-org/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.7,
+    "outputCost": 2.5
   }
 ]}
 />
@@ -37551,7 +37483,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://routellm.abacus.ai/v1",
-    id: "abacus/Qwen-QwQ-32B",
+    id: "abacus/Qwen/QwQ-32B",
     apiKey: process.env.ABACUS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -37569,8 +37501,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "abacus/zai-org-glm-4.6"
-      : "abacus/Qwen-QwQ-32B";
+      ? "abacus/zai-org/glm-4.7"
+      : "abacus/Qwen/QwQ-32B";
   }
 });
 ```
@@ -46968,7 +46900,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/xai.svg"
     />    <CardGridItem
       title="Abacus"
-      description="52 models"
+      description="55 models"
       href="/models/v1/providers/abacus"
       logo="https://models.dev/logos/abacus.svg"
     />    <CardGridItem
