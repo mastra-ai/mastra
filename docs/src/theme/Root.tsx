@@ -13,10 +13,14 @@ export default function Root({ children }: { children: React.ReactNode }) {
   const { siteConfig, i18n } = useDocusaurusContext();
   const locales = i18n?.locales;
   const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string;
+  const kapaGroupId = siteConfig.customFields.kapaGroupId as string | undefined;
 
   return (
     <PostHogWrapper>
-      <KapaProvider integrationId={kapaIntegrationId || ""}>
+      <KapaProvider
+        integrationId={kapaIntegrationId || ""}
+        {...(kapaGroupId && { sourceGroupIDsInclude: [kapaGroupId] })}
+      >
         {/* Adding GTProvider to the root of the app to ensure all jsx is translated */}
         <GTProvider
           locales={locales}

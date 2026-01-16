@@ -1794,6 +1794,76 @@
       "source": "/:path(ja)?/templates/olde-maps-ai-directions-assistant",
       "destination": "/:path/docs/getting-started/templates",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/setup",
+      "destination": "/docs/deployment/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/deployment",
+      "destination": "/docs/deployment/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/workflow-runners",
+      "destination": "/reference/workflows/run",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/studio",
+      "destination": "/docs/getting-started/studio",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/memory/message-history",
+      "destination": "/reference/client-js/memory",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/siliconflow-cn",
+      "destination": "/models/providers/siliconflow",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/:path*",
+      "destination": "/docs/deployment/cloud-providers/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/server/auth/firebase",
+      "destination": "/reference/auth/firebase",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/server/auth/:path*",
+      "destination": "/docs/auth/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/mastra-server",
+      "destination": "/docs/deployment/building-mastra",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/rag/graph-rag",
+      "destination": "/reference/rag/graph-rag",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/server/middleware",
+      "destination": "/docs/server-db/middleware",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/docs/frameworks/agentic-uis/ai-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/reference/server/express-adapter",
+      "destination": "/docs/frameworks/servers/express",
+      "permanent": true
     }
   ]
 }
