@@ -151,14 +151,16 @@ const stream = await agent.stream("message for agent", {
 
 ### Thread and resource relationship
 
-Mastra enforces a strict one-to-one mapping between thread IDs and resource IDs. Once a thread is created with a specific resource, that pairing is permanent and cannot be changed. Attempting to use the same thread ID with a different resource ID will result in an error:
+Each thread has an owner (its `resourceId`) that is set when the thread is created and cannot be changed. When you query a thread, you must use the correct owner's resource ID. Attempting to query a thread with a different resource ID will result in an error:
 
-```
+```text
 Thread with id <thread_id> is for resource with id <resource_a>
 but resource <resource_b> was queried
 ```
 
-Thread IDs must be globally unique across your application to prevent this collision.
+Note that while each thread has one owner, messages within that thread can have different `resourceId` values, enabling multi-participant conversations (like group chats or multi-agent interactions).
+
+To avoid accidentally reusing thread IDs across different owners, use UUIDs or include the resource ID in the thread ID (e.g., `user_alice_${randomId}`).
 
 ### Thread title generation
 

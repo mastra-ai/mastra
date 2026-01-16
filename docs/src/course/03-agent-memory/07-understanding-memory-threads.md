@@ -13,23 +13,30 @@ These identifiers allow memory to work properly outside of the playground. They 
 
 Without these identifiers, your agent would have no way to know which conversation history to retrieve when a user sends a message. The playground handles these identifiers automatically, but you'll need to manage them yourself when using memory in your own applications.
 
-## Thread ID Uniqueness
+## Thread ID and Resource ID Relationship
 
-**Important:** Thread IDs must be globally unique across your entire application. Once a thread ID is created with a specific resource ID, that pairing is permanent.
+**Important:** Each thread has an owner (its `resourceId`) that is set when the thread is created. Once created, a thread's owner cannot be changed.
 
 The relationship works like this:
-- **One thread → One resource** (a thread always belongs to the same user/entity)
-- **One resource → Many threads** (a user can have multiple separate conversations)
 
-If you reuse a thread ID with a different resource ID, you'll encounter an error:
-```
+- **One thread → One owner** (each thread has exactly one `resourceId` that identifies its owner)
+- **One resource → Many threads** (a user can have multiple separate conversations)
+- **One thread → Messages from multiple resources** (messages within a thread can have different `resourceId` values, enabling multi-participant conversations)
+
+### Common Pitfall: Thread ID Reuse
+
+If you create a thread with `threadId: "abc"` and `resourceId: "user-alice"`, you cannot later query or create another thread with `threadId: "abc"` but `resourceId: "user-bob"`. This will cause an error:
+
+```text
 Thread with id <thread_id> is for resource with id <resource_a>
 but resource <resource_b> was queried
 ```
 
+This error means you're trying to access a thread with the wrong owner's ID, not that thread IDs must be globally unique.
+
 ### Generating Thread IDs
 
-The safest approach is to use UUIDs or include the resource identifier:
+The safest approach is to use UUIDs to avoid accidentally reusing thread IDs:
 
 ```typescript
 // Using UUIDs (recommended)
@@ -39,4 +46,4 @@ const threadId = crypto.randomUUID(); // "550e8400-e29b-41d4-a716-446655440000"
 const threadId = `${resourceId}_${Date.now()}`; // "user_alice_1737907200000"
 ```
 
-Never reuse simple identifiers like `"conversation_1"` across different resources, as this will cause ID collision errors.
+Avoid reusing simple identifiers like `"conversation_1"` for threads owned by different users, as this creates confusion about thread ownership.

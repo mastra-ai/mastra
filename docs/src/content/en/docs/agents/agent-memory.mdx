@@ -139,7 +139,7 @@ const response = await memoryAgent.generate("What's my favorite color?", {
 ```
 
 :::warning
-Thread IDs must be globally unique. Once a thread is created with a specific resource, that pairing is permanent. Reusing a thread ID with a different resource ID will cause an error.
+Each thread has an owner (`resourceId`) that cannot be changed after creation. Avoid reusing the same thread ID for threads with different owners, as this will cause errors when querying.
 :::
 
 To learn more about memory see the [Memory](../memory/overview) documentation.
