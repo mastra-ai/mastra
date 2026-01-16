@@ -168,3 +168,10 @@ export function formatOutput(output: any, spanType: SpanType): any {
   if (typeof output === 'string') return output;
   return safeStringify(output);
 }
+
+export function sanitizeLabel(label: string): string {
+  return label
+    .replace(/[^a-zA-Z0-9_]/g, '_') // Replace invalid chars
+    .replace(/^([^a-zA-Z])/, 'eval_$1') // Ensure starts with letter
+    .slice(0, 200);
+}

@@ -1363,4 +1363,284 @@ describe('DatadogExporter', () => {
       expect((exporter as any).traceState.has('trace-reactivate')).toBe(false);
     });
   });
+
+  describe('score submission', () => {
+    it('should submit scores when span has scores on span_ended', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        isRootSpan: true,
+        scores: [
+          {
+            scorerId: 'scorer-1',
+            scorerName: 'Relevance',
+            score: 0.85,
+            reason: 'Good relevance',
+            timestamp: Date.now(),
+          },
+        ],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        { traceId: 'dd-trace-id', spanId: expect.any(String) },
+        expect.objectContaining({
+          label: 'Relevance',
+          metricType: 'score',
+          value: 0.85,
+          tags: expect.objectContaining({
+            scorerId: 'scorer-1',
+            reason: 'Good relevance',
+          }),
+        }),
+      );
+    });
+
+    it('should submit multiple scores for same span', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        isRootSpan: true,
+        scores: [
+          { scorerId: 's1', scorerName: 'Relevance', score: 0.9, timestamp: Date.now() },
+          { scorerId: 's2', scorerName: 'Quality', score: 0.8, timestamp: Date.now() },
+        ],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not call submitEvaluation when span has no scores', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({ isRootSpan: true });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors during score submission gracefully', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const loggerSpy = vi.spyOn((exporter as any).logger, 'error');
+
+      mockSubmitEvaluation.mockImplementationOnce(() => {
+        throw new Error('Evaluation submission failed');
+      });
+
+      const span = createMockSpan({
+        isRootSpan: true,
+        scores: [{ scorerId: 's1', scorerName: 'Test', score: 1.0, timestamp: Date.now() }],
+      });
+
+      await expect(
+        exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span)),
+      ).resolves.not.toThrow();
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Datadog exporter: Error submitting evaluation',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
+    it('should submit scores for child spans in tree emission', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+
+      const rootSpan = createMockSpan({
+        id: 'root',
+        traceId: 'trace-scores',
+        isRootSpan: true,
+      });
+      const childSpan = createMockSpan({
+        id: 'child',
+        traceId: 'trace-scores',
+        isRootSpan: false,
+        parentSpanId: 'root',
+        scores: [{ scorerId: 's1', scorerName: 'ChildScore', score: 0.75, timestamp: Date.now() }],
+      });
+
+      // Child ends before root (buffered)
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, childSpan));
+      expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+
+      // Root ends - triggers tree emission including child scores
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, rootSpan));
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ label: 'ChildScore', value: 0.75 }),
+      );
+    });
+
+    it('should include metadata in score tags', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        isRootSpan: true,
+        scores: [
+          {
+            scorerId: 's1',
+            scorerName: 'Test',
+            score: 1.0,
+            timestamp: Date.now(),
+            metadata: { key: 'value', nested: { data: true } },
+          },
+        ],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          tags: expect.objectContaining({
+            scorerId: 's1',
+            key: 'value',
+            nested: { data: true },
+          }),
+        }),
+      );
+    });
+
+    describe('score data transformation to tags', () => {
+      it('should transform reason and metadata to tags when score has both', async () => {
+        const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+        const span = createMockSpan({
+          isRootSpan: true,
+          scores: [
+            {
+              scorerId: 'scorer-1',
+              scorerName: 'Quality Scorer',
+              score: 0.92,
+              reason: 'High quality response with good structure',
+              metadata: {
+                preprocessStepResult: { extractedText: 'sample text', wordCount: 150 },
+                preprocessPrompt: 'Extract and analyze the response text',
+              },
+              timestamp: Date.now(),
+            },
+          ],
+        });
+
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+        expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              scorerId: 'scorer-1',
+              reason: 'High quality response with good structure',
+              preprocessStepResult: { extractedText: 'sample text', wordCount: 150 },
+              preprocessPrompt: 'Extract and analyze the response text',
+            }),
+          }),
+        );
+      });
+
+      it('should transform reason and metadata to tags for each score when multiple scores exist', async () => {
+        const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+        const span = createMockSpan({
+          isRootSpan: true,
+          scores: [
+            {
+              scorerId: 'scorer-1',
+              scorerName: 'Quality',
+              score: 0.9,
+              reason: 'Excellent quality',
+              metadata: {
+                analyzeStepResult: { qualityScore: 0.9, coherence: 0.85 },
+                analyzePrompt: 'Analyze the quality of the response',
+              },
+              timestamp: Date.now(),
+            },
+            {
+              scorerId: 'scorer-2',
+              scorerName: 'Relevance',
+              score: 0.85,
+              reason: 'Highly relevant',
+              metadata: {
+                generateScorePrompt: 'Generate a relevance score',
+                generateReasonPrompt: 'Explain why this score was given',
+              },
+              timestamp: Date.now() + 1,
+            },
+          ],
+        });
+
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+        expect(mockSubmitEvaluation).toHaveBeenCalledTimes(2);
+
+        // First score should have its reason and metadata
+        expect(mockSubmitEvaluation).toHaveBeenNthCalledWith(
+          1,
+          expect.anything(),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              scorerId: 'scorer-1',
+              reason: 'Excellent quality',
+              analyzeStepResult: { qualityScore: 0.9, coherence: 0.85 },
+              analyzePrompt: 'Analyze the quality of the response',
+            }),
+          }),
+        );
+
+        // Second score should have its reason and metadata
+        expect(mockSubmitEvaluation).toHaveBeenNthCalledWith(
+          2,
+          expect.anything(),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              scorerId: 'scorer-2',
+              reason: 'Highly relevant',
+              generateScorePrompt: 'Generate a relevance score',
+              generateReasonPrompt: 'Explain why this score was given',
+            }),
+          }),
+        );
+      });
+
+      it('should transform reason and metadata to tags for late-arriving scores via span_updated', async () => {
+        const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+        const span = createMockSpan({
+          isRootSpan: true,
+        });
+
+        // Span ends without scores
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+        expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+
+        // Score arrives later via span_updated
+        const updatedSpan = createMockSpan({
+          isRootSpan: true,
+          scores: [
+            {
+              scorerId: 'late-scorer',
+              scorerName: 'Late Scorer',
+              score: 0.88,
+              reason: 'Score added after span ended',
+              metadata: {
+                preprocessStepResult: { processed: true },
+                generateScorePrompt: 'Calculate the final score',
+              },
+              timestamp: Date.now(),
+            },
+          ],
+        });
+
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_UPDATED, updatedSpan));
+
+        expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              scorerId: 'late-scorer',
+              reason: 'Score added after span ended',
+              preprocessStepResult: { processed: true },
+              generateScorePrompt: 'Calculate the final score',
+            }),
+          }),
+        );
+      });
+    });
+  });
 });

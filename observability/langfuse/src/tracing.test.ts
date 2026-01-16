@@ -87,6 +87,8 @@ describe('LangfuseExporter', () => {
       kind: 'mockLangfuseClient',
       trace: vi.fn().mockReturnValue(mockTrace),
       shutdownAsync: vi.fn().mockResolvedValue(undefined),
+      flushAsync: vi.fn().mockResolvedValue(undefined),
+      score: vi.fn(),
     };
 
     // Get the mocked Langfuse constructor and configure it
@@ -1397,7 +1399,7 @@ describe('LangfuseExporter', () => {
     });
   });
 
-  describe('Score Management', () => {
+  describe('Deprecated Score Management', () => {
     let mockScore: any;
 
     beforeEach(() => {
@@ -1525,6 +1527,177 @@ describe('LangfuseExporter', () => {
       });
 
       mockLoggerError.mockRestore();
+    });
+  });
+
+  describe('Score Submission from span.scores', () => {
+    beforeEach(() => {
+      mockLangfuseClient.score = vi.fn();
+    });
+
+    it('should submit scores from span.scores on span update', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      // Create the trace first
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Update span with scores attached
+      const spanWithScores = {
+        ...rootSpan,
+        scores: [
+          {
+            scorerId: 'quality-scorer',
+            scorerName: 'Quality Scorer',
+            score: 0.95,
+            reason: 'High quality response',
+            timestamp: 1234567890,
+            metadata: { analyzeStepResult: { quality: 'high' } },
+          },
+        ],
+      };
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithScores,
+      });
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-root-span-quality-scorer',
+        traceId: 'trace-123',
+        observationId: 'root-span',
+        name: 'Quality Scorer',
+        value: 0.95,
+        comment: 'High quality response',
+        dataType: 'NUMERIC',
+        metadata: { analyzeStepResult: { quality: 'high' } },
+      });
+    });
+
+    it('should submit multiple scores from span.scores', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      const spanWithScores = {
+        ...rootSpan,
+        scores: [
+          {
+            scorerId: 'relevance-scorer',
+            scorerName: 'Relevance',
+            score: 0.9,
+            reason: 'Relevant',
+            timestamp: 1000,
+            metadata: { key: 'value1' },
+          },
+          {
+            scorerId: 'safety-scorer',
+            scorerName: 'Safety',
+            score: 1.0,
+            timestamp: 2000,
+          },
+        ],
+      };
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: spanWithScores,
+      });
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledTimes(2);
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-root-span-relevance-scorer',
+        traceId: 'trace-123',
+        observationId: 'root-span',
+        name: 'Relevance',
+        value: 0.9,
+        comment: 'Relevant',
+        dataType: 'NUMERIC',
+        metadata: { key: 'value1' },
+      });
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-root-span-safety-scorer',
+        traceId: 'trace-123',
+        observationId: 'root-span',
+        name: 'Safety',
+        value: 1.0,
+        comment: undefined,
+        dataType: 'NUMERIC',
+        metadata: undefined,
+      });
+    });
+
+    it('should not submit scores when span has no scores', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: rootSpan,
+      });
+
+      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
+    });
+
+    it('should not submit scores when client is disabled', async () => {
+      const disabledExporter = new LangfuseExporter({
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      const spanWithScores = createMockSpan({
+        id: 'root-span',
+        traceId: 'trace-123',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+      (spanWithScores as any).scores = [
+        {
+          scorerId: 'test-scorer',
+          scorerName: 'Test',
+          score: 0.8,
+          timestamp: 1000,
+        },
+      ];
+
+      // When client is disabled, nothing should happen
+      await disabledExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: spanWithScores,
+      });
+
+      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
     });
   });
 

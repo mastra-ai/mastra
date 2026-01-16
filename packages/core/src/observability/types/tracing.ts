@@ -1,6 +1,7 @@
 /**
  * Tracing interfaces
  */
+import { z } from 'zod';
 import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -369,6 +370,35 @@ export interface SpanTypeMap {
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 
 // ============================================================================
+// Score Types
+// ============================================================================
+
+/** Schema for score data attached to a span (scorerName is required after resolution) */
+export const spanScoreSchema = z.object({
+  scorerId: z.string().describe('ID of the scorer'),
+  scorerName: z.string().describe('Display name of the scorer'),
+  score: z.number().describe('Numeric score value'),
+  reason: z.string().optional().describe('Optional explanation for the score'),
+  metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata (from runResult, not span metadata)'),
+  timestamp: z.number().describe('Timestamp when score was added'),
+});
+
+/** Score data attached to a span */
+export type SpanScore = z.infer<typeof spanScoreSchema>;
+
+/** Schema for arguments when adding a score to a span (scorerName optional, defaults to scorerId) */
+const addScoreArgsSchema = z.object({
+  scorerId: z.string().describe('ID of the scorer'),
+  scorerName: z.string().optional().describe('Display name of the scorer (defaults to scorerId if not provided)'),
+  score: z.number().describe('Numeric score value'),
+  reason: z.string().optional().describe('Optional explanation for the score'),
+  metadata: z.record(z.unknown()).optional().describe('Scorer-specific metadata (from runResult, not span metadata)'),
+});
+
+/** Arguments for adding a score to a span */
+export type AddScoreArgs = z.infer<typeof addScoreArgsSchema>;
+
+// ============================================================================
 // Span Interfaces
 // ============================================================================
 
@@ -430,6 +460,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   observabilityInstance: ObservabilityInstance;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
+
+  /** Scores attached to this span */
+  scores: SpanScore[];
+
+  /** Add an evaluation score to this span */
+  addScore(args: AddScoreArgs): void;
 
   // Methods for span lifecycle
   /** End the span */
@@ -567,6 +603,8 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
    * Tags are string labels used to categorize and filter traces.
    */
   tags?: string[];
+  /** Scores attached to this span */
+  scores?: SpanScore[];
 }
 
 /**

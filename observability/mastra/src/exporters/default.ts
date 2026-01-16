@@ -235,8 +235,22 @@ export class DefaultExporter extends BaseExporter {
               updates: this.buildUpdateRecord(event.exportedSpan),
               sequenceNumber: this.getNextSequence(spanKey),
             });
+          } else if (event.exportedSpan.scores?.length) {
+            // Out-of-order case with scores: update directly to ensure scores are persisted
+            const span = event.exportedSpan;
+            this.#observability!.updateSpan({
+              traceId: span.traceId,
+              spanId: span.id,
+              updates: this.buildUpdateRecord(span),
+            }).catch(error => {
+              this.logger.error('Failed to update span with scores (out-of-order)', {
+                error: error instanceof Error ? error.message : String(error),
+                spanId: span.id,
+                traceId: span.traceId,
+              });
+            });
           } else {
-            // Out-of-order case: log and skip
+            // Out-of-order case without scores: log and skip
             this.handleOutOfOrderUpdate(event);
             this.buffer.outOfOrderCount++;
           }
@@ -425,6 +439,9 @@ export class DefaultExporter extends BaseExporter {
       error: span.errorInfo ?? null,
       isEvent: span.isEvent,
 
+      // Evaluation scores
+      scores: span.scores ?? null,
+
       // Timestamps
       startedAt: span.startTime,
       endedAt: span.endTime ?? null,
@@ -442,6 +459,7 @@ export class DefaultExporter extends BaseExporter {
       input: span.input,
       output: span.output,
       error: span.errorInfo ?? null,
+      scores: span.scores ?? null,
     };
   }
 

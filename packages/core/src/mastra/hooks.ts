@@ -1,4 +1,3 @@
-import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
@@ -68,30 +67,26 @@ export function createOnScorerHook(mastra: Mastra) {
       };
       await validateAndSaveScore(storage, payload);
 
+      // Add score to span and trigger update event so it gets exported
       if (currentSpan && spanId && traceId) {
-        await pMap(
-          currentSpan.observabilityInstance.getExporters(),
-          async exporter => {
-            if (exporter.addScoreToTrace) {
-              try {
-                await exporter.addScoreToTrace({
-                  traceId: traceId,
-                  spanId: spanId,
-                  score: runResult.score as number,
-                  reason: runResult.reason as string,
-                  scorerName: scorerToUse.scorer.id,
-                  metadata: {
-                    ...(currentSpan.metadata ?? {}),
-                  },
-                });
-              } catch (error) {
-                // Log error but don't fail the hook if exporter fails
-                mastra.getLogger()?.error(`Failed to add score to trace via exporter: ${error}`);
-              }
-            }
-          },
-          { concurrency: 3 },
-        );
+        try {
+          currentSpan.addScore({
+            scorerId: scorerToUse.scorer.id,
+            scorerName: scorerToUse.scorer.name,
+            score: runResult.score as number,
+            reason: runResult.reason as string,
+            metadata: {
+              ...(runResult.preprocessStepResult ? { preprocessStepResult: runResult.preprocessStepResult } : {}),
+              ...(runResult.analyzeStepResult ? { analyzeStepResult: runResult.analyzeStepResult } : {}),
+            },
+          });
+
+          // Trigger a span update event so the score gets exported
+
+          currentSpan.update({});
+        } catch (addScoreError) {
+          mastra.getLogger()?.warn(`Failed to add score to span: ${addScoreError}`);
+        }
       }
     } catch (error) {
       const mastraError = new MastraError(
