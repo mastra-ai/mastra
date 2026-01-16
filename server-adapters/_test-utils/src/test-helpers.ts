@@ -17,6 +17,10 @@ import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -401,6 +405,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
+  // Create test workspace with local filesystem and mock files
+  const workspace = await createTestWorkspace();
+
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
@@ -417,6 +424,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-server-1': mcpServer1,
       'test-server-2': mcpServer2,
     },
+    workspace,
   });
 
   await mockWorkflowRun(workflow);
@@ -566,6 +574,66 @@ async function mockWorkflowRun(workflow: Workflow) {
  */
 export function createMockVoice() {
   return new CompositeVoice({});
+}
+
+/**
+ * Creates a test workspace with a local filesystem and mock skill files.
+ * Uses a temporary directory that gets cleaned up after tests.
+ */
+export async function createTestWorkspace(): Promise<Workspace> {
+  // Create a temp directory for the test workspace
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-test-workspace-'));
+
+  // Create skills directory and a test skill
+  const skillsDir = path.join(tempDir, 'skills', 'test-skill');
+  fs.mkdirSync(skillsDir, { recursive: true });
+
+  // Create SKILL.md file for the test skill
+  const skillContent = `---
+name: test-skill
+description: A test skill for integration testing
+license: MIT
+compatibility: ">=1.0.0"
+allowedTools:
+  - test-tool
+---
+
+# Test Skill
+
+This is a test skill used for integration testing.
+
+## Instructions
+
+Follow these instructions for the test skill.
+`;
+  fs.writeFileSync(path.join(skillsDir, 'SKILL.md'), skillContent);
+
+  // Create a test reference file in the references subdirectory
+  const referencesDir = path.join(skillsDir, 'references');
+  fs.mkdirSync(referencesDir, { recursive: true });
+  fs.writeFileSync(path.join(referencesDir, 'test-reference.md'), '# Test Reference\n\nThis is a test reference file.');
+
+  // Create a regular test file in the workspace root
+  fs.writeFileSync(path.join(tempDir, 'test-file.txt'), 'Hello from test workspace!');
+
+  // Create a test directory for list operations
+  const testDir = path.join(tempDir, 'test-dir');
+  fs.mkdirSync(testDir, { recursive: true });
+  fs.writeFileSync(path.join(testDir, 'nested-file.txt'), 'Nested file content');
+
+  // Create the workspace with local filesystem and BM25 search
+  const filesystem = new LocalFilesystem({ basePath: tempDir });
+  const workspace = new Workspace({
+    filesystem,
+    skillsPaths: ['/skills'],
+    bm25: true, // Enable BM25 search for index/unindex operations
+    autoInit: true,
+  });
+
+  // Wait for initialization to complete
+  await workspace.init();
+
+  return workspace;
 }
 
 /**
@@ -798,6 +866,36 @@ export interface RouteRequestOverrides {
   body?: Record<string, unknown>;
 }
 
+/**
+ * Get route-specific defaults for path fields based on the route.
+ * Different routes need different kinds of paths (files vs directories).
+ */
+function getRouteSpecificPathDefaults(route: ServerRoute): { query?: Record<string, unknown>; body?: Record<string, unknown> } {
+  const routePath = route.path;
+
+  // File operations need file paths
+  if (routePath.includes('/fs/read') || routePath.includes('/fs/write') || routePath.includes('/fs/delete') || routePath.includes('/fs/stat')) {
+    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+  }
+
+  // Directory operations need directory paths
+  if (routePath.includes('/fs/list')) {
+    return { query: { path: '/' } };
+  }
+
+  // mkdir needs a new path to create
+  if (routePath.includes('/fs/mkdir')) {
+    return { body: { path: '/new-test-dir' } };
+  }
+
+  // Index/unindex operations
+  if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
+    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+  }
+
+  return {};
+}
+
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
   let path = route.path;
@@ -810,10 +908,13 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
     }
   }
 
+  // Get route-specific path defaults
+  const routeDefaults = getRouteSpecificPathDefaults(route);
+
   let query: Record<string, string | string[]> | undefined;
   if (route.queryParamSchema) {
     const generated = generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>;
-    query = convertQueryValues({ ...generated, ...(overrides.query ?? {}) });
+    query = convertQueryValues({ ...generated, ...(routeDefaults.query ?? {}), ...(overrides.query ?? {}) });
   } else if (overrides.query) {
     query = convertQueryValues(overrides.query);
   }
@@ -821,7 +922,7 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
   let body: Record<string, unknown> | undefined;
   if (route.bodySchema) {
     const generated = generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>;
-    body = { ...generated, ...(overrides.body ?? {}) };
+    body = { ...generated, ...(routeDefaults.body ?? {}), ...(overrides.body ?? {}) };
   } else if (overrides.body) {
     body = { ...overrides.body };
   }

@@ -65,6 +65,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Whether skills have been discovered */
   #initialized = false;
 
+  /** Promise for ongoing initialization (prevents concurrent discovery) */
+  #initPromise: Promise<void> | null = null;
+
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#filesystem = config.filesystem;
     this.#skillsPaths = config.skillsPaths;
@@ -433,13 +436,27 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   // ===========================================================================
 
   /**
-   * Ensure skills have been discovered
+   * Ensure skills have been discovered.
+   * Uses a promise to prevent concurrent discovery.
    */
   async #ensureInitialized(): Promise<void> {
-    if (!this.#initialized) {
-      await this.#discoverSkills();
-      this.#initialized = true;
+    if (this.#initialized) {
+      return;
     }
+
+    // If initialization is already in progress, wait for it
+    if (this.#initPromise) {
+      await this.#initPromise;
+      return;
+    }
+
+    // Start initialization and store the promise
+    this.#initPromise = this.#discoverSkills().then(() => {
+      this.#initialized = true;
+      this.#initPromise = null;
+    });
+
+    await this.#initPromise;
   }
 
   /**
@@ -473,13 +490,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           try {
             const skill = await this.#parseSkillFile(skillFilePath, entry.name, source);
 
-            // Check for duplicate names
-            if (this.#skills.has(skill.name)) {
-              console.warn(
-                `[WorkspaceSkills] Duplicate skill name "${skill.name}" found in ${skillFilePath}. Last one wins.`,
-              );
-            }
-
+            // Set skill (later discoveries overwrite earlier ones)
             this.#skills.set(skill.name, skill);
 
             // Index the skill content for search

@@ -3,29 +3,33 @@ import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 /**
- * Resolve a path that works from both project root and .mastra/public/
+ * Get the project root directory.
  *
- * When running via `mastra dev`, the cwd is .mastra/public (2 levels deep).
+ * When running via `mastra dev`, cwd is src/mastra/public/ (3 levels deep).
  * When running demo scripts directly, cwd is the project root.
  */
-function resolvePath(relativePath: string): string {
+function getProjectRoot(): string {
   const cwd = process.cwd();
 
-  // Try project root first (for demo scripts run from project root)
-  const fromRoot = resolve(cwd, relativePath);
+  // Try project root first (for demo scripts)
+  const fromRoot = resolve(cwd, 'skills');
   if (existsSync(fromRoot)) {
-    return fromRoot;
+    return cwd;
   }
 
-  // Try from .mastra/public/ (for mastra dev - 2 levels up)
-  const fromMastraPublic = resolve(cwd, '../../', relativePath);
-  if (existsSync(fromMastraPublic)) {
-    return fromMastraPublic;
+  // Try from src/mastra/public/ (for mastra dev - 3 levels up)
+  const threeLevelsUp = resolve(cwd, '../../..');
+  const fromOutput = resolve(threeLevelsUp, 'skills');
+  if (existsSync(fromOutput)) {
+    return threeLevelsUp;
   }
 
-  // Fallback to project root path
-  return fromRoot;
+  // Fallback to cwd
+  return cwd;
 }
+
+// Resolve project root once at module load time
+const PROJECT_ROOT = getProjectRoot();
 
 /**
  * Global Workspace with filesystem, skills, and search.
@@ -49,7 +53,7 @@ export const globalWorkspace = new Workspace({
   id: 'global-workspace',
   name: 'Global Workspace',
   filesystem: new LocalFilesystem({
-    basePath: resolvePath('.'),
+    basePath: PROJECT_ROOT,
   }),
   // Enable BM25 search for skills and files
   bm25: true,
@@ -75,7 +79,7 @@ export const docsAgentWorkspace = new Workspace({
   id: 'docs-agent-workspace',
   name: 'Docs Agent Workspace',
   filesystem: new LocalFilesystem({
-    basePath: resolvePath('.'),
+    basePath: PROJECT_ROOT,
   }),
   // Enable BM25 search
   bm25: true,
@@ -95,7 +99,7 @@ export const isolatedDocsWorkspace = new Workspace({
   id: 'isolated-docs-workspace',
   name: 'Isolated Docs Workspace',
   filesystem: new LocalFilesystem({
-    basePath: resolvePath('.'),
+    basePath: PROJECT_ROOT,
   }),
   bm25: true,
   // Only agent-specific skills, no global skills
