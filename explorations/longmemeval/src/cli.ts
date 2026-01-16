@@ -1223,6 +1223,7 @@ program
   .option('--improve-question <text>', 'Improved question text (use with --improve)')
   .option('--improve-answer <text>', 'Improved answer text (use with --improve)')
   .option('--improve-note <text>', 'Improvement note (use with --improve)')
+  .option('--category <category>', 'Failure category: observer-miss, reflector-loss, agent-reasoning, dataset-error, data-freshness, knowledge-update, rag-miss, other')
   .option('--clear-improved', 'Clear all improved fields (use with --improve)')
   .option('--prepare-stale', '(deprecated) Use --print-prepare-command instead')
   .option('--print-prepare-command', 'Print a prepare command for stale/partial questions')
@@ -1262,6 +1263,7 @@ program
         improveQuestion: options.improveQuestion,
         improveAnswer: options.improveAnswer,
         improveNote: options.improveNote,
+        category: options.category,
         clearImproved: options.clearImproved,
         prepareStale: options.prepareStale,
         printPrepareCommand: options.printPrepareCommand,

@@ -70,12 +70,14 @@ export class SyncCommand {
       const hasImprovedAnswer = sourceQuestion.improved_answer !== undefined;
       const hasImprovementNote = sourceQuestion.improvement_note !== undefined;
       const hasRequiresRetry = sourceQuestion.requires_retry !== undefined;
+      const hasFailureCategory = sourceQuestion.failure_category !== undefined;
 
       const needsUpdate =
         meta.improvedQuestion !== sourceQuestion.improved_question ||
         meta.improvedAnswer !== sourceQuestion.improved_answer ||
         meta.improvementNote !== sourceQuestion.improvement_note ||
-        meta.requiresRetry !== sourceQuestion.requires_retry;
+        meta.requiresRetry !== sourceQuestion.requires_retry ||
+        meta.failureCategory !== sourceQuestion.failure_category;
 
       if (!needsUpdate) {
         skipped++;
@@ -107,17 +109,24 @@ export class SyncCommand {
         delete meta.requiresRetry;
       }
 
+      if (hasFailureCategory) {
+        meta.failureCategory = sourceQuestion.failure_category;
+      } else {
+        delete meta.failureCategory;
+      }
+
       // Write updated meta.json
       await writeFile(metaPath, JSON.stringify(meta, null, 2));
 
       // Log the update
-      if (hasImprovedQuestion || hasImprovedAnswer || hasImprovementNote || hasRequiresRetry) {
+      if (hasImprovedQuestion || hasImprovedAnswer || hasImprovementNote || hasRequiresRetry || hasFailureCategory) {
         console.log(
           chalk.green(`✓ ${questionId}`),
           hasImprovedQuestion ? chalk.cyan('(improved_question)') : '',
           hasImprovedAnswer ? chalk.magenta('(improved_answer)') : '',
           hasImprovementNote ? chalk.yellow('(improvement_note)') : '',
           hasRequiresRetry ? chalk.blue('(requires_retry)') : '',
+          hasFailureCategory ? chalk.red(`(${sourceQuestion.failure_category})`) : '',
         );
       } else {
         console.log(chalk.gray(`○ ${questionId} (cleared improved fields)`));

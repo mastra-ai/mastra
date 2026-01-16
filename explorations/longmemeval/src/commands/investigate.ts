@@ -3,20 +3,10 @@ import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { DatasetLoader } from '../data/loader';
 import { PersistableInMemoryMemory } from '../storage';
-import type { LongMemEvalQuestion } from '../data/types';
+import type { LongMemEvalQuestion, FailureCategory } from '../data/types';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export type FailureCategory =
-  | 'observer-miss'
-  | 'reflector-loss'
-  | 'agent-reasoning'
-  | 'ambiguous-question'
-  | 'dataset-error'
-  | 'rag-miss'
-  | 'other';
+// Re-export FailureCategory for backwards compatibility
+export type { FailureCategory } from '../data/types';
 
 export interface QuestionProgress {
   status: 'pending' | 'investigated' | 'fix-implemented' | 'synced';
@@ -67,6 +57,7 @@ export interface InvestigateOptions {
   improveQuestion?: string; // Improved question text
   improveAnswer?: string;   // Improved answer text
   improveNote?: string;     // Improvement note
+  category?: FailureCategory; // Failure category for this question
   clearImproved?: boolean;  // Clear all improved fields (use with --improve)
   // Check for duplicate observations
   checkDuplicates?: boolean; // Check for duplicate thread blocks in observations
@@ -277,7 +268,7 @@ export class InvestigateCommand {
 
     // Improve question/answer in dataset
     if (options.improve) {
-      await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote, options.clearImproved);
+      await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote, options.category, options.clearImproved);
       return;
     }
 
@@ -979,7 +970,7 @@ export class InvestigateCommand {
       'Observer missed critical information': 'observer-miss',
       'Reflector lost/merged information incorrectly': 'reflector-loss',
       'Agent reasoning error': 'agent-reasoning',
-      'Ambiguous/poorly-worded question': 'ambiguous-question',
+      'Ambiguous/poorly-worded question': 'dataset-error', // Ambiguous questions are dataset errors
       'Dataset inconsistency/error': 'dataset-error',
       'RAG retrieval miss': 'rag-miss',
     };
@@ -1970,10 +1961,11 @@ export class InvestigateCommand {
     improvedQuestion?: string,
     improvedAnswer?: string,
     improvementNote?: string,
+    category?: FailureCategory,
     clearImproved?: boolean,
   ): Promise<void> {
-    if (!clearImproved && !improvedQuestion && !improvedAnswer && !improvementNote) {
-      console.log('❌ At least one of --improve-question, --improve-answer, --improve-note, or --clear-improved is required');
+    if (!clearImproved && !improvedQuestion && !improvedAnswer && !improvementNote && !category) {
+      console.log('❌ At least one of --improve-question, --improve-answer, --improve-note, --category, or --clear-improved is required');
       return;
     }
 
@@ -2020,6 +2012,10 @@ export class InvestigateCommand {
         console.log(`   improvement_note: ${question.improvement_note} → (cleared)`);
         delete question.improvement_note;
       }
+      if (question.failure_category) {
+        console.log(`   failure_category: ${question.failure_category} → (cleared)`);
+        delete question.failure_category;
+      }
     } else {
       if (improvedQuestion) {
         console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
@@ -2034,6 +2030,11 @@ export class InvestigateCommand {
       if (improvementNote) {
         console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
         question.improvement_note = improvementNote;
+      }
+      
+      if (category) {
+        console.log(`   failure_category: ${question.failure_category || '(not set)'} → ${category}`);
+        question.failure_category = category;
       }
     }
 

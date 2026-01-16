@@ -14,6 +14,16 @@ export interface Turn {
   has_answer?: boolean;
 }
 
+export type FailureCategory =
+  | 'observer-miss'
+  | 'reflector-loss'
+  | 'agent-reasoning'
+  | 'dataset-error'
+  | 'data-freshness'
+  | 'knowledge-update'
+  | 'rag-miss'
+  | 'other';
+
 export interface LongMemEvalQuestion {
   question_id: string;
   question_type: QuestionType;
@@ -21,6 +31,7 @@ export interface LongMemEvalQuestion {
   improved_question?: string; // Clarified version for vague/ambiguous questions
   improved_answer?: string; // Updated answer for the clarified question (if different)
   improvement_note?: string; // Notes about why this question failed (for tracking investigated failures)
+  failure_category?: FailureCategory; // Category of failure from investigation
   requires_retry?: boolean; // Eval agent sometimes fails due to poor reasoning, retry once on failure
   answer: string;
   question_date: string;
