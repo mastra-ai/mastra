@@ -620,15 +620,28 @@ execute: async (inputData, context) => {
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
-## Span Processors
+## Span Formatting
 
-Span processors allow you to transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Mastra includes built-in processors and supports custom implementations.
+Mastra provides two ways to transform span data before it reaches your observability platform: **span processors** and **custom span formatters**. Both allow you to modify, filter, or enrich trace data, but they operate at different levels and serve different purposes.
 
-### Built-in Processors
+| Feature | Span Processors | Custom Span Formatters |
+| --- | --- | --- |
+| Configuration level | Observability config | Per-exporter |
+| Operates on | Internal `Span` object | Exported `ExportedSpan` data |
+| Applies to | All exporters | Single exporter |
+| Use case | Security, filtering, enrichment | Platform-specific formatting |
+
+Use **span processors** for transformations that should apply to all exporters (like redacting sensitive data). Use **custom span formatters** when different exporters need different representations of the same data (like plain text for one platform and structured data for another).
+
+### Span Processors
+
+Span processors transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Processors run once and affect all exporters.
+
+#### Built-in Processors
 
 - [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
-### Creating Custom Processors
+#### Creating Custom Processors
 
 You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
@@ -661,25 +674,25 @@ export const mastra = new Mastra({
 });
 ```
 
-Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases for custom processors include:
+Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases include:
 
+- Redacting sensitive data (passwords, tokens, API keys)
 - Adding environment-specific metadata
 - Filtering out spans based on criteria
 - Normalizing data formats
-- Sampling high-volume traces
 - Enriching spans with business context
 
-## Custom Span Formatters
+### Custom Span Formatters
 
-Custom span formatters allow you to transform how spans appear in specific observability platforms. Unlike span processors (which operate at the observability level before export), custom span formatters are configured per-exporter, allowing different formatting for different destinations.
+Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations.
 
-### Use Cases
+#### Use Cases
 
 - **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
 - **Transform input/output formats** - Customize how data appears in specific platforms
 - **Platform-specific field mapping** - Add or remove fields based on platform requirements
 
-### Configuration
+#### Configuration
 
 Add a `customSpanFormatter` to any exporter configuration:
 
@@ -720,7 +733,7 @@ export const mastra = new Mastra({
 });
 ```
 
-### Chaining Multiple Formatters
+#### Chaining Multiple Formatters
 
 Use `chainFormatters` to combine multiple formatters:
 
@@ -741,17 +754,6 @@ const exporter = new BraintrustExporter({
   customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
 });
 ```
-
-### Comparison: Span Processors vs Custom Span Formatters
-
-| Feature | Span Processors | Custom Span Formatters |
-| --- | --- | --- |
-| Configuration level | Observability config | Per-exporter |
-| Operates on | Internal `Span` object | Exported `ExportedSpan` data |
-| Applies to | All exporters | Single exporter |
-| Use case | Security, filtering, enrichment | Platform-specific formatting |
-
-Use span processors for transformations that should apply to all exporters (like `SensitiveDataFilter`). Use custom span formatters when different exporters need different representations of the same data.
 
 ## Serialization Options
 
