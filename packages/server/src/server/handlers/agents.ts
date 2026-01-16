@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
+  agentSkillPathParams,
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
@@ -37,6 +38,7 @@ import {
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
+import { getAgentSkillResponseSchema } from '../schemas/workspace';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -1283,38 +1285,12 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
 // Agent Skill Routes
 // ============================================================================
 
-const agentSkillPathParams = z.object({
-  agentId: z.string().describe('Agent ID'),
-  skillName: z.string().describe('Skill name'),
-});
-
-const agentSkillResponseSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  license: z.string().optional(),
-  compatibility: z.string().optional(),
-  metadata: z.record(z.string()).optional(),
-  allowedTools: z.array(z.string()).optional(),
-  path: z.string().optional(),
-  instructions: z.string().optional(),
-  source: z
-    .discriminatedUnion('type', [
-      z.object({ type: z.literal('external'), packagePath: z.string() }),
-      z.object({ type: z.literal('local'), projectPath: z.string() }),
-      z.object({ type: z.literal('managed'), mastraPath: z.string() }),
-    ])
-    .optional(),
-  references: z.array(z.string()).optional(),
-  scripts: z.array(z.string()).optional(),
-  assets: z.array(z.string()).optional(),
-});
-
 export const GET_AGENT_SKILL_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/:agentId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
-  responseSchema: agentSkillResponseSchema,
+  responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent via its workspace',
   tags: ['Agents', 'Skills'],
