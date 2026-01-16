@@ -219,36 +219,41 @@ const result = await run.start({
   }
 });
 
-console.log(result);
+if (result.status === "success") {
+  console.log(result.result);
+}
 ```
   </TabItem>
   <TabItem value="stream" label="Stream">
-Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. Iterate over `fullStream` to track progress, then await `result` to get the final workflow result.
 
 ```typescript
 const run = await testWorkflow.createRun();
 
-const result = await run.stream({
+const stream = await run.stream({
   inputData: {
     message: "Hello world"
   }
 });
 
-for await (const chunk of result.fullStream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk);
+}
+
+// Get the final result (same type as run.start())
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
 }
 ```
   </TabItem>
 </Tabs>
 
 
-### Workflow status types
-
-When running a workflow, its `status` can be `success`, `failed`, `suspended`, `tripwire`, or `paused`.
-
 ### Workflow result type
 
-The return type of `run.start()` is a discriminated union based on the `status` property. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
+Both `run.start()` and `stream.result` return a discriminated union based on the `status` property, which can be `success`, `failed`, `suspended`, `tripwire`, or `paused`. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
 
 Additionally, depending on the status, different properties are available:
 
