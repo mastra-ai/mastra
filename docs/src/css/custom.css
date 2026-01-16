@@ -744,30 +744,6 @@ kbd {
     justify-content: space-between;
   }
 
-  .pagination-nav a {
-    text-decoration: none;
-  }
-
-  .pagination-nav__link:not(.pagination-nav__link--next) {
-    padding-inline-start: 0px;
-  }
-
-  .pagination-nav__link--next:is(.pagination-nav__link--next) {
-    padding-inline-end: 0px;
-  }
-
-  .pagination-nav__label.pagination-nav__label {
-    padding-inline-start: 0px;
-
-    &::before {
-      content: "";
-    }
-
-    &::after {
-      content: "";
-    }
-  }
-
   /* Highlighted lines in code blocks */
   .theme-code-block-highlighted-line {
     box-shadow: 2px 0 var(--mastra-green-accent-2) inset;
