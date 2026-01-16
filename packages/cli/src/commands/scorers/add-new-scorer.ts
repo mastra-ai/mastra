@@ -49,11 +49,8 @@ export async function selectScorer(): Promise<ScorerTemplate[] | null> {
 
 export async function addNewScorer(scorerId?: string, customDir?: string) {
   const depService = new DepsService();
-  const needsEvals = (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
 
-  if (needsEvals) {
-    await depService.installPackages(['@mastra/evals']);
-  }
+  await depService.ensureDependencies([{ name: '@mastra/evals' }]);
 
   if (!scorerId) {
     await showInteractivePrompt(customDir);

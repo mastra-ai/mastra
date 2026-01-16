@@ -56,11 +56,12 @@ const { init } = await import('./init');
 vi.mock('../../services/service.deps', () => {
   class MockDepsService {
     packageManager = 'pnpm';
-    
+
     checkDependencies = vi.fn(() => Promise.resolve('ok'));
     installPackages = vi.fn(() => Promise.resolve());
+    ensureDependencies = vi.fn(() => Promise.resolve());
   }
-  
+
   return {
     DepsService: MockDepsService,
   };
