@@ -1,6 +1,8 @@
 ---
-'@mastra/client-js': patch
-'@mastra/react': patch
+'@mastra/client-js': major
+'@mastra/react': major
 ---
 
-Match client-js network signature with core
+**Fixed:** Align `Agent.network` with core and update `@mastra/react` network usage.
+
+**Before**
