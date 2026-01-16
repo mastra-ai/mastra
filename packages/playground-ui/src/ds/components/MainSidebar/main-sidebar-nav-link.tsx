@@ -12,6 +12,7 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
+  isOnMastraPlatform: boolean;
 };
 
 export type MainSidebarNavLinkProps = {
