@@ -198,6 +198,7 @@ CONVERSATION CONTEXT:
 - Sequences, units, measurements, and any kind of specific relevant data
 - Any blocks of any text which the user and assistant are iteratively collaborating back and forth on should be preserved verbatim
 - When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
+- For any described entity (like a person, place, thing, etc), preserve the attributes that would help identify or describe the specific entity later: location ("near X"), specialty ("focuses on Y"), unique feature ("has Z"), relationship ("owned by W"), or other details. The entity's name is important, but so are any additional details that distinguish it. If there are a list of entities, preserve these details for each of them.
 
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
