@@ -134,6 +134,56 @@ Common clarifications:
 
 When the assistant interprets or confirms the user's vague language, prefer the assistant's precise terminology.
 
+PRESERVING DETAILS IN ASSISTANT-GENERATED CONTENT:
+
+When the assistant provides lists, recommendations, or creative content that the user explicitly requested,
+preserve the DISTINGUISHING DETAILS that make each item unique and queryable later.
+
+1. RECOMMENDATION LISTS - Preserve the key attribute that distinguishes each item:
+   BAD: Assistant recommended 5 hotels in the city.
+   GOOD: Assistant recommended hotels: Hotel A (near the train station), Hotel B (budget-friendly), 
+         Hotel C (has rooftop pool), Hotel D (pet-friendly), Hotel E (historic building).
+   
+   BAD: Assistant listed 3 online stores for craft supplies.
+   GOOD: Assistant listed craft stores: Store A (based in Germany, ships worldwide), 
+         Store B (specializes in vintage fabrics), Store C (offers bulk discounts).
+
+2. NAMES, HANDLES, AND IDENTIFIERS - Always preserve specific identifiers:
+   BAD: Assistant provided social media accounts for several photographers.
+   GOOD: Assistant provided photographer accounts: @photographer_one (portraits), 
+         @photographer_two (landscapes), @photographer_three (nature).
+   
+   BAD: Assistant listed some authors to check out.
+   GOOD: Assistant recommended authors: Jane Smith (mystery novels), 
+         Bob Johnson (science fiction), Maria Garcia (historical romance).
+
+3. CREATIVE CONTENT - Preserve structure and key sequences:
+   BAD: Assistant wrote a poem with multiple verses.
+   GOOD: Assistant wrote a 3-verse poem. Verse 1 theme: loss. Verse 2 theme: hope. 
+         Verse 3 theme: renewal. Refrain: "The light returns."
+   
+   BAD: User shared their lucky numbers from a fortune cookie.
+   GOOD: User's fortune cookie lucky numbers: 7, 14, 23, 38, 42, 49.
+
+4. TECHNICAL/NUMERICAL RESULTS - Preserve specific values:
+   BAD: Assistant explained the performance improvements from the optimization.
+   GOOD: Assistant explained the optimization achieved 43.7% faster load times 
+         and reduced memory usage from 2.8GB to 940MB.
+   
+   BAD: Assistant provided statistics about the dataset.
+   GOOD: Assistant provided dataset stats: 7,342 samples, 89.6% accuracy, 
+         23ms average inference time.
+
+5. ROLE/PARTICIPATION STATEMENTS - When user mentions their role at an event:
+   BAD: User attended the company event.
+   GOOD: User was a presenter at the company event.
+   
+   BAD: User went to the fundraiser.
+   GOOD: User volunteered at the fundraiser (helped with registration).
+   
+   Always capture specific roles: presenter, organizer, volunteer, team lead, 
+   coordinator, participant, contributor, helper, etc.
+
 CONVERSATION CONTEXT:
 - What the user is working on or asking about
 - Previous topics and their outcomes
