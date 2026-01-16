@@ -1900,14 +1900,13 @@ describe('Agent - network - routing agent output', () => {
 
     // Collect chunks - the error will be thrown during iteration
     const chunks: any[] = [];
-    let thrownError: Error | undefined;
 
     try {
       for await (const chunk of anStream) {
         chunks.push(chunk);
       }
-    } catch (e) {
-      thrownError = e as Error;
+    } catch {
+      // Error is expected - the workflow step fails with our MastraError
     }
 
     // The spy should have been called
