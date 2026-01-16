@@ -1102,9 +1102,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let metricOp: string;
       if (effectiveVectorType === 'bit') {
         // For bit vectors, use bit_hamming_ops or bit_jaccard_ops
-        metricOp = this.getBitOperatorClass(metric as BitDistanceMetric);
+        if (!['hamming', 'jaccard'].includes(metric)) {
+          this.logger?.warn(`Invalid metric '${metric}' for bit vector type, defaulting to 'hamming'`);
+        }
+        // For bit vectors, use bit_hamming_ops or bit_jaccard_ops
+         metricOp = this.getBitOperatorClass(metric as BitDistanceMetric);
       } else if (effectiveVectorType === 'sparsevec') {
         // For sparsevec, use sparsevec_l2_ops, sparsevec_cosine_ops, or sparsevec_ip_ops
+        if (!['l2', 'cosine', 'inner_product'].includes(metric)) {
+          this.logger?.warn(`Invalid metric '${metric}' for sparsevec type, defaulting to 'cosine'`);
+        }
         metricOp = this.getSparsevecOperatorClass(metric as SparsevecDistanceMetric);
       } else {
         // For vector/halfvec, use the standard operator classes
