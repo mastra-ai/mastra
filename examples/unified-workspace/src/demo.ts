@@ -10,7 +10,8 @@
  * Run with: pnpm demo
  */
 
-import { mastra, workspace, docsAgentWorkspace } from './mastra';
+import { mastra } from './mastra';
+import { globalWorkspace, docsAgentWorkspace } from './mastra/workspaces';
 
 async function main() {
   console.log('='.repeat(70));
@@ -26,8 +27,7 @@ async function main() {
 
   // Initialize workspaces (required for skills and search)
   console.log('Initializing workspaces...');
-  await workspace.init();
-  await docsAgentWorkspace.init();
+  await globalWorkspace.init();
   console.log();
 
   // =========================================================================
@@ -39,7 +39,7 @@ async function main() {
   console.log();
 
   console.log('Listing files in /skills directory:');
-  const skillFiles = await workspace.readdir('/skills');
+  const skillFiles = await globalWorkspace.readdir('/skills');
   for (const entry of skillFiles) {
     console.log(`  ${entry.type === 'directory' ? '[DIR]' : '[FILE]'} ${entry.name}`);
   }
@@ -55,8 +55,8 @@ async function main() {
 
   // Global workspace skills
   console.log('Global Workspace Skills (skillsPaths: ["/skills"]):');
-  if (workspace.skills) {
-    const globalSkills = await workspace.skills.list();
+  if (globalWorkspace.skills) {
+    const globalSkills = await globalWorkspace.skills.list();
     for (const skill of globalSkills) {
       console.log(`  - ${skill.name}`);
     }
@@ -82,9 +82,9 @@ async function main() {
   console.log('='.repeat(70));
   console.log();
 
-  if (workspace.skills) {
+  if (globalWorkspace.skills) {
     console.log('Searching global workspace for "code review":');
-    const skillResults = await workspace.skills.search('code review', { topK: 2 });
+    const skillResults = await globalWorkspace.skills.search('code review', { topK: 2 });
     for (const result of skillResults) {
       console.log(`  - [${result.skillName}] score: ${result.score.toFixed(3)}`);
     }
@@ -108,9 +108,9 @@ async function main() {
   console.log('='.repeat(70));
   console.log();
 
-  if (workspace.canBM25) {
+  if (globalWorkspace.canBM25) {
     console.log('Searching workspace for "password reset":');
-    const searchResults = await workspace.search('password reset', { topK: 2 });
+    const searchResults = await globalWorkspace.search('password reset', { topK: 2 });
     if (searchResults.length > 0) {
       for (const result of searchResults) {
         console.log(`  - [${result.id}] score: ${result.score.toFixed(3)}`);
@@ -162,9 +162,9 @@ async function main() {
   console.log('  - Developer/Support agents: inherit global workspace');
   console.log();
   console.log('Workspace capabilities:');
-  console.log(`  - Filesystem: ${workspace.filesystem ? 'Available' : 'Not configured'}`);
-  console.log(`  - BM25 Search: ${workspace.canBM25 ? 'Enabled' : 'Disabled'}`);
-  console.log(`  - Vector Search: ${workspace.canVector ? 'Enabled' : 'Disabled'}`);
+  console.log(`  - Filesystem: ${globalWorkspace.filesystem ? 'Available' : 'Not configured'}`);
+  console.log(`  - BM25 Search: ${globalWorkspace.canBM25 ? 'Enabled' : 'Disabled'}`);
+  console.log(`  - Vector Search: ${globalWorkspace.canVector ? 'Enabled' : 'Disabled'}`);
   console.log();
   console.log('='.repeat(70));
   console.log('Demo complete!');

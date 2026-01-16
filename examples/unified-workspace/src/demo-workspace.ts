@@ -9,7 +9,7 @@
  * Run with: pnpm demo:workspace
  */
 
-import { workspace } from './mastra';
+import { globalWorkspace } from './mastra/workspaces';
 
 async function main() {
   console.log('='.repeat(70));
@@ -19,10 +19,10 @@ async function main() {
 
   // Initialize workspace
   console.log('1. Initializing workspace...');
-  await workspace.init();
-  console.log(`   Status: ${workspace.status}`);
-  console.log(`   ID: ${workspace.id}`);
-  console.log(`   Name: ${workspace.name}`);
+  await globalWorkspace.init();
+  console.log(`   Status: ${globalWorkspace.status}`);
+  console.log(`   ID: ${globalWorkspace.id}`);
+  console.log(`   Name: ${globalWorkspace.name}`);
   console.log();
 
   // =========================================================================
@@ -32,11 +32,11 @@ async function main() {
   console.log('-'.repeat(40));
 
   // Check if file exists
-  const skillsExists = await workspace.exists('/skills');
+  const skillsExists = await globalWorkspace.exists('/skills');
   console.log(`   /skills exists: ${skillsExists}`);
 
   // List directory
-  const entries = await workspace.readdir('/');
+  const entries = await globalWorkspace.readdir('/');
   console.log(`   Root directory contents:`);
   for (const entry of entries.slice(0, 5)) {
     console.log(`     ${entry.type === 'directory' ? '📁' : '📄'} ${entry.name}`);
@@ -52,9 +52,9 @@ async function main() {
   console.log('3. Skills API:');
   console.log('-'.repeat(40));
 
-  if (workspace.skills) {
+  if (globalWorkspace.skills) {
     // List skills
-    const skills = await workspace.skills.list();
+    const skills = await globalWorkspace.skills.list();
     console.log(`   Found ${skills.length} skills:`);
     for (const skill of skills) {
       console.log(`     - ${skill.name}`);
@@ -63,7 +63,7 @@ async function main() {
 
     // Get specific skill
     if (skills.length > 0) {
-      const firstSkill = await workspace.skills.get(skills[0].name);
+      const firstSkill = await globalWorkspace.skills.get(skills[0].name);
       if (firstSkill) {
         console.log(`   Details for "${firstSkill.name}":`);
         console.log(`     Description: ${firstSkill.description?.slice(0, 50) || 'N/A'}...`);
@@ -75,7 +75,7 @@ async function main() {
 
     // Search skills
     console.log('   Searching skills for "api":');
-    const searchResults = await workspace.skills.search('api', { topK: 3 });
+    const searchResults = await globalWorkspace.skills.search('api', { topK: 3 });
     for (const result of searchResults) {
       console.log(`     - [${result.skillName}] score: ${result.score.toFixed(3)}`);
     }
@@ -89,29 +89,29 @@ async function main() {
   // =========================================================================
   console.log('4. Search API:');
   console.log('-'.repeat(40));
-  console.log(`   BM25 enabled: ${workspace.canBM25}`);
-  console.log(`   Vector enabled: ${workspace.canVector}`);
-  console.log(`   Hybrid enabled: ${workspace.canHybrid}`);
+  console.log(`   BM25 enabled: ${globalWorkspace.canBM25}`);
+  console.log(`   Vector enabled: ${globalWorkspace.canVector}`);
+  console.log(`   Hybrid enabled: ${globalWorkspace.canHybrid}`);
 
-  if (workspace.canBM25) {
+  if (globalWorkspace.canBM25) {
     // Index some content
     console.log();
     console.log('   Indexing sample content...');
-    await workspace.index('/sample/doc1.txt', 'This is a sample document about TypeScript programming.');
-    await workspace.index('/sample/doc2.txt', 'Guide to building REST APIs with Node.js and Express.');
-    await workspace.index('/sample/doc3.txt', 'Best practices for code review in software development.');
+    await globalWorkspace.index('/sample/doc1.txt', 'This is a sample document about TypeScript programming.');
+    await globalWorkspace.index('/sample/doc2.txt', 'Guide to building REST APIs with Node.js and Express.');
+    await globalWorkspace.index('/sample/doc3.txt', 'Best practices for code review in software development.');
 
     // Search
     console.log('   Searching for "TypeScript":');
-    const results = await workspace.search('TypeScript', { topK: 2 });
+    const results = await globalWorkspace.search('TypeScript', { topK: 2 });
     for (const result of results) {
       console.log(`     - [${result.id}] score: ${result.score.toFixed(3)}`);
     }
 
     // Clean up
-    await workspace.unindex('/sample/doc1.txt');
-    await workspace.unindex('/sample/doc2.txt');
-    await workspace.unindex('/sample/doc3.txt');
+    await globalWorkspace.unindex('/sample/doc1.txt');
+    await globalWorkspace.unindex('/sample/doc2.txt');
+    await globalWorkspace.unindex('/sample/doc3.txt');
   }
   console.log();
 
@@ -120,7 +120,7 @@ async function main() {
   // =========================================================================
   console.log('5. Workspace Info:');
   console.log('-'.repeat(40));
-  const info = await workspace.getInfo();
+  const info = await globalWorkspace.getInfo();
   console.log(`   ID: ${info.id}`);
   console.log(`   Name: ${info.name}`);
   console.log(`   Status: ${info.status}`);
