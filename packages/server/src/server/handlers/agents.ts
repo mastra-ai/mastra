@@ -1290,6 +1290,77 @@ Return a structured response with:
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
+const ENHANCE_SCORER_PROMPT_INSTRUCTIONS = `You are an expert at creating LLM-as-judge evaluation prompts for AI systems. Your goal is to help users create clear, effective, and comprehensive scoring prompts that will enable accurate and consistent evaluation of AI outputs.
+
+IMPORTANT: The prompt you create will be used as a scoring prompt for evaluating AI responses. It must use these template variables:
+- {{input}} - The input that was given to the AI being evaluated
+- {{output}} - The output/response from the AI being evaluated
+- {{minScore}} - The minimum score value in the scoring range
+- {{maxScore}} - The maximum score value in the scoring range
+
+Follow these steps to analyze and enhance the scoring prompt:
+
+1. ANALYSIS PHASE
+- Identify what aspects of AI output should be evaluated (accuracy, relevance, completeness, etc.)
+- Extract specific criteria mentioned by the user
+- Recognize any domain-specific evaluation requirements
+- Note any implicit quality standards that should be made explicit
+
+2. SCORER PROMPT STRUCTURE
+Create a scoring prompt with these components:
+a) EVALUATOR ROLE
+    - Clear statement that this is an evaluation/scoring task
+    - What the evaluator should focus on
+b) EVALUATION CRITERIA
+    - Specific, measurable criteria for assessment
+    - Clear definitions of what constitutes good vs poor performance
+    - Weighted importance if multiple criteria exist
+c) SCORING GUIDELINES
+    - Clear mapping of criteria to score ranges
+    - Examples of what warrants high vs low scores
+    - Use {{minScore}} and {{maxScore}} for score boundaries
+d) INPUT/OUTPUT CONTEXT
+    - Reference {{input}} as the original input
+    - Reference {{output}} as the response to evaluate
+e) OUTPUT REQUIREMENTS
+    - Specify that the evaluator should return only the numeric score
+    - Score must be between {{minScore}} and {{maxScore}}
+
+3. QUALITY CHECKS
+Ensure the prompt:
+- Uses all four template variables ({{input}}, {{output}}, {{minScore}}, {{maxScore}})
+- Has clear, unambiguous evaluation criteria
+- Provides specific scoring guidelines
+- Instructs to output only the numeric score
+- Is fair and objective
+
+4. OUTPUT FORMAT
+Return a structured response with:
+- Enhanced scoring prompt (using template variables)
+- Analysis of evaluation criteria
+- Explanation of scoring guidelines
+
+Remember: A good scoring prompt should produce consistent, fair evaluations. Focus on specific, measurable criteria that any evaluator could apply consistently.`;
+
+// Get the appropriate enhancement instructions based on context
+function getEnhanceInstructions(context: 'agent' | 'scorer' = 'agent'): string {
+  return context === 'scorer' ? ENHANCE_SCORER_PROMPT_INSTRUCTIONS : ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS;
+}
+
+// Get the user message for enhancement based on context
+function getEnhanceUserMessage(context: 'agent' | 'scorer', instructions: string, comment?: string): string {
+  if (context === 'scorer') {
+    return `We need to improve the LLM evaluation/scoring prompt.
+Current prompt: ${instructions}
+${comment ? `User feedback: ${comment}` : ''}
+
+Remember to preserve the template variables: {{input}}, {{output}}, {{minScore}}, {{maxScore}}`;
+  }
+  return `We need to improve the system prompt.
+Current: ${instructions}
+${comment ? `User feedback: ${comment}` : ''}`;
+}
+
 // Helper to find the first model with a connected provider
 async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
   const modelList = await agent.getModelList();
@@ -1375,7 +1446,8 @@ ${comment ? `User feedback: ${comment}` : ''}`,
 
 /**
  * Generic enhance instructions endpoint that doesn't require an agent.
- * Useful for creating new agents where no agent exists yet.
+ * Useful for creating new agents or scorers where no agent exists yet.
+ * Supports different contexts (agent instructions vs scorer prompts).
  */
 export const ENHANCE_INSTRUCTIONS_GENERIC_ROUTE = createRoute({
   method: 'POST',
@@ -1384,29 +1456,25 @@ export const ENHANCE_INSTRUCTIONS_GENERIC_ROUTE = createRoute({
   bodySchema: enhanceInstructionsGenericBodySchema,
   responseSchema: enhanceInstructionsResponseSchema,
   summary: 'Enhance instructions (generic)',
-  description: 'Uses AI to enhance instructions without requiring an existing agent. Model must be specified.',
+  description:
+    'Uses AI to enhance instructions without requiring an existing agent. Model must be specified. Context can be "agent" (default) or "scorer" for LLM evaluation prompts.',
   tags: ['Agents'],
-  handler: async ({ instructions, comment, model: requestedModel }) => {
+  handler: async ({ instructions, comment, model: requestedModel, context = 'agent' }) => {
     try {
       const modelToUse = `${requestedModel.provider}/${requestedModel.modelId}`;
 
       const systemPromptAgent = new Agent({
-        id: 'system-prompt-enhancer',
-        name: 'system-prompt-enhancer',
-        instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
+        id: 'prompt-enhancer',
+        name: 'prompt-enhancer',
+        instructions: getEnhanceInstructions(context),
         model: modelToUse,
       });
 
-      const result = await systemPromptAgent.generate(
-        `We need to improve the system prompt.
-Current: ${instructions}
-${comment ? `User feedback: ${comment}` : ''}`,
-        {
-          structuredOutput: {
-            schema: enhanceInstructionsResponseSchema,
-          },
+      const result = await systemPromptAgent.generate(getEnhanceUserMessage(context, instructions, comment), {
+        structuredOutput: {
+          schema: enhanceInstructionsResponseSchema,
         },
-      );
+      });
 
       return (await result.object) as unknown as EnhanceInstructionsResponse;
     } catch (error) {

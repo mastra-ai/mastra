@@ -437,6 +437,9 @@ export const enhanceInstructionsResponseSchema = z.object({
   new_prompt: z.string().describe('The enhanced instructions'),
 });
 
+/** Context type for the prompt enhancer - determines the enhancement strategy */
+export const enhancerContextSchema = z.enum(['agent', 'scorer']).default('agent');
+
 /**
  * Body schema for generic enhance instructions (without requiring an agent)
  */
@@ -449,4 +452,9 @@ export const enhanceInstructionsGenericBodySchema = z.object({
       modelId: z.string().describe('The model ID (e.g., "gpt-4o", "claude-3-5-sonnet")'),
     })
     .describe('The model to use for enhancement'),
+  context: enhancerContextSchema
+    .optional()
+    .describe(
+      'Context for enhancement: "agent" for agent system prompts (default), "scorer" for LLM-as-judge evaluation prompts',
+    ),
 });

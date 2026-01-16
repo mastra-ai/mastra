@@ -56,8 +56,7 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
   const edges: BuilderEdge[] = [];
 
   // Extract node comments from metadata (if present)
-  const nodeComments: Record<string, string> =
-    (definition.metadata?.nodeComments as Record<string, string>) ?? {};
+  const nodeComments: Record<string, string> = (definition.metadata?.nodeComments as Record<string, string>) ?? {};
 
   // Create trigger node
   const triggerNode: BuilderNode = {
@@ -91,13 +90,21 @@ export function deserializeDefinition(definition: StorageWorkflowDefinitionType)
   const processedSteps = new Set<string>();
 
   for (const entry of definition.stepGraph) {
-    const result = processStepGraphEntry(entry, lastNodeId, nodes, edges, processedSteps, {
-      conditionCounter,
-      sleepCounter,
-      loopCounter,
-      foreachCounter,
-      parallelCounter,
-    }, nodeComments);
+    const result = processStepGraphEntry(
+      entry,
+      lastNodeId,
+      nodes,
+      edges,
+      processedSteps,
+      {
+        conditionCounter,
+        sleepCounter,
+        loopCounter,
+        foreachCounter,
+        parallelCounter,
+      },
+      nodeComments,
+    );
 
     // Update counters
     conditionCounter = result.counters.conditionCounter;

@@ -882,8 +882,10 @@ export interface ScorerVersionResponse {
 export interface ListScorerVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  orderDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 /**

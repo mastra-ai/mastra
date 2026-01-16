@@ -197,14 +197,16 @@ export class MastraClient extends BaseResource {
 
   /**
    * Enhances instructions using AI without requiring an existing agent.
-   * Useful when creating new agents.
+   * Useful when creating new agents or scorers.
    * @param params - Enhancement parameters
+   * @param params.context - Context for enhancement: 'agent' for agent instructions, 'scorer' for LLM evaluation prompts
    * @returns Promise containing the enhanced instructions and explanation
    */
   public enhanceInstructions(params: {
     instructions: string;
     comment: string;
     model: { provider: string; modelId: string };
+    context?: 'agent' | 'scorer';
   }): Promise<{ explanation: string; new_prompt: string }> {
     return this.request('/api/agents/instructions/enhance', {
       method: 'POST',
@@ -1041,10 +1043,12 @@ export class MastraClient extends BaseResource {
       searchParams.set('perPage', String(params.perPage));
     }
     if (params?.orderBy) {
-      searchParams.set('orderBy', params.orderBy);
-    }
-    if (params?.orderDirection) {
-      searchParams.set('orderDirection', params.orderDirection);
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
     }
 
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));

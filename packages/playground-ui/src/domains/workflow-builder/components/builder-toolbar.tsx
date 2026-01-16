@@ -102,10 +102,7 @@ export function BuilderToolbar({ className, onShowShortcuts }: BuilderToolbarPro
       const { stepGraph, steps, nodeComments, warnings } = serializeGraph(nodes, edges);
 
       // Build metadata with node comments (only include if there are comments)
-      const metadata =
-        Object.keys(nodeComments).length > 0
-          ? { nodeComments }
-          : undefined;
+      const metadata = Object.keys(nodeComments).length > 0 ? { nodeComments } : undefined;
 
       // Show warnings if any nodes were skipped during serialization
       if (warnings.length > 0) {
