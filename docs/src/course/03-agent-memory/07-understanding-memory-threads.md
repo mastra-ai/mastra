@@ -21,7 +21,7 @@ The relationship works like this:
 
 - **One thread → One owner** (each thread has exactly one `resourceId` that identifies its owner)
 - **One resource → Many threads** (a user can have multiple separate conversations)
-- **One thread → Messages from multiple resources** (messages within a thread can have different `resourceId` values, enabling multi-participant conversations)
+- **One thread → Messages with different resourceIds** (messages can have varying `resourceId` values for attribution and filtering purposes)
 
 ### Common Pitfall: Thread ID Reuse
 
@@ -32,7 +32,7 @@ Thread with id <thread_id> is for resource with id <resource_a>
 but resource <resource_b> was queried
 ```
 
-This error means you're trying to access a thread with the wrong owner's ID, not that thread IDs must be globally unique.
+This error means you're trying to access a thread with the wrong owner's ID. Thread IDs are database primary keys and must be globally unique - you cannot reuse the same thread ID for different thread owners.
 
 ### Generating Thread IDs
 

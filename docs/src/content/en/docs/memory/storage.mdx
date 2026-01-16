@@ -158,9 +158,11 @@ Thread with id <thread_id> is for resource with id <resource_a>
 but resource <resource_b> was queried
 ```
 
-Note that while each thread has one owner, messages within that thread can have different `resourceId` values, enabling multi-participant conversations (like group chats or multi-agent interactions).
+Note that while each thread has one owner, messages within that thread can have different `resourceId` values. This is used for message attribution and filtering (e.g., distinguishing between different agents in a multi-agent system, or filtering messages for analytics).
 
-To avoid accidentally reusing thread IDs across different owners, use UUIDs or include the resource ID in the thread ID (e.g., `user_alice_${randomId}`).
+**Security:** Memory is a storage layer, not an authorization layer. Your application must implement access control before calling memory APIs. The `resourceId` parameter controls both validation and filtering - provide it to validate ownership and filter messages, or omit it for server-side access without validation.
+
+To avoid accidentally reusing thread IDs across different owners, use UUIDs: `crypto.randomUUID()`
 
 ### Thread title generation
 
