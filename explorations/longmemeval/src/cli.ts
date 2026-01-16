@@ -914,6 +914,19 @@ program
             chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
           );
         }
+
+        // Token usage summary (if available)
+        if (metrics.total_usage) {
+          const formatTokens = (n: number) => n.toLocaleString();
+          console.log(
+            chalk.gray('Token Usage:'),
+            chalk.cyan(formatTokens(metrics.total_usage.inputTokens)),
+            chalk.gray('input,'),
+            chalk.cyan(formatTokens(metrics.total_usage.outputTokens)),
+            chalk.gray('output'),
+            chalk.gray(`(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/q)`),
+          );
+        }
       }
 
       // Get terminal width for final separator

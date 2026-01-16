@@ -1069,6 +1069,9 @@ ${JSON.stringify(responses, null, 2)}`);
       spinner,
     );
 
+    // Track token usage from the main question
+    let usage = response.totalUsage ?? response.usage;
+
     console.log(
       response.text +
         `
@@ -1132,6 +1135,8 @@ ${JSON.stringify(responses, null, 2)}`);
         isCorrect = true;
         // Update response to the successful retry for logging
         response = retryResponse;
+        // Update usage to the successful retry
+        usage = retryResponse.totalUsage ?? retryResponse.usage;
       }
     }
     const didRetry = retryCount > 0;
@@ -1141,6 +1146,7 @@ ${JSON.stringify(responses, null, 2)}`);
     let improvedAnswer: string | undefined;
     let improvedHypothesis: string | undefined;
     let improvedIsCorrect: boolean | undefined;
+    let improvedUsage: typeof usage | undefined;
 
     if (!options.skipFixed) {
       // Normalize: if only improvedAnswer exists, copy the original question to improvedQuestion
@@ -1174,6 +1180,7 @@ ${JSON.stringify(responses, null, 2)}`);
         );
 
         improvedHypothesis = improvedResponse.text;
+        improvedUsage = improvedResponse.totalUsage ?? improvedResponse.usage;
       }
 
       const improvedInput = JSON.stringify({
@@ -1213,6 +1220,8 @@ ${JSON.stringify(responses, null, 2)}`);
         if (retryResult.score === 1) {
           improvedIsCorrect = true;
           improvedHypothesis = retryResponse.text;
+          // Update improved usage to the successful retry
+          improvedUsage = retryResponse.totalUsage ?? retryResponse.usage;
         }
       }
     }
@@ -1271,6 +1280,22 @@ ${JSON.stringify(responses, null, 2)}`);
       improved_is_correct: improvedIsCorrect,
       has_improvement_info: !!(meta.improvedQuestion || meta.improvedAnswer || meta.improvementNote),
       improved_regression: improvedRegression,
+      usage:
+        usage && usage.inputTokens !== undefined
+          ? {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens ?? 0,
+              totalTokens: usage.totalTokens ?? usage.inputTokens + (usage.outputTokens ?? 0),
+            }
+          : undefined,
+      improved_usage:
+        improvedUsage && improvedUsage.inputTokens !== undefined
+          ? {
+              inputTokens: improvedUsage.inputTokens,
+              outputTokens: improvedUsage.outputTokens ?? 0,
+              totalTokens: improvedUsage.totalTokens ?? improvedUsage.inputTokens + (improvedUsage.outputTokens ?? 0),
+            }
+          : undefined,
     };
   }
 
@@ -1408,6 +1433,24 @@ Results saved to: ${runDir}`),
           metrics.abstention_correct = (metrics.abstention_correct || 0) + 1;
         }
       }
+
+      // Aggregate token usage
+      if (result.usage) {
+        if (!metrics.total_usage) {
+          metrics.total_usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+        }
+        metrics.total_usage.inputTokens += result.usage.inputTokens;
+        metrics.total_usage.outputTokens += result.usage.outputTokens;
+        metrics.total_usage.totalTokens += result.usage.totalTokens;
+      }
+      if (result.improved_usage) {
+        if (!metrics.improved_total_usage) {
+          metrics.improved_total_usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+        }
+        metrics.improved_total_usage.inputTokens += result.improved_usage.inputTokens;
+        metrics.improved_total_usage.outputTokens += result.improved_usage.outputTokens;
+        metrics.improved_total_usage.totalTokens += result.improved_usage.totalTokens;
+      }
     }
 
     // Calculate per-type accuracies (vanilla)
@@ -1538,6 +1581,24 @@ Results saved to: ${runDir}`),
         chalk[fixedAccuracyColor](`${(metrics.fixed_overall_accuracy * 100).toFixed(2)}%`),
         chalk.gray(`(${metrics.improved_total} questions clarified)`),
       );
+    }
+
+    // Token usage summary
+    if (metrics.total_usage) {
+      console.log();
+      console.log(chalk.bold('Token Usage:'));
+      const formatTokens = (n: number) => n.toLocaleString();
+      console.log(
+        chalk.gray('  Input tokens: '),
+        chalk.cyan(formatTokens(metrics.total_usage.inputTokens)),
+        chalk.gray(`(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/question)`),
+      );
+      console.log(chalk.gray('  Output tokens:'), chalk.cyan(formatTokens(metrics.total_usage.outputTokens)));
+      console.log(chalk.gray('  Total tokens: '), chalk.cyan(formatTokens(metrics.total_usage.totalTokens)));
+
+      if (metrics.improved_total_usage) {
+        console.log(chalk.gray('  Improved input tokens: '), chalk.cyan(formatTokens(metrics.improved_total_usage.inputTokens)));
+      }
     }
   }
 

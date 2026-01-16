@@ -41,6 +41,12 @@ export interface LongMemEvalQuestion {
   answer_session_ids: string[];
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 export interface EvaluationResult {
   question_id: string;
   question: string; // The original question asked
@@ -57,6 +63,10 @@ export interface EvaluationResult {
   has_improvement_info?: boolean;
   // Track when improved version performs worse than original (original ✓, improved ✗)
   improved_regression?: boolean;
+  // Token usage for the agent response
+  usage?: TokenUsage;
+  // Token usage for improved question evaluation (if applicable)
+  improved_usage?: TokenUsage;
 }
 
 export type DatasetType = 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
@@ -87,4 +97,7 @@ export interface BenchmarkMetrics {
   // "Fixed" metrics - full results with improved questions replacing originals where available
   fixed_accuracy_by_type?: Record<QuestionType, { correct: number; total: number; accuracy: number }>;
   fixed_overall_accuracy?: number;
+  // Token usage aggregates
+  total_usage?: TokenUsage;
+  improved_total_usage?: TokenUsage;
 }
