@@ -242,6 +242,83 @@ export const agent = new Agent({
   ]}
 />
 
+## Orchestration Options
+
+The `generate()` and `stream()` methods support orchestration options that enable multi-step execution with routing and validation.
+
+### routing
+
+Enable routing agent orchestration. When enabled, a routing agent decides which primitive (agent/workflow/tool) handles each step.
+
+```typescript
+// Simple routing
+await agent.generate('Research and write a report', {
+  routing: true,
+  maxSteps: 10,
+});
+
+// With configuration
+await agent.generate('Complete this task', {
+  routing: {
+    verboseIntrospection: true,
+    additionalInstructions: 'Prefer the coder agent for implementation.',
+  },
+  maxSteps: 20,
+});
+```
+
+### validation
+
+Enable validation/completion checking. When configured, the agent loops until validation passes or `maxSteps` is reached.
+
+```typescript
+import { createScorer } from '@mastra/core/evals';
+
+const testsScorer = createScorer({
+  id: 'tests',
+  description: 'Run tests',
+}).generateScore(async () => {
+  const result = await exec('npm test');
+  return result.exitCode === 0 ? 1 : 0;
+});
+
+await agent.generate('Fix the failing tests', {
+  validation: {
+    scorers: [testsScorer],
+    strategy: 'all',
+  },
+  maxSteps: 10,
+});
+```
+
+### Combining routing and validation
+
+For full orchestration, combine both options:
+
+```typescript
+await agent.stream('Build a complete feature', {
+  routing: {
+    verboseIntrospection: true,
+  },
+  validation: {
+    scorers: [testsScorer, lintScorer],
+    strategy: 'all',
+  },
+  maxSteps: 20,
+  memory: {
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+  onIterationComplete: ({ iteration, isComplete }) => {
+    console.log(`Iteration ${iteration}: ${isComplete ? 'done' : 'continuing'}`);
+  },
+});
+```
+
+:::note
+Memory is required when using `routing` or `validation` options. Configure memory on the agent or provide it in options.
+:::
+
 ## Related
 
 - [Agents overview](/docs/v1/agents/overview)

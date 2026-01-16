@@ -3072,21 +3072,23 @@ export class Agent<
    * Executes a network loop where multiple agents can collaborate to handle messages.
    * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
    *
-   * @experimental
+   * @deprecated Use `generate()` or `stream()` with `routing` and/or `validation` options instead.
+   * This method will be removed in a future version.
    *
    * @example
    * ```typescript
-   * const result = await agent.network('Find the weather in Tokyo and plan an activity', {
-   *   memory: {
-   *     thread: 'user-123',
-   *     resource: 'my-app'
-   *   },
-   *   maxSteps: 10
+   * // Old way (deprecated):
+   * const result = await agent.network('Find the weather in Tokyo', {
+   *   maxSteps: 10,
+   *   completion: { scorers: [myScorer] },
    * });
    *
-   * for await (const chunk of result.stream) {
-   *   console.log(chunk);
-   * }
+   * // New way:
+   * const result = await agent.stream('Find the weather in Tokyo', {
+   *   routing: true,
+   *   validation: { scorers: [myScorer] },
+   *   maxSteps: 10,
+   * });
    * ```
    */
   async network(
@@ -3285,6 +3287,15 @@ export class Agent<
       ...(options ?? {}),
     } as unknown as AgentExecutionOptions<any>;
 
+    // Check if orchestration mode is enabled (routing or validation)
+    const hasRouting = !!mergedOptions.routing;
+    const hasValidation = !!mergedOptions.validation;
+
+    if (hasRouting || hasValidation) {
+      // Orchestration mode: use network loop
+      return this.#executeWithOrchestration(messages, mergedOptions);
+    }
+
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
     });
@@ -3350,6 +3361,107 @@ export class Agent<
     return fullOutput;
   }
 
+  /**
+   * Internal method to execute with orchestration (routing and/or validation).
+   * Uses the network loop to handle multi-step execution with routing agent and validation.
+   */
+  async #executeWithOrchestration<OUTPUT>(
+    messages: MessageListInput,
+    options: AgentExecutionOptions<OUTPUT>,
+  ): Promise<FullOutput<OUTPUT>> {
+    const requestContextToUse = options?.requestContext || new RequestContext();
+
+    // Validate memory is available - required for orchestration
+    const memoryToUse = await this.getMemory({ requestContext: requestContextToUse });
+    if (!memoryToUse) {
+      throw new MastraError({
+        id: 'AGENT_ORCHESTRATION_MEMORY_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Memory is required when using routing or validation options. Configure memory on the agent or provide it in options.',
+        details: {
+          agentName: this.name,
+          hasRouting: !!options.routing,
+          hasValidation: !!options.validation,
+        },
+      });
+    }
+
+    const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
+
+    // Reserved keys from requestContext take precedence for security.
+    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadId =
+      threadIdFromContext ||
+      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || options?.memory?.resource;
+
+    // Convert routing option to NetworkRoutingConfig
+    const routingConfig = typeof options.routing === 'boolean' ? {} : options.routing;
+
+    const networkStream = await networkLoop<OUTPUT>({
+      networkName: this.name,
+      requestContext: requestContextToUse,
+      runId,
+      routingAgent: this,
+      routingAgentOptions: {
+        modelSettings: options?.modelSettings,
+        memory: options?.memory,
+        tracingContext: options?.tracingContext,
+      } as unknown as AgentExecutionOptions<OUTPUT>,
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      maxIterations: options?.maxSteps || 10,
+      messages,
+      threadId,
+      resourceId,
+      validation: options?.validation,
+      routing: routingConfig,
+      onIterationComplete: options?.onIterationComplete,
+      autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
+      mastra: this.#mastra,
+      structuredOutput: options?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+    });
+
+    // Consume the stream and await the result
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _chunk of networkStream) {
+      // Consume stream to completion
+    }
+
+    const workflowResult = await networkStream.result;
+    const usage = await networkStream.usage;
+    const structuredObject = await networkStream.object;
+
+    // Extract the network result from the workflow result
+    // The workflow result has shape: { status: 'success', result: { result: string, object?: OUTPUT, isComplete?: boolean, ... } }
+    const networkResult = workflowResult?.status === 'success' ? (workflowResult.result as any) : null;
+
+    // Convert network result to FullOutput format
+    return {
+      text: networkResult?.result || '',
+      object: structuredObject as OUTPUT,
+      finishReason: networkResult?.isComplete ? 'stop' : 'length',
+      usage: {
+        promptTokens: usage?.inputTokens || 0,
+        completionTokens: usage?.outputTokens || 0,
+        totalTokens: usage?.totalTokens || 0,
+      },
+      response: {
+        id: runId,
+        timestamp: new Date(),
+        modelId: 'network',
+        headers: {},
+      },
+      steps: [],
+      toolCalls: [],
+      toolResults: [],
+      rememberedMessages: [],
+      messageList: new MessageList(),
+    } as unknown as FullOutput<OUTPUT>;
+  }
+
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
@@ -3374,6 +3486,15 @@ export class Agent<
       ...defaultOptions,
       ...(streamOptions ?? {}),
     } as unknown as AgentExecutionOptions<OUTPUT>;
+
+    // Check if orchestration mode is enabled (routing or validation)
+    const hasRouting = !!mergedOptions.routing;
+    const hasValidation = !!mergedOptions.validation;
+
+    if (hasRouting || hasValidation) {
+      // Orchestration mode: use network loop and return as MastraModelOutput
+      return this.#streamWithOrchestration(messages, mergedOptions);
+    }
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -3430,6 +3551,74 @@ export class Agent<
     }
 
     return result.result;
+  }
+
+  /**
+   * Internal method to stream with orchestration (routing and/or validation).
+   * Uses the network loop and wraps the result as MastraModelOutput.
+   */
+  async #streamWithOrchestration<OUTPUT>(
+    messages: MessageListInput,
+    options: AgentExecutionOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    const requestContextToUse = options?.requestContext || new RequestContext();
+
+    // Validate memory is available - required for orchestration
+    const memoryToUse = await this.getMemory({ requestContext: requestContextToUse });
+    if (!memoryToUse) {
+      throw new MastraError({
+        id: 'AGENT_ORCHESTRATION_MEMORY_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Memory is required when using routing or validation options. Configure memory on the agent or provide it in options.',
+        details: {
+          agentName: this.name,
+          hasRouting: !!options.routing,
+          hasValidation: !!options.validation,
+        },
+      });
+    }
+
+    const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
+
+    // Reserved keys from requestContext take precedence for security.
+    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadId =
+      threadIdFromContext ||
+      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || options?.memory?.resource;
+
+    // Convert routing option to NetworkRoutingConfig
+    const routingConfig = typeof options.routing === 'boolean' ? {} : options.routing;
+
+    const networkStream = await networkLoop<OUTPUT>({
+      networkName: this.name,
+      requestContext: requestContextToUse,
+      runId,
+      routingAgent: this,
+      routingAgentOptions: {
+        modelSettings: options?.modelSettings,
+        memory: options?.memory,
+        tracingContext: options?.tracingContext,
+      } as unknown as AgentExecutionOptions<OUTPUT>,
+      generateId: context => this.#mastra?.generateId(context) || randomUUID(),
+      maxIterations: options?.maxSteps || 10,
+      messages,
+      threadId,
+      resourceId,
+      validation: options?.validation,
+      routing: routingConfig,
+      onIterationComplete: options?.onIterationComplete,
+      autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
+      mastra: this.#mastra,
+      structuredOutput: options?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+    });
+
+    // Return the network stream wrapped as MastraModelOutput
+    // The network stream is already async iterable, so we wrap it
+    return networkStream as unknown as MastraModelOutput<OUTPUT>;
   }
 
   /**
