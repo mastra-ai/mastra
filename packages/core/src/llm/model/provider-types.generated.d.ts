@@ -1558,6 +1558,7 @@ export type ProviderModelsMap = {
   ];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2',
+    'MiniMaxAI/MiniMax-M2.1',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
