@@ -169,7 +169,9 @@ function parseDateFromContent(dateContent: string): Date | null {
 
   // Try "late/early/mid Month Year" format
   if (!targetDate) {
-    const vagueMatch = dateContent.match(/(late|early|mid)[- ]?(?:to[- ]?(?:late|early|mid)[- ]?)?([A-Z][a-z]+)\s+(\d{4})/i);
+    const vagueMatch = dateContent.match(
+      /(late|early|mid)[- ]?(?:to[- ]?(?:late|early|mid)[- ]?)?([A-Z][a-z]+)\s+(\d{4})/i,
+    );
     if (vagueMatch) {
       const month = vagueMatch[2];
       const year = vagueMatch[3];
@@ -231,21 +233,21 @@ function expandInlineEstimatedDates(observations: string, currentDate: Date): st
 
     if (targetDate) {
       const relative = formatRelativeTime(targetDate, currentDate);
-      
+
       // Check if this is a future-intent observation that's now in the past
       // We need to look at the text BEFORE this match to determine intent
       const matchIndex = observations.indexOf(match);
       const lineStart = observations.lastIndexOf('\n', matchIndex) + 1;
       const lineBeforeDate = observations.substring(lineStart, matchIndex);
-      
+
       const isPastDate = targetDate < currentDate;
       const isFutureIntent = isFutureIntentObservation(lineBeforeDate);
-      
+
       if (isPastDate && isFutureIntent) {
         // This was a planned action that should have happened by now
         return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
       }
-      
+
       return `(${prefix} ${dateContent} - ${relative})`;
     }
 
@@ -594,7 +596,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.maxOutputTokens,
       },
       providerOptions: config.observer?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.providerOptions,
-      maxTokensPerBatch: config.observer?.maxTokensPerBatch ?? 10000,
+      maxTokensPerBatch: config.observer?.maxTokensPerBatch ?? 5000,
     };
 
     // Resolve reflector config with defaults
@@ -1003,7 +1005,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           errorMessage.includes('blockReason') ||
           errorString.includes('PROHIBITED_CONTENT') ||
           causeString.includes('PROHIBITED_CONTENT');
-        
+
         console.error(`\n🔍 [OM] Error caught in withRetry. isProhibited=${isProhibited}`);
 
         // If PROHIBITED_CONTENT, dump context for debugging
@@ -1182,6 +1184,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
+    debugger;
     const result = await this.withRetry(
       () =>
         agent.generate(prompt, {
@@ -1791,14 +1794,11 @@ ${formattedMessages}
       if (newObsMatch && newObsMatch[1]) {
         const newObsContent = newObsMatch[1].trim();
         // Insert new observations at the end of the existing section (before </thread>)
-        const mergedSection = existingObservations.replace(
-          existingPattern,
-          (match) => {
-            // Remove closing </thread>, add new observations, add closing </thread>
-            const withoutClose = match.replace(/<\/thread>$/, '').trimEnd();
-            return `${withoutClose}\n${newObsContent}\n</thread>`;
-          },
-        );
+        const mergedSection = existingObservations.replace(existingPattern, match => {
+          // Remove closing </thread>, add new observations, add closing </thread>
+          const withoutClose = match.replace(/<\/thread>$/, '').trimEnd();
+          return `${withoutClose}\n${newObsContent}\n</thread>`;
+        });
         omDebug(`[OM] Merged observations for thread ${newThreadId} on ${newDate}`);
         return mergedSection;
       }
@@ -2106,9 +2106,7 @@ ${formattedMessages}
       // Query messages for this specific thread AFTER its lastObservedAt
       // Add 1ms to make the filter exclusive (since dateRange.start is inclusive)
       // This prevents re-observing the same messages
-      const startDate = threadLastObservedAt
-        ? new Date(new Date(threadLastObservedAt).getTime() + 1)
-        : undefined;
+      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
 
       const result = await this.storage.listMessages({
         threadId: thread.id,
@@ -2342,6 +2340,7 @@ ${formattedMessages}
       );
 
       // Process all batches in parallel
+      debugger;
       const batchPromises = batches.map(async (batch, batchIndex) => {
         omDebug(`[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads`);
         const results = await this.callMultiThreadObserver(
