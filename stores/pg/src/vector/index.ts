@@ -585,11 +585,22 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Get the properly qualified vector type based on the index's vector type
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType);
 
+      // Get the appropriate distance operator and score transform for this vector type
+      const { operator, scoreTransform } = this.getDistanceOperator(
+        indexInfo.vectorType,
+        indexInfo.distanceMetric || indexInfo.metric || 'cosine'
+      );
+
+      // Build score calculation based on operator type
+      const scoreExpr = scoreTransform
+        ? `embedding ${operator} '${vectorStr}'::${qualifiedVectorType}`
+        : `1 - (embedding ${operator} '${vectorStr}'::${qualifiedVectorType})`;
+
       const query = `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
-            1 - (embedding <=> '${vectorStr}'::${qualifiedVectorType}) as score,
+            ${scoreExpr} as raw_score,
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
@@ -597,8 +608,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         )
         SELECT *
         FROM vector_scores
-        WHERE score > $1
-        ORDER BY score DESC
+        WHERE raw_score > $1
+        ORDER BY raw_score DESC
         LIMIT $2`;
       const result = await client.query(query, filterValues);
       await client.query('COMMIT');
@@ -669,6 +680,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const indexInfo = await this.getIndexInfo({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType);
 
+      // Serialize vector based on type
+      const serializeVector = (
+        vector: number[] | { indices: number[]; values: number[]; dimension: number }
+      ): string => {
+        if (indexInfo.vectorType === 'sparsevec' && typeof vector === 'object' && 'indices' in vector && 'values' in vector) {
+          // Sparse vector format: {index1:value1,index2:value2,...}/dimension
+          const sparseVec = vector as { indices: number[]; values: number[] };
+          const pairs = sparseVec.indices.map((idx, i) => `${idx}:${sparseVec.values[i]}`).join(',');
+          return `{${pairs}}/${(vector as { dimension: number }).dimension}`;
+        }
+        // Dense vector format: [val1,val2,...]
+        return `[${(vector as number[]).join(',')}]`;
+      };
+
       // Validate sparsevec element count before any DB insert
       if (indexInfo.vectorType === 'sparsevec') {
         for (let i = 0; i < vectors.length; i++) {
@@ -708,7 +733,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           RETURNING embedding::text
         `;
 
-        await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
+        await client.query(query, [vectorIds[i], serializeVector(vectors[i]!), JSON.stringify(metadata?.[i] || {})]);
       }
 
       await client.query('COMMIT');
