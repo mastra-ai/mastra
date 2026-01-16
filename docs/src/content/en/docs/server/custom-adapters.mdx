@@ -6,6 +6,8 @@ packages:
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/server"
+  - "@mastra/fastify"
+  - "@mastra/koa"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -18,9 +20,12 @@ A custom adapter translates between Mastra's route definitions and your framewor
 
 :::info
 
-For Hono or Express, use the provided adapters instead:
-- [@mastra/hono](/reference/server/hono-adapter)
-- [@mastra/express](/reference/server/express-adapter)
+Use any of these prebuilt server adapters:
+
+- [@mastra/hono](/reference/v1/server/hono-adapter)
+- [@mastra/express](/reference/v1/server/express-adapter)
+- [@mastra/fastify](/reference/v1/server/fastify-adapter)
+- [@mastra/koa](/reference/v1/server/koa-adapter)
 
 :::
 
@@ -301,7 +306,7 @@ constructor(options: {
 }
 ```
 
-See [Server Adapters](/docs/server/server-adapters#constructor-options) for full documentation on each option.
+See [Server Adapters](/docs/v1/server/server-adapters) for full documentation on each option.
 
 ## Full example
 

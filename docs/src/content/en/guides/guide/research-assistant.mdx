@@ -120,7 +120,7 @@ import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
   id: 'research-vectors',
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
 export const mastra = new Mastra({
@@ -128,7 +128,7 @@ export const mastra = new Mastra({
 });
 ```
 
-For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+For the `url` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
 
 :::note
 
@@ -151,7 +151,7 @@ import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
   id: 'research-vectors',
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
 export const mastra = new Mastra({

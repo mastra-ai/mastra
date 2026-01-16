@@ -57,6 +57,12 @@ Visit [MCPClient](/reference/tools/mcp-client) for a full list of configuration 
 
 :::
 
+:::tip Authentication
+
+For connecting to OAuth-protected MCP servers, see the [OAuth Authentication](/reference/v1/tools/mcp-client#oauth-authentication) section.
+
+:::
+
 ## Using `MCPClient` with an agent
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
@@ -111,6 +117,12 @@ export const testMcpServer = new MCPServer({
 :::info
 
 Visit [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
+
+:::
+
+:::tip Authentication
+
+To protect your MCP server with OAuth, see the [OAuth Protection](/reference/v1/tools/mcp-server#oauth-protection) section.
 
 :::
 

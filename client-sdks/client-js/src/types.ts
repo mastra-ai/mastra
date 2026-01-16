@@ -23,8 +23,7 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRun, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -129,15 +128,19 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
+export type StreamParamsBase<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
+export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = Omit<StreamParamsBase<OUTPUT>, 'messages'>;
+export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> &
+  (OUTPUT extends {}
+    ? { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> }
+    : { structuredOutput?: never });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -180,9 +183,7 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
-export type GetWorkflowRunByIdResponse = WorkflowRun;
-
-export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
+export type GetWorkflowRunByIdResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;

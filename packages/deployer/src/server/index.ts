@@ -24,7 +24,7 @@ import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-r
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome';
 
-// Get studio path from env or default to ./playground relative to cwd
+// Get studio path from env or default to ./studio relative to cwd
 const getStudioPath = () => {
   if (process.env.MASTRA_STUDIO_PATH) {
     return process.env.MASTRA_STUDIO_PATH;
@@ -36,7 +36,7 @@ const getStudioPath = () => {
     __dirname = dirname(__filename);
   }
 
-  const studioPath = process.env.MASTRA_STUDIO_PATH || join(__dirname, 'playground');
+  const studioPath = process.env.MASTRA_STUDIO_PATH || join(__dirname, 'studio');
   return studioPath;
 };
 
@@ -240,7 +240,7 @@ export async function createHonoServer(
   const serverOptions = mastra.getServer();
   const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
 
-  if (options?.playground) {
+  if (options?.studio) {
     // SSE endpoint for refresh notifications
     app.get(
       `${studioBasePath}/refresh-events`,
@@ -273,8 +273,8 @@ export async function createHonoServer(
       },
     );
 
-    // Playground routes - these should come after API routes
-    // Serve static assets from playground directory
+    // Studio routes - these should come after API routes
+    // Serve static assets from studio directory
     // Note: Vite builds with base: './' so all asset URLs are relative
     // The <base href> tag in index.html handles path resolution for the SPA
     const studioPath = getStudioPath();
@@ -284,12 +284,12 @@ export async function createHonoServer(
         root: join(studioPath, 'assets'),
         rewriteRequestPath: path => {
           // Remove the basePath AND /assets prefix to get the actual file path
-          // Example: /custom-path/assets/style.css -> /style.css -> ./playground/assets/style.css
+          // Example: /custom-path/assets/style.css -> /style.css -> ./studio/assets/style.css
           let rewritten = path;
           if (studioBasePath && rewritten.startsWith(studioBasePath)) {
             rewritten = rewritten.slice(studioBasePath.length);
           }
-          // Remove the /assets prefix since root is already './playground/assets'
+          // Remove the /assets prefix since root is already './studio/assets'
           if (rewritten.startsWith('/assets')) {
             rewritten = rewritten.slice('/assets'.length);
           }
@@ -317,10 +317,10 @@ export async function createHonoServer(
       return await next();
     }
 
-    // Only serve playground for routes matching the configured base path
-    const isPlaygroundRoute =
+    // Only serve studio for routes matching the configured base path
+    const isStudioRoute =
       studioBasePath === '' || requestPath === studioBasePath || requestPath.startsWith(`${studioBasePath}/`);
-    if (options?.playground && isPlaygroundRoute) {
+    if (options?.studio && isStudioRoute) {
       // For HTML routes, serve index.html with dynamic replacements
       const studioPath = getStudioPath();
       let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
@@ -337,10 +337,13 @@ export async function createHonoServer(
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
 
+      const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
+
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly
       indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);
@@ -351,14 +354,14 @@ export async function createHonoServer(
     return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
 
-  if (options?.playground) {
-    // Serve extra static files from playground directory (this comes after HTML handler)
-    const studioPath = getStudioPath();
-    const playgroundPath = studioBasePath ? `${studioBasePath}/*` : '*';
+  if (options?.studio) {
+    // Serve extra static files from studio directory (this comes after HTML handler)
+    const studioRootPath = getStudioPath();
+    const studioPath = studioBasePath ? `${studioBasePath}/*` : '*';
     app.use(
-      playgroundPath,
+      studioPath,
       serveStatic({
-        root: studioPath,
+        root: studioRootPath,
         rewriteRequestPath: path => {
           // Remove the basePath prefix if present
           if (studioBasePath && path.startsWith(studioBasePath)) {
@@ -407,7 +410,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     () => {
       const logger = mastra.getLogger();
       logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
-      if (options?.playground) {
+      if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
         const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
         logger.info(`👨‍💻 Studio available at ${studioUrl}`);

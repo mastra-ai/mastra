@@ -94,6 +94,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/network-approval",
+          label: "Network Approval",
+        },
+        {
+          type: "doc",
           id: "agents/adding-voice",
           label: "Voice",
         },
@@ -268,7 +273,7 @@ const sidebars = {
         {
           type: "doc",
           id: "server/mastra-server",
-          label: "Server Configuration",
+          label: "Overview",
         },
         {
           type: "doc",
@@ -481,6 +486,16 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/datadog",
+                  label: "Datadog",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/laminar",
+                  label: "Laminar",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/langfuse",
                   label: "Langfuse",
                 },
@@ -498,6 +513,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/posthog",
                   label: "PostHog",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/sentry",
+                  label: "Sentry",
                 },
               ],
             },

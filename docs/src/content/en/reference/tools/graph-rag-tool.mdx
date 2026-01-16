@@ -108,6 +108,13 @@ time.
         "Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
       isOptional: true,
     },
+    {
+      name: "vectorStore",
+      type: "MastraVector | VectorStoreResolver",
+      description:
+        "Direct vector store instance or a resolver function for dynamic selection. Use a function for multi-tenant applications where the vector store is selected based on request context. When provided, `vectorStoreName` becomes optional.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -258,6 +265,33 @@ For more information on request context, please see:
 
 - [Agent Request Context](/docs/server/request-context)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)
+
+## Dynamic Vector Store for Multi-Tenant Applications
+
+For multi-tenant applications where each tenant has isolated data, you can pass a resolver function instead of a static vector store:
+
+```typescript
+import { createGraphRAGTool, VectorStoreResolver } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
+
+const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+  const tenantId = requestContext?.get("tenantId");
+  
+  return new PgVector({
+    id: `pg-vector-${tenantId}`,
+    connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+    schemaName: `tenant_${tenantId}`,
+  });
+};
+
+const graphTool = createGraphRAGTool({
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStore: vectorStoreResolver,
+});
+```
+
+See [createVectorQueryTool - Dynamic Vector Store](./vector-query-tool#dynamic-vector-store-for-multi-tenant-applications) for more details.
 
 ## Related
 

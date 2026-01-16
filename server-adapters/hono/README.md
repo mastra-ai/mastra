@@ -65,5 +65,5 @@ Access these in route handlers via `c.get()`:
 
 ## Related Links
 
-- [Server Adapters Documentation](https://mastra.ai/docs/server-db/server-adapters)
+- [Server Adapters Documentation](https://mastra.ai/docs/v1/server/server-adapters)
 - [Hono Documentation](https://hono.dev)

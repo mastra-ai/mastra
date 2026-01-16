@@ -28,10 +28,35 @@ npm install @mastra/braintrust@latest
 
 ```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
-BRAINTRUST_PROJECT_NAME=my-project  # Optional, defaults to 'mastra-tracing'
+
+# Optional
+BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # Custom endpoint if needed
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { BraintrustExporter } from "@mastra/braintrust";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: "my-service",
+        exporters: [new BraintrustExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -46,7 +71,7 @@ export const mastra = new Mastra({
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
-            projectName: process.env.BRAINTRUST_PROJECT_NAME,
+            projectName: "my-project",
           }),
         ],
       },

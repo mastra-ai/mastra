@@ -27,7 +27,7 @@ import { LibSQLVector } from "@mastra/libsql";
 // Create a new vector store instance
 const store = new LibSQLVector({
   id: 'libsql-vector',
-  connectionUrl: process.env.DATABASE_URL,
+  url: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,
 });
@@ -65,7 +65,7 @@ const results = await store.query({
 <PropertiesTable
   content={[
     {
-      name: "connectionUrl",
+      name: "url",
       type: "string",
       description:
         "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
@@ -422,7 +422,7 @@ export const libsqlAgent = new Agent({
     }),
     vector: new LibSQLVector({
       id: 'libsql-agent-vector',
-      connectionUrl: "file:libsql-agent.db",
+      url: "file:libsql-agent.db",
     }),
     embedder: fastembed,
     options: {
@@ -431,9 +431,7 @@ export const libsqlAgent = new Agent({
         topK: 3,
         messageRange: 2,
       },
-      threads: {
-        generateTitle: true, // Explicitly enable automatic title generation
-      },
+      generateTitle: true, // Explicitly enable automatic title generation
     },
   }),
 });

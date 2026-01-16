@@ -1,3 +1,5 @@
+import type { z } from 'zod/v3';
+
 /**
  * Type compatibility layer for Zod v3 and v4
  *
@@ -6,15 +8,12 @@
  * from both versions by checking for the presence of key methods rather
  * than relying on exact type matching.
  */
-export type ZodLikeSchema = {
-  parse: (data: unknown) => any;
-  safeParse: (data: unknown) => { success: boolean; data?: any; error?: any };
-};
+export type ZodLikeSchema<T = any> = z.ZodSchema<T>;
 
 /**
  * Helper type for extracting the inferred type from a Zod-like schema after parsing
  */
-export type InferZodLikeSchema<T> = T extends { parse: (data: unknown) => infer U } ? U : any;
+export type InferZodLikeSchema<T extends ZodLikeSchema<any>> = z.infer<T>;
 
 /**
  * Helper type for extracting the input type from a Zod-like schema.

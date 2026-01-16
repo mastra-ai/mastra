@@ -208,10 +208,10 @@ const agentStep = createStep(testAgent, {
         "Request Context for dependency injection and contextual information.",
     },
     {
-      name: "runCount",
+      name: "retryCount",
       type: "number",
       description:
-        "The run count for this specific step, it automatically increases each time the step runs",
+        "The retry count for this specific step, it automatically increases each time the step is retried",
       isOptional: true,
     },
   ]}

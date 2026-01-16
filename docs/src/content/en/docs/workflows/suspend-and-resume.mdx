@@ -93,11 +93,11 @@ const result = await run.resume({
 
 If only one step is suspended, you can omit the step argument entirely and Mastra will resume the last suspended step in the workflow.
 
-When resuming with only a `runId`, create a run instance first using `createRunAsync()`.
+When resuming with only a `runId`, create a run instance first using `createRun()`.
 
 ```typescript
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync({ runId: "123" });
+const run = await workflow.createRun({ runId: "123" });
 
 const stream = run.resume({
   resumeData: { approved: true }
@@ -193,16 +193,14 @@ The `suspended` array contains the IDs of any suspended workflows and steps from
 [ 'nested-workflow', 'step-1' ]
 ```
 
-## Sleep & Events
+## Sleep
 
-Sleep and event methods can be used to pause execution at the workflow level, which sets the status to `waiting`. By comparison, `suspend()` pauses execution within a specific step and sets the status to `suspended`.
+Sleep methods can be used to pause execution at the workflow level, which sets the status to `waiting`. By comparison, `suspend()` pauses execution within a specific step and sets the status to `suspended`.
 
 **Available methods:**
 
-- [`.sleep()`](/reference/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
-- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil) : Pause until a specific date
-- [`.waitForEvent()`](/reference/workflows/workflow-methods/waitForEvent): Pause until an external event is received
-- [`.sendEvent()`](/reference/workflows/workflow-methods/sendEvent) : Send an event to resume a waiting workflow
+- [`.sleep()`](/reference/v1/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
+- [`.sleepUntil()`](/reference/v1/workflows/workflow-methods/sleepUntil): Pause until a specific date
 
 ## Related
 

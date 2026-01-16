@@ -52,5 +52,5 @@ curl -X POST http://localhost:4111/api/agents/assistantAgent/generate \
 
 ## Documentation
 
-- [Hono Adapter docs](https://mastra.ai/docs/server-db/hono-adapter)
-- [Server Adapters overview](https://mastra.ai/docs/server-db/server-adapters)
+- [Hono Adapter docs](https://mastra.ai/docs/v1/server-db/hono-adapter)
+- [Server Adapters overview](https://mastra.ai/docs/v1/server/server-adapters)

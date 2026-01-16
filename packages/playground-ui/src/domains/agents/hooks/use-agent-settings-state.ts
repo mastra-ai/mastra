@@ -6,7 +6,7 @@ export interface AgentSettingsStateProps {
   defaultSettings?: AgentSettings;
 }
 
-const defaultSettings: AgentSettings = {
+export const defaultSettings: AgentSettings = {
   modelSettings: {
     maxRetries: 2,
     maxSteps: 5,

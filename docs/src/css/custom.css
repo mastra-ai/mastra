@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
+@theme {
+  --breakpoint-lg: 62.25rem;
+}
+
 /* ==================== LIGHT MODE ==================== */
 :root {
   /* Primary colors - Light mode uses darker green to match Nextra */
@@ -416,10 +420,6 @@ article a:hover {
   color: var(--mastra-green-accent-2);
 }
 
-#docs-search-results {
-  scrollbar-width: none;
-}
-
 p {
   @apply tracking-[-0.09px] leading-[1.6];
 }
@@ -633,7 +633,33 @@ ol {
   list-style: decimal;
 }
 
-@media (min-width: 997px) {
+.grecaptcha-badge {
+  visibility: hidden;
+}
+
+.table-of-contents li {
+  margin: var(--ifm-toc-padding-vertical) 0;
+}
+
+kbd {
+  all: unset;
+  background: var(--ifm-background-color);
+  border-radius: 4px;
+  padding-inline: 0.38rem;
+  padding-block: 0.2rem;
+  display: flex;
+  font-size: 10px;
+}
+
+[data-theme="dark"] kbd {
+  background: var(--ifm-navbar-background-color);
+}
+
+@media (min-width: 62.25rem) {
+  #doc-item-container {
+    gap: 2rem;
+  }
+
   [class*="docSidebarContainer"] {
     width: 280px !important;
   }
@@ -1024,20 +1050,6 @@ ol {
     text-wrap: balance;
   }
 
-  kbd {
-    all: unset;
-    background: var(--ifm-background-color);
-    border-radius: 4px;
-    padding-inline: 0.38rem;
-    padding-block: 0.2rem;
-    display: flex;
-    font-size: 10px;
-  }
-
-  [data-theme="dark"] kbd {
-    background: var(--ifm-navbar-background-color);
-  }
-
   /* Hide in Safari */
   input,
   button {
@@ -1047,10 +1059,6 @@ ol {
   input[type="search"]::-webkit-search-cancel-button {
     -webkit-appearance: none;
     appearance: none;
-  }
-
-  .grecaptcha-badge {
-    visibility: hidden;
   }
 
   .copilotKitMarkdown p {
@@ -1160,7 +1168,7 @@ ol {
   }
 
   #doc-item-container {
-    max-width: 64rem;
+    max-width: 62.25rem;
     margin: 0 auto;
   }
 
@@ -1202,7 +1210,6 @@ ol {
   }
 
   [class*="docItemContainer"] {
-    padding-inline: 3rem;
     max-width: 48rem;
     margin: 0 auto;
   }

@@ -1,12 +1,10 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
-import { useWorkflowRunExecutionResult } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
-import { WorkflowRunState } from '@mastra/core/workflows';
 import { useContext } from 'react';
 
 export interface WorkflowRunDetailProps extends Omit<
@@ -45,7 +43,7 @@ export const WorkflowRunDetail = ({
   if (!runSnapshot || !runId) {
     return (
       <div className="p-4">
-        <Txt variant="ui-md" className="text-icon6 text-center">
+        <Txt variant="ui-md" className="text-neutral6 text-center">
           No previous run
         </Txt>
       </div>

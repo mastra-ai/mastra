@@ -144,7 +144,7 @@ const scorer = createToolCallAccuracyScorerCode({
 
 // Simulate LLM input and output with tool call
 const inputMessages = [
-  createUIMessage({
+  createTestMessage({
     content: "What is the weather like in New York today?",
     role: "user",
     id: "input-1",
@@ -152,7 +152,7 @@ const inputMessages = [
 ];
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me check the weather for you.",
     role: "assistant",
     id: "output-1",
@@ -187,7 +187,7 @@ const strictScorer = createToolCallAccuracyScorerCode({
 
 // Multiple tools called - fails in strict mode
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me help you with that.",
     role: "assistant",
     id: "output-1",
@@ -226,7 +226,7 @@ const orderScorer = createToolCallAccuracyScorerCode({
 });
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "I will authenticate and fetch the data.",
     role: "assistant",
     id: "output-1",
@@ -265,7 +265,7 @@ const flexibleOrderScorer = createToolCallAccuracyScorerCode({
 });
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Performing comprehensive operation.",
     role: "assistant",
     id: "output-1",
@@ -409,7 +409,7 @@ const llmScorer = createToolCallAccuracyScorerLLM({
 });
 
 const inputMessages = [
-  createUIMessage({
+  createTestMessage({
     content: "What is the weather like in San Francisco today?",
     role: "user",
     id: "input-1",
@@ -417,7 +417,7 @@ const inputMessages = [
 ];
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me check the current weather for you.",
     role: "assistant",
     id: "output-1",
@@ -444,7 +444,7 @@ console.log(result.reason); // "The agent correctly used the weather-tool to add
 
 ```typescript title="src/example-llm-inappropriate.ts"
 const inputMessages = [
-  createUIMessage({
+  createTestMessage({
     content: "What is the weather in Tokyo?",
     role: "user",
     id: "input-1",
@@ -452,7 +452,7 @@ const inputMessages = [
 ];
 
 const inappropriateOutput = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me search for that information.",
     role: "assistant",
     id: "output-1",
@@ -481,7 +481,7 @@ The LLM scorer recognizes when agents appropriately ask for clarification:
 
 ```typescript title="src/example-llm-clarification.ts"
 const vagueInput = [
-  createUIMessage({
+  createTestMessage({
     content: 'I need help with something',
     role: 'user',
     id: 'input-1'
@@ -489,7 +489,7 @@ const vagueInput = [
 ];
 
 const clarificationOutput = [
-  createUIMessage({
+  createTestMessage({
     content: 'I'd be happy to help! Could you please provide more details about what you need assistance with?',
     role: 'assistant',
     id: 'output-1',
@@ -534,14 +534,14 @@ const llmScorer = createLLMScorer({
 // Test data
 const run = createAgentTestRun({
   inputMessages: [
-    createUIMessage({
+    createTestMessage({
       content: "What is the weather?",
       role: "user",
       id: "input-1",
     }),
   ],
   output: [
-    createUIMessage({
+    createTestMessage({
       content: "Let me find that information.",
       role: "assistant",
       id: "output-1",

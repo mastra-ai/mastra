@@ -26,11 +26,37 @@ npm install @mastra/posthog@latest
 3. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
+# Required
 POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
-POSTHOG_HOST=https://us.i.posthog.com  # Optional: EU region or self-hosted URL
+
+# Optional
+POSTHOG_HOST=https://us.i.posthog.com  # or eu.i.posthog.com for EU region
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { PosthogExporter } from "@mastra/posthog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: "my-service",
+        exporters: [new PosthogExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";

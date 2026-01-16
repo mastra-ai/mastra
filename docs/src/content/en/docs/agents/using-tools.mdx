@@ -146,8 +146,13 @@ When the agent calls the workflow tool, it receives a response containing the wo
 }
 ```
 
+## Tools with structured output
+
+When using tools with [structured output](/docs/agents/structured-output), some models don't support combining both features in the same API call. If your tools aren't being called when structured output is enabled, or you receive errors about incompatible options, see [Combining tools and structured output](/docs/agents/structured-output#combining-tools-and-structured-output) for model compatibility information and workarounds.
+
 ## Related
 
 - [MCP Overview](/docs/mcp/overview)
+- [Structured Output](/docs/agents/structured-output)
 - [Agent Memory](/docs/agents/agent-memory)
 - [Request Context](/docs/server/request-context)

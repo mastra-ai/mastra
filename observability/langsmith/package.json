@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langsmith",
-  "version": "1.0.0-beta.10",
+  "version": "1.0.0-beta.11",
   "description": "Langsmith observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@observability/test-utils": "workspace:*",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

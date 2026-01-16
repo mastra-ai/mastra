@@ -76,7 +76,7 @@ console.log(response.object);
 
 :::info
 
-Visit [.generate()](/reference/agents/generate#structuredoutput) for a full list of configuration options.
+Visit [.generate()](/reference/agents/generate) for a full list of configuration options.
 
 :::
 
@@ -162,9 +162,25 @@ const response = await testAgent.generate("Analyze the TypeScript programming la
 console.log(response.object);
 ```
 
-## LLM Structured Output support
+## Combining tools and structured output
 
-Structured output support varies across LLM's due to the model itself. There are various workarounds provided to be able to use the full range of features supported for structured output, mainly returning structured output, tool calling, and the combination of the two.
+When an agent has both tools and structured output configured, some models may not support using both features together. This is a limitation of the underlying model APIs, not Mastra itself.
+
+If your tools aren't being called when structured output is enabled, or you receive an error when combining both features, try one of the workarounds below.
+
+### Workaround options
+
+When your model doesn't support tools and structured output together, you have three options:
+
+1. **Use `jsonPromptInjection: true`** - Injects the schema into the prompt instead of using the API's `response_format` parameter
+2. **Use a separate structuring model** - Pass a `model` to `structuredOutput` to use a second LLM for structuring
+3. **Use `prepareStep`** - Handle tools and structured output in separate steps
+
+Each approach is detailed in the sections below.
+
+## LLM structured output support
+
+Structured output support varies across LLMs due to differences in their APIs. The sections below cover workarounds for models that don't fully support structured output or combining it with tools.
 
 ### `jsonPromptInjection`
 
@@ -192,7 +208,11 @@ console.log(response.object);
 
 :::info[Gemini 2.5 with tools]
 
-Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error:
+
+```
+Function calling with a response mime type: 'application/json' is unsupported
+```
 
 ```typescript
 const response = await agentWithTools.generate("Your prompt", {

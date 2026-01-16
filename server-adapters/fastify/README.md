@@ -81,5 +81,5 @@ await app.register(multipart);
 
 ## Related Links
 
-- [Server Adapters Documentation](https://mastra.ai/docs/server-db/server-adapters)
+- [Server Adapters Documentation](https://mastra.ai/docs/v1/server/server-adapters)
 - [Fastify Documentation](https://fastify.dev/docs/latest/)
