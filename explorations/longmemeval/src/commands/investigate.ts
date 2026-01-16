@@ -1135,7 +1135,7 @@ export class InvestigateCommand {
           new RegExp(`(${keyword})`, 'gi'),
           '\x1b[33m$1\x1b[0m'
         );
-        console.log(`   [${idx}] ${highlighted.substring(0, 150)}${line.length > 150 ? '...' : ''}`);
+        console.log(`   [${idx}] ${highlighted}`);
       }
     }
 
