@@ -161,7 +161,7 @@ describe('Writable Stream from Tool', () => {
     });
 
     // Stream with memory enabled
-    const stream = await agent.stream('Run a task called test', { threadId, resourceId });
+    const stream = await agent.stream('Run a task called test', { memory: { thread: threadId, resource: resourceId } });
     for await (const _ of stream.fullStream) {
       // consume stream
     }
@@ -259,7 +259,9 @@ describe('Writable Stream from Tool', () => {
       },
     ];
 
-    const stream = await agent.stream(messagesFromUseChat as any, { threadId, resourceId });
+    const stream = await agent.stream(messagesFromUseChat as any, {
+      memory: { thread: threadId, resource: resourceId },
+    });
     for await (const _ of stream.fullStream) {
       // consume stream
     }

@@ -636,6 +636,16 @@ export interface ObservabilityInstance {
   startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
 
   /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have end()/update()/error() called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
+
+  /**
    * Shutdown tracing and clean up resources
    */
   shutdown(): Promise<void>;
@@ -691,10 +701,20 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    */
   traceId?: string;
   /**
+   * Span ID to use for this span (1-16 hexadecimal characters).
+   * Only used when rebuilding a span from cached data.
+   */
+  spanId?: string;
+  /**
    * Parent span ID to use for this span (1-16 hexadecimal characters).
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /**
+   * Start time for this span.
+   * Only used when rebuilding a span from cached data.
+   */
+  startTime?: Date;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
 }
@@ -841,6 +861,14 @@ export interface TraceState {
    * with the per-request requestContextKeys.
    */
   requestContextKeys: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   */
+  hideOutput?: boolean;
 }
 
 /**
@@ -871,6 +899,16 @@ export interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 
 export interface SpanIds {

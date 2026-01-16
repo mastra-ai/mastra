@@ -652,6 +652,7 @@ export type ProviderModelsMap = {
   ];
   readonly venice: readonly [
     'claude-opus-45',
+    'claude-sonnet-45',
     'deepseek-v3.2',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
@@ -665,6 +666,7 @@ export type ProviderModelsMap = {
     'minimax-m21',
     'mistral-31-24b',
     'openai-gpt-52',
+    'openai-gpt-52-codex',
     'openai-gpt-oss-120b',
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-235b-a22b-thinking-2507',

@@ -324,7 +324,6 @@ const sidebars = {
           id: "memory/listThreadsByResourceId",
           label: ".listThreadsByResourceId()",
         },
-        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/recall", label: ".recall()" },
       ],
     },
@@ -395,6 +394,11 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/datadog",
+                  label: "DatadogExporter",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/laminar",
                   label: "LaminarExporter",
                 },
@@ -417,6 +421,11 @@ const sidebars = {
                   type: "doc",
                   id: "observability/tracing/exporters/posthog",
                   label: "PostHogExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/sentry",
+                  label: "SentryExporter",
                 },
               ],
             },

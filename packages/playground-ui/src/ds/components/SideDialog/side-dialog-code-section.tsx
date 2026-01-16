@@ -79,7 +79,7 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
   );
 }
 
-export function containsInnerNewline(obj: unknown): boolean {
+function containsInnerNewline(obj: unknown): boolean {
   if (typeof obj === 'string') {
     const idx = obj.indexOf('\n');
     return idx !== -1 && idx !== obj.length - 1;

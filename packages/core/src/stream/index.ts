@@ -43,7 +43,8 @@ export type {
   ReadonlyJSONValue,
 } from './types';
 
-export type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, SchemaWithValidation } from './base/schema';
+export type { OutputSchema, PartialSchemaOutput, SchemaWithValidation, InferSchemaOutput } from './base/schema';
+export type { FullOutput } from './base/output';
 
 // ============================================================================
 // Enums & Classes

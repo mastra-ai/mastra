@@ -9,7 +9,7 @@ packages:
 
 # Laminar Exporter
 
-[Laminar](https://www.lmnr.ai/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
+[Laminar](https://laminar.sh/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
 
 ## Installation
 
@@ -32,7 +32,6 @@ LMNR_PROJECT_API_KEY=lmnr_...
 # Optional
 LMNR_BASE_URL=https://api.lmnr.ai
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=...
 ```
 
 ### Zero-Config Setup
@@ -100,5 +99,4 @@ const result = await agent.generate({
 ## Related
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [Laminar Documentation](https://docs.lmnr.ai)
-
+- [Laminar Documentation](https://docs.laminar.sh)
