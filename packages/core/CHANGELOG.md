@@ -1,5 +1,361 @@
 # @mastra/core
 
+## 1.0.0-beta.22
+
+### Major Changes
+
+- Refactor workflow and tool types to remove Zod-specific constraints ([#11814](https://github.com/mastra-ai/mastra/pull/11814))
+
+  Removed Zod-specific type constraints across all workflow implementations and tool types, replacing them with generic types. This ensures type consistency across default, evented, and inngest workflows while preparing for Zod v4 migration.
+
+  **Workflow Changes:**
+  - Removed `z.ZodObject<any>` and `z.ZodType<any>` constraints from all workflow generic types
+  - Updated method signatures to use `TInput` and `TState` directly instead of `z.infer<TInput>` and `z.infer<TState>`
+  - Aligned conditional types across all workflow implementations using `TInput extends unknown` pattern
+  - Fixed `TSteps` generic to properly use `TEngineType` instead of `any`
+
+  **Tool Changes:**
+  - Removed Zod schema constraints from `ToolExecutionContext` and related interfaces
+  - Simplified type parameters from `TSuspendSchema extends ZodLikeSchema` to `TSuspend` and `TResume`
+  - Updated tool execution context types to use generic types
+
+  **Type Utilities:**
+  - Refactored type helpers to work with generic schemas instead of Zod-specific types
+  - Updated type extraction utilities for better compatibility
+
+  This change maintains backward compatibility while improving type consistency and preparing for Zod v4 support across all affected packages.
+
+- **Breaking Change**: Convert OUTPUT generic from `OutputSchema` constraint to plain generic ([#11741](https://github.com/mastra-ai/mastra/pull/11741))
+
+  This change removes the direct dependency on Zod typings in the public API by converting all `OUTPUT extends OutputSchema` generic constraints to plain `OUTPUT` generics throughout the codebase. This is preparation for moving to a standard schema approach.
+  - All generic type parameters previously constrained to `OutputSchema` (e.g., `<OUTPUT extends OutputSchema = undefined>`) are now plain generics with defaults (e.g., `<OUTPUT = undefined>`)
+  - Affects all public APIs including `Agent`, `MastraModelOutput`, `AgentExecutionOptions`, and stream/generate methods
+  - `InferSchemaOutput<OUTPUT>` replaced with `OUTPUT` throughout
+  - `PartialSchemaOutput<OUTPUT>` replaced with `Partial<OUTPUT>`
+  - Schema fields now use `NonNullable<OutputSchema<OUTPUT>>` instead of `OUTPUT` directly
+  - Added `FullOutput<OUTPUT>` type representing complete output with all fields
+  - Added `AgentExecutionOptionsBase<OUTPUT>` type
+  - `getFullOutput()` method now returns `Promise<FullOutput<OUTPUT>>`
+  - `Agent` class now generic: `Agent<TAgentId, TTools, TOutput>`
+  - `agent.generate()` and `agent.stream()` methods have updated signatures
+  - `MastraModelOutput<OUTPUT>` no longer requires `OutputSchema` constraint
+  - Network route and streaming APIs updated to use plain OUTPUT generic
+
+  **Before:**
+
+  ```typescript
+  const output = await agent.generate<z.ZodType>({
+    messages: [...],
+    structuredOutput: { schema: mySchema }
+  });
+
+  **After:**
+  const output = await agent.generate<z.infer<typeof mySchema>>({
+    messages: [...],
+    structuredOutput: { schema: mySchema }
+  });
+  // Or rely on type inference:
+  const output = await agent.generate({
+    messages: [...],
+    structuredOutput: { schema: mySchema }
+  });
+
+  ```
+
+### Minor Changes
+
+- Add context parameter to `idGenerator` to enable deterministic ID generation based on context. ([#10964](https://github.com/mastra-ai/mastra/pull/10964))
+
+  The `idGenerator` function now receives optional context about what type of ID is being generated and from which Mastra primitive. This allows generating IDs that can be shared with external databases.
+
+  ```typescript
+  const mastra = new Mastra({
+    idGenerator: context => {
+      // context.idType: 'thread' | 'message' | 'run' | 'step' | 'generic'
+      // context.source: 'agent' | 'workflow' | 'memory'
+      // context.entityId: the agent/workflow id
+      // context.threadId, context.resourceId, context.role, context.stepType
+
+      if (context?.idType === 'message' && context?.threadId) {
+        return `msg-${context.threadId}-${Date.now()}`;
+      }
+      if (context?.idType === 'run' && context?.source === 'agent') {
+        return `run-${context.entityId}-${Date.now()}`;
+      }
+      return crypto.randomUUID();
+    },
+  });
+  ```
+
+  Existing `idGenerator` functions without parameters continue to work since the context is optional.
+
+  Fixes #8131
+
+- Add `hideInput` and `hideOutput` options to `TracingOptions` for protecting sensitive data in traces. ([#11969](https://github.com/mastra-ai/mastra/pull/11969))
+
+  When set to `true`, these options hide input/output data from all spans in a trace, including child spans. This is useful for protecting sensitive information from being logged to observability platforms.
+
+  ```typescript
+  const agent = mastra.getAgent('myAgent');
+  await agent.generate('Process this sensitive data', {
+    tracingOptions: {
+      hideInput: true, // Input will be hidden from all spans
+      hideOutput: true, // Output will be hidden from all spans
+    },
+  });
+  ```
+
+  The options can be used independently (hide only input or only output) or together. The settings are propagated to all child spans via `TraceState`, ensuring consistent behavior across the entire trace.
+
+  Fixes #10888
+
+- Removed the deprecated `AISDKV5OutputStream` class from the public API. ([#11845](https://github.com/mastra-ai/mastra/pull/11845))
+
+  **What changed:** The `AISDKV5OutputStream` class is no longer exported from `@mastra/core`. This class was previously used with the `format: 'aisdk'` option, which has already been removed from `.stream()` and `.generate()` methods.
+
+  **Who is affected:** Only users who were directly importing `AISDKV5OutputStream` from `@mastra/core`. If you were using the standard `.stream()` or `.generate()` methods without the `format` option, no changes are needed.
+
+  **Migration:** If you were importing this class directly, switch to using `MastraModelOutput` which provides the same streaming functionality:
+
+  ```typescript
+  // Before
+  import { AISDKV5OutputStream } from '@mastra/core';
+
+  // After
+  import { MastraModelOutput } from '@mastra/core';
+  ```
+
+- Changed JSON columns from TEXT to JSONB in `mastra_threads` and `mastra_workflow_snapshot` tables. ([#11853](https://github.com/mastra-ai/mastra/pull/11853))
+
+  **Why this change?**
+
+  These were the last remaining columns storing JSON as TEXT. This change aligns them with other tables that already use JSONB, enabling native JSON operators and improved performance. See [#8978](https://github.com/mastra-ai/mastra/issues/8978) for details.
+
+  **Columns Changed:**
+  - `mastra_threads.metadata` - Thread metadata
+  - `mastra_workflow_snapshot.snapshot` - Workflow run state
+
+  **PostgreSQL**
+
+  Migration Required - PostgreSQL enforces column types, so existing tables must be migrated. Note: Migration will fail if existing column values contain invalid JSON.
+
+  ```sql
+  ALTER TABLE mastra_threads
+  ALTER COLUMN metadata TYPE jsonb
+  USING metadata::jsonb;
+
+  ALTER TABLE mastra_workflow_snapshot
+  ALTER COLUMN snapshot TYPE jsonb
+  USING snapshot::jsonb;
+  ```
+
+  **LibSQL**
+
+  No Migration Required - LibSQL now uses native SQLite JSONB format (added in SQLite 3.45) for ~3x performance improvement on JSON operations. The changes are fully backwards compatible:
+  - Existing TEXT JSON data continues to work
+  - New data is stored in binary JSONB format
+  - Both formats can coexist in the same table
+  - All JSON functions (`json_extract`, etc.) work on both formats
+
+  New installations automatically use JSONB. Existing applications continue to work without any changes.
+
+- Added `TrackingExporter` base class with improved handling for: ([#11870](https://github.com/mastra-ai/mastra/pull/11870))
+  - **Out-of-order span processing**: Spans that arrive before their parents are now queued and processed once dependencies are available
+  - **Delayed cleanup**: Trace data is retained briefly after spans end to handle late-arriving updates
+  - **Memory management**: Configurable limits on pending and total traces to prevent memory leaks
+
+  New configuration options on `TrackingExporterConfig`:
+  - `earlyQueueMaxAttempts` - Max retry attempts for queued events (default: 5)
+  - `earlyQueueTTLMs` - TTL for queued events in ms (default: 30000)
+  - `traceCleanupDelayMs` - Delay before cleaning up completed traces (default: 30000)
+  - `maxPendingCleanupTraces` - Soft cap on traces awaiting cleanup (default: 100)
+  - `maxTotalTraces` - Hard cap on total traces (default: 500)
+
+  Updated @mastra/braintrust, @mastra/langfuse, @mastra/langsmith, @mastra/posthog to use the new TrackingExporter
+
+- Add MCP tool annotations and metadata support to `ToolAction` and `Tool` ([#11841](https://github.com/mastra-ai/mastra/pull/11841))
+
+  Tools can now surface UI hints like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` via the `mcp.annotations` field, and pass arbitrary metadata to MCP clients via `mcp._meta`. These MCP-specific properties are grouped under the `mcp` property to clearly indicate they only apply when tools are exposed via MCP.
+
+  ```typescript
+  import { createTool } from '@mastra/core/tools';
+
+  const myTool = createTool({
+    id: 'weather',
+    description: 'Get weather for a location',
+    mcp: {
+      annotations: {
+        title: 'Weather Lookup',
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+      _meta: { version: '1.0.0' },
+    },
+    execute: async ({ location }) => fetchWeather(location),
+  });
+  ```
+
+### Patch Changes
+
+- Fix dimension mismatch error when switching embedders in SemanticRecall. The processor now properly validates vector index dimensions when an index already exists, preventing runtime errors when switching between embedders with different dimensions (e.g., fastembed 384 dims → OpenAI 1536 dims). ([#11893](https://github.com/mastra-ai/mastra/pull/11893))
+
+- Removes the deprecated `threadId` and `resourceId` options from `AgentExecutionOptions`. These have been deprecated for months in favour of the `memory` option. ([#11897](https://github.com/mastra-ai/mastra/pull/11897))
+
+  ### Breaking Changes
+
+  #### `@mastra/core`
+
+  The `threadId` and `resourceId` options have been removed from `agent.generate()` and `agent.stream()`. Use the `memory` option instead:
+
+  ```ts
+  // Before
+  await agent.stream('Hello', {
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+
+  // After
+  await agent.stream('Hello', {
+    memory: {
+      thread: 'thread-123',
+      resource: 'user-456',
+    },
+  });
+  ```
+
+  #### `@mastra/server`
+
+  The `threadId`, `resourceId`, and `resourceid` fields have been removed from the main agent execution body schema. The server now expects the `memory` option format in request bodies. Legacy routes (`/api/agents/:agentId/generate-legacy` and `/api/agents/:agentId/stream-legacy`) continue to support the deprecated fields.
+
+  #### `@mastra/react`
+
+  The `useChat` hook now internally converts `threadId` to the `memory` option format when making API calls. No changes needed in component code - the hook handles the conversion automatically.
+
+  #### `@mastra/client-js`
+
+  When using the client SDK agent methods, use the `memory` option instead of `threadId`/`resourceId`:
+
+  ```ts
+  const agent = client.getAgent('my-agent');
+
+  // Before
+  await agent.generate({
+    messages: [...],
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+
+  // After
+  await agent.generate({
+    messages: [...],
+    memory: {
+      thread: 'thread-123',
+      resource: 'user-456',
+    },
+  });
+  ```
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Fixed AI SDK v6 provider tools (like `openai.tools.webSearch()`) not being invoked correctly. These tools are now properly recognized and executed instead of causing failures or hallucinated tool calls. ([#11946](https://github.com/mastra-ai/mastra/pull/11946))
+
+  Resolves `#11781`.
+
+- Fixed `TokenLimiterProcessor` not filtering memory messages when limiting tokens. ([#11941](https://github.com/mastra-ai/mastra/pull/11941))
+
+  Previously, the processor only received the latest user input messages, missing the conversation history from memory. This meant token limiting couldn't filter historical messages to fit within the context window.
+
+  The processor now correctly:
+  - Accesses all messages (memory + input) when calculating token budgets
+  - Accounts for system messages in the token budget
+  - Filters older messages to prioritize recent conversation context
+
+  Fixes #11902
+
+- Fix crash in `mastraDBMessageToAIV4UIMessage` when `content.parts` is undefined or null. ([#11550](https://github.com/mastra-ai/mastra/pull/11550))
+
+  This resolves an issue where `ModerationProcessor` (and other code paths using `MessageList.get.*.ui()`) would throw `TypeError: Cannot read properties of undefined (reading 'length')` when processing messages with missing `parts` array. This commonly occurred when using AI SDK v4 (LanguageModelV1) models with input/output processors.
+
+  The fix adds null coalescing (`?? []`) to safely handle undefined/null `parts` in the message conversion method.
+
+- Improved TypeScript type inference for workflow steps. ([#11953](https://github.com/mastra-ai/mastra/pull/11953))
+
+  **What changed:**
+  - Step input/output type mismatches are now caught at compile time when chaining steps with `.then()`
+  - The `execute` function now properly infers types from `inputSchema`, `outputSchema`, `stateSchema`, and other schema parameters
+  - Clearer error messages when step types don't match workflow requirements
+
+  **Why:**
+  Previously, type errors in workflow step chains would only surface at runtime. Now TypeScript validates that each step's input requirements are satisfied by the previous step's output, helping you catch integration issues earlier in development.
+
+- Add `response` to finish chunk payload for output processor metadata access ([#11549](https://github.com/mastra-ai/mastra/pull/11549))
+
+  When using output processors with streaming, metadata added via `processOutputResult` is now accessible in the finish chunk's `payload.response.uiMessages`. This allows clients consuming streams over HTTP (e.g., via `/stream/ui`) to access processor-added metadata.
+
+  ```typescript
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'finish') {
+      const uiMessages = chunk.payload.response?.uiMessages;
+      const metadata = uiMessages?.find(m => m.role === 'assistant')?.metadata;
+    }
+  }
+  ```
+
+  Fixes #11454
+
+- Fixed formatting of model_step, model_chunk, and tool_call spans in Arize Exporter. ([#11922](https://github.com/mastra-ai/mastra/pull/11922))
+
+  Also removed `tools` output from `model_step` spans for all exporters.
+
+- Improved tracing by filtering infrastructure chunks from model streams and adding success attribute to tool spans. ([#11943](https://github.com/mastra-ai/mastra/pull/11943))
+
+  Added generic input/output attribute mapping for additional span types in Arize exporter.
+
+- Fix generateTitle for pre-created threads ([#11771](https://github.com/mastra-ai/mastra/pull/11771))
+  - Title generation now works automatically for pre-created threads (via client SDK)
+  - When `generateTitle: true` is configured, titles are generated on the first user message
+  - Detection is based on message history: if no existing user messages in memory, it's the first message
+  - No metadata flags required - works seamlessly with optimistic UI patterns
+
+  Fixes #11757
+
+- Real-time span export for Inngest workflow engine ([#11973](https://github.com/mastra-ai/mastra/pull/11973))
+  - Spans are now exported immediately when created and ended, instead of being batched at workflow completion
+  - Added durable span lifecycle hooks (`createStepSpan`, `endStepSpan`, `errorStepSpan`, `createChildSpan`, `endChildSpan`, `errorChildSpan`) that wrap span operations in Inngest's `step.run()` for memoization
+  - Added `rebuildSpan()` method to reconstruct span objects from exported data after Inngest replay
+  - Fixed nested workflow step spans missing output data
+  - Spans correctly maintain parent-child relationships across Inngest's durable execution boundaries using `tracingIds`
+
+- Fixed sub-agents in `agent.network()` not receiving conversation history. ([#11825](https://github.com/mastra-ai/mastra/pull/11825))
+
+  Sub-agents now have access to previous user messages from the conversation, enabling them to understand context from earlier exchanges. This resolves the issue where sub-agents would respond without knowledge of prior conversation turns.
+
+  Fixes #11468
+
+- Fix TypeScript type narrowing when iterating over typed RequestContext ([#10850](https://github.com/mastra-ai/mastra/pull/10850))
+
+  The `set()` and `get()` methods on a typed `RequestContext` already provide full type safety. However, when iterating with `entries()`, `keys()`, `values()`, or `forEach()`, TypeScript couldn't narrow the value type based on key checks.
+
+  Now it can:
+
+  ```typescript
+  const ctx = new RequestContext<{ userId: string; maxTokens: number }>();
+
+  // Direct access:
+  const tokens = ctx.get('maxTokens'); // number
+
+  // Iteration now works too:
+  for (const [key, value] of ctx.entries()) {
+    if (key === 'maxTokens') {
+      value.toFixed(0); // TypeScript knows value is number
+    }
+  }
+  ```
+
 ## 1.0.0-beta.21
 
 ### Minor Changes

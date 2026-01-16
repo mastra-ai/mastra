@@ -1,5 +1,120 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.22
+
+### Minor Changes
+
+- Added consistent sizing, radius, and focus effects across all form elements. ([#11970](https://github.com/mastra-ai/mastra/pull/11970))
+
+  **New size prop** for form elements with unified values:
+  - `sm` (24px)
+  - `md` (32px)
+  - `lg` (40px)
+
+  Components now share a consistent `size` prop: Button, Input, SelectTrigger, Searchbar, InputField, SelectField, and Combobox.
+
+  ```tsx
+  // Before - inconsistent props
+  <Input customSize="default" />
+  <Button size="md" /> // was 24px
+
+  // After - unified size prop
+  <Input size="md" />
+  <Button size="md" /> // now 32px
+  <SelectTrigger size="lg" />
+  ```
+
+  **Breaking changes:**
+  - Input: `customSize` prop renamed to `size`
+  - Button: `size="md"` now renders at 32px (was 24px). Use `size="sm"` for 24px height.
+
+  **Other changes:**
+  - All form elements now use `rounded-md` radius
+  - All form elements now use `focus:outline focus:outline-accent1` focus effect
+  - Removed `button-md` and `button-lg` size tokens (use `form-sm`, `form-md`, `form-lg` instead)
+
+- Added platform-aware navigation filtering using `useMastraPlatform` hook. Nav links now include an `isOnMastraPlatform` property that controls visibility based on whether the app is running on Mastra Platform or locally. ([#11990](https://github.com/mastra-ai/mastra/pull/11990))
+
+- consolidate duplicated components between ds and ui directories ([#11876](https://github.com/mastra-ai/mastra/pull/11876))
+
+### Patch Changes
+
+- Add Storybook stories for all design system components. Includes stories for 48 components organized by category (Elements, Feedback, Navigation, DataDisplay, Layout, Composite) plus an Icons showcase displaying all 41 icons. ([#11921](https://github.com/mastra-ai/mastra/pull/11921))
+
+- Consolidate UI components into design system folder. Moves all UI primitives from `src/components/ui/` to `src/ds/components/` to establish a single source of truth for UI components. Import paths updated across the codebase. No API changes - all exports remain the same. ([#11886](https://github.com/mastra-ai/mastra/pull/11886))
+
+- Consolidate Tailwind config as the single source of truth. The playground package now imports the config via a preset export instead of duplicating all theme definitions. ([#11916](https://github.com/mastra-ai/mastra/pull/11916))
+
+- Aligned border, background, and radius styles across Dialog, AlertDialog, Popover, and Select components for visual consistency. All overlay components now use border-border1, bg-surface3, and rounded-md. ([#11974](https://github.com/mastra-ai/mastra/pull/11974))
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- fix(playground-ui): prevent temperature and topP conflict for Anthropic Claude 4.5+ models ([#11777](https://github.com/mastra-ai/mastra/pull/11777))
+  - Auto-clear topP for Claude 4.5+ models when both temperature and topP are set
+  - Show warning banner when user manually sets both values for restricted models
+  - Non-restricted models (OpenAI, Google, Claude 3.5) keep both defaults
+
+  Fixes #11760
+
+- Removed legacy spacing tokens (sm, md, lg) from the design system. These tokens were deprecated aliases that mapped to standard Tailwind spacing values (0.5, 1, 2). All components have been updated to use the standard spacing tokens directly. ([#11978](https://github.com/mastra-ai/mastra/pull/11978))
+
+- Move AutoForm from ds/components to lib/form for better organization ([#11915](https://github.com/mastra-ai/mastra/pull/11915))
+
+- Merge `IconColors` into `Colors` object in design tokens. Icon color tokens (`icon1` through `icon6`) are now part of the main `Colors` export. ([#11932](https://github.com/mastra-ai/mastra/pull/11932))
+
+- Remove legacy `colors.mastra` from Tailwind config and migrate to design system tokens (`Colors`, `IconColors`). ([#11925](https://github.com/mastra-ai/mastra/pull/11925))
+
+- Rollback color of sidebar cloud cta ([#11877](https://github.com/mastra-ai/mastra/pull/11877))
+
+- Remove unused keyframes and animations from tailwind config ([#11930](https://github.com/mastra-ai/mastra/pull/11930))
+
+- Rename icon color tokens to neutral for better semantic naming ([#11933](https://github.com/mastra-ai/mastra/pull/11933))
+
+- Replaced arbitrary Tailwind CSS values with standard utility classes for better consistency and maintainability. ([#11965](https://github.com/mastra-ai/mastra/pull/11965))
+  - Changed arbitrary spacing values like `gap-[1rem]`, `p-[1.5rem]`, `px-[2rem]` to standard classes (`gap-4`, `p-6`, `px-8`)
+  - Updated z-index values from `z-[1]` and `z-[100]` to standard `z-10` and `z-50`
+  - Replaced arbitrary gap values like `gap-[6px]` with `gap-1.5`
+  - Updated duration values from `duration-[1s]` to `duration-1000`
+
+- Replaced arbitrary Tailwind text sizes with semantic design tokens for consistent typography. ([#11956](https://github.com/mastra-ai/mastra/pull/11956))
+
+  **Changes:**
+  - Consolidated font size tokens from 5 fractional rem values to 8 clean sizes
+  - Replaced 129 occurrences of arbitrary `text-[...]` patterns across 44 files
+  - Added new header size tokens (`header-sm`, `header-lg`, `header-xl`)
+
+  **New token scale:**
+  - `ui-xs`: 10px
+  - `ui-sm`: 12px (was 11px)
+  - `ui-md`: 14px (was 12px)
+  - `ui-lg`: 16px (was 13px)
+  - `header-sm`: 18px
+  - `header-md`: 20px (was 16px)
+  - `header-lg`: 24px
+  - `header-xl`: 28px
+
+- Replaced direct `clsx` imports with the `cn` utility across all components for consistent Tailwind class merging. ([#11938](https://github.com/mastra-ai/mastra/pull/11938))
+
+- Replace CSS variable colors with design tokens ([#11928](https://github.com/mastra-ai/mastra/pull/11928))
+
+- Removed unused files, dependencies, and exports from playground packages. Deleted orphaned tool-list.tsx and workflow-list.tsx components, removed unused react-code-block dependency, and cleaned up 12 unused exports across object utilities, string helpers, and hooks. ([#11979](https://github.com/mastra-ai/mastra/pull/11979))
+
+- Converted spacing design tokens from pixels to REM units for better accessibility. Spacing now scales with the user's browser font size settings. All existing Tailwind spacing classes (`p-4`, `gap-2`, `m-8`, etc.) continue to work unchanged. ([#11968](https://github.com/mastra-ai/mastra/pull/11968))
+
+- Simplify Storybook configuration by removing Radix UI module resolution hacks and creating a dedicated CSS file for Storybook ([#11920](https://github.com/mastra-ai/mastra/pull/11920))
+
+- Agent's right sidebar is now 30% wide before resizing. It makes it easier to read the information at a first glance ([#11803](https://github.com/mastra-ai/mastra/pull/11803))
+
+- Updated dependencies [[`ebae12a`](https://github.com/mastra-ai/mastra/commit/ebae12a2dd0212e75478981053b148a2c246962d), [`c61a0a5`](https://github.com/mastra-ai/mastra/commit/c61a0a5de4904c88fd8b3718bc26d1be1c2ec6e7), [`69136e7`](https://github.com/mastra-ai/mastra/commit/69136e748e32f57297728a4e0f9a75988462f1a7), [`449aed2`](https://github.com/mastra-ai/mastra/commit/449aed2ba9d507b75bf93d427646ea94f734dfd1), [`eb648a2`](https://github.com/mastra-ai/mastra/commit/eb648a2cc1728f7678768dd70cd77619b448dab9), [`0131105`](https://github.com/mastra-ai/mastra/commit/0131105532e83bdcbb73352fc7d0879eebf140dc), [`9d5059e`](https://github.com/mastra-ai/mastra/commit/9d5059eae810829935fb08e81a9bb7ecd5b144a7), [`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`b00ccd3`](https://github.com/mastra-ai/mastra/commit/b00ccd325ebd5d9e37e34dd0a105caae67eb568f), [`e09a788`](https://github.com/mastra-ai/mastra/commit/e09a788e01698a711c7f705ce8d64ef8a20c3582), [`3bdfa75`](https://github.com/mastra-ai/mastra/commit/3bdfa7507a91db66f176ba8221aa28dd546e464a), [`e770de9`](https://github.com/mastra-ai/mastra/commit/e770de941a287a49b1964d44db5a5763d19890a6), [`52e2716`](https://github.com/mastra-ai/mastra/commit/52e2716b42df6eff443de72360ae83e86ec23993), [`27b4040`](https://github.com/mastra-ai/mastra/commit/27b4040bfa1a95d92546f420a02a626b1419a1d6), [`610a70b`](https://github.com/mastra-ai/mastra/commit/610a70bdad282079f0c630e0d7bb284578f20151), [`8dc7f55`](https://github.com/mastra-ai/mastra/commit/8dc7f55900395771da851dc7d78d53ae84fe34ec), [`8379099`](https://github.com/mastra-ai/mastra/commit/8379099fc467af6bef54dd7f80c9bd75bf8bbddf), [`8c0ec25`](https://github.com/mastra-ai/mastra/commit/8c0ec25646c8a7df253ed1e5ff4863a0d3f1316c), [`ff4d9a6`](https://github.com/mastra-ai/mastra/commit/ff4d9a6704fc87b31a380a76ed22736fdedbba5a), [`69821ef`](https://github.com/mastra-ai/mastra/commit/69821ef806482e2c44e2197ac0b050c3fe3a5285), [`1ed5716`](https://github.com/mastra-ai/mastra/commit/1ed5716830867b3774c4a1b43cc0d82935f32b96), [`4186bdd`](https://github.com/mastra-ai/mastra/commit/4186bdd00731305726fa06adba0b076a1d50b49f), [`7aaf973`](https://github.com/mastra-ai/mastra/commit/7aaf973f83fbbe9521f1f9e7a4fd99b8de464617)]:
+  - @mastra/core@1.0.0-beta.22
+  - @mastra/react@0.1.0-beta.22
+  - @mastra/client-js@1.0.0-beta.22
+  - @mastra/ai-sdk@1.0.0-beta.15
+
 ## 7.0.0-beta.21
 
 ### Patch Changes
