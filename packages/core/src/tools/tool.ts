@@ -2,7 +2,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions } from '../workflows';
-import type { ToolAction, ToolExecutionContext } from './types';
+import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
@@ -122,6 +122,26 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional MCP-specific properties including annotations and metadata.
+   * Only relevant when the tool is being used in an MCP context.
+   * @example
+   * ```typescript
+   * mcp: {
+   *   annotations: {
+   *     title: 'Weather Lookup',
+   *     readOnlyHint: true,
+   *     destructiveHint: false
+   *   },
+   *   _meta: {
+   *     version: '1.0.0',
+   *     author: 'team@example.com'
+   *   }
+   * }
+   * ```
+   */
+  mcp?: MCPToolProperties;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -145,6 +165,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.mcp = opts.mcp;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data

@@ -644,6 +644,7 @@ export class CoreToolBuilder extends MastraBase {
       parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
+      mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
     } as unknown as CoreTool;
   }
 }

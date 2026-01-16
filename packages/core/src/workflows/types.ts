@@ -767,6 +767,14 @@ export type ExecutionContext = {
   };
   format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
+  /**
+   * Trace IDs for creating child spans in durable execution.
+   * Set after workflow root span is created, used by child step spans.
+   */
+  tracingIds?: {
+    traceId: string;
+    workflowSpanId: string;
+  };
 };
 
 /**

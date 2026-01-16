@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { getOrCreateSpan, SpanType, EntityType } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
@@ -17,7 +17,6 @@ import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
-import { SpanCollector } from './span-collector';
 import type {
   InngestEngineType,
   InngestFlowControlConfig,
@@ -250,53 +249,29 @@ export class InngestWorkflow<
         const mastra = this.#mastra;
         const tracingPolicy = this.options.tracingPolicy;
 
-        // Memoize span identity on first invocation.
-        // This captures the workflow start time and generates consistent IDs for the workflow span.
-        // Key insight from Inngest's tracing: separate span identity (IDs) from span objects.
-        // Child spans can reference the parent by ID even when the parent object doesn't exist.
-        const spanMeta = await step.run(`workflow.${this.id}.spanMeta`, async () => ({
-          startTime: Date.now(),
-          // Generate consistent IDs that will be used for the workflow span
-          traceId: tracingOptions?.traceId ?? randomUUID().replace(/-/g, ''),
-          spanId: randomUUID().replace(/-/g, '').slice(0, 16), // 16 hex chars
-        }));
+        // Create the workflow root span durably - exports SPAN_STARTED immediately on first execution
+        // On replay, returns memoized ExportedSpan data without re-creating the span
+        const workflowSpanData = await step.run(`workflow.${this.id}.span.start`, async () => {
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+          if (!observability) return undefined;
 
-        // Create a SpanCollector to collect span metadata during execution.
-        // Due to Inngest's replay model, we can't create real spans during execution
-        // (they would be duplicated on each replay). Instead, we collect the metadata
-        // and create real spans with proper hierarchy in the finalize step.
-        const spanCollector = new SpanCollector(spanMeta.traceId);
+          const span = observability.startSpan({
+            type: SpanType.WORKFLOW_RUN,
+            name: `workflow run: '${this.id}'`,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: this.id,
+            input: inputData,
+            metadata: {
+              resourceId,
+              runId,
+            },
+            tracingPolicy,
+            tracingOptions,
+            requestContext,
+          });
 
-        // Create a collector span that will serve as the workflow root span.
-        // This span collects child span metadata during execution.
-        const collectorWorkflowSpan = spanCollector.createRootSpan({
-          name: `workflow run: '${this.id}'`,
-          type: SpanType.WORKFLOW_RUN,
-          entityType: EntityType.WORKFLOW_RUN,
-          entityId: this.id,
-          input: inputData,
-          metadata: {
-            resourceId,
-            runId,
-          },
+          return span?.exportSpan();
         });
-
-        // Create a proxy span that delegates to the collector.
-        // This implements the Span interface expected by the execution engine,
-        // but instead of creating real spans, it collects metadata in the collector.
-        const proxyWorkflowSpan = {
-          id: spanMeta.spanId,
-          traceId: spanMeta.traceId,
-          createChildSpan: (childOptions: { name: string; type: SpanType; [key: string]: any }) => {
-            // Delegate to the collector span to create a child
-            // This records the span metadata for later reconstruction
-            return collectorWorkflowSpan.createChildSpan(childOptions as any);
-          },
-          // No-op methods - actual span lifecycle is managed in finalize step
-          end: () => collectorWorkflowSpan.end(),
-          error: (opts: any) => collectorWorkflowSpan.error(opts),
-          update: (opts: any) => collectorWorkflowSpan.update(opts),
-        };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
 
@@ -318,7 +293,15 @@ export class InngestWorkflow<
             perStep,
             format,
             abortController: new AbortController(),
-            workflowSpan: proxyWorkflowSpan as any, // Proxy span for child span creation
+            // For Inngest, we don't pass workflowSpan - step spans use tracingIds instead
+            workflowSpan: undefined,
+            // Pass tracing IDs for durable span operations
+            tracingIds: workflowSpanData
+              ? {
+                  traceId: workflowSpanData.traceId,
+                  workflowSpanId: workflowSpanData.id,
+                }
+              : undefined,
             outputOptions,
             outputWriter: async (chunk: WorkflowStreamEvent) => {
               try {
@@ -333,13 +316,12 @@ export class InngestWorkflow<
             },
           });
         } catch (error) {
-          // Re-throw - span will be created in finalize if we reach it
+          // Re-throw - span will be ended in finalize if we reach it
           throw error;
         }
 
-        // Final step to invoke lifecycle callbacks and check workflow status.
-        // This is also where we create real spans from the collected data with proper hierarchy.
-        // The spans are created once here (finalize is memoized by step.run).
+        // Final step to invoke lifecycle callbacks and end workflow span.
+        // This step is memoized by step.run.
         await step.run(`workflow.${this.id}.finalize`, async () => {
           if (result.status !== 'paused') {
             // Invoke lifecycle callbacks (onFinish and onError)
@@ -358,50 +340,32 @@ export class InngestWorkflow<
             });
           }
 
-          // Create the actual workflow span with memoized IDs.
-          // This will be the root span, and all collected child spans will be attached to it.
-          const workflowSpan = getOrCreateSpan({
-            type: SpanType.WORKFLOW_RUN,
-            name: `workflow run: '${this.id}'`,
-            entityType: EntityType.WORKFLOW_RUN,
-            entityId: this.id,
-            input: inputData,
-            metadata: {
-              resourceId,
-              runId,
-            },
-            tracingPolicy,
-            tracingOptions: {
-              ...tracingOptions,
-              traceId: spanMeta.traceId,
-            },
-            requestContext,
-            mastra,
-          });
-
-          // Set the start time to when the workflow actually started
-          if (workflowSpan && 'startTime' in workflowSpan) {
-            workflowSpan.startTime = new Date(spanMeta.startTime);
-          }
-
-          // Materialize collected spans as real child spans of the workflow span
-          if (workflowSpan) {
-            spanCollector.materializeSpans(workflowSpan, result.steps as Record<string, any>);
-          }
-
           // End the workflow span with appropriate status
+          // The workflow span was already created and SPAN_STARTED was exported in the span.start step
+          if (workflowSpanData) {
+            const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+            if (observability) {
+              // Rebuild the span from cached data to call end/error
+              const workflowSpan = observability.rebuildSpan(workflowSpanData);
+
+              if (result.status === 'failed') {
+                workflowSpan.error({
+                  error: result.error instanceof Error ? result.error : new Error(String(result.error)),
+                  attributes: { status: 'failed' },
+                });
+              } else {
+                workflowSpan.end({
+                  output: result.status === 'success' ? result.result : undefined,
+                  attributes: { status: result.status },
+                });
+              }
+            }
+          }
+
+          // Throw after span ended for failed workflows
           if (result.status === 'failed') {
-            workflowSpan?.error({
-              error: result.error instanceof Error ? result.error : new Error(String(result.error)),
-              attributes: { status: 'failed' },
-            });
             throw new NonRetriableError(`Workflow failed`, {
               cause: result,
-            });
-          } else {
-            workflowSpan?.end({
-              output: result.status === 'success' ? result.result : undefined,
-              attributes: { status: result.status },
             });
           }
 

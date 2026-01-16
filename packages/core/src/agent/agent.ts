@@ -2973,17 +2973,22 @@ export class Agent<
 
         // Generate title if needed
         // Note: Message saving is now handled by MessageHistory output processor
-        if (thread.title?.startsWith('New Thread')) {
-          const config = memory.getMergedThreadConfig(memoryConfig);
+        // Check if this is the first user message by looking at remembered (historical) messages
+        // This works automatically for pre-created threads without requiring any metadata flags
+        const config = memory.getMergedThreadConfig(memoryConfig);
+        const {
+          shouldGenerate,
+          model: titleModel,
+          instructions: titleInstructions,
+        } = this.resolveTitleGenerationConfig(config.generateTitle);
+
+        // Check for existing user messages from memory - if none, this is the first user message
+        const rememberedUserMessages = messageList.get.remembered.db().filter(m => m.role === 'user');
+        const isFirstUserMessage = rememberedUserMessages.length === 0;
+
+        if (shouldGenerate && isFirstUserMessage) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
-
-          const {
-            shouldGenerate,
-            model: titleModel,
-            instructions: titleInstructions,
-          } = this.resolveTitleGenerationConfig(config.generateTitle);
-
-          if (shouldGenerate && userMessage) {
+          if (userMessage) {
             const title = await this.genTitle(
               userMessage,
               requestContext,

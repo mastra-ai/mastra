@@ -26,6 +26,7 @@
     "@mastra/mcp": "beta",
     "@mastra/memory": "beta",
     "@mastra/observability": "beta",
+    "supports-color": "^10.2.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
