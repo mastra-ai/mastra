@@ -174,7 +174,13 @@ preserve the DISTINGUISHING DETAILS that make each item unique and queryable lat
    GOOD: Assistant provided dataset stats: 7,342 samples, 89.6% accuracy, 
          23ms average inference time.
 
-5. ROLE/PARTICIPATION STATEMENTS - When user mentions their role at an event:
+5. QUANTITIES AND COUNTS - Always preserve how many of each item:
+   BAD: Assistant listed items with details but no quantities.
+   GOOD: Assistant listed items: Item A (4 units, size large), Item B (2 units, size small).
+   
+   When listing items with attributes, always include the COUNT first before other details.
+
+6. ROLE/PARTICIPATION STATEMENTS - When user mentions their role at an event:
    BAD: User attended the company event.
    GOOD: User was a presenter at the company event.
    
