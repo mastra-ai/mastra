@@ -68,21 +68,18 @@
   "/reference/server/hono-adapter": "1.0.0",
   "/docs/agents/structured-output": "1.0.0",
   "/guides/getting-started/nuxt": "1.0.0",
-	"/docs/agents/network-approval": "1.0.0",
-	"/docs/memory/storage": "1.0.0",
-	"/docs/server/custom-api-routes": "1.0.0", https://mastra.ai/docs/server-db/custom-api-routes
-	"/docs/server/mastra-client": "1.0.0", https://mastra.ai/docs/server-db/mastra-client
-	"/docs/server/mastra-server": "1.0.0", https://mastra.ai/docs/server-db/mastra-server
-	"/guides/migrations/upgrade-to-v1/deployment": "1.0.0",
-	"/guides/migrations/upgrade-to-v1/rag": "1.0.0",
-	"/models/providers/abacus": "1.0.0",
-	"/models/providers/firmware": "1.0.0",
-	"/models/providers/friendli": "1.0.0",
-	"/models/providers/nano-gpt": "1.0.0",
-	"/models/providers/privatemode-ai": "1.0.0",
-	"/models/providers/vivgrid": "1.0.0",
+  "/docs/agents/network-approval": "1.0.0",
+  "/docs/memory/storage": "1.0.0",
+  "/guides/migrations/upgrade-to-v1/deployment": "1.0.0",
+  "/guides/migrations/upgrade-to-v1/rag": "1.0.0",
+  "/models/providers/abacus": "1.0.0",
+  "/models/providers/firmware": "1.0.0",
+  "/models/providers/friendli": "1.0.0",
+  "/models/providers/nano-gpt": "1.0.0",
+  "/models/providers/privatemode-ai": "1.0.0",
+  "/models/providers/vivgrid": "1.0.0",
   "/reference/configuration": "1.0.0",
   "/reference/memory/clone-utilities": "1.0.0",
   "/reference/memory/cloneThread": "1.0.0",
-  "/reference/storage/composite": "1.0.0",
+  "/reference/storage/composite": "1.0.0"
 }
