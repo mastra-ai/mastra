@@ -23,7 +23,6 @@ LMNR_PROJECT_API_KEY=lmnr_...
 # Optional
 LMNR_BASE_URL=https://api.lmnr.ai
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=...
 ```
 
 ```ts
@@ -74,7 +73,6 @@ const mastra = new Mastra({
 | `apiKey`        | `string`                | Laminar project API key. Defaults to `LMNR_PROJECT_API_KEY` env var               |
 | `baseUrl`       | `string`                | Laminar base URL. Defaults to `LMNR_BASE_URL` env var or `https://api.lmnr.ai`    |
 | `endpoint`      | `string`                | OTLP/HTTP traces endpoint. Defaults to `LAMINAR_ENDPOINT` env var or `/v1/traces` |
-| `teamId`        | `string`                | Optional Laminar team ID header. Defaults to `LAMINAR_TEAM_ID` env var            |
 | `headers`       | `Record<string,string>` | Additional OTLP headers                                                           |
 | `realtime`      | `boolean`               | Flush after each span for immediate visibility. Defaults to `false`               |
 | `disableBatch`  | `boolean`               | Disable batching (SimpleSpanProcessor). Defaults to `false`                       |

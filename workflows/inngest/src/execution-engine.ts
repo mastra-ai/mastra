@@ -4,6 +4,7 @@ import { getErrorFromUnknown } from '@mastra/core/error';
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import type { EntityType } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -225,6 +226,181 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     return super.invokeLifecycleCallbacks(result);
   }
 
+  // =============================================================================
+  // Durable Span Lifecycle Hooks
+  // =============================================================================
+
+  /**
+   * Create a step span durably - on first execution, creates and exports span.
+   * On replay, returns cached span data without re-creating.
+   */
+  async createStepSpan(params: {
+    parentSpan: any;
+    stepId: string;
+    operationId: string;
+    options: {
+      name: string;
+      type: any;
+      input?: unknown;
+      entityType?: string;
+      entityId?: string;
+      tracingPolicy?: any;
+    };
+    executionContext: ExecutionContext;
+  }): Promise<any> {
+    const { executionContext, operationId, options, parentSpan } = params;
+
+    // Use the actual parent span's ID if provided (e.g., for steps inside control-flow),
+    // otherwise fall back to workflow span
+    const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Use wrapDurableOperation to memoize span creation
+    const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      if (!observability) return undefined;
+
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
+      const span = observability.startSpan({
+        ...options,
+        entityType: options.entityType as EntityType | undefined,
+        traceId: executionContext.tracingIds?.traceId,
+        parentSpanId,
+      });
+
+      // Return serializable form
+      return span?.exportSpan();
+    });
+
+    // Return a rebuilt span that can have .end()/.error() called later
+    if (exportedSpan) {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      return observability?.rebuildSpan(exportedSpan);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * End a step span durably.
+   */
+  async endStepSpan(params: {
+    span: any;
+    operationId: string;
+    endOptions: {
+      output?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, endOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.end(endOptions);
+    });
+  }
+
+  /**
+   * Record error on step span durably.
+   */
+  async errorStepSpan(params: {
+    span: any;
+    operationId: string;
+    errorOptions: {
+      error: Error;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, errorOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.error(errorOptions);
+    });
+  }
+
+  /**
+   * Create a generic child span durably (for control-flow operations).
+   * On first execution, creates and exports span. On replay, returns cached span data.
+   */
+  async createChildSpan(params: {
+    parentSpan: any;
+    operationId: string;
+    options: {
+      name: string;
+      type: any;
+      input?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+    executionContext: ExecutionContext;
+  }): Promise<any> {
+    const { executionContext, operationId, options, parentSpan } = params;
+
+    // Use the actual parent span's ID if provided, otherwise fall back to workflow span
+    const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Use wrapDurableOperation to memoize span creation
+    const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      if (!observability) return undefined;
+
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
+      const span = observability.startSpan({
+        ...options,
+        traceId: executionContext.tracingIds?.traceId,
+        parentSpanId,
+      });
+
+      // Return serializable form
+      return span?.exportSpan();
+    });
+
+    // Return a rebuilt span that can have .end()/.error() called later
+    if (exportedSpan) {
+      const observability = this.mastra?.observability?.getSelectedInstance({});
+      return observability?.rebuildSpan(exportedSpan);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * End a generic child span durably (for control-flow operations).
+   */
+  async endChildSpan(params: {
+    span: any;
+    operationId: string;
+    endOptions?: {
+      output?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, endOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.end(endOptions);
+    });
+  }
+
+  /**
+   * Record error on a generic child span durably (for control-flow operations).
+   */
+  async errorChildSpan(params: {
+    span: any;
+    operationId: string;
+    errorOptions: {
+      error: Error;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    const { span, operationId, errorOptions } = params;
+    if (!span) return;
+
+    await this.wrapDurableOperation(operationId, async () => {
+      span.error(errorOptions);
+    });
+  }
+
   /**
    * Execute nested InngestWorkflow using inngestStep.invoke() for durability.
    * This MUST be called directly (not inside step.run()) due to Inngest constraints.
@@ -244,6 +420,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     pubsub: PubSub;
     startedAt: number;
     perStep?: boolean;
+    stepSpan?: any;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
@@ -261,7 +438,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       pubsub,
       startedAt,
       perStep,
+      stepSpan,
     } = params;
+
+    // Build trace context to propagate to nested workflow
+    const nestedTracingContext = executionContext.tracingIds?.traceId
+      ? {
+          traceId: executionContext.tracingIds.traceId,
+          parentSpanId: stepSpan?.id,
+        }
+      : undefined;
 
     const isResume = !!resume?.steps?.length;
     let result: WorkflowResult<any, any, any, any>;
@@ -293,6 +479,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;
@@ -321,6 +508,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: executionContext.runId,
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;
@@ -334,6 +522,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
             perStep,
+            tracingOptions: nestedTracingContext,
           },
         })) as any;
         result = invokeResp.result;

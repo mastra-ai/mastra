@@ -33,5 +33,5 @@ export const HeaderAction = ({ children }: HeaderProps) => {
 };
 
 export const HeaderGroup = ({ children }: HeaderProps) => {
-  return <div className="gap-lg flex items-center">{children}</div>;
+  return <div className="gap-2 flex items-center">{children}</div>;
 };
