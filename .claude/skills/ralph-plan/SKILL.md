@@ -90,19 +90,25 @@ Establish:
    - "This task depends on understanding how X works, but there's no research step for that - should we add one?"
    - "What happens if the processor throws an error? Should the UI handle that case?"
 
-3. **Be Iterative**: Don't try to produce the full command immediately. Ask questions, discuss options, refine.
+3. **Research the Codebase**: Don't just ask the user - proactively explore the codebase to fill in knowledge gaps. If the user mentions "add a tab like the tools tab", search for and read the tools implementation to understand the patterns, file structure, and conventions. Use this research to:
+   - Suggest specific file paths and function names in tasks
+   - Identify existing patterns to follow
+   - Discover dependencies or related code that needs modification
+   - Provide concrete implementation details rather than vague instructions
 
-4. **Be Specific**: Vague tasks lead to confusion. Help users make tasks concrete.
+4. **Be Iterative**: Don't try to produce the full command immediately. Ask questions, discuss options, refine.
+
+5. **Be Specific**: Vague tasks lead to confusion. Help users make tasks concrete.
    - Bad: "Improve the UI"
    - Good: "Create a '/processors' endpoint that lists processors, mimicking the '/tools' endpoint"
 
-5. **Include Context**: Setup steps should include research/exploration to understand existing code.
+6. **Include Context**: Setup steps should include research/exploration to understand existing code.
 
-6. **Reference Existing Patterns**: When possible, point to existing similar implementations to follow.
+7. **Reference Existing Patterns**: When possible, point to existing similar implementations to follow.
 
-7. **Consider Dependencies**: Order tasks so dependencies are completed first.
+8. **Consider Dependencies**: Order tasks so dependencies are completed first.
 
-8. **Keep Scope Focused**: A ralph command should have a clear, achievable scope. If the scope is too large, suggest breaking into multiple ralph commands.
+9. **Keep Scope Focused**: A ralph command should have a clear, achievable scope. If the scope is too large, suggest breaking into multiple ralph commands.
 
 ## Example Conversation Flow
 
