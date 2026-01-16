@@ -193,6 +193,9 @@ export interface MemoryConfigDefinition {
   /** The config type identifier */
   type: string;
 
+  /** Human-readable description of this config */
+  description: string;
+
   /** Memory options passed to Mastra Memory */
   memoryOptions: MemoryConfig;
 
@@ -301,6 +304,13 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'om-gemini-3-flash': 'om-gemini-3-flash',
   'om-gpt5': 'om-gpt5',
   'om-gpt5-mini': 'om-gpt5-mini',
+  // om2 variants
+  'om2': 'om2',
+  'om2-gpt5': 'om2-gpt5',
+  'om2-gpt5-mini': 'om2-gpt5-mini',
+  'om2-glm': 'om2-glm',
+  'om2-gemini-3-pro': 'om2-gemini-3-pro',
+  'om2-gemini-3-flash': 'om2-gemini-3-flash',
 
   // Full names (for completeness)
   'semantic-recall': 'semantic-recall',
@@ -337,6 +347,7 @@ export function getConfigAliases(): string[] {
 const MEMORY_CONFIGS = {
   'semantic-recall': {
     type: 'semantic-recall',
+    description: 'Vector similarity search over message history',
     memoryOptions: {
       lastMessages,
       semanticRecall,
@@ -356,6 +367,7 @@ const MEMORY_CONFIGS = {
 
   'working-memory': {
     type: 'working-memory',
+    description: 'LLM-maintained working memory (markdown scratchpad)',
     memoryOptions: {
       lastMessages,
       semanticRecall: false,
@@ -381,6 +393,7 @@ const MEMORY_CONFIGS = {
 
   'working-memory-tailored': {
     type: 'working-memory-tailored',
+    description: 'Working memory with per-question tailored templates',
     memoryOptions: {
       lastMessages,
       semanticRecall: false,
@@ -405,6 +418,7 @@ const MEMORY_CONFIGS = {
 
   combined: {
     type: 'combined',
+    description: 'Semantic recall + working memory combined',
     memoryOptions: {
       lastMessages,
       semanticRecall,
@@ -429,6 +443,7 @@ const MEMORY_CONFIGS = {
 
   'combined-tailored': {
     type: 'combined-tailored',
+    description: 'Semantic recall + working memory with tailored templates',
     memoryOptions: {
       lastMessages,
       semanticRecall,
@@ -454,6 +469,7 @@ const MEMORY_CONFIGS = {
 
   'observational-memory': {
     type: 'observational-memory',
+    description: 'Observational Memory with GPT-4o (baseline OM config)',
     memoryOptions: {
       lastMessages: 0,
       semanticRecall: false,
@@ -475,6 +491,7 @@ const MEMORY_CONFIGS = {
 
   'observational-memory-shortcut': {
     type: 'observational-memory-shortcut',
+    description: 'OM shortcut mode - single finalize() pass at end',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -495,6 +512,7 @@ const MEMORY_CONFIGS = {
 
   'observational-memory-shortcut-glm': {
     type: 'observational-memory-shortcut-glm',
+    description: 'OM shortcut mode using Cerebras GLM for Observer/Reflector',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -515,6 +533,7 @@ const MEMORY_CONFIGS = {
 
   'om-patterns-observed': {
     type: 'om-patterns-observed',
+    description: 'OM with pattern recognition during observation',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -538,6 +557,7 @@ const MEMORY_CONFIGS = {
 
   'om-patterns-tool': {
     type: 'om-patterns-tool',
+    description: 'OM with recall tool for on-demand pattern recognition',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -563,6 +583,7 @@ const MEMORY_CONFIGS = {
   // GLM-4.7 variants - use Cerebras GLM for the main agent
   'om-glm': {
     type: 'om-glm',
+    description: 'OM with Cerebras GLM as main agent',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -586,6 +607,7 @@ const MEMORY_CONFIGS = {
 
   'om-glm-patterns-observed': {
     type: 'om-glm-patterns-observed',
+    description: 'OM + GLM agent + pattern recognition during observation',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -610,6 +632,7 @@ const MEMORY_CONFIGS = {
 
   'om-glm-patterns-tool': {
     type: 'om-glm-patterns-tool',
+    description: 'OM + GLM agent + recall tool for pattern recognition',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -635,6 +658,7 @@ const MEMORY_CONFIGS = {
   // RAG variants - use semantic filtering on observations
   'om-rag': {
     type: 'om-rag',
+    description: 'OM with RAG filtering on observations at runtime',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -659,6 +683,7 @@ const MEMORY_CONFIGS = {
 
   'om-glm-rag': {
     type: 'om-glm-rag',
+    description: 'OM + GLM agent + RAG filtering',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -683,6 +708,7 @@ const MEMORY_CONFIGS = {
 
   'om-glm-rag-topk100': {
     type: 'om-glm-rag-topk100',
+    description: 'OM + GLM + RAG with topK=100 (experimental)',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -707,6 +733,7 @@ const MEMORY_CONFIGS = {
   },
   'om-glm-rag-prefboost': {
     type: 'om-glm-rag-prefboost',
+    description: 'OM + GLM + RAG with preference boost queries (experimental)',
     memoryOptions: {
       lastMessages: 5,
       semanticRecall: false,
@@ -732,6 +759,7 @@ const MEMORY_CONFIGS = {
 
   'om-gemini-3-pro': {
     type: 'om-gemini-3-pro',
+    description: 'OM with Gemini 3 Pro as main agent',
     memoryOptions: {
       lastMessages: 0,
       semanticRecall: false,
@@ -755,6 +783,7 @@ const MEMORY_CONFIGS = {
 
   'om-gemini-3-flash': {
     type: 'om-gemini-3-flash',
+    description: 'OM with Gemini 3 Flash as main agent',
     memoryOptions: {
       lastMessages: 0,
       semanticRecall: false,
@@ -776,9 +805,156 @@ const MEMORY_CONFIGS = {
     readOnlyConfig: true,
   },
 
+  // ============================================================================
+  // om2 - Fresh preparation with latest Observer/Reflector improvements
+  // ============================================================================
+
+  'om2': {
+    type: 'om2',
+    description: 'OM v2 - fresh data with latest Observer/Reflector improvements',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+  },
+
+  'om2-gpt5': {
+    type: 'om2-gpt5',
+    description: 'OM v2 with GPT-5 as main agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-5',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om2',
+    readOnlyConfig: true,
+  },
+
+  'om2-gpt5-mini': {
+    type: 'om2-gpt5-mini',
+    description: 'OM v2 with GPT-5 Mini as main agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-5-mini',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om2',
+    readOnlyConfig: true,
+  },
+
+  'om2-glm': {
+    type: 'om2-glm',
+    description: 'OM v2 with Cerebras GLM as main agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: CEREBRAS_GLM_MODEL,
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om2',
+    readOnlyConfig: true,
+  },
+
+  'om2-gemini-3-pro': {
+    type: 'om2-gemini-3-pro',
+    description: 'OM v2 with Gemini 3 Pro as main agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'google/gemini-3-pro-preview',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om2',
+    readOnlyConfig: true,
+  },
+
+  'om2-gemini-3-flash': {
+    type: 'om2-gemini-3-flash',
+    description: 'OM v2 with Gemini 3 Flash as main agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'google/gemini-3-flash-preview',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om2',
+    readOnlyConfig: true,
+  },
+
   // GPT-5 variants
   'om-gpt5': {
     type: 'om-gpt5',
+    description: 'OM with GPT-5 as main agent',
     memoryOptions: {
       lastMessages: 0,
       semanticRecall: false,
@@ -802,6 +978,7 @@ const MEMORY_CONFIGS = {
 
   'om-gpt5-mini': {
     type: 'om-gpt5-mini',
+    description: 'OM with GPT-5 Mini as main agent',
     memoryOptions: {
       lastMessages: 0,
       semanticRecall: false,
