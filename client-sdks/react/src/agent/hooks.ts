@@ -111,8 +111,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const response = await agent.generate({
-      messages: coreUserMessages,
+    const response = await agent.generate(coreUserMessages, {
       runId: uuid(),
       maxSteps,
       modelSettings: {
@@ -126,7 +125,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
+      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       tracingOptions,
     });
@@ -182,8 +181,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const runId = uuid();
 
-    const response = await agent.stream({
-      messages: coreUserMessages,
+    const response = await agent.stream(coreUserMessages, {
       runId,
       maxSteps,
       modelSettings: {
@@ -197,7 +195,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
+      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
@@ -258,7 +256,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       },
       runId,
       requestContext,
-      ...(threadId ? { thread: threadId, resourceId: resourceId || agentId } : {}),
+      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
 

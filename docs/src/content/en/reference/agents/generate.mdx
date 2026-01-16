@@ -401,13 +401,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
         "Callback fired after each generation step.",
     },
     {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.resource instead. Identifier for the resource/user.",
-    },
-    {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
@@ -457,13 +450,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.thread instead. Thread identifier for conversation continuity.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",

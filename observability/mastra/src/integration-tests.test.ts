@@ -16,7 +16,7 @@ import type {
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -1129,8 +1129,11 @@ describe('Tracing Integration Tests', () => {
         });
 
         const resourceId = 'test-resource-id';
+        const threadId = 'test-thread-id';
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { resourceId });
+        const result = await method(agent, 'Calculate 5 + 3', {
+          memory: { thread: threadId, resource: resourceId },
+        });
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
@@ -1326,7 +1329,7 @@ describe('Tracing Integration Tests', () => {
           items: z.string(),
         });
 
-        const structuredOutput: StructuredOutputOptions<OutputSchema> = {
+        const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
           schema: outputSchema,
           model,
         };

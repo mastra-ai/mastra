@@ -44,7 +44,10 @@ async function agentGenerate(
   isV5: boolean,
 ) {
   if (isV5) {
-    return agent.generate(prompt, options);
+    // Transform deprecated threadId/resourceId to memory format for v5+
+    return agent.generate(prompt, {
+      memory: { thread: options.threadId, resource: options.resourceId },
+    });
   } else {
     return agent.generateLegacy(prompt, options);
   }
