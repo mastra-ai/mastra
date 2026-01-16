@@ -105,7 +105,8 @@ export function resolveNetworkMessages<T extends UIMessage>(messages: T[]): T[] 
           const primitiveType = json.primitiveType || '';
           const primitiveId = json.primitiveId || '';
           const finalResult = json.finalResult;
-          const nestedMessages = finalResult?.messages || [];
+          // Use finalResult.messages if available, fall back to top-level json.messages
+          const nestedMessages = finalResult?.messages ?? json.messages ?? [];
 
           // Build child messages from nested messages
           const childMessages: NetworkChildMessage[] = [];
