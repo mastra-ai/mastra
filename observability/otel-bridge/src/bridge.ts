@@ -262,9 +262,35 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   }
 
   /**
+   * Force flush any buffered spans without shutting down the bridge.
+   *
+   * Attempts to flush the underlying OTEL tracer provider if it supports
+   * the forceFlush operation. This is useful in serverless environments
+   * where you need to ensure all spans are exported before the runtime
+   * instance is terminated.
+   */
+  async flush(): Promise<void> {
+    try {
+      const provider = otelTrace.getTracerProvider();
+      // Check if the provider supports forceFlush (not all implementations do)
+      if (provider && 'forceFlush' in provider && typeof provider.forceFlush === 'function') {
+        await provider.forceFlush();
+        this.logger.debug('[OtelBridge] Flushed tracer provider');
+      } else {
+        this.logger.debug('[OtelBridge] Tracer provider does not support forceFlush');
+      }
+    } catch (error) {
+      this.logger.error('[OtelBridge] Failed to flush tracer provider:', error);
+    }
+  }
+
+  /**
    * Shutdown the bridge and clean up resources
    */
   async shutdown(): Promise<void> {
+    // Flush before shutdown
+    await this.flush();
+
     // End any remaining spans
     for (const [spanId, { otelSpan }] of this.otelSpanMap.entries()) {
       this.logger.warn(`[OtelBridge] Force-ending span that was not properly closed [id=${spanId}]`);

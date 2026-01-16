@@ -51,7 +51,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "Stream of progressive structured object updates when using output schemas. Emits partial objects as they're built up, allowing real-time visualization of structured data generation.",
       properties: [
@@ -60,7 +60,7 @@ These properties provide real-time access to model outputs as they're generated:
           parameters: [
             {
               name: "PartialSchemaOutput",
-              type: "PartialSchemaOutput<OUTPUT>",
+              type: "Partial<OUTPUT>",
               description:
                 "Partially completed object matching the defined schema",
             },
@@ -70,7 +70,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "elementStream",
-      type: "ReadableStream<InferSchemaOutput<OUTPUT> extends (infer T)[] ? T : never>",
+      type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
       description:
         "Stream of individual array elements when the output schema defines an array type. Each element is emitted as it's completed rather than waiting for the entire array.",
     },
@@ -91,7 +91,7 @@ These properties resolve to final values after the stream completes:
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT>>",
+      type: "Promise<OUTPUT>",
       description:
         "The complete structured object response when using output schemas. Validated against the schema before resolving. Rejects if validation fails.",
       properties: [
@@ -100,7 +100,7 @@ These properties resolve to final values after the stream completes:
           parameters: [
             {
               name: "InferSchemaOutput",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               description:
                 "Fully typed object matching the exact schema definition",
             },
@@ -346,7 +346,7 @@ These properties resolve to final values after the stream completes:
             },
             {
               name: "object",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               isOptional: true,
               description: "Structured output if schema was provided",
             },

@@ -6,7 +6,6 @@ import { lodashTitleCase } from '@/lib/string';
 import { AlertCircleIcon } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
-import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useContext } from 'react';
 import { GetWorkflowResponse } from '@mastra/client-js';
@@ -40,12 +39,10 @@ export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraph
   }
 
   return (
-    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId}>
-      <ReactFlowProvider>
-        <WorkflowGraphInner
-          workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
-        />
-      </ReactFlowProvider>
-    </WorkflowNestedGraphProvider>
+    <ReactFlowProvider>
+      <WorkflowGraphInner
+        workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
+      />
+    </ReactFlowProvider>
   );
 }

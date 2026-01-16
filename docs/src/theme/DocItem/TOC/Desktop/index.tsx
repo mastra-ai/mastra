@@ -9,8 +9,8 @@ import TOC from "@theme/TOC";
 export default function DocItemTOCDesktop(): ReactNode {
   const { toc, frontMatter } = useDoc();
   return (
-    <div className="toc-wrapper">
-      <div className="flex items-center pl-2 text-(--mastra-text-secondary) gap-1.5 -mb-2!">
+    <>
+      <div className="flex items-center text-(--mastra-text-secondary) gap-1.5">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -25,7 +25,7 @@ export default function DocItemTOCDesktop(): ReactNode {
           <path d="M17 6H3"></path>
           <path d="M21 12H3"></path>
         </svg>
-        <p className="text-sm mb-0!">On this page</p>
+        <span className="text-sm">On this page</span>
       </div>
 
       <TOC
@@ -34,10 +34,11 @@ export default function DocItemTOCDesktop(): ReactNode {
         maxHeadingLevel={frontMatter.toc_max_heading_level}
         className={ThemeClassNames.docs.docTocDesktop}
       />
-      <div className="mt-3 hidden xl:flex flex-col gap-4 px-1.5">
+      <div className="mt-4 hidden xl:flex flex-col gap-4">
         <SubscribeForm />
+        {/* TODO: Move feedback to side footer */}
         <FeedbackTrigger />
       </div>
-    </div>
+    </>
   );
 }
