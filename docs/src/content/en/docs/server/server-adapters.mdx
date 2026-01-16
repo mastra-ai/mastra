@@ -23,7 +23,7 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/server/mastra-server).
 
-If you want to use [Studio](/docs/v1/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/v1/cli/mastra#mastra-studio) to only launch the Studio UI.
+If you want to use [Studio](/docs/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
 
 :::
 
@@ -31,12 +31,12 @@ If you want to use [Studio](/docs/v1/getting-started/studio) with your server ad
 
 Mastra currently provides these official server adapters:
 
-- [@mastra/express](/reference/v1/server/express-adapter)
-- [@mastra/hono](/reference/v1/server/hono-adapter)
-- [@mastra/fastify](/reference/v1/server/fastify-adapter)
-- [@mastra/koa](/reference/v1/server/koa-adapter)
+- [@mastra/express](/reference/server/express-adapter)
+- [@mastra/hono](/reference/server/hono-adapter)
+- [@mastra/fastify](/reference/server/fastify-adapter)
+- [@mastra/koa](/reference/server/koa-adapter)
 
-You can build your own adapter, read [custom adapters](/docs/v1/server/custom-adapters) for details.
+You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
 
 ## Installation
 
@@ -95,7 +95,7 @@ app.listen(4111, () => {
 
 :::info
 
-See the [Express Adapter](/reference/v1/server/express-adapter) documentation for full configuration options.
+See the [Express Adapter](/reference/server/express-adapter) documentation for full configuration options.
 
 :::
 
@@ -121,7 +121,7 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
 
 :::info
 
-See the [Hono Adapter](/reference/v1/server/hono-adapter) documentation for full configuration options.
+See the [Hono Adapter](/reference/server/hono-adapter) documentation for full configuration options.
 
 :::
 
@@ -154,7 +154,7 @@ app.listen({ port }, () => {
 
 :::info
 
-See the [Fastify Adapter](/reference/v1/server/fastify-adapter) documentation for full configuration options.
+See the [Fastify Adapter](/reference/server/fastify-adapter) documentation for full configuration options.
 
 :::
 
@@ -194,7 +194,7 @@ app.listen(port, () => {
 
 :::info
 
-See the [Koa Adapter](/reference/v1/server/koa-adapter) documentation for full configuration options.
+See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
 
 :::
 

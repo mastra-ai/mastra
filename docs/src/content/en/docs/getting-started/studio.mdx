@@ -108,14 +108,14 @@ You can explore all available endpoints in the OpenAPI specification at http://l
 To explore the API interactively, visit the Swagger UI at http://localhost:4111/swagger-ui. Here, you can discover endpoints and test them directly from your browser.
 
 :::info
-The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/v1/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/v1/configuration#serverbuild) to `true` respectively.
+The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
 :::
 
 ## Configuration
 
-By default, Studio runs at http://localhost:4111. You can change the [`host`](/reference/v1/configuration#serverhost), [`port`](/reference/v1/configuration#serverport), and [`studioBase`](/reference/v1/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
+By default, Studio runs at http://localhost:4111. You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and [`studioBase`](/reference/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
 
-Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/v1/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/v1/configuration#serverhttps) to learn more.
+Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/configuration#serverhttps) to learn more.
 
 ## Next steps
 
