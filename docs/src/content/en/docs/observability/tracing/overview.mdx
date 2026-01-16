@@ -1047,6 +1047,54 @@ app.post("/api/analyze", async (req, res) => {
 
 This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
 
+## Flushing Traces in Serverless Environments
+
+In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflare Workers, runtime instances can be reused across multiple requests. The `flush()` method allows you to ensure all buffered spans are exported before the runtime terminates, without shutting down the exporter (which would prevent future exports).
+
+### Using flush()
+
+Call `flush()` on the observability instance to flush all exporters:
+
+```ts
+// Get the observability instance from Mastra
+const observability = mastra.getObservability();
+
+// Flush all buffered spans to all exporters
+await observability.flush();
+```
+
+### When to Use flush()
+
+Use `flush()` in these scenarios:
+
+- **End of serverless function execution**: Ensure spans are exported before the runtime is paused or terminated
+- **Before long-running operations**: Flush accumulated spans before a potentially slow operation
+- **Periodic flushing**: In long-running processes, periodically flush to ensure timely data availability
+
+```ts
+// Example: Vercel serverless function
+export async function POST(req: Request) {
+  const result = await agent.generate({
+    messages: [{ role: "user", content: await req.text() }],
+  });
+
+  // Ensure spans are exported before function completes
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+### flush() vs shutdown()
+
+| Method | Behavior | Use Case |
+| --- | --- | --- |
+| `flush()` | Exports buffered spans, keeps exporter active | Serverless environments, periodic flushing |
+| `shutdown()` | Exports buffered spans, releases resources | Application shutdown, graceful termination |
+
+Use `flush()` when you need to ensure data is exported but want to keep the exporter ready for future requests. Use `shutdown()` only when the application is terminating.
+
 ## What Gets Traced
 
 Mastra automatically creates spans for:

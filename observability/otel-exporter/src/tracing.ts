@@ -211,6 +211,17 @@ export class OtelExporter extends BaseExporter {
     }
   }
 
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * Delegates to the BatchSpanProcessor's forceFlush() method.
+   */
+  async flush(): Promise<void> {
+    if (this.processor) {
+      await this.processor.forceFlush();
+      this.logger.debug('[OtelExporter] Flushed pending spans');
+    }
+  }
+
   async shutdown(): Promise<void> {
     // Shutdown the processor to flush any remaining spans
     if (this.processor) {
