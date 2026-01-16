@@ -34,6 +34,7 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 import { McpServerPage } from './pages/mcps/[serverId]';
 
 import {
+  useMastraPlatform,
   LinkComponentProvider,
   LinkComponentProviderProps,
   PlaygroundConfigGuard,
@@ -86,6 +87,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, isLoading } = useStudioConfig();
+  const { isMastraPlatform } = useMastraPlatform();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -110,44 +112,17 @@ function App() {
                   </Layout>
                 }
               >
-                <Route path="/settings" element={<StudioSettingsPage />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/templates" element={<Templates />} />
-                <Route path="/templates/:templateSlug" element={<Template />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
+                {isMastraPlatform ? null : (
+                  <>
+                    <Route path="/settings" element={<StudioSettingsPage />} />
+                    <Route path="/templates" element={<Templates />} />
+                    <Route path="/templates/:templateSlug" element={<Template />} />
+                  </>
+                )}
+
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
                 <Route path="/observability" element={<Observability />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
@@ -162,6 +137,7 @@ function App() {
                   <Route path="chat" element={<Agent />} />
                   <Route path="chat/:threadId" element={<Agent />} />
                 </Route>
+
                 <Route path="/tools" element={<Tools />} />
 
                 <Route path="/tools/:toolId" element={<Tool />} />
