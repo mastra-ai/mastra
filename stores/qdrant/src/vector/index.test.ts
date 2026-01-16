@@ -633,8 +633,8 @@ const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdra
 
 createVectorTestSuite({
   vector: qdrantVector,
-  createIndex: async (indexName: string) => {
-    await qdrantVector.createIndex({ indexName, dimension: 1536 });
+  createIndex: async (indexName, options) => {
+    await qdrantVector.createIndex({ indexName, dimension: 1536, metric: options?.metric });
   },
   deleteIndex: async (indexName: string) => {
     await qdrantVector.deleteIndex({ indexName });

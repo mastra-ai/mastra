@@ -313,8 +313,8 @@ const duckDBVector = new DuckDBVector({
 
 createVectorTestSuite({
   vector: duckDBVector,
-  createIndex: async (indexName: string) => {
-    await duckDBVector.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
+  createIndex: async (indexName, options) => {
+    await duckDBVector.createIndex({ indexName, dimension: 1536, metric: options?.metric ?? 'cosine' });
   },
   deleteIndex: async (indexName: string) => {
     try {

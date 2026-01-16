@@ -11,8 +11,8 @@ const libSQLVectorDB = new LibSQLVector({
 // Shared test suite
 createVectorTestSuite({
   vector: libSQLVectorDB,
-  createIndex: async (indexName: string) => {
-    await libSQLVectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
+  createIndex: async (indexName, options) => {
+    await libSQLVectorDB.createIndex({ indexName, dimension: 1536, metric: options?.metric ?? 'cosine' });
   },
   deleteIndex: async (indexName: string) => {
     try {

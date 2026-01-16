@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import type { VectorTestConfig } from '../../vector-factory';
+import type { VectorTestConfig, VectorMetric } from '../../vector-factory';
 import { createUnitVector, createVector, VECTOR_DIMENSION } from './test-helpers';
 
 /**
@@ -367,6 +367,62 @@ export function createBasicOperationsTest(config: VectorTestConfig) {
           expect(result.vector).toBeUndefined();
         });
       });
+    });
+
+    describe('Metric Variations', () => {
+      const metrics: VectorMetric[] = ['cosine', 'euclidean', 'dotproduct'];
+
+      for (const metric of metrics) {
+        describe(`${metric} metric`, () => {
+          const metricTestIndex = `metric_${metric}_test_${Date.now()}`;
+
+          afterAll(async () => {
+            try {
+              await deleteIndex(metricTestIndex);
+            } catch {
+              // Ignore cleanup errors
+            }
+          });
+
+          it(`should create index with ${metric} metric`, async () => {
+            await createIndex(metricTestIndex, { metric });
+            await waitForIndexing(metricTestIndex);
+
+            // Verify index exists
+            const indexes = await config.vector.listIndexes();
+            expect(indexes).toContain(metricTestIndex);
+          });
+
+          it(`should upsert and query vectors with ${metric} metric`, async () => {
+            // Insert test vectors
+            const vectors = [createVector(1), createVector(2), createVector(3)];
+            const metadata = [
+              { type: 'metric-test', index: 1 },
+              { type: 'metric-test', index: 2 },
+              { type: 'metric-test', index: 3 },
+            ];
+
+            await config.vector.upsert({
+              indexName: metricTestIndex,
+              vectors,
+              metadata,
+            });
+
+            await waitForIndexing(metricTestIndex);
+
+            // Query should work with the specified metric
+            const results = await config.vector.query({
+              indexName: metricTestIndex,
+              queryVector: createVector(1),
+              topK: 3,
+            });
+
+            expect(results.length).toBeGreaterThan(0);
+            expect(results[0]).toHaveProperty('id');
+            expect(results[0]).toHaveProperty('score');
+          });
+        });
+      }
     });
   });
 }

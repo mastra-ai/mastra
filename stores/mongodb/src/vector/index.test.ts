@@ -329,8 +329,8 @@ createVectorTestSuite({
   disconnect: async () => {
     await mongodbVector.disconnect();
   },
-  createIndex: async (indexName: string) => {
-    await createIndexAndWait(mongodbVector, indexName, 1536, 'cosine');
+  createIndex: async (indexName, options) => {
+    await createIndexAndWait(mongodbVector, indexName, 1536, options?.metric ?? 'cosine');
   },
   deleteIndex: async (indexName: string) => {
     await deleteIndexAndWait(mongodbVector, indexName);

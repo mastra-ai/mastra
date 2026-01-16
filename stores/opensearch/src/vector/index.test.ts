@@ -112,8 +112,8 @@ const opensearchVector = new OpenSearchVector({ node: 'http://localhost:9200', i
 
 createVectorTestSuite({
   vector: opensearchVector,
-  createIndex: async (indexName: string) => {
-    await opensearchVector.createIndex({ indexName, dimension: 1536 });
+  createIndex: async (indexName, options) => {
+    await opensearchVector.createIndex({ indexName, dimension: 1536, metric: options?.metric });
   },
   deleteIndex: async (indexName: string) => {
     await opensearchVector.deleteIndex({ indexName });

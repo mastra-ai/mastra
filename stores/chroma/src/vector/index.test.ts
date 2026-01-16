@@ -565,8 +565,8 @@ const chromaVector = new ChromaVector({ id: 'chroma-shared-test' });
 
 createVectorTestSuite({
   vector: chromaVector,
-  createIndex: async (indexName: string) => {
-    await chromaVector.createIndex({ indexName, dimension: 1536 });
+  createIndex: async (indexName, options) => {
+    await chromaVector.createIndex({ indexName, dimension: 1536, metric: options?.metric });
   },
   deleteIndex: async (indexName: string) => {
     await chromaVector.deleteIndex({ indexName });

@@ -106,8 +106,8 @@ const elasticSearchVector = new ElasticSearchVector({
 
 createVectorTestSuite({
   vector: elasticSearchVector,
-  createIndex: async (indexName: string) => {
-    await elasticSearchVector.createIndex({ indexName, dimension: 1536 });
+  createIndex: async (indexName, options) => {
+    await elasticSearchVector.createIndex({ indexName, dimension: 1536, metric: options?.metric });
   },
   deleteIndex: async (indexName: string) => {
     await elasticSearchVector.deleteIndex({ indexName });

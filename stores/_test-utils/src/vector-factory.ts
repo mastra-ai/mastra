@@ -54,9 +54,15 @@ export interface TestDomains {
   advancedOps?: boolean;
 }
 
+export type VectorMetric = 'cosine' | 'euclidean' | 'dotproduct';
+
+export interface CreateIndexOptions {
+  metric?: VectorMetric;
+}
+
 export interface VectorTestConfig {
   vector: MastraVector<any>;
-  createIndex: (indexName: string) => Promise<void>;
+  createIndex: (indexName: string, options?: CreateIndexOptions) => Promise<void>;
   deleteIndex: (indexName: string) => Promise<void>;
   waitForIndexing?: (indexName: string) => Promise<void>;
   connect?: () => Promise<void>;

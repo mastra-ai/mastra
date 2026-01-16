@@ -29,8 +29,8 @@ describe('PgVector', () => {
 
     createVectorTestSuite({
       vector: sharedTestVectorDB,
-      createIndex: async (indexName: string) => {
-        await sharedTestVectorDB.createIndex({ indexName, dimension: 1536 });
+      createIndex: async (indexName, options) => {
+        await sharedTestVectorDB.createIndex({ indexName, dimension: 1536, metric: options?.metric });
       },
       deleteIndex: async (indexName: string) => {
         await sharedTestVectorDB.deleteIndex({ indexName });
