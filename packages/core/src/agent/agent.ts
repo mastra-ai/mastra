@@ -1126,7 +1126,7 @@ export class Agent<
         return resolved.map(m => ({
           id: m.id ?? randomUUID(),
           model: m.model as DynamicArgument<MastraModelConfig>,
-          maxRetries: m.maxRetries ?? 0,
+          maxRetries: m.maxRetries ?? this.maxRetries,
           enabled: m.enabled ?? true,
         })) as ModelFallbacks;
       }
@@ -1140,7 +1140,7 @@ export class Agent<
       return modelConfig.map(m => ({
         id: m.id ?? randomUUID(),
         model: m.model as DynamicArgument<MastraModelConfig>,
-        maxRetries: m.maxRetries ?? 0,
+        maxRetries: m.maxRetries ?? this.maxRetries,
         enabled: m.enabled ?? true,
       })) as ModelFallbacks;
     }
@@ -1209,6 +1209,17 @@ export class Agent<
   public async getModelList(
     requestContext: RequestContext = new RequestContext(),
   ): Promise<Array<AgentModelManagerConfig> | null> {
+    // Handle dynamic functions that might return arrays
+    if (typeof this.model === 'function') {
+      const resolved = await this.resolveModelFallbacks(this.model, requestContext);
+      // If the function returned an array, prepare and return it
+      if (Array.isArray(resolved)) {
+        return this.prepareModels(requestContext, resolved);
+      }
+      // Function returned a single model
+      return null;
+    }
+
     if (!Array.isArray(this.model)) {
       return null;
     }

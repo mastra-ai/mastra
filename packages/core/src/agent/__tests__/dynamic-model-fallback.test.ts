@@ -286,4 +286,139 @@ describe('Dynamic Model Selection with Fallback', () => {
     // Should fallback to backup model after primary fails
     expect(fullText).toBe('Backup succeeded');
   });
+
+  it('should inherit agent-level maxRetries when not specified in dynamic fallback array', async () => {
+    // This test verifies the bug fix: dynamic arrays should inherit this.maxRetries
+    const workingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Test response',
+          content: [
+            {
+              type: 'text',
+              text: 'Test response',
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'test-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'maxretries-inheritance-test',
+      name: 'MaxRetries Inheritance Test',
+      instructions: 'You are a test agent',
+      model: ({ requestContext }) => {
+        return [
+          { model: workingModel }, // No maxRetries specified - should inherit agent-level
+          { model: workingModel, maxRetries: 1 }, // Explicit maxRetries should be preserved
+        ];
+      },
+      maxRetries: 3, // Agent-level default
+    });
+
+    const requestContext = new RequestContext();
+    const modelList = await agent.getModelList(requestContext);
+
+    expect(modelList).not.toBeNull();
+    expect(modelList?.length).toBe(2);
+    // First model should inherit agent-level maxRetries (3)
+    expect(modelList?.[0]?.maxRetries).toBe(3);
+    // Second model should keep its explicit maxRetries (1)
+    expect(modelList?.[1]?.maxRetries).toBe(1);
+  });
+
+  it('should inherit agent-level maxRetries for static arrays passed to resolveModelFallbacks', async () => {
+    // This test verifies that static arrays also inherit maxRetries correctly
+    const workingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Test response',
+          content: [
+            {
+              type: 'text',
+              text: 'Test response',
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'test-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'static-maxretries-inheritance-test',
+      name: 'Static MaxRetries Inheritance Test',
+      instructions: 'You are a test agent',
+      model: [
+        { model: workingModel }, // No maxRetries specified
+      ],
+      maxRetries: 5, // Agent-level default
+    });
+
+    const requestContext = new RequestContext();
+    const modelList = await agent.getModelList(requestContext);
+
+    expect(modelList).not.toBeNull();
+    expect(modelList?.length).toBe(1);
+    // Should inherit agent-level maxRetries (5)
+    expect(modelList?.[0]?.maxRetries).toBe(5);
+  });
 });
