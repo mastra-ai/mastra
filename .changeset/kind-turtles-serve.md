@@ -2,4 +2,8 @@
 '@mastra/react': patch
 ---
 
-Use new syntax isntead of old syntax to call generate/stream rest api
+---
+'@mastra/react': patch
+---
+
+Fixed compatibility with updated `@mastra/client-js` generate and stream API signatures
