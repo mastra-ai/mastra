@@ -870,11 +870,19 @@ export interface RouteRequestOverrides {
  * Get route-specific defaults for path fields based on the route.
  * Different routes need different kinds of paths (files vs directories).
  */
-function getRouteSpecificPathDefaults(route: ServerRoute): { query?: Record<string, unknown>; body?: Record<string, unknown> } {
+function getRouteSpecificPathDefaults(route: ServerRoute): {
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+} {
   const routePath = route.path;
 
   // File operations need file paths
-  if (routePath.includes('/fs/read') || routePath.includes('/fs/write') || routePath.includes('/fs/delete') || routePath.includes('/fs/stat')) {
+  if (
+    routePath.includes('/fs/read') ||
+    routePath.includes('/fs/write') ||
+    routePath.includes('/fs/delete') ||
+    routePath.includes('/fs/stat')
+  ) {
     return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
   }
 
