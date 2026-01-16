@@ -1253,14 +1253,16 @@ kbd {
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
     position: static !important;
+    overflow-y: unset !important;
+    max-height: none !important;
   }
 
-  .toc-wrapper,
   #toc-column {
     position: sticky;
     overflow-y: auto;
     top: calc(var(--ifm-navbar-height) + 2rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 8rem);
+    scrollbar-width: thin;
   }
 
   .menu__link--sublist {
