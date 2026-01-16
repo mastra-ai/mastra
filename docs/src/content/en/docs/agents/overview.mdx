@@ -193,7 +193,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### Completion using `onFinish()`
+<h3 id="#completion-using-onfinish">Completion using `onFinish()`</h3>
 
 When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
 It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
