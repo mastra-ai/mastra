@@ -95,7 +95,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
         </Button>
       </DialogTrigger>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/40 backdrop-blur-[2px]">
+        <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/50 backdrop-blur-[2px]">
           <DialogContent className="dialog-panel p-6 z-260 relative my-8 lg:my-[15vh] mx-auto max-w-2xl">
             <DialogTitle className="sr-only">Search documentation</DialogTitle>
             <div className="w-full shadow-2xl duration-150 ease-out dark:border-(--border) h-fit mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">

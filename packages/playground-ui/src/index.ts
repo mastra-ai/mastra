@@ -91,3 +91,4 @@ export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
 export * from './domains/workspace/index';
+export * from './lib/mastra-platform';

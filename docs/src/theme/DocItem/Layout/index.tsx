@@ -64,7 +64,7 @@ export default function DocItemLayout({ children }: Props): ReactNode {
 
       {docTOC.desktop ? (
         <div id="toc-column" className={clsx("col col--3")}>
-          <div className="">{docTOC.desktop}</div>
+          {docTOC.desktop}
         </div>
       ) : (
         <div id="toc-column" className={clsx("col col--3")}>

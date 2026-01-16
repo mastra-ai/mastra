@@ -23,36 +23,44 @@ import {
   LogoWithoutText,
   SettingsIcon,
   MastraVersionFooter,
+  useMastraPlatform,
+  NavLink,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
   {
     key: 'main',
+
     links: [
       {
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
+        isOnMastraPlatform: true,
       },
       {
         name: 'Workflows',
         url: '/workflows',
         icon: <WorkflowIcon />,
+        isOnMastraPlatform: true,
       },
       {
         name: 'MCP Servers',
         url: '/mcps',
         icon: <McpServerIcon />,
+        isOnMastraPlatform: true,
       },
       {
         name: 'Tools',
         url: '/tools',
         icon: <ToolsIcon />,
+        isOnMastraPlatform: true,
       },
       {
         name: 'Scorers',
         url: '/scorers',
         icon: <GaugeIcon />,
+        isOnMastraPlatform: true,
       },
       {
         name: 'Workspace',
@@ -63,6 +71,7 @@ const mainNavigation: NavSection[] = [
         name: 'Request Context',
         url: '/request-context',
         icon: <GlobeIcon />,
+        isOnMastraPlatform: true,
       },
     ],
   },
@@ -74,6 +83,7 @@ const mainNavigation: NavSection[] = [
         name: 'Observability',
         url: '/observability',
         icon: <EyeIcon />,
+        isOnMastraPlatform: true,
       },
     ],
   },
@@ -85,6 +95,7 @@ const mainNavigation: NavSection[] = [
         name: 'Templates',
         url: '/templates',
         icon: <PackageIcon />,
+        isOnMastraPlatform: false,
       },
     ],
   },
@@ -97,6 +108,7 @@ const mainNavigation: NavSection[] = [
         name: 'Settings',
         url: '/settings',
         icon: <SettingsIcon />,
+        isOnMastraPlatform: false,
       },
     ],
   },
@@ -110,21 +122,25 @@ const secondNavigation: NavSection = {
       name: 'Mastra APIs',
       url: 'http://localhost:4111/swagger-ui',
       icon: <EarthIcon />,
+      isOnMastraPlatform: false,
     },
     {
       name: 'Documentation',
       url: 'https://mastra.ai/en/docs',
       icon: <BookIcon />,
+      isOnMastraPlatform: true,
     },
     {
       name: 'Github',
       url: 'https://github.com/mastra-ai/mastra',
       icon: <GithubIcon />,
+      isOnMastraPlatform: true,
     },
     {
       name: 'Community',
       url: 'https://discord.gg/BTYqqHKUrf',
       icon: <MessagesSquareIcon />,
+      isOnMastraPlatform: true,
     },
   ],
 };
@@ -142,6 +158,14 @@ export function AppSidebar() {
   const pathname = location.pathname;
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
+  const { isMastraPlatform } = useMastraPlatform();
+
+  const filterPlatformLink = (link: NavLink) => {
+    if (isMastraPlatform) {
+      return link.isOnMastraPlatform;
+    }
+    return true;
+  };
 
   return (
     <MainSidebar>
@@ -158,15 +182,18 @@ export function AppSidebar() {
 
       <MainSidebar.Nav>
         {mainNavigation.map(section => {
+          const filteredLinks = section.links.filter(filterPlatformLink);
+          const showSeparator = filteredLinks.length > 0 && section?.separator;
+
           return (
             <MainSidebar.NavSection key={section.key}>
               {section?.title ? (
                 <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
               ) : (
-                <>{section?.separator && <MainSidebar.NavSeparator />}</>
+                <>{showSeparator && <MainSidebar.NavSeparator />}</>
               )}
               <MainSidebar.NavList>
-                {section.links.map(link => {
+                {filteredLinks.map(link => {
                   const [_, pagePath] = pathname.split('/');
                   const lowercasedPagePath = link.name.toLowerCase();
                   const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
@@ -184,10 +211,11 @@ export function AppSidebar() {
           <MainSidebar.NavSection>
             <MainSidebar.NavSeparator />
             <MainSidebar.NavList>
-              {secondNavigation.links.map(link => {
+              {secondNavigation.links.filter(filterPlatformLink).map(link => {
                 return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
               })}
-              {!hideCloudCta && (
+
+              {!hideCloudCta && !isMastraPlatform ? (
                 <MainSidebar.NavLink
                   link={{
                     name: 'Share',
@@ -195,10 +223,11 @@ export function AppSidebar() {
                     icon: <CloudUploadIcon />,
                     variant: 'featured',
                     tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
+                    isOnMastraPlatform: false,
                   }}
                   state={state}
                 />
-              )}
+              ) : null}
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
