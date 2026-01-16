@@ -109,7 +109,8 @@
     "overrides": {
       "client-js-e2e-tests-zod-v3>zod": "^3.24.0",
       "client-js-e2e-tests-zod-v4>zod": "^4.3.5",
-      "better-auth": "^1.4.5"
+      "better-auth": "^1.4.5",
+      "js-yaml": "^3.14.2"
     }
   },
   "license": "Apache-2.0",
