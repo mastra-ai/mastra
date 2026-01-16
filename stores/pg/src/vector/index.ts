@@ -126,7 +126,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             // Stream factory: ensure returned streams have destroy()
             const originalStreamFn = config.stream;
             (poolConfig as any).stream = () => {
-              const stream = originalStreamFn();
+              const stream = originalStreamFn.call(config);
               if (!stream) return undefined;
               if (typeof stream.destroy !== 'function') {
                 // Add destroy method if missing - pg-pool will call this during cleanup
