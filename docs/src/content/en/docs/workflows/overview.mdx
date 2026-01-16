@@ -230,7 +230,7 @@ Create a workflow run instance using `.createRun()`, then call `.stream()` with 
 ```typescript
 const run = await testWorkflow.createRun();
 
-const stream = await run.stream({
+const stream = run.stream({
   inputData: {
     message: "Hello world"
   }
