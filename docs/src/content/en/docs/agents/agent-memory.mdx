@@ -106,6 +106,10 @@ export const memoryAgent = new Agent({
 });
 ```
 
+:::warning
+**Mastra Cloud Store limitation**: Agent-level storage is not supported when using [Mastra Cloud Store](/docs/v1/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
+:::
+
 ## Message history
 
 Include a `memory` object with both `resource` and `thread` to track message history during agent calls.
