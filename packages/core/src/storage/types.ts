@@ -256,6 +256,13 @@ export interface StorageAgentType {
   workflows?: string[];
   /** Array of agent keys to resolve from Mastra's agent registry */
   agents?: string[];
+  /** Array of integration IDs (for backward compatibility, not used for tool selection) */
+  integrations?: string[];
+  /**
+   * Array of specific integration tool IDs selected for this agent.
+   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   */
+  integrationTools?: string[];
   /** Input processor configurations */
   inputProcessors?: Record<string, unknown>[];
   /** Output processor configurations */
@@ -266,6 +273,10 @@ export interface StorageAgentType {
   scorers?: Record<string, StorageScorerConfig>;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -285,6 +296,10 @@ export type StorageUpdateAgentInput = {
   workflows?: string[];
   /** Array of agent keys to resolve from Mastra's agent registry */
   agents?: string[];
+  /** Array of integration IDs (for backward compatibility) */
+  integrations?: string[];
+  /** Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug) */
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   /** Memory key to resolve from Mastra's memory registry */
@@ -292,6 +307,10 @@ export type StorageUpdateAgentInput = {
   /** Scorer keys with optional sampling config */
   scorers?: Record<string, StorageScorerConfig>;
   metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
 };
 
 export type StorageListAgentsInput = {
@@ -306,6 +325,16 @@ export type StorageListAgentsInput = {
    */
   page?: number;
   orderBy?: StorageOrderBy;
+  /**
+   * Filter agents by owner identifier (indexed for fast lookups).
+   * Only agents with matching ownerId will be returned.
+   */
+  ownerId?: string;
+  /**
+   * Filter agents by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
