@@ -741,14 +741,16 @@ export interface DeleteAgentVersionResponse {
 }
 
 export interface VersionDiff {
-  path: string;
-  before: any;
-  after: any;
+  field: string;
+  previousValue: any;
+  currentValue: any;
 }
 
+export type AgentVersionDiff = VersionDiff;
+
 export interface CompareVersionsResponse {
-  versionA: AgentVersionResponse;
-  versionB: AgentVersionResponse;
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
   diffs: VersionDiff[];
 }
 
