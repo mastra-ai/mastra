@@ -11,4 +11,4 @@ Then, you can run the e2e tests:
 
 The tests will run in Playwright.
 ---------------------------------------------------------------------------------
-    `)
+    `);
