@@ -135,20 +135,13 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     // Validate topK parameter - throws MastraError directly
     validateTopK('LIBSQL', topK);
 
-    try {
-      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-        throw new Error('queryVector must be an array of finite numbers');
-      }
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      throw new MastraError(
-        {
-          id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        error,
-      );
+    if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+      throw new MastraError({
+        id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { message: 'queryVector must be an array of finite numbers' },
+      });
     }
 
     try {

@@ -321,6 +321,9 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
           return `NOT (${nestedConditions})`;
         }
 
+        if (!FILTER_OPERATORS[operator as OperatorType]) {
+          throw new Error(`Invalid operator: ${operator}`);
+        }
         const operatorFn = FILTER_OPERATORS[operator as OperatorType]!;
         const operatorResult = operatorFn(key, values.length + 1, operatorValue);
         if (operatorResult.needsValue) {
@@ -477,6 +480,9 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
           return `NOT (${nestedConditions})`;
         }
 
+        if (!FILTER_OPERATORS[operator as OperatorType]) {
+          throw new Error(`Invalid operator: ${operator}`);
+        }
         const operatorFn = FILTER_OPERATORS[operator as OperatorType]!;
         const operatorResult = operatorFn(key, values.length + 1, operatorValue);
         if (operatorResult.needsValue) {

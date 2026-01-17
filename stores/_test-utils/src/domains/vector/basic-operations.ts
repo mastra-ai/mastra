@@ -12,7 +12,11 @@ import { createUnitVector, createVector, VECTOR_DIMENSION } from './test-helpers
  * This test domain ensures that vector stores implement the core MastraVector interface correctly.
  */
 export function createBasicOperationsTest(config: VectorTestConfig) {
-  const { createIndex, deleteIndex, waitForIndexing = (_indexName: string) => new Promise(resolve => setTimeout(resolve, 100)) } = config;
+  const {
+    createIndex,
+    deleteIndex,
+    waitForIndexing = (_indexName: string) => new Promise(resolve => setTimeout(resolve, 100)),
+  } = config;
 
   describe('Basic Vector Operations', () => {
     describe('Index Lifecycle', () => {

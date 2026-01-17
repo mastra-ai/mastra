@@ -16,14 +16,22 @@ import { createErrorHandlingTest } from './domains/vector/error-handling';
  * // Run all tests (default)
  * createVectorTestSuite({ vector, createIndex, deleteIndex });
  *
- * // Skip pattern matching tests if store doesn't support regex
+ * // Skip all filter operator tests (for stores with minimal filter support)
  * createVectorTestSuite({
  *   vector,
  *   createIndex,
  *   deleteIndex,
  *   testDomains: {
- *     filterOps: false, // Skip if regex/pattern matching not supported
+ *     filterOps: false,
  *   }
+ * });
+ *
+ * // Keep filter tests but skip regex-specific ones
+ * createVectorTestSuite({
+ *   vector,
+ *   createIndex,
+ *   deleteIndex,
+ *   supportsRegex: false, // Only skips $regex tests, other filter ops still run
  * });
  *
  * // Skip large batch tests for stores with strict rate limits
