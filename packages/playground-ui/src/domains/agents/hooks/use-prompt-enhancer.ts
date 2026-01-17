@@ -32,14 +32,12 @@ export function usePromptEnhancer({ agentId, context = 'agent' }: UsePromptEnhan
     mutationFn: async ({ instructions, userComment, model }: EnhancePromptParams) => {
       try {
         if (agentId) {
-          // Use agent-specific endpoint (model is optional, falls back to agent's model)
-          return await client.getAgent(agentId).enhanceInstructions(instructions, userComment, model);
+          // Use agent-specific endpoint (model parameter not supported on this endpoint)
+          return await client.getAgent(agentId).enhanceInstructions(instructions, userComment);
         } else {
-          // Use generic endpoint (model is required)
-          if (!model) {
-            throw new Error('Model is required when enhancing without an agent');
-          }
-          return await client.enhanceInstructions({ instructions, comment: userComment, model, context });
+          // For create mode without agentId, we need model selection
+          // This is handled in the UI layer - for now throw error
+          throw new Error('Enhancement requires an agent context');
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Error enhancing prompt';

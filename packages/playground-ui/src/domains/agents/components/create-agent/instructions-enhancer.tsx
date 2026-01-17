@@ -16,6 +16,7 @@ import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers'
 import { cleanProviderId } from '../agent-metadata/utils';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
 import { useAllModels, ModelInfo } from '../model-picker/use-model-picker';
+import { Provider } from '@mastra/client-js';
 
 interface EnhancerModelSelectorProps {
   selectedModel: { provider: string; modelId: string } | null;
@@ -262,8 +263,9 @@ export function InstructionsEnhancer({
   const hasConnectedModel = () => {
     if (!agent) return false;
     if (agent.modelList && agent.modelList.length > 0) {
-      return agent.modelList.some((m: { enabled?: boolean; model: { provider: string } }) =>
-        m.enabled !== false && isProviderConnected(m.model.provider)
+      return agent.modelList.some(
+        (m: { enabled?: boolean; model: { provider: string } }) =>
+          m.enabled !== false && isProviderConnected(m.model.provider),
       );
     }
     return agent.provider ? isProviderConnected(agent.provider) : false;

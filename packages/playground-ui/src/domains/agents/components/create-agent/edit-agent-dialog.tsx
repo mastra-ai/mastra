@@ -99,9 +99,10 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
       name: agent.name || '',
       description: agent.description || '',
       instructions: agent.instructions || '',
-      model: agent.model
-        ? (agent.model as { provider?: string; name?: string })
-        : { provider: '', name: '' },
+      model: {
+        provider: (agent.model as { provider?: string; name?: string })?.provider || '',
+        name: (agent.model as { provider?: string; name?: string })?.name || '',
+      },
       tools: allTools,
       workflows: agent.workflows || [],
       agents: agent.agents || [],

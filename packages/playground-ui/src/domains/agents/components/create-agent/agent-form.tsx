@@ -151,13 +151,11 @@ export function AgentForm({
   }, [availableAgents]);
 
   // Transform memory configs data
+  // Note: MemoryConfig doesn't have an id, so we use memory IDs from a different source
+  // For now, return empty array as memory selection needs to be handled differently
   const memoryOptions = React.useMemo(() => {
-    if (!memoryConfigsData?.configs) return [];
-    return memoryConfigsData.configs.map((config: { id: string; name?: string }) => ({
-      id: config.id,
-      name: config.name || config.id,
-      description: '',
-    }));
+    // TODO: Implement proper memory config listing
+    return [];
   }, [memoryConfigsData]);
 
   // Transform scorers data

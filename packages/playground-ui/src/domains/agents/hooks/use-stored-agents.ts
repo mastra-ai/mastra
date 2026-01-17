@@ -5,11 +5,10 @@ import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgents
 
 export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['stored-agents', params, requestContext],
-    queryFn: () => client.listStoredAgents(params, requestContext),
+    queryKey: ['stored-agents', params],
+    queryFn: () => client.listStoredAgents(params),
   });
 };
 
@@ -30,7 +29,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
   const { requestContext } = usePlaygroundStore();
 
   const createMutation = useMutation({
-    mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params, requestContext),
+    mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params),
     onSuccess: () => {
       // Invalidate both stored-agents list and the merged agents list
       queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
