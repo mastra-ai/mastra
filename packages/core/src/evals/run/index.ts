@@ -40,7 +40,7 @@ export function runEvals<TAgent extends Agent>(config: {
   target: TAgent;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
-    targetResult: ReturnType<Agent['generate']>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
