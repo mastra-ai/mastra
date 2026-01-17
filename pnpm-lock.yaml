@@ -805,7 +805,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.44
-        version: 2.0.72(zod@3.25.76)
+        version: 2.0.72(zod@4.3.5)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -823,13 +823,13 @@ importers:
         version: link:../../packages/memory
       ai:
         specifier: 5.1.0-beta.13
-        version: 5.1.0-beta.13(zod@3.25.76)
+        version: 5.1.0-beta.13(zod@4.3.5)
       mastra:
         specifier: workspace:*
         version: link:../../packages/cli
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: ^4
+        version: 4.3.5
     devDependencies:
       '@types/node':
         specifier: 22.13.17
@@ -19348,11 +19348,11 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.18(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/gateway@1.1.0-beta.8(zod@3.25.76)':
+  '@ai-sdk/gateway@1.1.0-beta.8(zod@4.3.5)':
     dependencies:
       '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@3.25.76)
-      zod: 3.25.76
+      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.3.5)
+      zod: 4.3.5
 
   '@ai-sdk/gateway@2.0.0(zod@3.25.76)':
     dependencies:
@@ -19473,6 +19473,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.17(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/openai@2.0.72(zod@4.3.5)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.17(zod@4.3.5)
+      zod: 4.3.5
+
   '@ai-sdk/openai@3.0.1(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.0
@@ -19522,6 +19528,13 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 3.25.76
 
+  '@ai-sdk/provider-utils@3.0.17(zod@4.3.5)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 4.3.5
+
   '@ai-sdk/provider-utils@3.0.18(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -19552,12 +19565,12 @@ snapshots:
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
 
-  '@ai-sdk/provider-utils@3.1.0-beta.4(zod@3.25.76)':
+  '@ai-sdk/provider-utils@3.1.0-beta.4(zod@4.3.5)':
     dependencies:
       '@ai-sdk/provider': 2.1.0-beta.2
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
-      zod: 3.25.76
+      zod: 4.3.5
 
   '@ai-sdk/provider-utils@4.0.0(zod@3.25.76)':
     dependencies:
@@ -27935,14 +27948,14 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
 
-  ai@5.1.0-beta.13(zod@3.25.76):
+  ai@5.1.0-beta.13(zod@4.3.5):
     dependencies:
-      '@ai-sdk/gateway': 1.1.0-beta.8(zod@3.25.76)
+      '@ai-sdk/gateway': 1.1.0-beta.8(zod@4.3.5)
       '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@3.25.76)
+      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.3.5)
       '@ai-sdk/test-server': 1.0.0-beta.0
       '@opentelemetry/api': 1.9.0
-      zod: 3.25.76
+      zod: 4.3.5
 
   ai@6.0.1(zod@3.25.76):
     dependencies:
