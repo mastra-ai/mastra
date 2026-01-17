@@ -14,12 +14,14 @@ import {
   AgentsTable,
   AgentIcon,
   CreateAgentDialog,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 
 function Agents() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { Link, navigate, paths } = useLinkComponent();
   const { data: agents = {}, isLoading } = useAgents();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   const handleAgentCreated = (agentId: string) => {
     setIsCreateDialogOpen(false);
@@ -37,12 +39,14 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button variant="light" onClick={() => setIsCreateDialogOpen(true)}>
-            <Icon>
-              <Plus />
-            </Icon>
-            Create Agent
-          </Button>
+          {experimentalFeaturesEnabled && (
+            <Button variant="light" onClick={() => setIsCreateDialogOpen(true)}>
+              <Icon>
+                <Plus />
+              </Icon>
+              Create Agent
+            </Button>
+          )}
           <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
             <Icon>
               <DocsIcon />
@@ -53,14 +57,20 @@ function Agents() {
       </Header>
 
       <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable agents={agents} isLoading={isLoading} onCreateClick={() => setIsCreateDialogOpen(true)} />
+        <AgentsTable
+          agents={agents}
+          isLoading={isLoading}
+          onCreateClick={experimentalFeaturesEnabled ? () => setIsCreateDialogOpen(true) : undefined}
+        />
       </MainContentContent>
 
-      <CreateAgentDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        onSuccess={handleAgentCreated}
-      />
+      {experimentalFeaturesEnabled && (
+        <CreateAgentDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          onSuccess={handleAgentCreated}
+        />
+      )}
     </MainContentLayout>
   );
 }
