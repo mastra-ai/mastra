@@ -503,7 +503,8 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
               indexName: testIndexName,
               queryVector: createUnitVector(0),
               topK: 10,
-              filter: { category: { $regex: 'ELECTRONICS', $options: 'i' } },
+              // Use inline (?i) flag for case-insensitivity as not all stores support $options
+              filter: { category: { $regex: '(?i)ELECTRONICS' } },
             });
 
             // Should return electronics products
