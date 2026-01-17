@@ -5,7 +5,9 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   AGENTS_SCHEMA,
+  AGENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -13,6 +15,10 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  AgentVersion,
+  CreateVersionInput,
+  ListVersionsInput,
+  ListVersionsOutput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -28,9 +34,11 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
+    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_AGENT_VERSIONS });
     await this.#db.deleteData({ tableName: TABLE_AGENTS });
   }
 
@@ -76,6 +84,10 @@ export class AgentsLibSQL extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      integrations: this.parseJson(row.integrations, 'integrations'),
+      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
+      ownerId: row.ownerId as string | undefined,
+      activeVersionId: row.activeVersionId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
@@ -123,6 +135,10 @@ export class AgentsLibSQL extends AgentsStorage {
           outputProcessors: agent.outputProcessors ?? null,
           memory: agent.memory ?? null,
           scorers: agent.scorers ?? null,
+          integrations: agent.integrations ?? null,
+          integrationTools: agent.integrationTools ?? null,
+          ownerId: agent.ownerId ?? null,
+          activeVersionId: agent.activeVersionId ?? null,
           metadata: agent.metadata ?? null,
           createdAt: now,
           updatedAt: now,
@@ -178,6 +194,10 @@ export class AgentsLibSQL extends AgentsStorage {
       if (updates.outputProcessors !== undefined) data.outputProcessors = updates.outputProcessors;
       if (updates.memory !== undefined) data.memory = updates.memory;
       if (updates.scorers !== undefined) data.scorers = updates.scorers;
+      if (updates.integrations !== undefined) data.integrations = updates.integrations;
+      if (updates.integrationTools !== undefined) data.integrationTools = updates.integrationTools;
+      if (updates.ownerId !== undefined) data.ownerId = updates.ownerId;
+      if (updates.activeVersionId !== undefined) data.activeVersionId = updates.activeVersionId;
       if (updates.metadata !== undefined) {
         // Merge metadata
         data.metadata = { ...existingAgent.metadata, ...updates.metadata };
@@ -223,6 +243,10 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
+      // Delete all versions for this agent first
+      await this.deleteVersionsByAgentId(id);
+
+      // Then delete the agent
       await this.#db.delete({
         tableName: TABLE_AGENTS,
         keys: { id },
@@ -301,5 +325,292 @@ export class AgentsLibSQL extends AgentsStorage {
         error,
       );
     }
+  }
+
+  // ==========================================================================
+  // Agent Version Methods
+  // ==========================================================================
+
+  async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
+    try {
+      const now = new Date();
+
+      await this.#db.insert({
+        tableName: TABLE_AGENT_VERSIONS,
+        record: {
+          id: input.id,
+          agentId: input.agentId,
+          versionNumber: input.versionNumber,
+          name: input.name ?? null,
+          snapshot: input.snapshot,
+          changedFields: input.changedFields ?? null,
+          changeMessage: input.changeMessage ?? null,
+          createdAt: now,
+        },
+      });
+
+      return {
+        ...input,
+        createdAt: now,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'CREATE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: input.id, agentId: input.agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersion(id: string): Promise<AgentVersion | null> {
+    try {
+      const result = await this.#db.select<Record<string, any>>({
+        tableName: TABLE_AGENT_VERSIONS,
+        keys: { id },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
+    try {
+      const rows = await this.#db.selectMany<Record<string, any>>({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: 'WHERE agentId = ? AND versionNumber = ?',
+          args: [agentId, versionNumber],
+        },
+        limit: 1,
+      });
+
+      if (!rows || rows.length === 0) {
+        return null;
+      }
+
+      return this.parseVersionRow(rows[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId, versionNumber },
+        },
+        error,
+      );
+    }
+  }
+
+  async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
+    try {
+      const rows = await this.#db.selectMany<Record<string, any>>({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: 'WHERE agentId = ?',
+          args: [agentId],
+        },
+        orderBy: 'versionNumber DESC',
+        limit: 1,
+      });
+
+      if (!rows || rows.length === 0) {
+        return null;
+      }
+
+      return this.parseVersionRow(rows[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_LATEST_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+    const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
+    const { field, direction } = this.parseVersionOrderBy(orderBy);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_VERSIONS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 20);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Get total count
+      const total = await this.#db.selectTotalCount({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: 'WHERE agentId = ?',
+          args: [agentId],
+        },
+      });
+
+      if (total === 0) {
+        return {
+          versions: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Get paginated results
+      const limitValue = perPageInput === false ? total : perPage;
+      const rows = await this.#db.selectMany<Record<string, any>>({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: 'WHERE agentId = ?',
+          args: [agentId],
+        },
+        orderBy: `"${field}" ${direction}`,
+        limit: limitValue,
+        offset,
+      });
+
+      const versions = rows.map(row => this.parseVersionRow(row));
+
+      return {
+        versions,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersion(id: string): Promise<void> {
+    try {
+      await this.#db.delete({
+        tableName: TABLE_AGENT_VERSIONS,
+        keys: { id },
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'DELETE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+    try {
+      // Get all version IDs for this agent
+      const versions = await this.#db.selectMany<{ id: string }>({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: 'WHERE agentId = ?',
+          args: [agentId],
+        },
+      });
+
+      // Delete each version individually
+      for (const version of versions) {
+        await this.#db.delete({
+          tableName: TABLE_AGENT_VERSIONS,
+          keys: { id: version.id },
+        });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async countVersions(agentId: string): Promise<number> {
+    try {
+      const count = await this.#db.selectTotalCount({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: 'WHERE agentId = ?',
+          args: [agentId],
+        },
+      });
+      return count;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'COUNT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  // ==========================================================================
+  // Private Helper Methods
+  // ==========================================================================
+
+  private parseVersionRow(row: any): AgentVersion {
+    return {
+      id: row.id as string,
+      agentId: row.agentId as string,
+      versionNumber: row.versionNumber as number,
+      name: row.name as string | undefined,
+      snapshot: this.parseJson(row.snapshot, 'snapshot'),
+      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      changeMessage: row.changeMessage as string | undefined,
+      createdAt: new Date(row.createdAt as string),
+    };
   }
 }

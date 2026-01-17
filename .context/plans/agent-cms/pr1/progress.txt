@@ -628,3 +628,51 @@ Next Steps:
 - Task 021: Implement MongoDB stored agent storage (pending)
 - These two tasks block the full build (Task 024)
 
+[2026-01-17] Task 020: Implement LibSQL stored agent storage - COMPLETED
+
+Summary:
+- Updated stores/libsql/src/storage/domains/agents/index.ts to add version management support
+- Added imports for TABLE_AGENT_VERSIONS, AGENT_VERSIONS_SCHEMA, and version types (AgentVersion, CreateVersionInput, ListVersionsInput, ListVersionsOutput)
+- Updated init() to create agent_versions table alongside agents table
+- Updated dangerouslyClearAll() to clear agent_versions before agents (respects foreign key constraints)
+- Updated parseRow() to include new fields: integrations, integrationTools, ownerId, activeVersionId
+- Updated createAgent() INSERT to include all new fields (integrations, integrationTools, ownerId, activeVersionId)
+- Updated updateAgent() to handle all new fields in conditional updates
+- Updated deleteAgent() to cascade delete all versions via deleteVersionsByAgentId before deleting agent
+- Implemented createVersion() - Creates new agent version with snapshot
+- Implemented getVersion() - Retrieves version by ID
+- Implemented getVersionByNumber() - Retrieves version by agentId + versionNumber using whereClause
+- Implemented getLatestVersion() - Gets latest version by versionNumber DESC
+- Implemented listVersions() - Paginated version listing with sorting and whereClause filtering
+- Implemented deleteVersion() - Deletes single version by ID
+- Implemented deleteVersionsByAgentId() - Deletes all versions for an agent using selectMany + loop delete pattern (LibSQL doesn't support conditional deleteData)
+- Implemented countVersions() - Returns version count for an agent using selectTotalCount with whereClause
+- Added parseVersionRow() helper method for parsing version rows with JSON deserialization
+
+Files Modified:
+- stores/libsql/src/storage/domains/agents/index.ts (added version types, methods, and field support)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/libsql: PASSED
+- pnpm turbo build (full monorepo build): PASSED
+- All acceptance criteria met:
+  ✓ All storage interface methods implemented (8 version methods + updated CRUD methods)
+  ✓ Compatible with LibSQL/Turso (uses LibSQLDB wrapper methods)
+  ✓ JSON stored as TEXT and parsed correctly (parseJson helper handles serialization)
+  ✓ Timestamps handled correctly (Date objects converted to/from ISO strings)
+
+Implementation Notes:
+- Used LibSQLDB's selectMany with whereClause for filtering by agentId
+- deleteVersionsByAgentId uses selectMany + loop pattern instead of direct conditional delete (LibSQL API limitation)
+- All version operations follow the same error handling pattern as CRUD operations
+- JSON fields properly serialized/deserialized via parseJson helper
+- Follows same patterns as PostgreSQL implementation for consistency
+
+Next Steps:
+- Task 021: Implement MongoDB stored agent storage (P2 priority, pending)
+- Task 015-018: UI components for agent versions (P1-P2 priority, pending)
+- Task 022-023: Client SDK and tests (P2 priority, pending)
+- Task 024-026: Testing and verification tasks (P0-P1 priority, pending)
+
