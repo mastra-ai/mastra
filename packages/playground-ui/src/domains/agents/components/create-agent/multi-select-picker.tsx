@@ -284,12 +284,7 @@ export function MultiSelectPicker<T>({
                         onClick={() => handleSelect(id)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                       >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => handleSelect(id)}
-                          id={`checkbox-${id}`}
-                          className="mt-0.5"
-                        />
+                        <Checkbox checked={isSelected} id={`checkbox-${id}`} className="mt-0.5" />
                         <div className="flex flex-col gap-0.5">
                           <label htmlFor={`checkbox-${id}`} className="text-sm text-icon6 cursor-pointer">
                             {optionLabel}
