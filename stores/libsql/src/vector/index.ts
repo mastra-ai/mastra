@@ -132,13 +132,15 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     includeVector = false,
     minScore = -1, // Default to -1 to include all results (cosine similarity ranges from -1 to 1)
   }: LibSQLQueryVectorParams): Promise<QueryResult[]> {
+    // Validate topK parameter - throws MastraError directly
+    validateTopK('LIBSQL', topK);
+
     try {
-      // Validate topK parameter
-      validateTopK('LIBSQL', topK);
       if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
         throw new Error('queryVector must be an array of finite numbers');
       }
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),

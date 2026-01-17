@@ -69,10 +69,10 @@ export function validateUpsertInput(
  *
  * @param storeName - Name of the vector store (e.g., 'PG', 'CHROMA')
  * @param topK - Number of results to return
- * @throws MastraError if topK is <= 0
+ * @throws MastraError if topK is not a positive integer
  */
 export function validateTopK(storeName: string, topK: number): void {
-  if (topK <= 0) {
+  if (!Number.isInteger(topK) || topK <= 0) {
     throw new MastraError({
       id: createVectorErrorId(storeName, 'QUERY', 'INVALID_TOP_K'),
       domain: ErrorDomain.MASTRA_VECTOR,

@@ -83,7 +83,6 @@ describe('QdrantVector', () => {
         topK: 2,
         includeVector: true,
       });
-      console.log(results);
       expect(results[0]?.id).toBe(idToBeUpdated);
       // not matching the vector in results list because, the stored vector is stored in a normalized form inside qdrant
       // expect(results[0]?.vector).toEqual(newVector);

@@ -85,14 +85,15 @@ export function createErrorHandlingTest(config: VectorTestConfig) {
       });
 
       it('should throw error when deleting non-existent index', async () => {
-        // Note: Some stores may silently succeed if index doesn't exist
-        // This test documents expected behavior but may be gracefully handled
+        // This test documents store-specific behavior:
+        // - Some stores throw (expected for strict implementations)
+        // - Some stores silently succeed (idempotent deletion)
         try {
           await config.vector.deleteIndex({ indexName: nonExistentIndexName });
-          // Some stores might succeed - this is acceptable behavior
+          // Idempotent deletion succeeded - this is acceptable
         } catch (error) {
-          // Other stores might throw - also acceptable
-          expect(error).toBeDefined();
+          // Strict implementation threw - verify it's an actual error
+          expect(error).toBeInstanceOf(Error);
         }
       });
     });
@@ -340,24 +341,20 @@ export function createErrorHandlingTest(config: VectorTestConfig) {
 
         // Test negative dimension
         await expect(
-          createIndex(invalidIndexName).then(() =>
-            config.vector.createIndex({
-              indexName: invalidIndexName,
-              dimension: -100,
-              metric: 'cosine',
-            } as any),
-          ),
+          config.vector.createIndex({
+            indexName: invalidIndexName,
+            dimension: -100,
+            metric: 'cosine',
+          }),
         ).rejects.toThrow();
 
         // Test zero dimension
         await expect(
-          createIndex(invalidIndexName).then(() =>
-            config.vector.createIndex({
-              indexName: invalidIndexName,
-              dimension: 0,
-              metric: 'cosine',
-            } as any),
-          ),
+          config.vector.createIndex({
+            indexName: `${invalidIndexName}_zero`,
+            dimension: 0,
+            metric: 'cosine',
+          }),
         ).rejects.toThrow();
       });
 

@@ -4,33 +4,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OpenSearchVector } from './index';
 
-/**
- * Helper function to check if two vectors are similar (cosine similarity close to 1)
- * This is needed because OpenSearch may normalize vectors when using cosine similarity
- */
-function _areVectorsSimilar(v1: number[] | undefined, v2: number[] | undefined, threshold = 0.99): boolean {
-  if (!v1 || !v2 || v1.length !== v2.length) return false;
-
-  // Calculate cosine similarity
-  let dotProduct = 0;
-  let mag1 = 0;
-  let mag2 = 0;
-
-  for (let i = 0; i < v1.length; i++) {
-    dotProduct += v1[i] * v2[i];
-    mag1 += v1[i] * v1[i];
-    mag2 += v2[i] * v2[i];
-  }
-
-  mag1 = Math.sqrt(mag1);
-  mag2 = Math.sqrt(mag2);
-
-  if (mag1 === 0 || mag2 === 0) return false;
-
-  const similarity = dotProduct / (mag1 * mag2);
-  return similarity >= threshold;
-}
-
 describe('OpenSearchVector', () => {
   let vectorDB: OpenSearchVector;
   const node = 'http://localhost:9200';

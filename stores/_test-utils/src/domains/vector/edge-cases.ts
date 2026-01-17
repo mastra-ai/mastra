@@ -187,9 +187,7 @@ export function createEdgeCasesTest(config: VectorTestConfig, options: EdgeCases
         }, 60000); // 1 minute timeout
 
         it('should handle deleting large batch of vectors', async () => {
-          // Delete half the vectors (500)
-          const idsToDelete = Array.from({ length: 500 }, (_, i) => `${i}`);
-
+          // Delete half the vectors (500) using filter
           await config.vector.deleteVectors({
             indexName: largeBatchTestIndex,
             filter: { batch: 'large', index: { $lt: 500 } },

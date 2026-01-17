@@ -169,8 +169,9 @@ export function createVectorTestSuite(config: VectorTestConfig) {
     if (vector && vector.constructor) {
       vectorName = vector.constructor.name;
     }
-  } catch (e) {
-    // If accessing vector throws (e.g., it's undefined), use default name
+  } catch {
+    // Expected when vector is undefined or a getter that throws during setup.
+    // Fall back to default name for the describe block.
   }
 
   describe(vectorName, () => {
