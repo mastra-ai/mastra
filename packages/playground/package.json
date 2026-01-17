@@ -21,6 +21,7 @@
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "test:e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
     "test:e2e:dev": "E2E_PORT=5173 playwright test -c e2e/playwright.config.ts",
+    "test:e2e:dev:ui": "E2E_PORT=5173 playwright test -c e2e/playwright.config.ts --ui",
     "test:e2e:setup": "playwright install chromium"
   },
   "dependencies": {
