@@ -907,3 +907,51 @@ Next Steps:
 
 Note: The version comparison dialog components are complete and syntactically correct. Build failures in playground-ui are due to missing client SDK methods (Task 022) which will be implemented in a future task.
 
+[2026-01-17] Task 022: Create client SDK stored agent resource - COMPLETED
+
+Summary:
+- Created client-sdks/client-js/src/resources/stored-agent.ts with StoredAgent class:
+  * details(requestContext?) - Retrieves stored agent details
+  * update(params, requestContext?) - Updates stored agent configuration
+  * delete(requestContext?) - Deletes stored agent
+  * listVersions(params?, requestContext?) - Lists all versions with pagination/sorting
+  * createVersion(params?, requestContext?) - Creates new version snapshot
+  * getVersion(versionId, requestContext?) - Retrieves specific version
+  * activateVersion(versionId, requestContext?) - Activates a version
+  * restoreVersion(versionId, requestContext?) - Restores version by creating new version
+  * deleteVersion(versionId, requestContext?) - Deletes a version
+  * compareVersions(fromId, toId, requestContext?) - Compares two versions
+- All methods properly construct API paths with encodeURIComponent for safety
+- Query parameters properly handled via URLSearchParams
+- Request context properly appended to query strings
+- Fixed sortDirection field name (was orderDirection) to match ListAgentVersionsParams type
+- Export already present in client-sdks/client-js/src/resources/index.ts (line 11)
+
+Files Created:
+- client-sdks/client-js/src/resources/stored-agent.ts
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/client-js: PASSED
+- All acceptance criteria met:
+  ✓ All methods call correct API endpoints (details, update, delete, version operations)
+  ✓ TypeScript types match server responses (uses types from types.ts)
+  ✓ Error handling for API failures (inherits from BaseResource.request method)
+  ✓ Methods are documented with JSDoc (all methods have JSDoc comments)
+
+Implementation Notes:
+- StoredAgent class uses instance-scoped storedAgentId passed to constructor
+- All API paths use /api/stored/agents/${agentId} prefix
+- Version endpoints use /api/stored/agents/${agentId}/versions pattern
+- Query string construction handles both pagination params and request context
+- compareVersions uses query params (from, to) for version IDs
+- The class follows the exact pattern from total-cms branch reference
+
+Next Steps:
+- Task 023: Add client SDK stored agent tests (P2 priority, depends on Task 022 - now unblocked)
+- Task 021: MongoDB stored agent storage (P2 priority, pending - currently blocking full build)
+- Task 024-026: Testing and verification tasks (P0-P1 priority, pending)
+
+Note: Full monorepo build currently fails on mongodb package due to missing version methods (Task 021 pending). The client-js package builds successfully and is ready for use.
+
