@@ -494,6 +494,19 @@ export async function createNetworkLoop({
 
       const object = await result.object;
 
+      if (!object) {
+        throw new MastraError({
+          id: 'AGENT_NETWORK_ROUTING_AGENT_INVALID_OUTPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.SYSTEM,
+          text: `Routing agent returned undefined for 'object'. This may indicate an issue with the model's response or structured output parsing.`,
+          details: {
+            finishReason: result.finishReason ?? null,
+            usage: JSON.stringify(result.usage) ?? null,
+          },
+        });
+      }
+
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 
       // When routing agent handles request itself (no delegation), emit text events
