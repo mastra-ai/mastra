@@ -1,18 +1,18 @@
 - table:
-  - rowgroup:
-    - row "Name Attached tools":
-      - columnheader "Name"
-      - columnheader "Attached tools"
-  - rowgroup:
-    - row /Simple MCP Server http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse 0 agent 1 tool 0 workflow/:
-      - cell /Simple MCP Server http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse/:
-        - link "Simple MCP Server":
-          - /url: /mcps/simple-mcp-server
-        - text: /http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse/
-      - cell "0 agent 1 tool 0 workflow":
-        - img
-        - text: 0 agent
-        - img
-        - text: 1 tool
-        - img
-        - text: 0 workflow
+    - rowgroup:
+        - row "Name Attached tools":
+            - columnheader "Name"
+            - columnheader "Attached tools"
+    - rowgroup:
+        - row /Simple MCP Server http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse 0 agent 1 tool 0 workflow/:
+            - cell /Simple MCP Server http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse/:
+                - link "Simple MCP Server":
+                    - /url: /mcps/simple-mcp-server
+                - text: /http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse/
+            - cell "0 agent 1 tool 0 workflow":
+                - img
+                - text: 0 agent
+                - img
+                - text: 1 tool
+                - img
+                - text: 0 workflow

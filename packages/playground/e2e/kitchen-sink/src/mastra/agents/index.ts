@@ -14,7 +14,7 @@ const memory = new Memory({
   storage,
 
   options: {
-      generateTitle: true,
+    generateTitle: true,
   },
 });
 

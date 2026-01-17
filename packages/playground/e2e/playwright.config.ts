@@ -8,15 +8,15 @@ const webservers = [
     command: `pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
     timeout: 120_000,
-  }
-]
+  },
+];
 
-if(PORT) {
+if (PORT) {
   webservers.push({
     command: `echo "App is running on :${PORT}"`,
     url: `http://localhost:${PORT}`,
     timeout: 120_000,
-  })
+  });
 }
 
 export default defineConfig({
@@ -38,6 +38,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  
+
   webServer: webservers,
 });
