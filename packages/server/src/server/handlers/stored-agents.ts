@@ -12,6 +12,7 @@ import {
 } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { handleAutoVersioning } from './agent-versions';
 import { handleError } from './error';
 
 // ============================================================================
@@ -30,7 +31,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   summary: 'List stored agents',
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
-  handler: async ({ mastra, page, perPage, orderBy }) => {
+  handler: async ({ mastra, page, perPage, orderBy, ownerId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -47,6 +48,8 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        ownerId,
+        metadata,
       });
 
       return result;
@@ -81,7 +84,8 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await agentsStore.getAgentById({ id: storedAgentId });
+      // Use getAgentByIdResolved to automatically resolve from active version
+      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -117,11 +121,14 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrations,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
     metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -143,6 +150,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationsFromBody = Array.isArray(integrations) ? integrations : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       const agent = await agentsStore.createAgent({
         agent: {
@@ -155,11 +164,14 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           defaultOptions,
           workflows,
           agents,
+          integrations: integrationsFromBody,
+          integrationTools: integrationToolsFromBody,
           inputProcessors,
           outputProcessors,
           memory,
           scorers,
           metadata,
+          ownerId,
         },
       });
 
@@ -194,11 +206,14 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrations,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
     metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -218,10 +233,12 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools if it's actually an array from the body (not {} from adapter)
+      // Only include tools/integrations if they're actually arrays from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationsFromBody = Array.isArray(integrations) ? integrations : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
-      const agent = await agentsStore.updateAgent({
+      const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
         name,
         description,
@@ -231,12 +248,19 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         defaultOptions,
         workflows,
         agents,
+        integrations: integrationsFromBody,
+        integrationTools: integrationToolsFromBody,
         inputProcessors,
         outputProcessors,
         memory,
         scorers,
         metadata,
+        ownerId,
       });
+
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a version if there are meaningful changes and updates activeVersionId
+      const { agent } = await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent);
 
       return agent;
     } catch (error) {
