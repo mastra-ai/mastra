@@ -62,7 +62,7 @@ export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
     return (
       <div className="flex items-center gap-2">
         <Spinner />
-        <span className="text-sm text-gray-500">Loading providers...</span>
+        <span className="text-sm text-icon3">Loading providers...</span>
       </div>
     );
   }

@@ -152,7 +152,11 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
 
         {allModels.length > 0 && (
           <PopoverContent
-            className="flex flex-col gap-0 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto p-2"
+            className="flex flex-col gap-0 w-full overflow-y-auto p-2"
+            style={{
+              width: 'var(--radix-popover-trigger-width)',
+              maxHeight: 'calc(var(--radix-popover-content-available-height) - 50px)',
+            }}
             onOpenAutoFocus={e => e.preventDefault()}
           >
             {filteredModels.length === 0 ? (

@@ -161,7 +161,7 @@ export function MultiSelectPicker<T>({
               key={id}
               className="inline-flex items-center gap-1 bg-surface4 text-icon5 text-ui-sm rounded-md px-1.5 h-badge-default shrink-0"
             >
-              <span className="truncate max-w-[120px]">{getOptionLabel(option)}</span>
+              <span className="truncate max-w-truncate-sm">{getOptionLabel(option)}</span>
               <button
                 type="button"
                 onClick={e => handleRemove(id, e)}
@@ -194,7 +194,7 @@ export function MultiSelectPicker<T>({
             aria-haspopup="listbox"
             variant="default"
             className={cn(
-              'w-full justify-between min-h-[32px] h-auto py-1',
+              'w-full justify-between min-h-form-sm h-auto py-1',
               error && 'border-accent2',
               disabled && 'cursor-not-allowed opacity-50',
             )}
@@ -204,7 +204,7 @@ export function MultiSelectPicker<T>({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+        <PopoverContent className="p-0 w-full" align="start" style={{ width: 'var(--radix-popover-trigger-width)' }}>
           <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
             <div className="flex items-center border-b border-border1 px-3 py-2">
               <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />

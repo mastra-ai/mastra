@@ -14,4 +14,8 @@ export const Sizes = {
   'avatar-md': '32px',
   'avatar-lg': '40px',
   'dropdown-max-height': '300px',
+  'truncate-sm': '120px',
+  'truncate-md': '180px',
+  'screen-85': '85vh',
+  'screen-90': '90vh',
 };
