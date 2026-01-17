@@ -5,6 +5,7 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
@@ -15,6 +16,14 @@ import type {
   StorageListAgentsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
+import type {
+  AgentVersion,
+  CreateVersionInput,
+  ListVersionsInput,
+  ListVersionsOutput,
+  VersionOrderBy,
+  VersionSortDirection,
+} from '@mastra/core/storage/domains/agents';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
@@ -26,7 +35,7 @@ export class AgentsPG extends AgentsStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_AGENTS] as const;
+  static readonly MANAGED_TABLES = [TABLE_AGENTS, TABLE_AGENT_VERSIONS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -59,6 +68,7 @@ export class AgentsPG extends AgentsStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -82,6 +92,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_AGENT_VERSIONS });
     await this.#db.clearTable({ tableName: TABLE_AGENTS });
   }
 
@@ -123,11 +134,15 @@ export class AgentsPG extends AgentsStorage {
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
       workflows: this.parseJson(row.workflows, 'workflows'),
       agents: this.parseJson(row.agents, 'agents'),
+      integrations: this.parseJson(row.integrations, 'integrations'),
+      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
       metadata: this.parseJson(row.metadata, 'metadata'),
+      ownerId: row.ownerId as string | undefined,
+      activeVersionId: row.activeVersionId as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -165,10 +180,12 @@ export class AgentsPG extends AgentsStorage {
 
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, name, description, instructions, model, tools, 
-          "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, 
+          id, name, description, instructions, model, tools,
+          "defaultOptions", workflows, agents, integrations, "integrationTools",
+          "inputProcessors", "outputProcessors", memory, scorers, metadata,
+          "ownerId", "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
         [
           agent.id,
           agent.name,
@@ -179,11 +196,15 @@ export class AgentsPG extends AgentsStorage {
           agent.defaultOptions ? JSON.stringify(agent.defaultOptions) : null,
           agent.workflows ? JSON.stringify(agent.workflows) : null,
           agent.agents ? JSON.stringify(agent.agents) : null,
+          agent.integrations ? JSON.stringify(agent.integrations) : null,
+          agent.integrationTools ? JSON.stringify(agent.integrationTools) : null,
           agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
           agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
           agent.memory ? JSON.stringify(agent.memory) : null,
           agent.scorers ? JSON.stringify(agent.scorers) : null,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
+          agent.ownerId ?? null,
+          agent.activeVersionId ?? null,
           nowIso,
           nowIso,
           nowIso,
@@ -289,6 +310,26 @@ export class AgentsPG extends AgentsStorage {
         values.push(JSON.stringify(updates.scorers));
       }
 
+      if (updates.integrations !== undefined) {
+        setClauses.push(`integrations = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.integrations));
+      }
+
+      if (updates.integrationTools !== undefined) {
+        setClauses.push(`"integrationTools" = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.integrationTools));
+      }
+
+      if (updates.ownerId !== undefined) {
+        setClauses.push(`"ownerId" = $${paramIndex++}`);
+        values.push(updates.ownerId);
+      }
+
+      if (updates.activeVersionId !== undefined) {
+        setClauses.push(`"activeVersionId" = $${paramIndex++}`);
+        values.push(updates.activeVersionId);
+      }
+
       if (updates.metadata !== undefined) {
         // Merge metadata
         const mergedMetadata = { ...existingAgent.metadata, ...updates.metadata };
@@ -347,6 +388,10 @@ export class AgentsPG extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
+      // Delete all versions for this agent first
+      await this.deleteVersionsByAgentId(id);
+
+      // Then delete the agent
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
       throw new MastraError(
@@ -423,5 +468,264 @@ export class AgentsPG extends AgentsStorage {
         error,
       );
     }
+  }
+
+  // ==========================================================================
+  // Agent Version Methods
+  // ==========================================================================
+
+  async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      await this.#db.client.none(
+        `INSERT INTO ${tableName} (
+          id, "agentId", "versionNumber", name, snapshot, "changedFields", "changeMessage", "createdAt", "createdAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          input.id,
+          input.agentId,
+          input.versionNumber,
+          input.name ?? null,
+          JSON.stringify(input.snapshot),
+          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.changeMessage ?? null,
+          nowIso,
+          nowIso,
+        ],
+      );
+
+      return {
+        ...input,
+        createdAt: now,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'CREATE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: input.id, agentId: input.agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersion(id: string): Promise<AgentVersion | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE "agentId" = $1 AND "versionNumber" = $2`,
+        [agentId, versionNumber],
+      );
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId, versionNumber },
+        },
+        error,
+      );
+    }
+  }
+
+  async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
+        [agentId],
+      );
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_LATEST_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+    const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
+    const { field, direction } = this.parseVersionOrderBy(orderBy);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LIST_VERSIONS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 20);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+
+      // Get total count
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
+        [agentId],
+      );
+      const total = parseInt(countResult.count, 10);
+
+      if (total === 0) {
+        return {
+          versions: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Get paginated results
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataResult = await this.#db.client.manyOrNone(
+        `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
+        [agentId, limitValue, offset],
+      );
+
+      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+
+      return {
+        versions,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LIST_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersion(id: string): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [agentId]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async countVersions(agentId: string): Promise<number> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
+        [agentId],
+      );
+      return parseInt(result.count, 10);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'COUNT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  // ==========================================================================
+  // Private Helper Methods
+  // ==========================================================================
+
+  private parseVersionRow(row: any): AgentVersion {
+    return {
+      id: row.id as string,
+      agentId: row.agentId as string,
+      versionNumber: row.versionNumber as number,
+      name: row.name as string | undefined,
+      snapshot: this.parseJson(row.snapshot, 'snapshot'),
+      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      changeMessage: row.changeMessage as string | undefined,
+      createdAt: row.createdAtZ || row.createdAt,
+    };
   }
 }

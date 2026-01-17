@@ -546,7 +546,8 @@
 			],
 			"estimatedComplexity": "medium",
 			"dependencies": ["001"],
-			"status": "pending"
+			"status": "completed",
+			"passing": true
 		},
 		{
 			"id": "020",

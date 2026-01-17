@@ -570,3 +570,61 @@ Next Steps:
 - Task 016: Create save version dialog (depends on Task 011 - already complete)
 - Task 017: Create version comparison dialog (depends on Task 011 - already complete)
 - Task 018: Update agents page with stored agents (depends on Tasks 012, 013, 014, 015 - Task 014 now complete)
+[2026-01-17] Task 019: Implement PostgreSQL stored agent storage - COMPLETED
+
+Summary:
+- Updated packages/core/src/storage/constants.ts:
+  * Added TABLE_AGENT_VERSIONS constant ('mastra_agent_versions')
+  * Added AGENT_VERSIONS_SCHEMA with columns: id, agentId, versionNumber, name, snapshot, changedFields, changeMessage, createdAt
+  * Updated AGENTS_SCHEMA to include: integrations, integrationTools, ownerId, activeVersionId fields
+  * Added TABLE_AGENT_VERSIONS to TABLE_NAMES type
+  * Added TABLE_AGENT_VERSIONS to TABLE_SCHEMAS record
+- Updated packages/core/src/storage/domains/operations/inmemory.ts:
+  * Added mastra_agent_versions: new Map() to in-memory data structure
+- Updated stores/pg/src/storage/domains/agents/index.ts:
+  * Added imports for AgentVersion, CreateVersionInput, ListVersionsInput, ListVersionsOutput types
+  * Added TABLE_AGENT_VERSIONS to imports and MANAGED_TABLES
+  * Updated init() to create agent_versions table
+  * Updated dangerouslyClearAll() to clear agent_versions table
+  * Updated parseRow() to include integrations, integrationTools, ownerId, activeVersionId fields
+  * Updated createAgent() INSERT to include all new fields
+  * Updated updateAgent() SET clauses to handle all new fields
+  * Updated deleteAgent() to delete versions first via deleteVersionsByAgentId
+  * Implemented createVersion() - Creates new agent version with snapshot
+  * Implemented getVersion() - Retrieves version by ID
+  * Implemented getVersionByNumber() - Retrieves version by agentId + versionNumber
+  * Implemented getLatestVersion() - Gets latest version by versionNumber DESC
+  * Implemented listVersions() - Paginated version listing with sorting
+  * Implemented deleteVersion() - Deletes single version by ID
+  * Implemented deleteVersionsByAgentId() - Deletes all versions for an agent
+  * Implemented countVersions() - Returns version count for an agent
+  * Added parseVersionRow() helper method for parsing version rows
+
+Files Modified:
+- packages/core/src/storage/constants.ts (added agent versions schema and constants)
+- packages/core/src/storage/domains/operations/inmemory.ts (added agent_versions map)
+- stores/pg/src/storage/domains/agents/index.ts (implemented all version methods)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck (core package): PASSED
+- pnpm turbo build --filter @mastra/pg: PASSED
+- All acceptance criteria met:
+  ✓ All storage interface methods implemented (8 version methods + updated CRUD methods)
+  ✓ Tables created with proper schema (mastra_agent_versions table added)
+  ✓ Queries are parameterized (all use $1, $2, etc. placeholders - SQL injection safe)
+  ✓ JSON fields properly serialized/deserialized (snapshot, changedFields, integrations, etc.)
+
+Notes:
+- The parseVersionOrderBy method is already implemented in the base class (AgentsStorage) as a protected method
+- Version table uses versionNumber (integer) and supports vanity names
+- deleteAgent now cascades to delete all versions (deleteVersionsByAgentId called first)
+- All version operations follow the same error handling pattern as CRUD operations
+- Pre-existing CLI typecheck errors are unrelated to this task (missing @mastra/deployer module)
+
+Next Steps:
+- Task 020: Implement LibSQL stored agent storage (pending)
+- Task 021: Implement MongoDB stored agent storage (pending)
+- These two tasks block the full build (Task 024)
+
