@@ -3,8 +3,8 @@ import { Memory } from '@mastra/memory';
 
 import { weatherInfo } from '../tools';
 import * as aiTest from 'ai/test';
-import { fixtures } from '../../fixtures';
-import { Fixtures } from '../../types';
+import { fixtures } from '../../../fixtures';
+import { Fixtures } from '../../../types';
 import { lessComplexWorkflow } from '../workflows/complex-workflow';
 import { simpleMcpTool } from '../tools';
 import { storage } from '../storage';
@@ -14,7 +14,9 @@ const memory = new Memory({
   storage,
 
   options: {
-    generateTitle: true,
+    threads: {
+      generateTitle: true,
+    },
   },
 });
 
