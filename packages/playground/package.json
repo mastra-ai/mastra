@@ -18,11 +18,11 @@
     "build:watch": "vite build --watch",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test:e2e": "playwright test -c e2e/playwright.config.ts",
-    "test:e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
-    "test:e2e:dev": "E2E_PORT=5173 playwright test -c e2e/playwright.config.ts",
+    "test:e2e": "pnpm test:e2e:install && playwright test -c e2e/playwright.config.ts",
+    "test:e2e:ui": "pnpm test:e2e:install && playwright test -c e2e/playwright.config.ts --ui",
     "test:e2e:dev:ui": "E2E_PORT=5173 playwright test -c e2e/playwright.config.ts --ui",
-    "test:e2e:setup": "playwright install chromium"
+    "test:e2e:setup": "playwright install chromium",
+    "test:e2e:install": "node ./e2e/scripts/info.js && pnpm install --ignore-workspace --dir ./e2e/kitchen-sink"
   },
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
