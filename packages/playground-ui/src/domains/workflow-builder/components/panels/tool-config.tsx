@@ -198,10 +198,10 @@ export function ToolConfig({ node }: ToolConfigProps) {
             <SelectTrigger>
               <SelectValue placeholder="Select a tool" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-w-[var(--radix-select-trigger-width)]">
               {toolList.map(tool => (
                 <SelectItem key={tool.id} value={tool.id}>
-                  <div className="overflow-hidden">
+                  <div className="overflow-hidden max-w-full">
                     <div className="truncate">{tool.name}</div>
                     {tool.description && <div className="text-xs text-icon3 truncate">{tool.description}</div>}
                   </div>
