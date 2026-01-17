@@ -1,9 +1,8 @@
 import { ReadableStream } from 'node:stream/web';
-import type { Run } from '../workflows';
-import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
+import type { DefaultEngineType, Run, Step } from '../workflows';
 import type { ChunkType } from './types';
 
-export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> extends ReadableStream<ChunkType> {
+export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream<ChunkType<OUTPUT>> {
   #usageCount = {
     inputTokens: 0,
     outputTokens: 0,
@@ -17,12 +16,12 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
     reject: (reason?: any) => void;
   };
   #objectPromise: {
-    promise: Promise<InferSchemaOutput<OUTPUT> | undefined>;
-    resolve: (value: InferSchemaOutput<OUTPUT> | undefined) => void;
+    promise: Promise<OUTPUT | undefined>;
+    resolve: (value: OUTPUT | undefined) => void;
     reject: (reason?: any) => void;
   };
-  #objectStreamController: ReadableStreamDefaultController<PartialSchemaOutput<OUTPUT>> | null = null;
-  #objectStream: ReadableStream<PartialSchemaOutput<OUTPUT>> | null = null;
+  #objectStreamController: ReadableStreamDefaultController<Partial<OUTPUT>> | null = null;
+  #objectStream: ReadableStream<Partial<OUTPUT>> | null = null;
   #run: Run;
   runId: string;
 
@@ -30,8 +29,8 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
     createStream,
     run,
   }: {
-    createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
-    run: Run;
+    createStream: (writer: WritableStream<ChunkType<OUTPUT>>) => Promise<ReadableStream<any>> | ReadableStream<any>;
+    run: Run<DefaultEngineType, Step<string, any, any, any, any, any, DefaultEngineType>[], any, any, any>;
   }) {
     const deferredPromise = {
       promise: null,
@@ -53,8 +52,8 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
       resolve: null,
       reject: null,
     } as unknown as {
-      promise: Promise<InferSchemaOutput<OUTPUT> | undefined>;
-      resolve: (value: InferSchemaOutput<OUTPUT> | undefined) => void;
+      promise: Promise<OUTPUT | undefined>;
+      resolve: (value: OUTPUT | undefined) => void;
       reject: (reason?: any) => void;
     };
     objectDeferredPromise.promise = new Promise((resolve, reject) => {
@@ -63,7 +62,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
     });
 
     // Object stream controller reference
-    let objectStreamController: ReadableStreamDefaultController<PartialSchemaOutput<OUTPUT>> | null = null;
+    let objectStreamController: ReadableStreamDefaultController<Partial<OUTPUT>> | null = null;
 
     const updateUsageCount = (usage: {
       inputTokens?: `${number}` | number;
@@ -82,7 +81,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
     super({
       start: async controller => {
         try {
-          const writer = new WritableStream<ChunkType>({
+          const writer = new WritableStream<ChunkType<OUTPUT>>({
             write: chunk => {
               if (
                 (chunk.type === 'step-output' &&
@@ -110,9 +109,9 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
             },
           });
 
-          const stream: ReadableStream<ChunkType> = await createStream(writer);
+          const stream: ReadableStream<ChunkType<OUTPUT>> = await createStream(writer);
 
-          const getInnerChunk = (chunk: ChunkType) => {
+          const getInnerChunk = (chunk: ChunkType<OUTPUT>) => {
             if (chunk.type === 'workflow-step-output') {
               return getInnerChunk(chunk.payload.output as any);
             }
@@ -191,7 +190,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
     this.#objectPromise = objectDeferredPromise;
 
     // Create object stream
-    this.#objectStream = new ReadableStream<PartialSchemaOutput<OUTPUT>>({
+    this.#objectStream = new ReadableStream<Partial<OUTPUT>>({
       start: ctrl => {
         objectStreamController = ctrl;
         this.#objectStreamController = ctrl;
@@ -216,7 +215,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
    * Only available when structuredOutput option is provided to network().
    * Resolves to undefined if no structuredOutput was requested.
    */
-  get object(): Promise<InferSchemaOutput<OUTPUT> | undefined> {
+  get object(): Promise<OUTPUT | undefined> {
     return this.#objectPromise.promise;
   }
 
@@ -224,7 +223,7 @@ export class MastraAgentNetworkStream<OUTPUT extends OutputSchema = undefined> e
    * Returns a ReadableStream of partial objects during structured output generation.
    * Useful for streaming partial results as they're being generated.
    */
-  get objectStream(): ReadableStream<PartialSchemaOutput<OUTPUT>> {
+  get objectStream(): ReadableStream<Partial<OUTPUT>> {
     return this.#objectStream!;
   }
 }

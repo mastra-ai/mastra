@@ -11,9 +11,9 @@ import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType, OutputSchema } from '../../stream';
-import type { InferSchemaOutput } from '../../stream/base/schema';
+import type { ChunkType } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
+import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
@@ -26,6 +26,47 @@ import {
   generateFinalResult,
   generateStructuredFinalResult,
 } from './validation';
+
+/**
+ * Type for ID generator function that can optionally accept context
+ */
+type NetworkIdGenerator = (context?: IdGeneratorContext) => string;
+
+/**
+ * Filters messages to extract conversation context for sub-agents.
+ * Includes user messages and assistant messages that are NOT internal network JSON.
+ * Excludes:
+ * - isNetwork: true JSON (result markers after primitive execution)
+ * - Routing agent decision JSON (has primitiveId/primitiveType/selectionReason)
+ */
+function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
+  return messages.filter(msg => {
+    // Include all user messages
+    if (msg.role === 'user') return true;
+
+    // Include assistant messages that are NOT internal network JSON
+    if (msg.role === 'assistant') {
+      // Check ALL parts for network-internal JSON
+      const parts = msg.content?.parts ?? [];
+      for (const part of parts) {
+        if (part?.type === 'text' && part?.text) {
+          try {
+            const parsed = JSON.parse(part.text);
+            // Exclude isNetwork JSON (result markers after execution)
+            if (parsed.isNetwork) return false;
+            // Exclude routing agent decision JSON (has primitiveId + selectionReason)
+            if (parsed.primitiveId && parsed.selectionReason) return false;
+          } catch {
+            // Not JSON, continue checking other parts
+          }
+        }
+      }
+      return true;
+    }
+
+    return false;
+  });
+}
 
 async function getRoutingAgent({
   requestContext,
@@ -64,7 +105,7 @@ async function getRoutingAgent({
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema((tool as any).inputSchema || z.object({})),
+        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
       )}`;
     })
     .join('\n');
@@ -156,7 +197,7 @@ export async function prepareMemoryStep({
   messages: MessageListInput;
   routingAgent: Agent;
   requestContext: RequestContext;
-  generateId: () => string;
+  generateId: NetworkIdGenerator;
   tracingContext?: TracingContext;
   memoryConfig?: any;
 }) {
@@ -181,7 +222,13 @@ export async function prepareMemoryStep({
         memory.saveMessages({
           messages: [
             {
-              id: generateId(),
+              id: generateId({
+                idType: 'message',
+                source: 'agent',
+                threadId: thread?.id,
+                resourceId: thread?.resourceId,
+                role: 'user',
+              }),
               type: 'text',
               role: 'user',
               content: { parts: [{ type: 'text', text: messages }], format: 2 },
@@ -216,7 +263,9 @@ export async function prepareMemoryStep({
   }
 
   // Add title generation to promises if needed (non-blocking)
-  if (thread?.title?.startsWith('New Thread') && memory) {
+  // Check if this is the first user message by looking at existing messages in the thread
+  // This works automatically for pre-created threads without requiring any metadata flags
+  if (thread && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 
     const {
@@ -226,27 +275,38 @@ export async function prepareMemoryStep({
     } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
 
     if (shouldGenerate && userMessage) {
-      promises.push(
-        routingAgent
-          .genTitle(
-            userMessage,
-            requestContext,
-            tracingContext || { currentSpan: undefined },
-            titleModel,
-            titleInstructions,
-          )
-          .then(title => {
-            if (title) {
-              return memory.createThread({
-                threadId: thread.id,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
-          }),
-      );
+      // Check for existing user messages in the thread - if none, this is the first user message
+      // We fetch existing messages before the new message is saved
+      const existingMessages = await memory.recall({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+      });
+      const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
+      const isFirstUserMessage = existingUserMessages.length === 0;
+
+      if (isFirstUserMessage) {
+        promises.push(
+          routingAgent
+            .genTitle(
+              userMessage,
+              requestContext,
+              tracingContext || { currentSpan: undefined },
+              titleModel,
+              titleInstructions,
+            )
+            .then(title => {
+              if (title) {
+                return memory.createThread({
+                  threadId: thread.id,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                  title,
+                  metadata: thread.metadata,
+                });
+              }
+            }),
+        );
+      }
     }
   }
 
@@ -309,7 +369,7 @@ export async function createNetworkLoop({
   runId: string;
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
-  generateId: () => string;
+  generateId: NetworkIdGenerator;
   routing?: {
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
@@ -337,9 +397,10 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
       const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
@@ -347,7 +408,11 @@ export async function createNetworkLoop({
       // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
       const iterationCount = (inputData.iteration ?? -1) + 1;
 
-      const stepId = generateId();
+      const stepId = generateId({
+        idType: 'step',
+        source: 'agent',
+        stepType: 'routing-agent',
+      });
       await writer.write({
         type: 'routing-agent-start',
         payload: {
@@ -427,7 +492,20 @@ export async function createNetworkLoop({
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
-      const object = result.object;
+      const object = await result.object;
+
+      if (!object) {
+        throw new MastraError({
+          id: 'AGENT_NETWORK_ROUTING_AGENT_INVALID_OUTPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.SYSTEM,
+          text: `Routing agent returned undefined for 'object'. This may indicate an issue with the model's response or structured output parsing.`,
+          details: {
+            finishReason: result.finishReason ?? null,
+            usage: JSON.stringify(result.usage) ?? null,
+          },
+        });
+      }
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 
@@ -447,6 +525,9 @@ export async function createNetworkLoop({
         });
       }
 
+      // Extract conversation context from the memory-loaded messages only.
+      const conversationContext = filterMessagesForSubAgent(result.rememberedMessages ?? []);
+
       const endPayload = {
         task: inputData.task,
         result: isComplete ? object.selectionReason : '',
@@ -457,6 +538,7 @@ export async function createNetworkLoop({
         selectionReason: object.selectionReason,
         iteration: iterationCount,
         runId: stepId,
+        conversationContext,
       };
 
       await writer.write({
@@ -484,6 +566,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -512,7 +595,12 @@ export async function createNetworkLoop({
       }
 
       const agentId = agentForStep.id;
-      const stepId = generateId();
+      const stepId = generateId({
+        idType: 'step',
+        source: 'agent',
+        entityId: agentId,
+        stepType: 'agent-execution',
+      });
       await writer.write({
         type: 'agent-execution-start',
         payload: {
@@ -526,36 +614,46 @@ export async function createNetworkLoop({
 
       // Get memory context from initData to pass to sub-agents
       // This ensures sub-agents can access the same thread/resource for memory operations
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const threadId = initData?.threadId || runId;
       const resourceId = initData?.threadResourceId || networkName;
 
-      const agentHasOwnMemory = agentForStep.hasOwnMemory();
+      // Use conversation context passed from routingStep.
+      const conversationContext = inputData.conversationContext ?? [];
 
+      // Build the messages to send to the sub-agent:
+      // 1. Conversation history (user + non-isNetwork assistant messages) for context
+      // 2. The routing agent's prompt (the specific task for this sub-agent)
+      const messagesForSubAgent: MessageListInput = [
+        ...conversationContext,
+        { role: 'user' as const, content: inputData.prompt },
+      ];
+
+      // We set lastMessages: 0 to prevent loading messages from the network's thread
+      // (which contains isNetwork JSON and completion feedback). We still pass
+      // threadId/resourceId so working memory tools function correctly.
       const result = await (resumeData
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
             runId,
-            ...(agentHasOwnMemory
-              ? {
-                  memory: {
-                    thread: threadId,
-                    resource: resourceId,
-                  },
-                }
-              : {}),
+            memory: {
+              thread: threadId,
+              resource: resourceId,
+              options: {
+                lastMessages: 0,
+              },
+            },
           })
-        : agentForStep.stream(inputData.prompt, {
+        : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
-            ...(agentHasOwnMemory
-              ? {
-                  memory: {
-                    thread: threadId,
-                    resource: resourceId,
-                  },
-                }
-              : {}),
+            memory: {
+              thread: threadId,
+              resource: resourceId,
+              options: {
+                lastMessages: 0,
+              },
+            },
           }));
 
       let requireApprovalMetadata: Record<string, any> | undefined;
@@ -624,7 +722,14 @@ export async function createNetworkLoop({
       await memory?.saveMessages({
         messages: [
           {
-            id: generateId(),
+            id: generateId({
+              idType: 'message',
+              source: 'agent',
+              entityId: agentId,
+              threadId: initData?.threadId || runId,
+              resourceId: initData?.threadResourceId || networkName,
+              role: 'assistant',
+            }),
             type: 'text',
             role: 'assistant',
             content: {
@@ -642,17 +747,11 @@ export async function createNetworkLoop({
                 },
               ],
               format: 2,
-              ...(requireApprovalMetadata
+              ...(requireApprovalMetadata || suspendedTools
                 ? {
                     metadata: {
-                      requireApprovalMetadata,
-                    },
-                  }
-                : {}),
-              ...(suspendedTools
-                ? {
-                    metadata: {
-                      suspendedTools,
+                      ...(requireApprovalMetadata ? { requireApprovalMetadata } : {}),
+                      ...(suspendedTools ? { suspendedTools } : {}),
                     },
                   }
                 : {}),
@@ -744,6 +843,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -791,7 +891,12 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const stepId = generateId();
+      const stepId = generateId({
+        idType: 'step',
+        source: 'workflow',
+        entityId: wf.id,
+        stepType: 'workflow-execution',
+      });
       const run = await wf.createRun({ runId });
       const toolData = {
         workflowId: wf.id,
@@ -883,11 +988,18 @@ export async function createNetworkLoop({
       });
 
       const memory = await agent.getMemory({ requestContext: requestContext });
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       await memory?.saveMessages({
         messages: [
           {
-            id: generateId(),
+            id: generateId({
+              idType: 'message',
+              source: 'workflow',
+              entityId: wf.id,
+              threadId: initData?.threadId || runId,
+              resourceId: initData?.threadResourceId || networkName,
+              role: 'assistant',
+            }),
             type: 'text',
             role: 'assistant',
             content: {
@@ -979,6 +1091,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -988,8 +1101,13 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
+    resumeSchema: z.object({
+      approved: z
+        .boolean()
+        .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
+    }),
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
-      const initData = await getInitData();
+      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
 
       const agentTools = await agent.listTools({ requestContext });
@@ -1044,7 +1162,12 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const toolCallId = generateId();
+      const toolCallId = generateId({
+        idType: 'step',
+        source: 'agent',
+        entityId: toolId,
+        stepType: 'tool-execution',
+      });
 
       await writer?.write({
         type: 'tool-execution-start',
@@ -1308,7 +1431,14 @@ export async function createNetworkLoop({
       await memory?.saveMessages({
         messages: [
           {
-            id: generateId(),
+            id: generateId({
+              idType: 'message',
+              source: 'agent',
+              entityId: toolId,
+              threadId: initData.threadId,
+              resourceId: initData.threadResourceId || networkName,
+              role: 'assistant',
+            }),
             type: 'text',
             role: 'assistant',
             content: {
@@ -1367,6 +1497,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       selectionReason: z.string(),
       iteration: z.number(),
+      conversationContext: z.array(z.any()).optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -1487,7 +1618,7 @@ export async function createNetworkLoop({
   return { networkWorkflow };
 }
 
-export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
+export async function networkLoop<OUTPUT = undefined>({
   networkName,
   requestContext,
   runId,
@@ -1509,9 +1640,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   networkName: string;
   requestContext: RequestContext;
   runId: string;
-  routingAgent: Agent;
+  routingAgent: Agent<any, any, any>;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
-  generateId: () => string;
+  generateId: NetworkIdGenerator;
   maxIterations: number;
   threadId?: string;
   resourceId?: string;
@@ -1542,7 +1673,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
    * Structured output configuration for the network's final result.
    * When provided, generates a structured response matching the schema.
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
 
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
@@ -1720,7 +1851,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       // Run either configured scorers or the default LLM completion check
       let completionResult;
       let generatedFinalResult: string | undefined;
-      let structuredObject: InferSchemaOutput<OUTPUT> | undefined;
+      let structuredObject: OUTPUT | undefined;
 
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);

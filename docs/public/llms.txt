@@ -40,7 +40,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Mastra Docs Server | Getting Started](https://mastra.ai/en/docs/getting-started/mcp-docs-server): Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.
 - [Project Structure | Getting Started](https://mastra.ai/en/docs/getting-started/project-structure): Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 - [Start with Mastra | Getting Started](https://mastra.ai/en/docs/getting-started/start): Choose how to get started with Mastra - quickstart, framework integration, or agentic UI.
-- [Studio | Getting Started](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+- [Studio | Getting Started](https://mastra.ai/en/docs/getting-started/studio): Learn how to use Mastra Studio, the interactive development environment for building and testing your agents locally.
 - [About Mastra](https://mastra.ai/en/docs): Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack.
 - [Deployment | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/deployment): Deploy your Mastra application to production
 - [Observability | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/observability): Monitoring and debugging tools for Mastra Cloud deployments
@@ -63,10 +63,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Cloud Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/cloud): Send traces to Mastra Cloud for production monitoring
 - [Datadog Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/datadog): Send traces to Datadog for LLM observability and analytics
 - [Default Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/default): Store traces locally for development and debugging
+- [Laminar Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/laminar): Send traces to Laminar for LLM observability, evaluation, and analysis
 - [Langfuse Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/langfuse): Send traces to Langfuse for LLM observability and analytics
 - [LangSmith Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/langsmith): Send traces to LangSmith for LLM observability and evaluation
 - [OpenTelemetry Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/otel): Send traces to any OpenTelemetry-compatible observability platform
 - [PostHog Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/posthog): Send traces to PostHog for AI observability and analytics
+- [Sentry Exporter | Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/exporters/sentry): Send traces to Sentry for AI tracing and monitoring
 - [Tracing | Observability](https://mastra.ai/en/docs/observability/tracing/overview): Set up Tracing for Mastra applications
 - [Sensitive Data Filter | Processors | Observability](https://mastra.ai/en/docs/observability/tracing/processors/sensitive-data-filter): Protect sensitive information in your traces with automatic data redaction
 - [Chunking and Embedding Documents | RAG](https://mastra.ai/en/docs/rag/chunking-and-embedding): Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
@@ -128,6 +130,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Express | Frameworks](https://mastra.ai/en/guides/getting-started/express): Get started with Mastra and Express
 - [Hono | Frameworks](https://mastra.ai/en/guides/getting-started/hono): Get started with Mastra and Hono
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
+- [Nuxt | Frameworks](https://mastra.ai/en/guides/getting-started/nuxt): Get started with Mastra and Nuxt
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 - [SvelteKit | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): Get started with Mastra and SvelteKit
 - [React + Vite | Frameworks](https://mastra.ai/en/guides/getting-started/vite-react): A step-by-step guide to integrating Mastra with React and Vite.
@@ -145,6 +148,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Agent Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/agent): Learn how to migrate Agent class changes when upgrading to v1.
 - [CLI | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/cli): Learn how to migrate CLI changes when upgrading to v1.
 - [Client SDK | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/client): Learn how to migrate client SDK changes when upgrading to v1.
+- [Deployment | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/deployment): Learn how to migrate deployment configuration when upgrading to v1.
 - [Evals & Scorers | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/evals): Learn how to migrate evals and scorers changes when upgrading to v1.
 - [Mastra Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/mastra): Learn how to migrate Mastra class changes when upgrading to v1.
 - [MCP | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/mcp): Learn how to migrate MCP-related changes when upgrading to v1.
@@ -168,8 +172,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 66+ AI providers and 1629+ models through Mastra's model router.
-- [Abacus | Models | Mastra](https://mastra.ai/en/models/providers/abacus): Use Abacus models with Mastra. 52 models available.
+- [Models](https://mastra.ai/en/models): Access 70+ AI providers and 1835+ models through Mastra's model router.
+- [Abacus | Models | Mastra](https://mastra.ai/en/models/providers/abacus): Use Abacus models with Mastra. 55 models available.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -180,15 +184,16 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Bailing | Models | Mastra](https://mastra.ai/en/models/providers/bailing): Use Bailing models with Mastra. 2 models available.
 - [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 6 models available.
 - [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 4 models available.
-- [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 55 models available.
+- [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 56 models available.
 - [Cloudflare AI Gateway | Models | Mastra](https://mastra.ai/en/models/providers/cloudflare-ai-gateway): Use Cloudflare AI Gateway models with Mastra. 64 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cohere](https://mastra.ai/en/models/providers/cohere): Use Cohere models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 16 models available.
-- [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 8 models available.
+- [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 9 models available.
 - [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 2 models available.
 - [FastRouter | Models | Mastra](https://mastra.ai/en/models/providers/fastrouter): Use FastRouter models with Mastra. 14 models available.
 - [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 16 models available.
+- [Firmware | Models | Mastra](https://mastra.ai/en/models/providers/firmware): Use Firmware models with Mastra. 18 models available.
 - [Friendli | Models | Mastra](https://mastra.ai/en/models/providers/friendli): Use Friendli models with Mastra. 11 models available.
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
 - [Vertex](https://mastra.ai/en/models/providers/google-vertex): Use Vertex models via the AI SDK.
@@ -196,7 +201,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 9 models available.
 - [Helicone | Models | Mastra](https://mastra.ai/en/models/providers/helicone): Use Helicone models with Mastra. 91 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
-- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 20 models available.
+- [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 14 models available.
 - [Inception | Models | Mastra](https://mastra.ai/en/models/providers/inception): Use Inception models with Mastra. 2 models available.
 - [Providers](https://mastra.ai/en/models/providers): Direct access to AI model providers.
 - [Inference | Models | Mastra](https://mastra.ai/en/models/providers/inference): Use Inference models with Mastra. 9 models available.
@@ -215,23 +220,26 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Morph | Models | Mastra](https://mastra.ai/en/models/providers/morph): Use Morph models with Mastra. 3 models available.
 - [NanoGPT | Models | Mastra](https://mastra.ai/en/models/providers/nano-gpt): Use NanoGPT models with Mastra. 21 models available.
 - [Nebius Token Factory | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius Token Factory models with Mastra. 15 models available.
+- [NovitaAI | Models | Mastra](https://mastra.ai/en/models/providers/novita-ai): Use NovitaAI models with Mastra. 77 models available.
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 66 models available.
 - [Ollama Cloud | Models | Mastra](https://mastra.ai/en/models/providers/ollama-cloud): Use Ollama Cloud models with Mastra. 12 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
-- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 39 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 26 models available.
+- [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 40 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 27 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 3 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 115 models available.
+- [Privatemode AI | Models | Mastra](https://mastra.ai/en/models/providers/privatemode-ai): Use Privatemode AI models with Mastra. 5 models available.
 - [Requesty | Models | Mastra](https://mastra.ai/en/models/providers/requesty): Use Requesty models with Mastra. 20 models available.
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 14 models available.
-- [SiliconFlow (China) | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow-cn): Use SiliconFlow (China) models with Mastra. 72 models available.
-- [SiliconFlow | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow): Use SiliconFlow models with Mastra. 72 models available.
+- [SiliconFlow (China) | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow-cn): Use SiliconFlow (China) models with Mastra. 71 models available.
+- [SiliconFlow | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow): Use SiliconFlow models with Mastra. 73 models available.
 - [submodel | Models | Mastra](https://mastra.ai/en/models/providers/submodel): Use submodel models with Mastra. 9 models available.
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 25 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 10 models available.
-- [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 24 models available.
+- [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 3 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 25 models available.
+- [Vivgrid | Models | Mastra](https://mastra.ai/en/models/providers/vivgrid): Use Vivgrid models with Mastra. 1 model available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
@@ -322,7 +330,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: MastraModelGateway | Core](https://mastra.ai/en/reference/core/mastra-model-gateway): Base class for creating custom model gateways
 - [Reference: Mastra.setLogger() | Core](https://mastra.ai/en/reference/core/setLogger): Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.).
 - [Reference: Mastra.setStorage() | Core](https://mastra.ai/en/reference/core/setStorage): Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance.
-- [Reference: Mastra.setTelemetry() | Core](https://mastra.ai/en/reference/core/setTelemetry): Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components.
 - [Reference: CloudflareDeployer | Deployer](https://mastra.ai/en/reference/deployer/cloudflare): Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers.
 - [Reference: Deployer | Deployer](https://mastra.ai/en/reference/deployer/deployer): Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 - [Reference: NetlifyDeployer | Deployer](https://mastra.ai/en/reference/deployer/netlify): Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions.
@@ -356,7 +363,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Memory.getThreadById() | Memory](https://mastra.ai/en/reference/memory/getThreadById): Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID.
 - [Reference: Memory.listThreadsByResourceId() | Memory](https://mastra.ai/en/reference/memory/listThreadsByResourceId): Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.
 - [Reference: Memory Class | Memory](https://mastra.ai/en/reference/memory/memory-class): Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage.
-- [Reference: Memory.query() | Memory](https://mastra.ai/en/reference/memory/query): Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
 - [Reference: Memory.recall() | Memory](https://mastra.ai/en/reference/memory/recall): Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
 - [Reference: OtelBridge | Observability](https://mastra.ai/en/reference/observability/tracing/bridges/otel): OpenTelemetry bridge for Tracing
 - [Reference: Configuration | Observability](https://mastra.ai/en/reference/observability/tracing/configuration): Tracing configuration types and registry functions
@@ -366,10 +372,12 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: ConsoleExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/console-exporter): API reference for the ConsoleExporter
 - [Reference: DatadogExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/datadog): Datadog LLM Observability exporter for Tracing
 - [Reference: DefaultExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/default-exporter): API reference for the DefaultExporter
+- [Reference: LaminarExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/laminar): Laminar exporter for Tracing
 - [Reference: LangfuseExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/langfuse): Langfuse exporter for Tracing
 - [Reference: LangSmithExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/langsmith): LangSmith exporter for Tracing
 - [Reference: OtelExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/otel): OpenTelemetry exporter for Tracing
 - [Reference: PosthogExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/posthog): PostHog exporter for Tracing
+- [Reference: SentryExporter | Observability](https://mastra.ai/en/reference/observability/tracing/exporters/sentry): Sentry AI monitoring exporter for Tracing
 - [Reference: Tracing | Observability](https://mastra.ai/en/reference/observability/tracing/instances): Core Tracing classes and methods
 - [Reference: Interfaces | Observability](https://mastra.ai/en/reference/observability/tracing/interfaces): Tracing type definitions and interfaces
 - [Reference: SensitiveDataFilter | Observability](https://mastra.ai/en/reference/observability/tracing/processors/sensitive-data-filter): API reference for the SensitiveDataFilter processor
@@ -398,12 +406,14 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: rerankWithScorer() | RAG](https://mastra.ai/en/reference/rag/rerankWithScorer): Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 - [Reference: createRoute() | Server](https://mastra.ai/en/reference/server/create-route): API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation.
 - [Reference: Express Adapter | Server](https://mastra.ai/en/reference/server/express-adapter): API reference for the @mastra/express server adapter.
+- [Reference: Fastify Adapter | Server](https://mastra.ai/en/reference/server/fastify-adapter): API reference for the @mastra/fastify server adapter.
 - [Reference: Hono Adapter | Server](https://mastra.ai/en/reference/server/hono-adapter): API reference for the @mastra/hono server adapter.
+- [Reference: Koa Adapter | Server](https://mastra.ai/en/reference/server/koa-adapter): API reference for the @mastra/koa server adapter.
 - [Reference: MastraServer | Server](https://mastra.ai/en/reference/server/mastra-server): API reference for the MastraServer abstract class used to create server adapters.
 - [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 - [Reference: Cloudflare Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare): Documentation for the Cloudflare KV storage implementation in Mastra.
-- [Reference: Storage Composition | Storage](https://mastra.ai/en/reference/storage/composite): Documentation for combining multiple storage backends in Mastra.
+- [Reference: Composite Storage | Storage](https://mastra.ai/en/reference/storage/composite): Documentation for combining multiple storage backends in Mastra.
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.
 - [Reference: DynamoDB Storage | Storage](https://mastra.ai/en/reference/storage/dynamodb): Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB.
 - [Reference: LanceDB Storage | Storage](https://mastra.ai/en/reference/storage/lance): Documentation for the LanceDB storage implementation in Mastra.
@@ -489,9 +499,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Workflow.foreach() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/foreach): Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
 - [Reference: Workflow.map() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/map): Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
 - [Reference: Workflow.parallel() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/parallel): Documentation for the `Workflow.parallel()` method in workflows, which executes multiple steps in parallel.
-- [Reference: Workflow.sendEvent() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/sendEvent): Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
 - [Reference: Workflow.sleep() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/sleep): Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
 - [Reference: Workflow.sleepUntil() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/sleepUntil): Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
 - [Reference: Workflow.then() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/then): Documentation for the `Workflow.then()` method in workflows, which creates sequential dependencies between steps.
-- [Reference: Workflow.waitForEvent() | Workflows](https://mastra.ai/en/reference/workflows/workflow-methods/waitForEvent): Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
 - [Reference: Workflow Class | Workflows](https://mastra.ai/en/reference/workflows/workflow): Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.

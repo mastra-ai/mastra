@@ -76,7 +76,7 @@ console.log(response.object);
 
 :::info
 
-Visit [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+Visit [.generate()](/reference/v1/agents/generate) for a full list of configuration options.
 
 :::
 
@@ -162,9 +162,25 @@ const response = await testAgent.generate("Analyze the TypeScript programming la
 console.log(response.object);
 ```
 
-## LLM Structured Output support
+## Combining tools and structured output
 
-Structured output support varies across LLM's due to the model itself. There are various workarounds provided to be able to use the full range of features supported for structured output, mainly returning structured output, tool calling, and the combination of the two.
+When an agent has both tools and structured output configured, some models may not support using both features together. This is a limitation of the underlying model APIs, not Mastra itself.
+
+If your tools aren't being called when structured output is enabled, or you receive an error when combining both features, try one of the workarounds below.
+
+### Workaround options
+
+When your model doesn't support tools and structured output together, you have three options:
+
+1. **Use `jsonPromptInjection: true`** - Injects the schema into the prompt instead of using the API's `response_format` parameter
+2. **Use a separate structuring model** - Pass a `model` to `structuredOutput` to use a second LLM for structuring
+3. **Use `prepareStep`** - Handle tools and structured output in separate steps
+
+Each approach is detailed in the sections below.
+
+## LLM structured output support
+
+Structured output support varies across LLMs due to differences in their APIs. The sections below cover workarounds for models that don't fully support structured output or combining it with tools.
 
 ### `jsonPromptInjection`
 

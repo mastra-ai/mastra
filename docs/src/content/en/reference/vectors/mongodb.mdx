@@ -30,6 +30,21 @@ const store = new MongoDBVector({
 });
 ```
 
+### Custom Embedding Field Path
+
+If you need to store embeddings in a nested field structure (e.g., to integrate with existing MongoDB collections), use the `embeddingFieldPath` option:
+
+```typescript
+import { MongoDBVector } from "@mastra/mongodb";
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+  embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
+});
+```
+
 ## Constructor Options
 
 <PropertiesTable
@@ -54,6 +69,13 @@ const store = new MongoDBVector({
       type: "MongoClientOptions",
       isOptional: true,
       description: "Optional MongoDB client options",
+    },
+    {
+      name: "embeddingFieldPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "embedding",
+      description: "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
     },
   ]}
 />
@@ -384,6 +406,7 @@ export const mongodbAgent = new Agent({
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     vector: new MongoDBVector({
+      id: 'mongodb-vector',
       uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
@@ -394,9 +417,7 @@ export const mongodbAgent = new Agent({
         topK: 3,
         messageRange: 2,
       },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
+      generateTitle: true, // generates descriptive thread titles automatically
     },
   }),
 });

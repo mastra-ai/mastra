@@ -12,7 +12,7 @@ import { AgentIcon } from '@/ds/icons';
 import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
-import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
 import {
@@ -22,7 +22,7 @@ import {
   useUpdateModelInModelList,
 } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
 
 export interface AgentMetadataProps {
@@ -85,7 +85,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
     <AgentMetadataWrapper>
       {agent?.description && (
         <AgentMetadataSection title="Description">
-          <p className="text-sm text-muted-foreground">{agent.description}</p>
+          <p className="text-sm text-neutral6">{agent.description}</p>
         </AgentMetadataSection>
       )}
       {agent.modelList ? (
@@ -208,7 +208,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       {tools.map(tool => (
         <AgentMetadataListItem key={tool.id}>
           <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge">
-            <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{tool.id}</Badge>
+            <Badge icon={<ToolsIcon className="text-accent6" />}>{tool.id}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}
@@ -273,7 +273,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
       {scorerList.map(scorer => (
         <AgentMetadataListItem key={scorer.id}>
           <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
-            <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
+            <Badge icon={<GaugeIcon className="text-neutral3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}

@@ -11,7 +11,7 @@ Agents, tools, and workflows can all accept `RequestContext` as a parameter, mak
 
 ## When to use `RequestContext`
 
-Use `RequestContext` when a primitive’s behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
+Use `RequestContext` when a primitive's behavior should change based on runtime conditions. For example, you might switch models or storage backends based on user attributes, or adjust instructions and tool selection based on language.
 
 :::note
 
@@ -67,7 +67,7 @@ await run.resume({
 await weatherTool.execute(
   { location: "London" },
   { requestContext },
-});
+);
 ```
 
 ### Setting values based on request headers
@@ -163,7 +163,7 @@ Visit [createStep()](/reference/v1/workflows/step) for a full list of configurat
 
 ## Accessing values with tools
 
-You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
+You can access the `requestContext` argument from a tool's `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 export type UserTier = {
@@ -186,9 +186,50 @@ Visit [createTool()](/reference/v1/tools/create-tool) for a full list of configu
 
 :::
 
+## TypeScript support
+
+When you provide a type parameter to `RequestContext`, all methods are fully typed:
+
+```typescript
+import { RequestContext } from "@mastra/core/request-context";
+
+type MyContext = {
+  userId: string;
+  maxTokens: number;
+  isPremium: boolean;
+};
+
+const ctx = new RequestContext<MyContext>();
+
+// set() enforces correct value types
+ctx.set("userId", "user-123");   // ✓ valid
+ctx.set("maxTokens", 4096);      // ✓ valid
+ctx.set("maxTokens", "wrong");   // ✗ TypeScript error: expected number
+
+// get() returns the correct type automatically
+const tokens = ctx.get("maxTokens"); // inferred as number
+const id = ctx.get("userId");        // inferred as string
+
+// keys() returns typed keys
+for (const key of ctx.keys()) {
+  // key is "userId" | "maxTokens" | "isPremium"
+}
+
+// entries() supports type narrowing
+for (const [key, value] of ctx.entries()) {
+  if (key === "maxTokens") {
+    // TypeScript knows value is number here
+    console.log(value.toFixed(2));
+  }
+  if (key === "userId") {
+    // TypeScript knows value is string here
+    console.log(value.toUpperCase());
+  }
+}
+```
+
 ## Related
 
 - [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
-- [Tool Request Context](../mcp/overview#using-requestcontext)
 - [Server Middleware](/docs/v1/server/middleware)
