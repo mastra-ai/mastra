@@ -66,12 +66,14 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
   const basePath = '';
 
+  const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
     .replace('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
     .replace('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
     .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
-    .replace('%%MASTRA_EXPERIMENTAL_FEATURES%%', process.env.EXPERIMENTAL_FEATURES || 'false');
+    .replace('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures);
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;
