@@ -1212,6 +1212,9 @@
       "apiKeyEnvVar": "VOYAGE_API_KEY",
       "name": "Voyage AI",
       "models": [
+        "voyage-4-large",
+        "voyage-4",
+        "voyage-4-lite",
         "voyage-3-large",
         "voyage-3.5",
         "voyage-3.5-lite",
@@ -3169,6 +3172,9 @@
       "gemini-live-2.5-flash-preview-native-audio"
     ],
     "voyage": [
+      "voyage-4-large",
+      "voyage-4",
+      "voyage-4-lite",
       "voyage-3-large",
       "voyage-3.5",
       "voyage-3.5-lite",

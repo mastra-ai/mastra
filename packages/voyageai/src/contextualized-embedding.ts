@@ -122,10 +122,10 @@ export class VoyageContextualizedEmbeddingModel {
       outputDtype: outputDtype,
     });
 
-    // The response contains embeddings grouped by input document
+    // The SDK returns data grouped by input document
     // Each data item has a nested 'data' array containing embeddings for each chunk
     // Structure: response.data[docIndex].data[chunkIndex].embedding
-    const sortedData = response.data?.sort((a, b) => (a.index ?? 0) - (b.index ?? 0)) ?? [];
+    const sortedData = [...(response.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 
     // Flatten all embeddings and track chunk counts per document
     const allEmbeddings: number[][] = [];
@@ -133,8 +133,8 @@ export class VoyageContextualizedEmbeddingModel {
 
     for (const item of sortedData) {
       // Each document item has a nested 'data' property with chunk embeddings
-      const nestedData = (item as { data?: Array<{ embedding?: number[] }> }).data ?? [];
-      const docEmbeddings = nestedData.map(chunk => chunk.embedding ?? []);
+      const chunkData = item.data ?? [];
+      const docEmbeddings = chunkData.map(chunk => chunk.embedding ?? []);
       chunkCounts.push(docEmbeddings.length);
       allEmbeddings.push(...docEmbeddings);
     }
@@ -175,10 +175,10 @@ export class VoyageContextualizedEmbeddingModel {
 
     // Sort by index and extract grouped embeddings
     // Structure: response.data[docIndex].data[chunkIndex].embedding
-    const sortedData = response.data?.sort((a, b) => (a.index ?? 0) - (b.index ?? 0)) ?? [];
+    const sortedData = [...(response.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
     const embeddingsByDocument = sortedData.map(item => {
-      const nestedData = (item as { data?: Array<{ embedding?: number[] }> }).data ?? [];
-      return nestedData.map(chunk => chunk.embedding ?? []);
+      const chunkData = item.data ?? [];
+      return chunkData.map(chunk => chunk.embedding ?? []);
     });
 
     return { embeddingsByDocument };

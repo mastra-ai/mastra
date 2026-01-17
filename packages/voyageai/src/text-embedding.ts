@@ -29,7 +29,7 @@ export class VoyageTextEmbeddingModelV2 {
   readonly specificationVersion = 'v2' as const;
   readonly provider = 'voyage' as const;
   readonly modelId: string;
-  readonly maxEmbeddingsPerCall = 128;
+  readonly maxEmbeddingsPerCall = 1000; // VoyageAI supports up to 1000 inputs per API call
   readonly supportsParallelCalls = true;
 
   private client: VoyageAIClient;
@@ -95,7 +95,7 @@ export class VoyageTextEmbeddingModelV3 {
   readonly specificationVersion = 'v3' as const;
   readonly provider = 'voyage' as const;
   readonly modelId: string;
-  readonly maxEmbeddingsPerCall = 128;
+  readonly maxEmbeddingsPerCall = 1000; // VoyageAI supports up to 1000 inputs per API call
   readonly supportsParallelCalls = true;
 
   private v2Model: VoyageTextEmbeddingModelV2;

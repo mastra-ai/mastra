@@ -321,15 +321,37 @@ export interface VoyageEmbeddingResponse {
 }
 
 /**
+ * Single chunk embedding from contextualized embeddings API
+ */
+export interface VoyageContextualizedChunkEmbedding {
+  /** The object type, which is always "embedding" */
+  object?: string;
+  /** The embedding vector for this chunk */
+  embedding?: number[];
+  /** The index of this chunk within the document */
+  index?: number;
+}
+
+/**
+ * Single document result from contextualized embeddings API
+ */
+export interface VoyageContextualizedDocumentResult {
+  /** The object type, which is always "list" */
+  object?: string;
+  /** Array of chunk embeddings for this document */
+  data?: VoyageContextualizedChunkEmbedding[];
+  /** The index of this document within the input list */
+  index?: number;
+}
+
+/**
  * VoyageAI contextualized embedding response
+ * Structure: response.data[docIndex].data[chunkIndex].embedding
  */
 export interface VoyageContextualizedEmbeddingResponse {
   object: 'list';
-  data: Array<{
-    object: 'embedding';
-    embeddings: number[][];
-    index: number;
-  }>;
+  /** Array of document results, each containing chunk embeddings */
+  data: VoyageContextualizedDocumentResult[];
   model: string;
   usage: {
     total_tokens: number;

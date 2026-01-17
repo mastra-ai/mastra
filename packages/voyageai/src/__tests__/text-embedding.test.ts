@@ -37,7 +37,7 @@ describe('VoyageTextEmbeddingModelV2', () => {
     expect(model.specificationVersion).toBe('v2');
     expect(model.provider).toBe('voyage');
     expect(model.modelId).toBe('voyage-3.5');
-    expect(model.maxEmbeddingsPerCall).toBe(128);
+    expect(model.maxEmbeddingsPerCall).toBe(1000);
     expect(model.supportsParallelCalls).toBe(true);
   });
 

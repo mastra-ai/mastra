@@ -118,7 +118,12 @@ export class VoyageMultimodalEmbeddingModel {
     const sdkInputs = values.map(toSdkInput);
 
     // Use the SDK's multimodalEmbed method
-    // Note: The SDK may have different method naming; we'll use the client directly
+    // Note: The `as any` cast is necessary because the SDK's type definitions don't properly
+    // type the flexible multimodal input structure. The SDK accepts mixed content types:
+    // - strings for text content
+    // - objects like { type: 'image_url', image_url: '...' } for images/video
+    // Our internal `unknown[]` return type from toSdkInput needs to bridge to the SDK's
+    // expected `any[][]` format for the multimodal inputs parameter.
     const response = await this.client.multimodalEmbed({
       inputs: sdkInputs as any,
       model: this.modelId,

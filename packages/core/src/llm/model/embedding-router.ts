@@ -35,7 +35,7 @@ function createVoyageEmbeddingModel(modelId: string, apiKey: string): EmbeddingM
     specificationVersion: 'v2',
     provider: 'voyage',
     modelId,
-    maxEmbeddingsPerCall: 128,
+    maxEmbeddingsPerCall: 1000, // VoyageAI supports up to 1000 inputs per API call
     supportsParallelCalls: true,
 
     async doEmbed({ values }: { values: string[] }): Promise<{ embeddings: number[][] }> {
