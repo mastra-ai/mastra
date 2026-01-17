@@ -1,0 +1,141 @@
+'use client';
+
+import * as React from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
+import { toast } from '@/lib/toast';
+
+import { AgentForm } from './agent-form';
+import type { AgentFormValues } from './form-validation';
+import { useStoredAgent, useStoredAgentMutations } from '../../hooks/use-stored-agents';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { Spinner } from '@/ds/components/Spinner';
+
+export interface EditAgentDialogProps {
+  agentId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+  onDelete?: () => void;
+}
+
+export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDelete }: EditAgentDialogProps) {
+  const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
+  const { updateStoredAgent, deleteStoredAgent } = useStoredAgentMutations(agentId);
+  const { data: toolsData } = useTools();
+
+  const handleSubmit = async (values: AgentFormValues) => {
+    try {
+      // Separate code-defined tools from integration tools
+      const codeDefinedTools: string[] = [];
+      const integrationToolIds: string[] = [];
+      const integrationIdsSet = new Set<string>();
+
+      if (values.tools && toolsData) {
+        for (const toolId of values.tools) {
+          const toolData = toolsData[toolId] as { integrationId?: string } | undefined;
+          if (toolData?.integrationId) {
+            // This is an integration tool - store the specific tool ID and its integration ID
+            integrationToolIds.push(toolId);
+            integrationIdsSet.add(toolData.integrationId);
+          } else {
+            // This is a code-defined tool
+            codeDefinedTools.push(toolId);
+          }
+        }
+      }
+
+      const integrationIds = Array.from(integrationIdsSet);
+
+      await updateStoredAgent.mutateAsync({
+        name: values.name,
+        description: values.description,
+        instructions: values.instructions,
+        model: values.model as Record<string, unknown>,
+        tools: codeDefinedTools.length > 0 ? codeDefinedTools : undefined,
+        integrations: integrationIds.length > 0 ? integrationIds : undefined,
+        integrationTools: integrationToolIds.length > 0 ? integrationToolIds : undefined,
+        workflows: values.workflows,
+        agents: values.agents,
+        memory: values.memory,
+        scorers: values.scorers,
+      });
+      toast.success('Agent updated successfully');
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (error) {
+      toast.error(`Failed to update agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteStoredAgent.mutateAsync();
+      toast.success('Agent deleted successfully');
+      onOpenChange(false);
+      onDelete?.();
+    } catch (error) {
+      toast.error(`Failed to delete agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleCancel = () => {
+    onOpenChange(false);
+  };
+
+  // Transform agent data to form values
+  const initialValues = React.useMemo(() => {
+    if (!agent) return undefined;
+
+    // Merge code-defined tools and integration tools
+    const allTools: string[] = [];
+    if (agent.tools && Array.isArray(agent.tools)) {
+      allTools.push(...agent.tools);
+    }
+    if (agent.integrationTools && Array.isArray(agent.integrationTools)) {
+      allTools.push(...agent.integrationTools);
+    }
+
+    return {
+      name: agent.name || '',
+      description: agent.description || '',
+      instructions: agent.instructions || '',
+      model: agent.model
+        ? (agent.model as { provider?: string; name?: string })
+        : { provider: '', name: '' },
+      tools: allTools,
+      workflows: agent.workflows || [],
+      agents: agent.agents || [],
+      memory: agent.memory || '',
+      scorers: agent.scorers || {},
+    };
+  }, [agent]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-surface1 border-border1 max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Agent</DialogTitle>
+        </DialogHeader>
+        {isLoadingAgent ? (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="h-8 w-8" />
+          </div>
+        ) : initialValues ? (
+          <AgentForm
+            mode="edit"
+            agentId={agentId}
+            initialValues={initialValues}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            onDelete={handleDelete}
+            isSubmitting={updateStoredAgent.isPending}
+            isDeleting={deleteStoredAgent.isPending}
+            excludeAgentId={agentId}
+          />
+        ) : (
+          <div className="flex items-center justify-center py-8 text-icon3">Agent not found</div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
