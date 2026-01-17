@@ -25,8 +25,11 @@
     }
   },
   "scripts": {
-    "demo": "npx bun src/demo.ts",
-    "demo:workspace": "npx bun src/demo-workspace.ts",
+    "demo:skills": "npx bun src/demo/demo-skills.ts",
+    "demo:workspace": "npx bun src/demo/demo-workspace.ts",
+    "demo:filesystem": "npx bun src/demo/demo-filesystem.ts",
+    "demo:sandbox": "npx bun src/demo/demo-sandbox.ts",
+    "demo:agents": "npx bun src/demo/demo-agents.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },

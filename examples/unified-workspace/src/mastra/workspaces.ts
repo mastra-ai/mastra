@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 /**
  * Get the project root directory.
@@ -55,6 +55,10 @@ export const globalWorkspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
   }),
+  // Enable sandbox for code execution
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+  }),
   // Enable BM25 search for skills and files
   bm25: true,
   // Auto-index support FAQ content for search
@@ -81,6 +85,10 @@ export const docsAgentWorkspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
   }),
+  // Enable sandbox for code execution
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+  }),
   // Enable BM25 search
   bm25: true,
   // Inherit global skills + add agent-specific skills
@@ -100,6 +108,10 @@ export const isolatedDocsWorkspace = new Workspace({
   name: 'Isolated Docs Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+  }),
+  // Enable sandbox for code execution
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
   }),
   bm25: true,
   // Only agent-specific skills, no global skills
