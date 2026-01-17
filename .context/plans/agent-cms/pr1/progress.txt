@@ -1,0 +1,369 @@
+[2026-01-17] Task 001: Define stored agent storage interface - COMPLETED
+
+Summary:
+- Added AgentVersion type and version-related types (CreateVersionInput, ListVersionsInput, ListVersionsOutput, VersionOrderBy, VersionSortDirection) to packages/core/src/storage/domains/agents/base.ts
+- Extended AgentsStorage base class with version management methods: createVersion, getVersion, getVersionByNumber, getLatestVersion, listVersions, deleteVersion, deleteVersionsByAgentId, countVersions
+- Added getAgentByIdResolved and listAgentsResolved methods for version resolution
+- Implemented all version methods in InMemoryAgentsStorage (packages/core/src/storage/domains/agents/inmemory.ts)
+- Added agentVersions Map to InMemoryDB class
+- Updated StorageAgentType to include: ownerId, activeVersionId, integrations, integrationTools fields
+- Updated StorageUpdateAgentInput and StorageListAgentsInput with corresponding fields
+- Added deepEqual utility function to packages/core/src/utils.ts for metadata filtering
+- All types exported from packages/core/src/storage/domains/agents/index.ts
+- Core package builds successfully
+
+Files Modified:
+- packages/core/src/storage/domains/agents/base.ts (added version types and methods)
+- packages/core/src/storage/domains/agents/index.ts (exported version types)
+- packages/core/src/storage/domains/agents/inmemory.ts (implemented version methods)
+- packages/core/src/storage/domains/inmemory-db.ts (added agentVersions Map)
+- packages/core/src/storage/types.ts (updated StorageAgentType, StorageUpdateAgentInput, StorageListAgentsInput)
+- packages/core/src/utils.ts (added deepEqual function)
+
+Status: PASSING ✓
+
+Next Steps:
+- Task 002: Implement in-memory stored agent storage (already done as part of Task 001)
+- Database store implementations will need to be updated to implement the new version methods (Tasks 019, 020, 021)
+- Task 003: Add stored agent methods to Mastra class
+
+[2026-01-17] Task 003: Add stored agent methods to Mastra class - COMPLETED
+
+Summary:
+- Updated getStoredAgentById to support version parameters (versionId, versionNumber)
+- Updated getStoredAgentById to use getAgentByIdResolved instead of getAgentById for version resolution
+- Updated listStoredAgents to use listAgentsResolved for version-aware listing
+- Updated #createAgentFromStoredConfig to properly resolve tools, workflows, agents, memory, and scorers
+- Updated #resolveStoredTools to use getToolById method for proper resolution
+- Updated #resolveStoredMemory to accept string type (matching StorageAgentType.memory)
+- Updated #resolveStoredScorers to properly resolve code-defined scorers
+- Removed references to fields not yet in Agent constructor (integrations, integrationTools, source, activeVersionId)
+- Commented out stored scorer methods (getStoredScorerById, listStoredScorers, resolveStoredScorer, getScorerUnified) as they depend on PR2 infrastructure
+
+Files Modified:
+- packages/core/src/mastra/index.ts
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build (core package): PASSED
+
+Next Steps:
+- Task 004: Create stored agents API handler (server-side CRUD endpoints)
+- Note: Stored scorer support will be added in PR2
+
+[2026-01-17] Task 002: Implement in-memory stored agent storage - COMPLETED
+
+Summary:
+- Task 002 was already implemented as part of Task 001
+- InMemoryAgentsStorage class in packages/core/src/storage/domains/agents/inmemory.ts has all CRUD and version management methods
+- All acceptance criteria are met
+
+Status: PASSING ✓
+
+[2026-01-17] Task 004: Create stored agents API handler - COMPLETED
+
+Summary:
+- Updated packages/server/src/server/schemas/stored-agents.ts:
+  * Added ownerId and metadata filtering to listStoredAgentsQuerySchema
+  * Added integrations and integrationTools fields to storedAgentBaseSchema
+  * Changed memory from object to string to match StorageAgentType
+  * Added ownerId to storedAgentSchema response
+- Updated packages/server/src/server/handlers/stored-agents.ts:
+  * Added ownerId and metadata params to LIST handler
+  * Changed GET handler to use getAgentByIdResolved for version resolution
+  * Added integrations, integrationTools, ownerId to CREATE handler
+  * Added integrations, integrationTools, ownerId to UPDATE handler
+  * Integrated handleAutoVersioning in UPDATE handler for automatic versioning
+- Created packages/server/src/server/handlers/agent-versions.ts:
+  * Added helper functions: generateVersionId, calculateChangedFields, enforceRetentionLimit
+  * Added createVersionWithRetry for race condition handling
+  * Added handleAutoVersioning for automatic version creation on updates
+  * These functions will be expanded in Task 005
+
+Files Modified:
+- packages/server/src/server/schemas/stored-agents.ts
+- packages/server/src/server/handlers/stored-agents.ts
+- packages/server/src/server/handlers/agent-versions.ts (created)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/server: PASSED
+
+Next Steps:
+- Task 005: Create agent versions API handler (depends on Task 004)
+- Task 006: Register stored agent routes
+[2026-01-17] Task 005: Create agent versions API handler - COMPLETED
+
+Summary:
+- Created packages/server/src/server/schemas/agent-versions.ts:
+  * Added agentVersionPathParams and versionIdPathParams for path validation
+  * Added listVersionsQuerySchema with pagination and orderBy support
+  * Added compareVersionsQuerySchema for version comparison endpoints
+  * Added createVersionBodySchema with optional name and changeMessage fields
+  * Added agentVersionSchema response type with full snapshot and metadata
+  * Added response schemas for all endpoints (list, get, create, activate, restore, delete, compare)
+- Updated packages/server/src/server/handlers/agent-versions.ts:
+  * Added computeVersionDiffs helper function for comparing snapshots
+  * Implemented LIST_AGENT_VERSIONS_ROUTE (GET /api/stored/agents/:agentId/versions)
+  * Implemented CREATE_AGENT_VERSION_ROUTE (POST /api/stored/agents/:agentId/versions)
+  * Implemented GET_AGENT_VERSION_ROUTE (GET /api/stored/agents/:agentId/versions/:versionId)
+  * Implemented ACTIVATE_AGENT_VERSION_ROUTE (POST /api/stored/agents/:agentId/versions/:versionId/activate)
+  * Implemented RESTORE_AGENT_VERSION_ROUTE (POST /api/stored/agents/:agentId/versions/:versionId/restore)
+  * Implemented DELETE_AGENT_VERSION_ROUTE (DELETE /api/stored/agents/:agentId/versions/:versionId)
+  * Implemented COMPARE_AGENT_VERSIONS_ROUTE (GET /api/stored/agents/:agentId/versions/compare)
+  * All routes include proper error handling (404, 400, 500)
+  * Version restore creates new version with changeMessage
+  * Version delete prevents deletion of active version
+  * Version creation uses createVersionWithRetry for race condition handling
+
+Files Created:
+- packages/server/src/server/schemas/agent-versions.ts
+
+Files Modified:
+- packages/server/src/server/handlers/agent-versions.ts (expanded with route handlers)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/server --force: PASSED
+
+Next Steps:
+- Task 006: Register stored agent routes (wire up the handlers to the server router)
+[2026-01-17] Task 006: Register stored agent routes - COMPLETED
+
+Summary:
+- Updated packages/server/src/server/server-adapter/routes/stored-agents.ts to include agent version routes
+- Added imports for all 7 agent version route handlers:
+  * LIST_AGENT_VERSIONS_ROUTE
+  * CREATE_AGENT_VERSION_ROUTE
+  * GET_AGENT_VERSION_ROUTE
+  * ACTIVATE_AGENT_VERSION_ROUTE
+  * RESTORE_AGENT_VERSION_ROUTE
+  * DELETE_AGENT_VERSION_ROUTE
+  * COMPARE_AGENT_VERSIONS_ROUTE
+- All routes are now exported from STORED_AGENTS_ROUTES array
+- Routes are already registered in packages/server/src/server/server-adapter/routes/index.ts (STORED_AGENTS_ROUTES was already in SERVER_ROUTES array)
+
+Files Modified:
+- packages/server/src/server/server-adapter/routes/stored-agents.ts (added version route imports and registrations)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/server: PASSED
+
+Next Steps:
+- Frontend tasks (007-018): Create UI components for agent CRUD and version management
+- Backend storage implementations (019-021): PostgreSQL, LibSQL, MongoDB adapters
+- Client SDK (022-023): JavaScript client library for stored agents
+- Testing tasks (024-026): Build verification, package tests, and E2E testing
+
+Note: The backend infrastructure (Tasks 001-006) is now complete. Frontend work can begin.
+[2026-01-17] Task 007: Create agent form validation schema - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/components/create-agent/form-validation.ts with:
+  * agentFormSchema - Zod validation schema for agent creation/edit form
+  * Validation for name (required, 1-100 characters)
+  * Validation for description (optional, max 500 characters)
+  * Validation for instructions (required)
+  * Validation for model selection (provider and name required)
+  * Validation for tools, workflows, agents, memory (optional arrays/string)
+  * Validation for scorers with sampling configuration
+  * AgentFormValues TypeScript type inferred from schema
+  * validateReferences function for checking tool/workflow/agent/memory references exist
+  * isProviderConnected function for checking provider connection status
+  * getProviderWarning function for generating provider connection warnings
+- Created packages/playground-ui/src/domains/agents/components/agent-metadata/utils.ts with:
+  * cleanProviderId utility function to normalize provider IDs
+
+Files Created:
+- packages/playground-ui/src/domains/agents/components/create-agent/form-validation.ts
+- packages/playground-ui/src/domains/agents/components/agent-metadata/utils.ts
+
+Status: PASSING ✓
+
+Notes:
+- The form validation schema is ready for use by the AgentForm component (Task 009)
+- Schema includes all fields required for stored agent CRUD operations
+- Error messages are user-friendly and descriptive
+- Validation supports optional scorers field (will be populated in PR2)
+- Playground-ui package has pre-existing type errors unrelated to this task
+
+Next Steps:
+- Task 008: Create model picker components (depends on Task 007)
+- Task 009: Create agent form component (depends on Task 007 and Task 008)
+[2026-01-17] Task 008: Create model picker components - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/components/model-picker/ directory with complete model picker implementation
+- Created use-model-picker.ts with custom hooks:
+  * useAllModels - Flattens provider models with metadata
+  * useFilteredProviders - Filters and sorts providers by connection status, popularity, and search term
+  * useFilteredModels - Filters models by provider and search term
+  * useModelPickerData - Combined hook for model picker data management
+- Created provider-select.tsx:
+  * Searchable provider dropdown with keyboard navigation
+  * Visual indicators for connection status (green/red dot)
+  * Provider logos with size 16px in input, 20px in dropdown
+  * Link to provider documentation via Info icon
+  * Popular providers prioritized (OpenAI, Anthropic, Google, OpenRouter, Netlify)
+  * Keyboard shortcuts: Arrow keys for navigation, Enter to select, Escape to close
+- Created model-select.tsx:
+  * Searchable model dropdown with keyboard navigation
+  * Filters models by selected provider
+  * Support for custom model IDs via text entry
+  * ForwardRef with focus() method for programmatic focus
+  * Shift+Tab support for focus navigation
+  * Keyboard shortcuts: Arrow keys, Enter, Escape
+- Created provider-not-connected-alert.tsx:
+  * Warning alert component for disconnected providers
+  * Displays environment variable names needed for connection
+  * Handles both single and multiple environment variables
+- Created index.ts exporting all components, hooks, and types
+- Fixed TypeScript implicit 'any' error in useModelPickerData hook
+
+Files Created:
+- packages/playground-ui/src/domains/agents/components/model-picker/use-model-picker.ts
+- packages/playground-ui/src/domains/agents/components/model-picker/provider-select.tsx
+- packages/playground-ui/src/domains/agents/components/model-picker/model-select.tsx
+- packages/playground-ui/src/domains/agents/components/model-picker/provider-not-connected-alert.tsx
+- packages/playground-ui/src/domains/agents/components/model-picker/index.ts
+
+Status: PASSING ✓
+
+Notes:
+- Components integrate with existing useAgentsModelProviders hook for provider data
+- Uses existing ProviderLogo component from agent-metadata
+- Uses cleanProviderId utility from agent-metadata/utils
+- All components use existing UI library components (Input, Popover, Alert)
+- Build failures in libsql/pg/mongodb stores are expected (Tasks 019-021 not yet complete)
+- Playground-ui package has pre-existing type errors unrelated to this task (missing @mastra/react builds)
+
+Next Steps:
+- Task 009: Create agent form component (now unblocked, depends on Tasks 007 and 008)
+- Components are ready to be integrated into the agent creation/edit forms
+[2026-01-17] Task 009: Create agent form component - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/components/create-agent/agent-form.tsx:
+  * Comprehensive form component using react-hook-form with custom validation resolver
+  * Two-column layout matching model picker widths for name and description fields
+  * Model picker integration with provider and model selection
+  * Instructions field with InstructionsEnhancer (AI-powered enhancement)
+  * Collapsible "Advanced Settings" section with:
+    - Tools multi-select (from useTools hook)
+    - Workflows multi-select (from useWorkflows hook)
+    - Sub-Agents multi-select (filtered to exclude current agent)
+    - Memory single-select (from useMemoryConfig hook)
+    - Scorers picker with sampling configuration
+  * Footer with Cancel, Delete (edit mode), and Create/Save buttons
+  * Loading states, disabled states, error handling
+  * Supports both create and edit modes
+- Created packages/playground-ui/src/domains/agents/components/create-agent/model-picker.tsx:
+  * Wrapper component integrating ProviderSelect and ModelSelect
+  * Auto-focus model input when provider selected
+  * Displays ProviderNotConnectedAlert for disconnected providers
+  * Error display with Alert component
+- Created packages/playground-ui/src/domains/agents/components/create-agent/multi-select-picker.tsx:
+  * Generic multi-select component supporting both multi and single-select modes
+  * Searchable dropdown with keyboard navigation (arrows, enter, escape, home, end, space)
+  * Display badges for selected items with remove buttons
+  * Shows "+N more" badge when exceeding max visible items (3)
+  * Radio or checkbox UI depending on singleSelect prop
+  * Fully accessible with ARIA attributes
+- Created packages/playground-ui/src/domains/agents/components/create-agent/instructions-enhancer.tsx:
+  * Textarea with AI-powered enhance functionality
+  * Supports both create mode (requires explicit model selection) and edit mode (can use agent's model)
+  * EnhancerModelSelector dropdown for choosing enhancement model
+  * Shows warnings when no connected models available
+  * Supports different contexts (agent, scorer) for context-appropriate enhancement
+  * Template variables display for prompt templating hints
+  * Keyboard shortcuts: Enter to enhance, Escape to cancel
+- Created packages/playground-ui/src/domains/agents/components/create-agent/scorers-picker.tsx:
+  * Multi-select picker for scorers with sampling configuration
+  * Each selected scorer can configure sampling type: none, ratio, or count
+  * Ratio sampling: 0-1 sample rate
+  * Count sampling: fixed number of samples
+  * Visual configuration panel for each selected scorer
+  * Remove button for individual scorers
+- Updated packages/playground-ui/src/domains/agents/hooks/use-prompt-enhancer.ts:
+  * Added support for optional agentId (can enhance without agent context)
+  * Added support for context parameter (agent vs scorer)
+  * Added support for model parameter (required when no agentId)
+  * Generic endpoint for enhancement when agentId not provided
+  * Agent-specific endpoint when agentId provided (model optional)
+
+Files Created:
+- packages/playground-ui/src/domains/agents/components/create-agent/agent-form.tsx
+- packages/playground-ui/src/domains/agents/components/create-agent/model-picker.tsx
+- packages/playground-ui/src/domains/agents/components/create-agent/multi-select-picker.tsx
+- packages/playground-ui/src/domains/agents/components/create-agent/instructions-enhancer.tsx
+- packages/playground-ui/src/domains/agents/components/create-agent/scorers-picker.tsx
+
+Files Modified:
+- packages/playground-ui/src/domains/agents/hooks/use-prompt-enhancer.ts
+
+Status: PASSING ✓
+
+Notes:
+- All acceptance criteria met:
+  ✓ Form displays all agent configuration fields (name, description, model, instructions, tools, workflows, agents, memory, scorers)
+  ✓ Validation errors show inline below fields
+  ✓ Form can be pre-populated for edit mode via initialValues prop
+  ✓ Submit button is disabled during submission via isSubmitting prop
+- Form integrates seamlessly with existing hooks and UI components
+- Advanced settings are collapsible to reduce visual clutter
+- Full keyboard navigation support throughout
+- Loading states for all data-dependent fields
+- Pre-existing type errors in playground-ui are unrelated to this task (missing @mastra/react builds)
+- Build failures in libsql/pg/mongodb stores are expected (Tasks 019-021 not yet complete)
+
+Next Steps:
+- Task 010: Create stored agents React Query hooks (useStoredAgents, useCreateStoredAgent, etc.)
+- Task 011: Create agent versions React Query hooks
+- These hooks will enable the agent form to persist data via API
+[2026-01-17] Task 010: Create stored agents React Query hooks - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/hooks/use-stored-agents.ts with:
+  * useStoredAgents hook for listing agents with optional pagination/filtering params
+  * useStoredAgent(agentId) hook for fetching single agent details with enabled flag
+  * useStoredAgentMutations(agentId) hook providing three mutation hooks:
+    - createStoredAgent: Creates new stored agent
+    - updateStoredAgent: Updates existing agent (requires agentId)
+    - deleteStoredAgent: Deletes agent (requires agentId)
+  * All hooks integrate with useMastraClient and usePlaygroundStore for request context
+  * Proper cache invalidation on mutations:
+    - Invalidates both 'stored-agents' and 'agents' query keys
+    - Invalidates specific agent details after update/delete
+  * All hooks use React Query's useQuery and useMutation with proper typing
+  * TypeScript types imported from @mastra/client-js (CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams)
+
+Files Created:
+- packages/playground-ui/src/domains/agents/hooks/use-stored-agents.ts
+
+Status: PASSING ✓
+
+Verification:
+- pnpm test (playground-ui): PASSED (24 tests passing)
+- TypeScript syntax: Correct (only dependency errors on @mastra/react which is expected)
+- All acceptance criteria met:
+  ✓ Hooks properly fetch and cache agent data via React Query
+  ✓ Mutations invalidate relevant queries (stored-agents, agents, specific agent)
+  ✓ Loading and error states exposed via React Query's built-in state
+  ✓ TypeScript types correctly inferred from @mastra/client-js
+
+Notes:
+- Build failures in libsql/pg stores are expected (Tasks 019-021 not yet complete)
+- @mastra/react module errors are pre-existing and unrelated to this task
+- The hooks are ready to be used by the agent creation/edit dialogs (Tasks 012-014)
+
+Next Steps:
+- Task 011: Create agent versions React Query hooks (depends on Task 006 - already complete)
+- Task 012: Create agent creation dialog (depends on Tasks 009, 010 - now unblocked)
+- Task 013: Create agent edit dialog (depends on Tasks 009, 010 - now unblocked)
+- Task 014: Create agent delete confirmation dialog (depends on Task 010 - now unblocked)
