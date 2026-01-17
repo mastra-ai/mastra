@@ -31,9 +31,9 @@ const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
           {isStored && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span>
-                  <Database className="w-4 h-4 text-muted-foreground" />
-                </span>
+                <button type="button" aria-label="Stored agent - can be edited">
+                  <Database className="w-4 h-4 text-icon3" />
+                </button>
               </TooltipTrigger>
               <TooltipContent>Stored agent - can be edited</TooltipContent>
             </Tooltip>
