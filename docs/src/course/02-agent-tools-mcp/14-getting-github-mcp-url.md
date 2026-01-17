@@ -6,7 +6,7 @@
 
 :::
 
-For this course, we'll use the **Smithery CLI** which handles OAuth authentication automatically. Alternatively, you can use the official GitHub MCP server directly.
+For this course, we'll use the **Smithery CLI**. On first use, it opens a browser to complete OAuth consent. Alternatively, you can use the official GitHub MCP server directly.
 
 ## Option 1: Using Smithery CLI (Recommended for this course)
 
@@ -14,7 +14,7 @@ The Smithery CLI manages OAuth authentication interactively. When you first conn
 
 ```bash
 # No installation needed - we'll use npx to run it
-# Authentication happens automatically on first use
+# On first use, the CLI opens a browser window for OAuth consent
 ```
 
 We'll configure the MCP client to use Smithery's GitHub server via their CLI in the next step.

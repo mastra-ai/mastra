@@ -29,11 +29,11 @@ This configuration adds the GitHub MCP server alongside the Zapier server we add
 
 - The `command` property specifies we're using `npx` to run the Smithery CLI
 - The `args` array contains the arguments to pass to the CLI
-- Smithery CLI will handle OAuth authentication automatically on first use
-- You'll be prompted to authenticate via your browser when the agent first tries to use GitHub tools
+- On first use, Smithery CLI opens a browser to complete the OAuth consent flow
+- The agent proceeds once the OAuth session is completed
 
 By adding multiple servers to your MCP configuration, you're building a more versatile agent that can access a wider range of tools and services. Each server adds its own set of capabilities to your agent.
 
 :::tip OAuth Authentication
-When you first run your agent with this configuration, Smithery will open a browser window for you to authenticate. This is a one-time setup, and your credentials will be securely stored for future use.
+When you first run your agent with this configuration, Smithery opens a browser window to complete OAuth consent. Subsequent runs reuse the existing Smithery session (per your local CLI cache).
 :::
