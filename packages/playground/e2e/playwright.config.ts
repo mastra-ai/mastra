@@ -1,7 +1,23 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = process.env.E2E_PORT || '4111';
-const BASE_URL = `http://localhost:${PORT}`;
+const PORT = process.env.E2E_PORT;
+const BASE_URL = `http://localhost:${PORT || '4111'}`;
+
+const webservers = [
+  {
+    command: `pnpm -C ./kitchen-sink dev`,
+    url: `http://localhost:4111`,
+    timeout: 120_000,
+  }
+]
+
+if(PORT) {
+  webservers.push({
+    command: `echo "App is running on :${PORT}"`,
+    url: `http://localhost:${PORT}`,
+    timeout: 120_000,
+  })
+}
 
 export default defineConfig({
   testDir: './tests',
@@ -22,4 +38,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
+  
+  webServer: webservers,
 });

@@ -120,7 +120,7 @@
           - list [ref=e141]:
             - listitem [ref=e142]:
               - link "New Chat" [ref=e143] [cursor=pointer]:
-                - /url: /agents/weatherAgent/chat/c61d3be0-ee75-460b-ac48-4d39e9c16fc4?new=true
+                - /url: /agents/weatherAgent/chat/94edd211-6ee2-4218-ac37-3254a03640da?new=true
                 - generic [ref=e144]:
                   - img [ref=e146]
                   - text: New Chat
