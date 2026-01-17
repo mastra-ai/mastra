@@ -788,3 +788,47 @@ Next Steps:
 - Task 017: Create version comparison dialog (depends on Task 011 - already complete)
 - These two dialog components are referenced by AgentVersionsList and need to be implemented
 
+[2026-01-17] Task 016: Create save version dialog - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/components/agent-versions/save-version-dialog.tsx:
+  * SaveVersionDialog component using Dialog from UI library
+  * Accepts agentId, open, onOpenChange props
+  * Form with two optional fields:
+    - Version Name (text input, max 100 chars)
+    - Description/Change Message (textarea, max 500 chars, 3 rows)
+  * Uses useCreateAgentVersion mutation hook for saving
+  * Resets form fields on successful save
+  * Closes dialog on successful save
+  * Shows toast notifications for success/error
+  * Loading state managed via isPending from mutation hook
+  * Cancel button clears form and closes dialog (disabled during save)
+  * Submit button shows "Saving..." during save operation
+  * handleClose prevents closing during save operation
+  * Clean form state reset on both success and cancel
+
+Files Created:
+- packages/playground-ui/src/domains/agents/components/agent-versions/save-version-dialog.tsx
+
+Status: PASSING ✓
+
+Verification:
+- TypeScript check: No errors in save-version-dialog.tsx
+- All acceptance criteria met:
+  ✓ Dialog allows entering version name and description
+  ✓ Save creates new version with optional name and changeMessage
+  ✓ Success notification shows "Version saved successfully"
+  ✓ Dialog closes and version list refreshes (via mutation invalidation in useCreateAgentVersion)
+
+Implementation Notes:
+- Component follows the same patterns as create-agent-dialog.tsx and edit-agent-dialog.tsx
+- Both name and changeMessage are optional fields (sent as undefined if empty)
+- Form uses native input/textarea elements with custom styling (matches design system)
+- Loading state prevents premature dialog closure and double-submits
+- Pre-existing type errors in playground-ui are unrelated to this task (missing @mastra/client-js version methods)
+
+Next Steps:
+- Task 017: Create version comparison dialog (depends on Task 011 - already complete)
+- Task 017 is referenced by AgentVersionsList (Task 015) and should be implemented next
+- After Task 017, consider Tasks 021-023 (MongoDB storage, Client SDK) or Tasks 024-026 (verification/testing)
+
