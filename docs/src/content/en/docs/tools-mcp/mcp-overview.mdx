@@ -42,37 +42,14 @@ export const testMcpClient = new MCPClient({
       command: "npx",
       args: ["-y", "wikipedia-mcp"],
     },
-    hackernews: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-hackernews"],
+    weather: {
+      url: new URL(
+        `https://server.smithery.ai/@smithery-ai/national-weather-service/mcp?api_key=${process.env.SMITHERY_API_KEY}`,
+      ),
     },
   },
 });
 ```
-
-:::info Smithery OAuth Authentication
-
-Smithery has migrated to OAuth-only authentication. To use Smithery-hosted MCP servers, use the Smithery CLI which handles OAuth automatically:
-
-```typescript
-servers: {
-  github: {
-    command: "npx",
-    args: [
-      "-y",
-      "@smithery/cli@latest",
-      "run",
-      "@smithery-ai/server-github",
-      "--config",
-      "{}",
-    ],
-  },
-}
-```
-
-The CLI will prompt for OAuth authentication on first use.
-
-:::
 
 :::info
 
@@ -102,7 +79,7 @@ export const testAgent = new Agent({
   instructions: `
       You are a helpful assistant that has access to the following MCP Servers.
       - Wikipedia MCP Server
-      - Hacker News MCP Server
+      - US National Weather Service
 
       Answer questions using the information you find using the MCP Servers.`,
   model: "openai/gpt-5.1",
@@ -324,28 +301,12 @@ MCP servers can be discovered through registries. Here's how to connect to some 
   <TabItem value="smithery" label="Smithery.ai">
     [Smithery.ai](https://smithery.ai) provides a registry accessible via their CLI.
 
-    :::warning OAuth Authentication Required
-    
-    Smithery has migrated to **OAuth-only authentication** and no longer supports API key–based access. The Smithery CLI handles OAuth authentication automatically.
-    
-    :::
-
     ```typescript
+    // Unix/Mac
     import { MCPClient } from "@mastra/mcp";
 
     const mcp = new MCPClient({
       servers: {
-        github: {
-          command: "npx",
-          args: [
-            "-y",
-            "@smithery/cli@latest",
-            "run",
-            "@smithery-ai/server-github",
-            "--config",
-            "{}",
-          ],
-        },
         sequentialThinking: {
           command: "npx",
           args: [
@@ -361,13 +322,26 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     });
     ```
 
-    **How it works:**
-    - On first use, the Smithery CLI will open a browser window for OAuth authentication
-    - You'll sign in to Smithery and grant permissions
-    - Credentials are securely stored for future use
-    - Works the same on Unix/Mac and Windows
+    ```typescript
+    // Windows
+    import { MCPClient } from "@mastra/mcp";
 
-    For more information, visit the [Smithery documentation](https://smithery.ai/docs).
+    const mcp = new MCPClient({
+      servers: {
+        sequentialThinking: {
+          command: "npx",
+          args: [
+            "-y",
+            "@smithery/cli@latest",
+            "run",
+            "@smithery-ai/server-sequential-thinking",
+            "--config",
+            "{}",
+          ],
+        },
+      },
+    });
+    ```
 
   </TabItem>
   <TabItem value="ampersand" label="Ampersand">
