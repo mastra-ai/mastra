@@ -595,6 +595,8 @@ export interface StoredAgentResponse {
   instructions: string;
   model: Record<string, unknown>;
   tools?: string[];
+  integrations?: string[];
+  integrationTools?: string[];
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
@@ -681,6 +683,73 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Agent Version Types
+// ============================================================================
+
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: Record<string, any>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number;
+}
+
+export interface CreateAgentVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+export interface CreateAgentVersionResponse {
+  version: AgentVersionResponse;
+}
+
+export interface ActivateAgentVersionResponse {
+  success: boolean;
+  message: string;
+  version: AgentVersionResponse;
+}
+
+export interface RestoreAgentVersionResponse {
+  success: boolean;
+  message: string;
+  version: AgentVersionResponse;
+}
+
+export interface DeleteAgentVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface VersionDiff {
+  path: string;
+  before: any;
+  after: any;
+}
+
+export interface CompareVersionsResponse {
+  versionA: AgentVersionResponse;
+  versionB: AgentVersionResponse;
+  diffs: VersionDiff[];
 }
 
 export interface ListAgentsModelProvidersResponse {

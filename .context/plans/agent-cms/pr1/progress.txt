@@ -740,3 +740,51 @@ Next Steps:
 
 Note: Full monorepo build is blocked by pre-existing type errors in components from Tasks 007-014. These errors were documented in previous task progress notes as known issues.
 
+[2026-01-17] Task 015: Create agent versions list component - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/components/agent-versions/agent-versions-list.tsx:
+  * AgentVersionsList component accepting agentId and activeVersionId props
+  * Uses useAgentVersions hook to fetch paginated versions (10 per page)
+  * VersionListItem sub-component for individual version display
+  * Displays version number (v{versionNumber}), name, changedFields, and formatted timestamp
+  * Active version badge with Check icon and green "success" variant
+  * Activate button (Check icon) for non-active versions
+  * Delete button (Trash2 icon) for non-active versions
+  * Delete confirmation using browser confirm() dialog
+  * Toast notifications for activate/delete success and errors
+  * Loading skeleton state with 4 placeholder rows
+  * Empty state with helpful message ("No versions saved yet")
+  * Pagination controls (Previous/Next) when total pages > 1
+  * Header shows total version count
+  * Compare button (GitCompare icon) when 2+ versions exist
+  * "Save Version" button to create new versions
+  * Integrates SaveVersionDialog and VersionCompareDialog components
+  * Uses date-fns format() for timestamp display (e.g., "Jan 17, 2026 3:45 PM")
+
+Files Created:
+- packages/playground-ui/src/domains/agents/components/agent-versions/agent-versions-list.tsx
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck (playground-ui): No errors in agent-versions-list.tsx
+- All acceptance criteria met:
+  ✓ Versions display in reverse chronological order (server sorts by versionNumber DESC)
+  ✓ Each version shows timestamp, name, and changedFields description
+  ✓ Activate/Delete actions trigger API calls with confirmation
+  ✓ Empty state shows helpful message with usage hint
+
+Implementation Notes:
+- Component references SaveVersionDialog and VersionCompareDialog which will be created in Tasks 016 and 017
+- Uses pagination (page state) to handle large version histories efficiently
+- Activate action calls useActivateAgentVersion mutation hook
+- Delete action calls useDeleteAgentVersion mutation hook
+- Active version cannot be deleted (buttons hidden when isActive)
+- Loading states during activate/delete disable pagination buttons
+
+Next Steps:
+- Task 016: Create save version dialog (depends on Task 011 - already complete)
+- Task 017: Create version comparison dialog (depends on Task 011 - already complete)
+- These two dialog components are referenced by AgentVersionsList and need to be implemented
+
