@@ -12,7 +12,7 @@ import { SaveVersionDialog } from './save-version-dialog';
 import { VersionCompareDialog } from './version-compare-dialog';
 import { toast } from '@/lib/toast';
 
-interface AgentVersionsListProps {
+export interface AgentVersionsListProps {
   agentId: string;
   activeVersionId?: string;
 }
