@@ -86,7 +86,8 @@ createVectorTestSuite({
     await elasticSearchVector.deleteIndex({ indexName });
   },
   waitForIndexing: async () => {
-    // ElasticSearch indexes immediately with refresh: true
+    // ElasticSearch uses refresh: true for immediate visibility, but add small
+    // buffer for test environment stability and potential replica sync
     await new Promise(resolve => setTimeout(resolve, 100));
   },
   supportsRegex: false,

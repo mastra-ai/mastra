@@ -503,7 +503,7 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
               indexName: testIndexName,
               queryVector: createUnitVector(0),
               topK: 10,
-              filter: { category: { $regex: '(?i)ELECTRONICS' } },
+              filter: { category: { $regex: 'ELECTRONICS', $options: 'i' } },
             });
 
             // Should return electronics products

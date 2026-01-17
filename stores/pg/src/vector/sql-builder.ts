@@ -308,7 +308,12 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
               const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
               const operatorResult = operatorFn(key, values.length + 1, nestedValue);
               if (operatorResult.needsValue) {
-                values.push(nestedValue as number);
+                const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+                if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+                  values.push(...transformedValue);
+                } else {
+                  values.push(transformedValue);
+                }
               }
               return operatorResult.sql;
             })
@@ -345,7 +350,12 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
           const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
           const operatorResult = operatorFn(key, values.length + 1, nestedValue);
           if (operatorResult.needsValue) {
-            values.push(nestedValue as number);
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+            if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+              values.push(...transformedValue);
+            } else {
+              values.push(transformedValue);
+            }
           }
           return operatorResult.sql;
         })
@@ -454,7 +464,12 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
               const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
               const operatorResult = operatorFn(key, values.length + 1, nestedValue);
               if (operatorResult.needsValue) {
-                values.push(nestedValue as number);
+                const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+                if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+                  values.push(...transformedValue);
+                } else {
+                  values.push(transformedValue);
+                }
               }
               return operatorResult.sql;
             })
@@ -491,7 +506,12 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
           const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
           const operatorResult = operatorFn(key, values.length + 1, nestedValue);
           if (operatorResult.needsValue) {
-            values.push(nestedValue as number);
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+            if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+              values.push(...transformedValue);
+            } else {
+              values.push(transformedValue);
+            }
           }
           return operatorResult.sql;
         })
