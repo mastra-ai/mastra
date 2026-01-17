@@ -14,9 +14,7 @@ const memory = new Memory({
   storage,
 
   options: {
-    threads: {
       generateTitle: true,
-    },
   },
 });
 

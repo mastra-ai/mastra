@@ -1,0 +1,194 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - region "Notifications alt+T"
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e7]:
+        - img [ref=e8]
+        - generic [ref=e10]: Mastra Studio
+      - navigation [ref=e11]:
+        - list [ref=e13]:
+          - listitem [ref=e14]:
+            - link "Agents" [ref=e15] [cursor=pointer]:
+              - /url: /agents
+              - img [ref=e16]
+              - text: Agents
+          - listitem [ref=e19]:
+            - link "Workflows" [ref=e20] [cursor=pointer]:
+              - /url: /workflows
+              - img [ref=e21]
+              - text: Workflows
+          - listitem [ref=e23]:
+            - link "MCP Servers" [ref=e24] [cursor=pointer]:
+              - /url: /mcps
+              - img [ref=e25]
+              - text: MCP Servers
+          - listitem [ref=e28]:
+            - link "Tools" [ref=e29] [cursor=pointer]:
+              - /url: /tools
+              - img [ref=e30]
+              - text: Tools
+          - listitem [ref=e32]:
+            - link "Scorers" [ref=e33] [cursor=pointer]:
+              - /url: /scorers
+              - img [ref=e34]
+              - text: Scorers
+          - listitem [ref=e37]:
+            - link "Request Context" [ref=e38] [cursor=pointer]:
+              - /url: /request-context
+              - img [ref=e39]
+              - text: Request Context
+        - list [ref=e44]:
+          - listitem [ref=e45]:
+            - link "Observability" [ref=e46] [cursor=pointer]:
+              - /url: /observability
+              - img [ref=e47]
+              - text: Observability
+        - list [ref=e52]:
+          - listitem [ref=e53]:
+            - link "Templates" [ref=e54] [cursor=pointer]:
+              - /url: /templates
+              - img [ref=e55]
+              - text: Templates
+        - list [ref=e61]:
+          - listitem [ref=e62]:
+            - link "Settings" [ref=e63] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e64]
+              - text: Settings
+      - generic [ref=e66]:
+        - navigation [ref=e67]:
+          - list [ref=e70]:
+            - listitem [ref=e71]:
+              - link "Mastra APIs" [ref=e72] [cursor=pointer]:
+                - /url: http://localhost:4111/swagger-ui
+                - img [ref=e73]
+                - text: Mastra APIs
+            - listitem [ref=e78]:
+              - link "Documentation" [ref=e79] [cursor=pointer]:
+                - /url: https://mastra.ai/en/docs
+                - img [ref=e80]
+                - text: Documentation
+            - listitem [ref=e82]:
+              - link "Github" [ref=e83] [cursor=pointer]:
+                - /url: https://github.com/mastra-ai/mastra
+                - img [ref=e84]
+                - text: Github
+            - listitem [ref=e87]:
+              - link "Community" [ref=e88] [cursor=pointer]:
+                - /url: https://discord.gg/BTYqqHKUrf
+                - img [ref=e89]
+                - text: Community
+            - listitem [ref=e92]:
+              - link "Share" [ref=e93] [cursor=pointer]:
+                - /url: https://mastra.ai/cloud
+                - img [ref=e94]
+                - text: Share
+        - 'button "mastra version: 1.0.0-beta.23" [ref=e98] [cursor=pointer]':
+          - generic [ref=e100]: "mastra version:"
+          - generic [ref=e102]: 1.0.0-beta.23
+      - button "Toggle sidebar" [ref=e105] [cursor=pointer]:
+        - img [ref=e106]
+      - button "Toggle sidebar" [ref=e108]
+    - main [ref=e110]:
+      - generic [ref=e111]:
+        - navigation [ref=e112]:
+          - list [ref=e113]:
+            - listitem [ref=e114]:
+              - link "Agents" [ref=e115] [cursor=pointer]:
+                - /url: /agents
+                - img [ref=e117]
+                - text: Agents
+        - generic [ref=e120]:
+          - combobox [ref=e122] [cursor=pointer]:
+            - generic [ref=e123]: Select an agent...
+            - img [ref=e124]
+          - img [ref=e127]
+          - link "Chat" [ref=e128] [cursor=pointer]:
+            - /url: /agents/weatherAgent/chat
+          - img [ref=e129]
+          - link "Traces" [ref=e130] [cursor=pointer]:
+            - /url: /observability?entity=weatherAgent
+        - link "Agents documentation" [ref=e132] [cursor=pointer]:
+          - /url: https://mastra.ai/en/docs/agents/overview
+          - img [ref=e134]
+          - text: Agents documentation
+      - generic [ref=e136]:
+        - navigation [ref=e140]:
+          - list [ref=e141]:
+            - listitem [ref=e142]:
+              - link "New Chat" [ref=e143] [cursor=pointer]:
+                - /url: /agents/weatherAgent/chat/c61d3be0-ee75-460b-ac48-4d39e9c16fc4?new=true
+                - generic [ref=e144]:
+                  - img [ref=e146]
+                  - text: New Chat
+            - paragraph [ref=e147]: Your conversations will appear here once you start chatting!
+        - separator [ref=e148]
+        - generic [ref=e151]:
+          - generic [ref=e153]:
+            - paragraph [ref=e155]: W
+            - paragraph [ref=e156]: How can I help you today?
+          - generic [ref=e161]:
+            - textbox "Enter your message..." [active] [ref=e162]
+            - generic [ref=e163]:
+              - button "Start dictation" [ref=e164] [cursor=pointer]:
+                - img [ref=e165]
+              - button "Add attachment" [ref=e168] [cursor=pointer]:
+                - img [ref=e169]
+              - button "Send" [disabled] [ref=e170]:
+                - img [ref=e171]
+        - separator [ref=e173]
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - generic [ref=e178]:
+              - img [ref=e180]
+              - heading "Weather Agent" [level=2] [ref=e184]
+            - button "weatherAgent" [ref=e186] [cursor=pointer]:
+              - generic [ref=e187]:
+                - img [ref=e190]
+                - text: weatherAgent
+          - generic [ref=e194]:
+            - tablist [ref=e196]:
+              - tab "Overview" [ref=e197] [cursor=pointer]
+              - tab "Model Settings" [selected] [ref=e198] [cursor=pointer]
+              - tab "Memory" [ref=e199] [cursor=pointer]
+              - tab "Tracing Options" [ref=e200] [cursor=pointer]
+            - tabpanel "Model Settings" [ref=e201]:
+              - generic [ref=e202]:
+                - generic [ref=e203]:
+                  - generic [ref=e204]:
+                    - paragraph [ref=e205]: Chat Method
+                    - radiogroup [ref=e206]:
+                      - generic [ref=e207]:
+                        - radio "Generate" [ref=e208] [cursor=pointer]
+                        - generic [ref=e209]: Generate
+                      - generic [ref=e210]:
+                        - radio "Stream" [checked] [ref=e211] [cursor=pointer]:
+                          - img [ref=e213]
+                        - generic [ref=e215]: Stream
+                      - generic [ref=e216]:
+                        - radio "Network" [ref=e217] [cursor=pointer]
+                        - generic [ref=e218]: Network
+                  - generic [ref=e219]:
+                    - paragraph [ref=e220]: Require Tool Approval
+                    - checkbox [ref=e221] [cursor=pointer]
+                  - generic [ref=e222]:
+                    - generic [ref=e223]:
+                      - paragraph [ref=e224]: Temperature
+                      - generic [ref=e225]:
+                        - slider [ref=e230]
+                        - paragraph [ref=e231]: "0.5"
+                    - generic [ref=e232]:
+                      - paragraph [ref=e233]: Top P
+                      - generic [ref=e234]:
+                        - slider [ref=e239]
+                        - paragraph [ref=e240]: "1"
+                - button "Advanced Settings" [ref=e243] [cursor=pointer]:
+                  - text: Advanced Settings
+                  - img [ref=e245]
+                - button "Reset" [ref=e247] [cursor=pointer]:
+                  - img [ref=e249]
+                  - text: Reset
+```
