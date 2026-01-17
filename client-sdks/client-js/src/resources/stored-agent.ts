@@ -9,6 +9,7 @@ import type {
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
   CreateAgentVersionParams,
+  ActivateAgentVersionResponse,
   CompareVersionsResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
@@ -132,9 +133,12 @@ export class StoredAgent extends BaseResource {
    * Activates a specific version, making it the active version for this agent
    * @param versionId - The UUID of the version to activate
    * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise that resolves when activation is complete
+   * @returns Promise containing activation confirmation with success status, message, and active version ID
    */
-  activateVersion(versionId: string, requestContext?: RequestContext | Record<string, any>): Promise<void> {
+  activateVersion(
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse> {
     return this.request(
       `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {

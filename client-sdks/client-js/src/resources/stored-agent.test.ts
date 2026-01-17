@@ -411,9 +411,15 @@ describe('StoredAgent Resource', () => {
 
       it('should activate a version', async () => {
         const versionId = 'version-1';
-        mockFetchResponse(undefined);
+        const mockResponse = {
+          success: true,
+          message: 'Version 1 is now active',
+          activeVersionId: versionId,
+        };
+        mockFetchResponse(mockResponse);
 
-        await storedAgent.activateVersion(versionId);
+        const result = await storedAgent.activateVersion(versionId);
+        expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
           `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}/activate`,
           expect.objectContaining({
@@ -544,32 +550,26 @@ describe('StoredAgent Resource', () => {
 
     describe('Error Handling', () => {
       it('should handle 404 error for non-existent agent', async () => {
-        const errorResponse = new Response(
-          JSON.stringify({ error: 'Agent not found' }),
-          {
-            status: 404,
-            statusText: 'Not Found',
-            headers: new Headers({
-              'Content-Type': 'application/json',
-            }),
-          },
-        );
+        const errorResponse = new Response(JSON.stringify({ error: 'Agent not found' }), {
+          status: 404,
+          statusText: 'Not Found',
+          headers: new Headers({
+            'Content-Type': 'application/json',
+          }),
+        });
         (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
         await expect(storedAgent.details()).rejects.toThrow();
       });
 
       it('should handle 500 error', async () => {
-        const errorResponse = new Response(
-          JSON.stringify({ error: 'Internal server error' }),
-          {
-            status: 500,
-            statusText: 'Internal Server Error',
-            headers: new Headers({
-              'Content-Type': 'application/json',
-            }),
-          },
-        );
+        const errorResponse = new Response(JSON.stringify({ error: 'Internal server error' }), {
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: new Headers({
+            'Content-Type': 'application/json',
+          }),
+        });
         (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
         await expect(storedAgent.update({ name: 'New Name' })).rejects.toThrow();

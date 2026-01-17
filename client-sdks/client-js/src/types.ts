@@ -726,7 +726,7 @@ export interface CreateAgentVersionResponse {
 export interface ActivateAgentVersionResponse {
   success: boolean;
   message: string;
-  version: AgentVersionResponse;
+  activeVersionId: string;
 }
 
 export interface RestoreAgentVersionResponse {
