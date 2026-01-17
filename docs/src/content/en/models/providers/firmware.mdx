@@ -11,7 +11,7 @@ description: "Use Firmware models with Mastra. 18 models available."
 
 Access 18 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
 
-Learn more in the [Firmware documentation](https://firmware.ai).
+Learn more in the [Firmware documentation](https://docs.firmware.ai).
 
 ```bash
 FIRMWARE_API_KEY=your-api-key
@@ -39,7 +39,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://firmware.ai) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://docs.firmware.ai) for details.
 
 :::
 
@@ -200,8 +200,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.25,
-    "outputCost": 2
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "firmware/gpt-5-nano",
@@ -212,8 +212,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.05,
-    "outputCost": 0.4
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "firmware/gpt-5.2",
