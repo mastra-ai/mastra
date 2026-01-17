@@ -7,6 +7,7 @@ import type {
   ListAgentVersionsResponse,
   AgentVersionResponse,
   CompareVersionsResponse,
+  ActivateAgentVersionResponse,
 } from '@mastra/client-js';
 
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
@@ -65,7 +66,7 @@ export const useActivateAgentVersion = ({ agentId }: { agentId: string }) => {
   const queryClient = useQueryClient();
   const { requestContext } = usePlaygroundStore();
 
-  return useMutation<void, Error, string>({
+  return useMutation<ActivateAgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).activateVersion(versionId, requestContext),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
