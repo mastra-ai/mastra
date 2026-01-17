@@ -291,7 +291,6 @@ export function InstructionsEnhancer({
       const result = await enhancePrompt({
         instructions: value,
         userComment: enhanceComment,
-        ...(selectedModel && { model: selectedModel }),
       });
       onChange(result.new_prompt);
       setEnhanceComment('');

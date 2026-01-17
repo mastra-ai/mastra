@@ -15,28 +15,27 @@ interface UsePromptEnhancerProps {
 interface EnhancePromptParams {
   instructions: string;
   userComment: string;
-  /** Model to use for enhancement. Required when agentId is not provided. */
-  model?: { provider: string; modelId: string };
 }
 
 /**
  * Hook for enhancing instructions/prompts using AI.
  *
- * - If agentId is provided, uses the agent-specific endpoint (can auto-select model from agent)
- * - If agentId is not provided, uses the generic endpoint (model is required)
+ * - Requires agentId to be provided - uses the agent-specific endpoint
+ * - The agent's model configuration is used for enhancement
  * - Context determines the enhancement strategy (agent instructions vs scorer prompts)
+ *
+ * Note: Enhancement without an agent context is not currently supported.
  */
 export function usePromptEnhancer({ agentId, context = 'agent' }: UsePromptEnhancerProps = {}) {
   const client = useMastraClient();
   return useMutation({
-    mutationFn: async ({ instructions, userComment, model }: EnhancePromptParams) => {
+    mutationFn: async ({ instructions, userComment }: EnhancePromptParams) => {
       try {
         if (agentId) {
-          // Use agent-specific endpoint (model parameter not supported on this endpoint)
+          // Use agent-specific endpoint with the agent's configured model
           return await client.getAgent(agentId).enhanceInstructions(instructions, userComment);
         } else {
-          // For create mode without agentId, we need model selection
-          // This is handled in the UI layer - for now throw error
+          // Enhancement requires an agent context
           throw new Error('Enhancement requires an agent context');
         }
       } catch (error) {
