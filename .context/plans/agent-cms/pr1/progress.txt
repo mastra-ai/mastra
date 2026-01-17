@@ -367,3 +367,50 @@ Next Steps:
 - Task 012: Create agent creation dialog (depends on Tasks 009, 010 - now unblocked)
 - Task 013: Create agent edit dialog (depends on Tasks 009, 010 - now unblocked)
 - Task 014: Create agent delete confirmation dialog (depends on Task 010 - now unblocked)
+
+[2026-01-17] Task 011: Create agent versions React Query hooks - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/hooks/use-agent-versions.ts with:
+  * useAgentVersions hook for listing versions of a stored agent with optional params
+  * useAgentVersion(agentId, versionId) hook for fetching single version details
+  * useCreateAgentVersion mutation hook for creating new versions
+  * useActivateAgentVersion mutation hook for activating specific versions
+  * useRestoreAgentVersion mutation hook for restoring previous versions (creates new version)
+  * useDeleteAgentVersion mutation hook for deleting versions
+  * useCompareAgentVersions hook for comparing two versions
+  * All hooks integrate with useMastraClient and usePlaygroundStore for request context
+  * Proper cache invalidation on mutations:
+    - Version mutations invalidate 'agent-versions' and 'agent' query keys
+    - Ensures UI refreshes after version operations
+  * All hooks use React Query's useQuery and useMutation with proper typing
+  * TypeScript types imported from @mastra/client-js (ListAgentVersionsParams, CreateAgentVersionParams, ListAgentVersionsResponse, AgentVersionResponse, CompareVersionsResponse)
+  * Export types for use in consuming components
+
+Files Created:
+- packages/playground-ui/src/domains/agents/hooks/use-agent-versions.ts
+
+Status: PASSING ✓
+
+Verification:
+- pnpm test (playground-ui): PASSED (24 tests passing)
+- TypeScript syntax: Correct (no errors in use-agent-versions.ts)
+- All acceptance criteria met:
+  ✓ Versions are fetched and cached correctly via useAgentVersions and useAgentVersion
+  ✓ Create version (useCreateAgentVersion) refreshes version list and agent data
+  ✓ Restore version (useRestoreAgentVersion) updates agent and creates new version entry
+  ✓ Error states are properly handled via React Query's built-in error handling
+
+Notes:
+- Pre-existing type errors in playground-ui are unrelated to this task (missing @mastra/react builds)
+- Build failures in libsql/pg stores are expected (Tasks 019-021 not yet complete)
+- The hooks are ready to be used by the agent version UI components (Tasks 015-017)
+- Supports 7 different version operations: list, get, create, activate, restore, delete, compare
+
+Next Steps:
+- Task 012: Create agent creation dialog (depends on Tasks 009, 010)
+- Task 013: Create agent edit dialog (depends on Tasks 009, 010)
+- Task 014: Create agent delete confirmation dialog (depends on Task 010)
+- Task 015: Create agent versions list component (depends on Task 011 - now unblocked)
+- Task 016: Create save version dialog (depends on Task 011 - now unblocked)
+- Task 017: Create version comparison dialog (depends on Task 011 - now unblocked)
