@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useState, useRef, useEffectEvent, forwardRef, useImperativeHandle } from 'react';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useFilteredModels, ModelInfo } from './use-model-picker';
@@ -34,73 +34,67 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
       },
     }));
 
-    const handleSelect = useCallback(
-      (modelId: string) => {
-        justClosedRef.current = true;
-        setShowSuggestions(false);
-        setSearch('');
-        setIsSearching(false);
-        onSelect(modelId);
-        // Reset the flag after a delay - needs to be long enough to prevent focus reopening
-        setTimeout(() => {
-          justClosedRef.current = false;
-        }, 200);
-      },
-      [onSelect],
-    );
+    const handleSelect = useEffectEvent((modelId: string) => {
+      justClosedRef.current = true;
+      setShowSuggestions(false);
+      setSearch('');
+      setIsSearching(false);
+      onSelect(modelId);
+      // Reset the flag after a delay - needs to be long enough to prevent focus reopening
+      setTimeout(() => {
+        justClosedRef.current = false;
+      }, 200);
+    });
 
-    const scrollToHighlighted = useCallback(() => {
+    const scrollToHighlighted = useEffectEvent(() => {
       setTimeout(() => {
         const element = document.querySelector('[data-model-highlighted="true"]');
         element?.scrollIntoView({ block: 'nearest' });
       }, 0);
-    }, []);
+    });
 
-    const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        if (e.key === 'Tab' && e.shiftKey) {
+    const handleKeyDown = useEffectEvent((e: React.KeyboardEvent) => {
+      if (e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault();
+        onShiftTab?.();
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowDown':
           e.preventDefault();
-          onShiftTab?.();
-          return;
-        }
+          setHighlightedIndex(prev => (prev < filteredModels.length - 1 ? prev + 1 : prev));
+          scrollToHighlighted();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredModels.length - 1));
+          scrollToHighlighted();
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (highlightedIndex >= 0 && highlightedIndex < filteredModels.length) {
+            handleSelect(filteredModels[highlightedIndex].model);
+          } else if (isSearching && search.trim()) {
+            // Custom model ID support
+            handleSelect(search.trim());
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          justClosedRef.current = true;
+          setShowSuggestions(false);
+          setHighlightedIndex(-1);
+          setIsSearching(false);
+          setSearch('');
+          setTimeout(() => {
+            justClosedRef.current = false;
+          }, 200);
+          break;
+      }
+    });
 
-        switch (e.key) {
-          case 'ArrowDown':
-            e.preventDefault();
-            setHighlightedIndex(prev => (prev < filteredModels.length - 1 ? prev + 1 : prev));
-            scrollToHighlighted();
-            break;
-          case 'ArrowUp':
-            e.preventDefault();
-            setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredModels.length - 1));
-            scrollToHighlighted();
-            break;
-          case 'Enter':
-            e.preventDefault();
-            if (highlightedIndex >= 0 && highlightedIndex < filteredModels.length) {
-              handleSelect(filteredModels[highlightedIndex].model);
-            } else if (isSearching && search.trim()) {
-              // Custom model ID support
-              handleSelect(search.trim());
-            }
-            break;
-          case 'Escape':
-            e.preventDefault();
-            justClosedRef.current = true;
-            setShowSuggestions(false);
-            setHighlightedIndex(-1);
-            setIsSearching(false);
-            setSearch('');
-            setTimeout(() => {
-              justClosedRef.current = false;
-            }, 200);
-            break;
-        }
-      },
-      [filteredModels, highlightedIndex, isSearching, search, handleSelect, onShiftTab, scrollToHighlighted],
-    );
-
-    const handleFocus = useCallback(() => {
+    const handleFocus = useEffectEvent(() => {
       // Don't reopen if we just closed after selection
       if (justClosedRef.current) {
         return;
@@ -113,7 +107,7 @@ export const ModelSelect = forwardRef<ModelSelectHandle, ModelSelectProps>(
       const currentIndex = filteredModels.findIndex(m => m.model === selectedModel);
       setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
       scrollToHighlighted();
-    }, [showSuggestions, filteredModels, selectedModel, scrollToHighlighted]);
+    });
 
     return (
       <Popover

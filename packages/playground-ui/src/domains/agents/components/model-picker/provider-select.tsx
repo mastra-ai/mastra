@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useEffectEvent } from 'react';
 import { Input } from '@/ds/components/Input';
 import { Info } from 'lucide-react';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
@@ -31,73 +31,67 @@ export const ProviderSelect = ({
   const filteredProviders = useFilteredProviders(providers, search, isSearching);
   const selectedProviderData = providers.find(p => p.id === currentProvider);
 
-  const handleSelect = useCallback(
-    (provider: Provider) => {
-      justClosedRef.current = true;
-      setSearch('');
-      setIsSearching(false);
-      setShowSuggestions(false);
-      setHighlightedIndex(-1);
-      onSelect(provider);
-      setTimeout(() => {
-        justClosedRef.current = false;
-      }, 100);
-    },
-    [onSelect],
-  );
+  const handleSelect = useEffectEvent((provider: Provider) => {
+    justClosedRef.current = true;
+    setSearch('');
+    setIsSearching(false);
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+    onSelect(provider);
+    setTimeout(() => {
+      justClosedRef.current = false;
+    }, 100);
+  });
 
-  const scrollToHighlighted = useCallback(() => {
+  const scrollToHighlighted = useEffectEvent(() => {
     setTimeout(() => {
       const element = document.querySelector('[data-provider-highlighted="true"]');
       element?.scrollIntoView({ block: 'nearest' });
     }, 0);
-  }, []);
+  });
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-        setIsSearching(true);
+  const handleKeyDown = useEffectEvent((e: React.KeyboardEvent) => {
+    if (!isSearching && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      setIsSearching(true);
+      setSearch('');
+      setHighlightedIndex(0);
+      return;
+    }
+
+    if (!showSuggestions) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev < filteredProviders.length - 1 ? prev + 1 : 0));
+        scrollToHighlighted();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredProviders.length - 1));
+        scrollToHighlighted();
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedIndex >= 0 && highlightedIndex < filteredProviders.length) {
+          handleSelect(filteredProviders[highlightedIndex]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        justClosedRef.current = true;
+        setIsSearching(false);
         setSearch('');
-        setHighlightedIndex(0);
-        return;
-      }
+        setHighlightedIndex(-1);
+        setShowSuggestions(false);
+        setTimeout(() => {
+          justClosedRef.current = false;
+        }, 100);
+        break;
+    }
+  });
 
-      if (!showSuggestions) return;
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          setHighlightedIndex(prev => (prev < filteredProviders.length - 1 ? prev + 1 : 0));
-          scrollToHighlighted();
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setHighlightedIndex(prev => (prev > 0 ? prev - 1 : filteredProviders.length - 1));
-          scrollToHighlighted();
-          break;
-        case 'Enter':
-          e.preventDefault();
-          if (highlightedIndex >= 0 && highlightedIndex < filteredProviders.length) {
-            handleSelect(filteredProviders[highlightedIndex]);
-          }
-          break;
-        case 'Escape':
-          e.preventDefault();
-          justClosedRef.current = true;
-          setIsSearching(false);
-          setSearch('');
-          setHighlightedIndex(-1);
-          setShowSuggestions(false);
-          setTimeout(() => {
-            justClosedRef.current = false;
-          }, 100);
-          break;
-      }
-    },
-    [isSearching, showSuggestions, filteredProviders, highlightedIndex, handleSelect, scrollToHighlighted],
-  );
-
-  const handleFocus = useCallback(() => {
+  const handleFocus = useEffectEvent(() => {
     // Don't reopen if we just closed after selection
     if (justClosedRef.current) {
       return;
@@ -109,19 +103,17 @@ export const ProviderSelect = ({
       setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
       scrollToHighlighted();
     }
-  }, [showSuggestions, filteredProviders, currentProvider, scrollToHighlighted]);
+  });
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      if (!showSuggestions) {
-        setShowSuggestions(true);
-        const currentIndex = filteredProviders.findIndex(p => p.id === currentProvider);
-        setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
-      }
-    },
-    [showSuggestions, filteredProviders, currentProvider],
-  );
+  const handleClick = useEffectEvent((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!showSuggestions) {
+      setShowSuggestions(true);
+      const currentIndex = filteredProviders.findIndex(p => p.id === currentProvider);
+      setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
+      scrollToHighlighted();
+    }
+  });
 
   return (
     <Popover

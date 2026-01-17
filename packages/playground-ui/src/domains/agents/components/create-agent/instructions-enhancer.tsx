@@ -45,60 +45,54 @@ const EnhancerModelSelector = ({
       m.providerName.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const handleSelect = React.useCallback(
-    (model: ModelInfo | null) => {
-      if (model) {
-        onModelSelect({ provider: model.provider, modelId: model.model });
-      } else {
-        onModelSelect(null);
-      }
-      setIsOpen(false);
-      setSearch('');
-    },
-    [onModelSelect],
-  );
+  const handleSelect = React.useEffectEvent((model: ModelInfo | null) => {
+    if (model) {
+      onModelSelect({ provider: model.provider, modelId: model.model });
+    } else {
+      onModelSelect(null);
+    }
+    setIsOpen(false);
+    setSearch('');
+  });
 
-  const handleKeyDown = React.useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!isOpen) return;
+  const handleKeyDown = React.useEffectEvent((e: React.KeyboardEvent) => {
+    if (!isOpen) return;
 
-      // In create mode, index 0 is the first model. In edit mode, index 0 is "Default"
-      const maxIndex = isCreateMode ? filteredModels.length - 1 : filteredModels.length;
+    // In create mode, index 0 is the first model. In edit mode, index 0 is "Default"
+    const maxIndex = isCreateMode ? filteredModels.length - 1 : filteredModels.length;
 
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          setHighlightedIndex(prev => Math.min(prev + 1, maxIndex));
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setHighlightedIndex(prev => Math.max(prev - 1, 0));
-          break;
-        case 'Enter':
-          e.preventDefault();
-          if (isCreateMode) {
-            // In create mode, index maps directly to filteredModels
-            if (highlightedIndex < filteredModels.length) {
-              handleSelect(filteredModels[highlightedIndex]);
-            }
-          } else {
-            // In edit mode, index 0 is "Default", then models start at 1
-            if (highlightedIndex === 0) {
-              handleSelect(null);
-            } else if (highlightedIndex <= filteredModels.length) {
-              handleSelect(filteredModels[highlightedIndex - 1]);
-            }
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex(prev => Math.min(prev + 1, maxIndex));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex(prev => Math.max(prev - 1, 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (isCreateMode) {
+          // In create mode, index maps directly to filteredModels
+          if (highlightedIndex < filteredModels.length) {
+            handleSelect(filteredModels[highlightedIndex]);
           }
-          break;
-        case 'Escape':
-          e.preventDefault();
-          setIsOpen(false);
-          setSearch('');
-          break;
-      }
-    },
-    [isOpen, filteredModels, highlightedIndex, handleSelect, isCreateMode],
-  );
+        } else {
+          // In edit mode, index 0 is "Default", then models start at 1
+          if (highlightedIndex === 0) {
+            handleSelect(null);
+          } else if (highlightedIndex <= filteredModels.length) {
+            handleSelect(filteredModels[highlightedIndex - 1]);
+          }
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsOpen(false);
+        setSearch('');
+        break;
+    }
+  });
 
   const displayValue = selectedModel
     ? `${selectedModel.provider}/${selectedModel.modelId}`
