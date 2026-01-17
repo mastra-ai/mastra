@@ -423,10 +423,19 @@ describe('Workspace', () => {
       expect(workspace.skills).toBeUndefined();
     });
 
-    it('should return undefined when no filesystem', () => {
+    it('should throw when skillsPaths configured without filesystem', () => {
+      expect(
+        () =>
+          new Workspace({
+            sandbox: mockSandbox,
+            skillsPaths: ['/skills'],
+          }),
+      ).toThrow('Skills require a filesystem provider');
+    });
+
+    it('should return undefined when no skillsPaths configured', () => {
       const workspace = new Workspace({
         sandbox: mockSandbox,
-        skillsPaths: ['/skills'],
       });
       expect(workspace.skills).toBeUndefined();
     });

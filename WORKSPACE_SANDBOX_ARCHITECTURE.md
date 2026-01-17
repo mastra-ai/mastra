@@ -1,0 +1,212 @@
+# Workspace Sandbox Architecture
+
+Design exploration for how filesystem and sandbox components should interact within a Workspace.
+
+---
+
+## Current State
+
+Workspace components are currently independent:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  skillsPaths: ['/skills'],
+  bm25: true,
+});
+```
+
+**Issues:**
+
+- `LocalSandbox` writes temp script files to `/tmp`, so `__dirname` doesn't work
+- Filesystem and sandbox paths must be manually aligned
+- No automatic context sharing between components
+
+---
+
+## Component Dependencies
+
+| Component  | Requires            | Notes                                                 |
+| ---------- | ------------------- | ----------------------------------------------------- |
+| Skills     | Filesystem          | Skills ARE SKILL.md files - must read from filesystem |
+| Sandbox    | Nothing (currently) | Can execute code independently                        |
+| Search     | Nothing             | Can index arbitrary content                           |
+| Filesystem | Nothing             | Core storage primitive                                |
+
+**Proposed:**
+
+- Skills should throw an error if configured without filesystem
+- Sandbox should be aware of filesystem when both are present
+
+---
+
+## Context Compatibility
+
+### Same-Context Combinations
+
+These naturally share the same execution environment:
+
+| Filesystem        | Sandbox        | Context            |
+| ----------------- | -------------- | ------------------ |
+| `LocalFilesystem` | `LocalSandbox` | Same machine       |
+| `E2BFilesystem`   | `E2BSandbox`   | Same E2B container |
+
+For same-context combinations:
+
+- Sandbox should share filesystem's basePath
+- `__dirname` and `process.cwd()` should both work
+- No sync operations needed
+
+### Cross-Context Combinations
+
+These have isolated environments:
+
+| Filesystem               | Sandbox        | Context                           |
+| ------------------------ | -------------- | --------------------------------- |
+| `AgentFS` (SQLite/Turso) | `LocalSandbox` | Files in DB, execution on host    |
+| `LocalFilesystem`        | `ComputeSDK`   | Files on disk, execution in cloud |
+| `AgentFS`                | `ComputeSDK`   | Both remote but separate          |
+
+For cross-context combinations:
+
+- Must use `syncToSandbox()` / `syncFromSandbox()` to transfer files
+- Code executes in sandbox's isolated environment
+- Results synced back after execution
+
+---
+
+## Proposed Architecture
+
+### 1. Context Detection
+
+Workspace should detect if filesystem and sandbox share the same context:
+
+```typescript
+class Workspace {
+  private contextsAreCompatible(): boolean {
+    // LocalFilesystem + LocalSandbox = compatible (same machine)
+    // E2BFilesystem + E2BSandbox = compatible (same container)
+    // Otherwise = incompatible (need sync)
+  }
+}
+```
+
+### 2. LocalSandbox Fix
+
+When LocalFilesystem and LocalSandbox are both present:
+
+```typescript
+// Current - writes to /tmp (breaks __dirname)
+const tempFile = path.join(os.tmpdir(), `mastra-code-${id}`);
+
+// Proposed - writes to workspace
+const tempFile = path.join(this.workingDirectory, `.mastra/sandbox/code-${id}`);
+```
+
+This ensures:
+
+- `__dirname` = workspace directory
+- `process.cwd()` = workspace directory
+- Script files live in the workspace (can be gitignored)
+
+### 3. Automatic Context Sharing
+
+When creating a Workspace with compatible components:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: true, // Auto-create LocalSandbox with filesystem's basePath
+  skillsPaths: ['/skills'],
+});
+
+// Or explicit but validated:
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox(), // Inherits basePath from filesystem
+  skillsPaths: ['/skills'],
+});
+```
+
+### 4. Cross-Context Workflow
+
+For incompatible contexts, explicit sync is required:
+
+```typescript
+// Sync files to sandbox before execution
+await workspace.syncToSandbox(['/src', '/package.json']);
+
+// Execute code in sandbox
+const result = await workspace.executeCode(`
+  const pkg = require('./package.json');
+  console.log(pkg.name);
+`);
+
+// Sync results back
+await workspace.syncFromSandbox(['/dist', '/output.json']);
+```
+
+---
+
+## Validation Rules
+
+### Skills Validation
+
+Skills require filesystem - throw if misconfigured:
+
+```typescript
+if (config.skillsPaths && !config.filesystem) {
+  throw new WorkspaceError(
+    'Skills require a filesystem provider. Configure filesystem or remove skillsPaths.',
+    'SKILLS_REQUIRE_FILESYSTEM',
+  );
+}
+```
+
+### Sandbox Validation
+
+Sandbox can work without filesystem, but warn about limitations:
+
+```typescript
+if (config.sandbox && !config.filesystem) {
+  // Valid but limited - no persistent file storage
+  // executeCode works but files are ephemeral
+}
+```
+
+---
+
+## Provider Matrix
+
+| Provider            | Package                      | Type       | Compatible With   |
+| ------------------- | ---------------------------- | ---------- | ----------------- |
+| `LocalFilesystem`   | `@mastra/core`               | Filesystem | `LocalSandbox`    |
+| `AgentFS`           | `@mastra/filesystem-agentfs` | Filesystem | (requires sync)   |
+| `LocalSandbox`      | `@mastra/core`               | Sandbox    | `LocalFilesystem` |
+| `ComputeSDKSandbox` | `@mastra/sandbox-computesdk` | Sandbox    | (requires sync)   |
+| `E2BFilesystem`     | `@mastra/filesystem-e2b`     | Filesystem | `E2BSandbox`      |
+| `E2BSandbox`        | `@mastra/sandbox-e2b`        | Sandbox    | `E2BFilesystem`   |
+
+---
+
+## Open Questions
+
+1. **Auto-sync option**: Should Workspace auto-sync before/after executeCode for cross-context?
+
+   ```typescript
+   await workspace.executeCode(code, { autoSync: true });
+   ```
+
+2. **Sandbox temp directory**: Should `.mastra/sandbox/` be configurable or hardcoded?
+
+3. **Context detection API**: Should providers expose a `contextId` for compatibility checking?
+
+4. **Skills from external sources**: Future feature - skills from npm packages, URLs, etc.?
+
+---
+
+## Related Documents
+
+- [UNIFIED_WORKSPACE_DESIGN.md](./UNIFIED_WORKSPACE_DESIGN.md) - Overall workspace architecture
+- [WORKSPACE_UI_DESIGN.md](./WORKSPACE_UI_DESIGN.md) - UI visualization options

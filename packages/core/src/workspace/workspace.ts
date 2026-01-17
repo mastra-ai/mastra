@@ -304,6 +304,14 @@ export class Workspace {
       throw new WorkspaceError('Workspace requires at least a filesystem or sandbox provider', 'NO_PROVIDERS');
     }
 
+    // Validate skills require filesystem
+    if (config.skillsPaths && config.skillsPaths.length > 0 && !this._fs) {
+      throw new WorkspaceError(
+        'Skills require a filesystem provider. Configure filesystem or remove skillsPaths.',
+        'SKILLS_REQUIRE_FILESYSTEM',
+      );
+    }
+
     // Auto-initialize if requested
     if (config.autoInit) {
       // Use void to indicate we intentionally don't await
