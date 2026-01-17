@@ -370,6 +370,7 @@ const sandboxWorkspace = new Workspace({
 
 ## Related Documents
 
+- [WORKSPACE_UI_DESIGN.md](./WORKSPACE_UI_DESIGN.md) - UI visualization options for sandbox/capabilities
 - [WORKSPACE_TESTS_PLAN.md](./WORKSPACE_TESTS_PLAN.md) - Test coverage plan
 - [WORKSPACE_PR_EXPLORATION.md](./WORKSPACE_PR_EXPLORATION.md) - PR #11567 analysis
 - [AGENT_SKILLS_SPEC.md](./AGENT_SKILLS_SPEC.md) - Agent Skills specification
