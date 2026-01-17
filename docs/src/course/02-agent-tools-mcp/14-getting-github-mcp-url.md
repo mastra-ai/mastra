@@ -24,7 +24,7 @@ We'll configure the MCP client to use Smithery's GitHub server via their CLI in 
 Alternatively, you can use the official GitHub MCP server directly:
 
 ```bash
-pnpm install @modelcontextprotocol/server-github
+pnpm install @modelcontextprotocol/github
 ```
 
 This requires a GitHub Personal Access Token:

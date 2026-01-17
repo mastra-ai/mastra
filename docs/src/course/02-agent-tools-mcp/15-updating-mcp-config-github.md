@@ -14,7 +14,7 @@ const mcp = new MCPClient({
         "-y",
         "@smithery/cli@latest",
         "run",
-        "@smithery-ai/server-github",
+        "@smithery-ai/github",
         "--config",
         "{}",
       ],
