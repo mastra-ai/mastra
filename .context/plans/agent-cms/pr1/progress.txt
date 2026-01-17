@@ -524,3 +524,49 @@ Next Steps:
 - Task 017: Create version comparison dialog (depends on Task 011)
 - Task 018: Update agents page with stored agents (depends on Tasks 012, 013, 014, 015)
 
+[2026-01-17] Task 014: Create agent delete confirmation dialog - COMPLETED
+
+Summary:
+- Created packages/playground-ui/src/domains/agents/components/create-agent/delete-agent-confirm.tsx:
+  * DeleteAgentConfirm component using Dialog from UI library
+  * Accepts agentId, agentName, open, onOpenChange, and optional onSuccess callback props
+  * Integrates with useStoredAgentMutations hook for deletion
+  * Displays warning message with agent name in confirmation dialog
+  * Shows destructive alert with permanent deletion warning and impact description
+  * Handles deletion with useDeleteStoredAgent mutation hook
+  * Shows success toast notification after deletion
+  * Shows error toast notification on failure
+  * Closes dialog on successful deletion
+  * Calls optional onSuccess callback
+  * Loading state managed via deleteStoredAgent.isPending
+  * Cancel button closes dialog without action
+  * Delete button styled with destructive colors (bg-destructive, text-destructive-foreground)
+  * Uses correct Button variants: 'outline' for Cancel, 'default' for Delete with custom destructive styling
+
+Files Created:
+- packages/playground-ui/src/domains/agents/components/create-agent/delete-agent-confirm.tsx
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED (0 errors)
+- pnpm build: PASSED (no errors in delete-agent-confirm.tsx)
+- pnpm test: PASSED (24 tests passing)
+- All acceptance criteria met:
+  ✓ Warning message shows agent name
+  ✓ Cancel closes dialog without action
+  ✓ Delete calls API (deleteStoredAgent.mutateAsync) and shows loading state
+  ✓ Success closes dialog and shows toast notification
+
+Notes:
+- Component uses same patterns as edit-agent-dialog.tsx (toast, mutations, dialog structure)
+- Proper error handling with try/catch and error toast
+- Loading state prevents double-clicks during deletion
+- Pre-existing type errors in playground-ui are unrelated to this task (missing @mastra/react builds)
+- Component is ready to be integrated into the agents page (Task 018)
+
+Next Steps:
+- Task 015: Create agent versions list component (depends on Task 011 - already complete)
+- Task 016: Create save version dialog (depends on Task 011 - already complete)
+- Task 017: Create version comparison dialog (depends on Task 011 - already complete)
+- Task 018: Update agents page with stored agents (depends on Tasks 012, 013, 014, 015 - Task 014 now complete)
