@@ -64,6 +64,9 @@
 // Re-export all types
 export * from './types';
 
+// Re-export VoyageAIClient for use in @mastra/core embedding-router
+export { VoyageAIClient } from 'voyageai';
+
 // Re-export embedding model classes
 export {
   VoyageTextEmbeddingModelV2,

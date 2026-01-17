@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -5,6 +7,9 @@ import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
+
+// Create require function for ESM compatibility
+const require = createRequire(import.meta.url);
 
 /**
  * Creates a VoyageAI embedding model wrapper that implements EmbeddingModelV2.
@@ -17,16 +22,23 @@ import type { OpenAICompatibleConfig } from './shared.types.js';
 function createVoyageEmbeddingModel(modelId: string, apiKey: string): EmbeddingModelV2<string> {
   // Lazy import to avoid bundling voyageai if not used
   // This allows the package to be optional
+  // Try @mastra/voyageai first (re-exports VoyageAIClient), then fall back to voyageai
   let VoyageAIClient: any;
   try {
-    // Try to import the voyageai package
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    VoyageAIClient = require('voyageai').VoyageAIClient;
+    // First try @mastra/voyageai which provides additional Mastra integrations
+    VoyageAIClient = require('@mastra/voyageai').VoyageAIClient;
   } catch {
-    throw new Error(
-      'VoyageAI SDK not found. Please install the voyageai package: npm install voyageai\n' +
-        'Or use @mastra/voyageai for a more integrated experience: npm install @mastra/voyageai',
-    );
+    try {
+      // Fall back to the official voyageai SDK
+      VoyageAIClient = require('voyageai').VoyageAIClient;
+    } catch {
+      throw new Error(
+        'VoyageAI SDK not found. Please install one of the following packages:\n' +
+          '  - npm install @mastra/voyageai (recommended, includes Mastra integrations)\n' +
+          '  - npm install voyageai (official VoyageAI SDK)\n' +
+          'Note: With pnpm or other strict package managers, ensure the package is explicitly listed in your dependencies.',
+      );
+    }
   }
 
   const client = new VoyageAIClient({ apiKey });
