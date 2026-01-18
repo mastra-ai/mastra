@@ -33,12 +33,14 @@ export const STORED_AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
 
   // ============================================================================
   // Agent Versions Routes
+  // IMPORTANT: Routes with literal paths (e.g., /compare) must come BEFORE
+  // routes with path parameters (e.g., /:versionId) to ensure correct matching.
   // ============================================================================
   LIST_AGENT_VERSIONS_ROUTE,
   CREATE_AGENT_VERSION_ROUTE,
+  COMPARE_AGENT_VERSIONS_ROUTE, // Must be before GET_AGENT_VERSION_ROUTE
   GET_AGENT_VERSION_ROUTE,
   ACTIVATE_AGENT_VERSION_ROUTE,
   RESTORE_AGENT_VERSION_ROUTE,
   DELETE_AGENT_VERSION_ROUTE,
-  COMPARE_AGENT_VERSIONS_ROUTE,
 ];

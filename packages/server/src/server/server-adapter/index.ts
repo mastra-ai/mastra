@@ -193,7 +193,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   async registerRoutes(): Promise<void> {
-    await Promise.all(SERVER_ROUTES.map(route => this.registerRoute(this.app, route, { prefix: this.prefix })));
+    // Register routes sequentially to maintain order - important for routers where
+    // more specific routes (e.g., /versions/compare) must be registered before
+    // parameterized routes (e.g., /versions/:versionId)
+    for (const route of SERVER_ROUTES) {
+      await this.registerRoute(this.app, route, { prefix: this.prefix });
+    }
 
     if (this.openapiPath) {
       await this.registerOpenAPIRoute(
