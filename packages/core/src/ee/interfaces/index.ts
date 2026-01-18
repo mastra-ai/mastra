@@ -11,3 +11,4 @@ export type { EEUser, IUserProvider } from './user.js';
 export type { Session, ISessionProvider } from './session.js';
 export type { ISSOProvider, SSOLoginConfig, SSOCallbackResult, SSOTokens } from './sso.js';
 export type { ICredentialsProvider, CredentialsResult } from './credentials.js';
+export type { IRBACProvider, RoleMapping, Role } from './rbac.js';
