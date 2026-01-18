@@ -75,3 +75,7 @@ export { WorkOSDirectorySync } from './directory-sync.js';
 export type { WorkOSDirectorySyncConfig, DirectorySyncEvent, DirectorySyncEventType } from './directory-sync.js';
 export { WorkOSAuditExporter } from './audit-export.js';
 export type { WorkOSAuditExporterConfig } from './audit-export.js';
+
+// Export the main EE auth provider (recommended for new implementations)
+export { MastraAuthWorkosEE } from './provider-ee.js';
+export type { MastraAuthWorkosEEOptions } from './provider-ee.js';

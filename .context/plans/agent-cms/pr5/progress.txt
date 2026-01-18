@@ -698,3 +698,40 @@ Implementation details:
 - Query and export via WorkOS dashboard (SDK methods to be implemented later)
 
 Next engineer: Task 025 (Create main WorkOS auth provider class) is ready to implement. This will compose all the WorkOS sub-providers (SSO, session, user, RBAC, directory sync, audit export) into the main MastraAuthWorkos provider class. This is a P0 task that completes the WorkOS auth provider implementation.
+
+### 2026-01-18 - Task 025 Complete
+- Created auth/workos/src/provider-ee.ts with MastraAuthWorkosEE class
+- Implemented MastraAuthWorkosEE extending MastraAuthProvider<EEUser>
+- Constructor accepts MastraAuthWorkosEEOptions extending MastraAuthWorkosOptions
+- Validates required configuration (apiKey, clientId, redirectUri, cookiePassword)
+- Initializes WorkOS SDK client with API key and client ID
+- Creates AuthKit session service with sessionStorageFactory using WebSessionStorage
+- Composed all WorkOS sub-providers:
+  - WorkOSSSOProvider for OAuth/OIDC SSO flows
+  - WorkOSSessionProvider for encrypted cookie-based sessions
+  - WorkOSUserProvider for user management via WorkOS API
+  - MastraRBACWorkos for role-based access control (optional, if rbac config provided)
+  - WorkOSDirectorySync for SCIM provisioning (optional, if directorySync config provided)
+  - WorkOSAuditExporter for WorkOS Audit Logs export (optional, if auditExport config provided)
+- Implemented getCurrentUser delegating to WorkOSUserProvider
+- Added getWorkOSClient() helper for accessing WorkOS SDK instance
+- Added getDirectorySync() helper for accessing directory sync instance
+- Exported MastraAuthWorkosEE and MastraAuthWorkosEEOptions from auth/workos/src/index.ts
+- Fixed TypeScript errors:
+  - AuthKitConfig requires apiHttps and cookieMaxAge fields (added with sensible defaults)
+  - WorkOSDirectorySync and WorkOSAuditExporter expect workos instance in their config
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (123 tasks successful)
+- Provider is now accessible from @mastra/auth-workos
+
+Implementation details:
+- Provider composes all WorkOS capabilities into single configuration point
+- RBAC, directory sync, and audit export are optional features
+- Uses WorkOS AuthKit for production-ready session management
+- Sessions stored in encrypted cookies (no server-side storage required)
+- All sub-providers are initialized in initializeProviders() method
+- Provider maintains backward compatibility with existing MastraAuthWorkos class
+- The EE provider is exported as MastraAuthWorkosEE (recommended for new implementations)
+- Original MastraAuthWorkos remains for backward compatibility
+
+Next engineer: All backend tasks for WorkOS auth provider (Tasks 021-025) are now complete. The next P0 tasks are frontend tasks (029-037) for building the auth UI components and hooks, or you can start on the Better Auth provider (Tasks 026-027) or Mastra Cloud Auth provider (Task 028). Task 040 (verify build and typecheck) should be run after completing more frontend/backend tasks to ensure everything still works together.

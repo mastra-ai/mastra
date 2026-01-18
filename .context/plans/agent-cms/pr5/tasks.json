@@ -715,9 +715,9 @@
       "priority": "P0",
       "title": "Create main WorkOS auth provider class",
       "description": "Create the main WorkOS auth provider combining all sub-providers.",
-      "files": ["auth/workos/src/provider.ts"],
+      "files": ["auth/workos/src/provider-ee.ts"],
       "steps": [
-        "Create MastraAuthWorkos class extending MastraAuthProvider",
+        "Create MastraAuthWorkosEE class extending MastraAuthProvider",
         "Accept WorkOSConfig in constructor",
         "Initialize WorkOS SDK client",
         "Compose SSO, session, user providers internally",
@@ -725,7 +725,7 @@
         "Optionally compose audit exporter if enabled",
         "Implement getCurrentUser delegating to user provider",
         "Override buildCapabilities for WorkOS-specific features",
-        "Export as default from package"
+        "Export from package"
       ],
       "acceptanceCriteria": [
         "Provider composes all WorkOS capabilities",
@@ -735,7 +735,8 @@
       ],
       "estimatedComplexity": "medium",
       "dependencies": ["022", "023", "024"],
-      "status": "pending"
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "026",
