@@ -190,6 +190,48 @@ if (config.sandbox && !config.filesystem) {
 
 ---
 
+## Design Decisions
+
+### Sandbox Directory
+
+The sandbox temp/script directory should be **configurable**:
+
+```typescript
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  scriptDirectory: './.mastra/sandbox', // Optional, defaults to os.tmpdir()
+});
+```
+
+- If not provided, use current behavior (`os.tmpdir()`)
+- If provided, write script files there (enables `__dirname` to work)
+- Should be gitignored if within the workspace
+
+### Filesystem Awareness
+
+Sandbox should be **aware** of filesystem when both are configured, but doesn't need to share the same path:
+
+```typescript
+// Filesystem and sandbox can have different paths
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './data' }),
+  sandbox: new LocalSandbox({ workingDirectory: './sandbox' }),
+});
+
+// Sandbox knows about filesystem for sync operations
+await workspace.syncToSandbox(['/files/to/sync']);
+await workspace.executeCode(code);
+await workspace.syncFromSandbox(['/output']);
+```
+
+This allows:
+
+- Sandbox to act on filesystem when needed (sync, read files)
+- Flexibility for different storage locations
+- Clear separation when desired
+
+---
+
 ## Open Questions
 
 1. **Auto-sync option**: Should Workspace auto-sync before/after executeCode for cross-context?
@@ -198,11 +240,9 @@ if (config.sandbox && !config.filesystem) {
    await workspace.executeCode(code, { autoSync: true });
    ```
 
-2. **Sandbox temp directory**: Should `.mastra/sandbox/` be configurable or hardcoded?
+2. **Context detection API**: Should providers expose a `contextId` for compatibility checking?
 
-3. **Context detection API**: Should providers expose a `contextId` for compatibility checking?
-
-4. **Skills from external sources**: Future feature - skills from npm packages, URLs, etc.?
+3. **Skills from external sources**: Future feature - skills from npm packages, URLs, etc.?
 
 ---
 
