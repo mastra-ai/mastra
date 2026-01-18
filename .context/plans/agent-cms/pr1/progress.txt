@@ -2118,3 +2118,25 @@ Next Steps:
   - Task 048 (P2): Add changeType field to VersionDiff interface
   - Task 049 (P1): Ensure versionNumber uniqueness per agent in inmemory.ts
   - Task 050 (P1): Protect stored versions from external mutation in inmemory.ts
+
+[2026-01-18] Task 048: Add changeType field to VersionDiff interface - COMPLETED
+
+Summary:
+- Added optional changeType field to VersionDiff interface in client-sdks/client-js/src/types.ts
+- Field type is 'added' | 'removed' | 'modified' to match test mock data
+- This field was already being used in test mocks (stored-agent.test.ts line 514) but was missing from the TypeScript interface
+- The API returns this field to indicate what type of change occurred for each diff
+
+Files Modified:
+- client-sdks/client-js/src/types.ts (added changeType?: 'added' | 'removed' | 'modified' to VersionDiff interface)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build: PASSED (123 tasks, all successful)
+- pnpm test (client-js): PASSED (234 tests all passing)
+
+Next Steps:
+- Task 049: Ensure versionNumber uniqueness per agent in inmemory.ts (P1 priority)
+- Task 050: Protect stored versions from external mutation in inmemory.ts (P1 priority)

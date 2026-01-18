@@ -745,6 +745,7 @@ export interface VersionDiff {
   field: string;
   previousValue: any;
   currentValue: any;
+  changeType?: 'added' | 'removed' | 'modified';
 }
 
 export type AgentVersionDiff = VersionDiff;
