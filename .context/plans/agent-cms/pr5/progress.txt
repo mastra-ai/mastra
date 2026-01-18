@@ -264,3 +264,22 @@ Next engineer: Task 010 (Create capabilities detection and response building) is
 - All types are now accessible from @mastra/core/ee
 
 Next engineer: Task 011 (Create withEE composition helper) is ready to implement. The capabilities detection system is complete and ready for the withEE() composition helper that wraps auth providers to add EE capabilities.
+
+### 2026-01-17 - Task 011 Complete
+- Created packages/core/src/ee/with-ee.ts with full implementation
+- Defined WithEEOptions<TUser> interface for composing EE capabilities
+- Added support for composing user, session, sso, credentials, rbac, acl, and audit providers
+- Options override base auth provider's implementations (allows adding RBAC to providers without it)
+- Implemented withEE<TUser>(baseAuth, options) composition function
+- Created ComposedAuthProvider class that extends MastraAuthProvider
+- Delegates getCurrentUser() to base auth provider
+- Overrides getCapabilities() to detect composed capabilities
+- Overrides buildCapabilities() to use buildPublicCapabilities/buildAuthenticatedCapabilities
+- Preserves isMastraCloudAuth flag from base provider
+- Exported WithEEOptions, EEAuthProvider types, and withEE function from packages/core/src/ee/index.ts
+- withEE enables adding RBAC, ACL, or audit logging to any auth provider
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- Types are now accessible from @mastra/core/ee
+
+Next engineer: Task 012 (Create default role definitions) is ready to implement. The withEE composition helper is complete. The next logical tasks are the default implementations (012-017) which provide ready-to-use implementations of the EE interfaces for development and production use.
