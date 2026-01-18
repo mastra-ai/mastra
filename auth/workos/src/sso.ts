@@ -153,7 +153,12 @@ export class WorkOSSSOProvider implements ISSOProvider<EEUser> {
       tokens: {
         accessToken: result.authResponse.accessToken,
         refreshToken: result.authResponse.refreshToken,
-        expiresAt: result.authResponse.user.emailVerified ? Date.now() + 3600000 : undefined, // 1 hour default
+        // Use expiresAt from auth response if available, otherwise compute from expiresIn
+        expiresAt: (result.authResponse as any).expiresAt
+          ? (result.authResponse as any).expiresAt
+          : (result.authResponse as any).expiresIn
+            ? Date.now() + (result.authResponse as any).expiresIn * 1000
+            : Date.now() + 3600000, // 1 hour default fallback
       },
       cookies,
     };
