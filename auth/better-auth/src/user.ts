@@ -128,9 +128,14 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
       const cookies = cookieHeader.split(';').map(c => c.trim());
 
       for (const cookie of cookies) {
-        const [name, value] = cookie.split('=');
+        const equalsIndex = cookie.indexOf('=');
+        if (equalsIndex === -1) continue;
+
+        const name = cookie.slice(0, equalsIndex);
+        const value = cookie.slice(equalsIndex + 1);
+
         if (name === cookieName) {
-          return value ?? null;
+          return value || null;
         }
       }
 
