@@ -97,7 +97,7 @@ export function AuditLogList({ defaultFilter, pageSize = 50 }: AuditLogListProps
           value={filter.outcome || 'all'}
           onValueChange={value => handleFilterChange('outcome', value === 'all' ? undefined : (value as AuditOutcome))}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-form-width-sm">
             <SelectValue placeholder="Filter by outcome" />
           </SelectTrigger>
           <SelectContent>
@@ -114,7 +114,7 @@ export function AuditLogList({ defaultFilter, pageSize = 50 }: AuditLogListProps
             handleFilterChange('actorType', value === 'all' ? undefined : (value as AuditActorType))
           }
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-form-width-sm">
             <SelectValue placeholder="Filter by actor" />
           </SelectTrigger>
           <SelectContent>
