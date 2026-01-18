@@ -1075,3 +1075,50 @@ Implementation details:
 - Accessible and keyboard navigable
 
 Next engineer: Task 034 (Create AuthRequired guard component) is ready to implement. This is a P0 frontend task that creates the route guard component for protecting authenticated routes. It depends on Tasks 030 and 031 (current user and permissions hooks), which are both complete. All necessary hooks (useAuthCapabilities, useCurrentUser, usePermissions) are in place for this implementation.
+
+### 2026-01-18 - Task 034 Complete
+- Created packages/playground-ui/src/domains/auth/components/auth-required.tsx
+- Implemented AuthRequired component as route/content guard for protected pages
+- Component features:
+  - children prop for protected content rendering
+  - redirectTo prop for custom login URL (defaults to /login)
+  - requiredPermissions prop for permission-based access control
+  - requireAll prop to switch between AND vs OR permission checking (defaults to OR)
+  - loadingComponent prop for custom loading UI
+  - accessDeniedComponent prop for custom access denied UI
+- Uses useCurrentUser hook to check authentication state:
+  - Shows loading spinner while checking auth (user === undefined)
+  - Redirects to login if not authenticated (user === null)
+  - Renders children if authenticated (user is AuthenticatedUser)
+- Uses usePermissions hook for permission checking when requiredPermissions specified
+- Redirect behavior:
+  - Builds redirect URL with current location as return URL via query parameter
+  - Preserves original URL so users can be returned after login
+  - Uses window.location.href for client-side redirect
+- Loading state:
+  - Uses Spinner component from design system
+  - Centered layout with min-h-screen for full page coverage
+  - Custom loading component can override default spinner
+- Access denied UI:
+  - Shows "Access Denied" heading with explanation text
+  - Lists required permissions (formatted with AND/OR based on requireAll)
+  - Custom access denied component can override default UI
+- Permission checking supports both modes:
+  - requireAll=false (default): hasAnyPermission - user needs at least one permission
+  - requireAll=true: hasAllPermissions - user must have all permissions
+- Updated packages/playground-ui/src/domains/auth/components/index.ts to export AuthRequired
+- Comprehensive JSDoc documentation with usage examples
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (124 tasks successful)
+- AuthRequired component is now accessible from @mastra/playground-ui
+
+Implementation details:
+- Component uses useEffect to trigger redirect when user is null
+- Redirect only happens after auth state is resolved (not during loading)
+- Permission checking is optional - component works for auth-only guards
+- Wildcard permission matching inherited from usePermissions hook
+- Component is type-safe with proper TypeScript interfaces
+- Loading and access denied UIs are customizable for brand consistency
+- Follows playground-ui patterns for navigation and component composition
+
+Next engineer: Task 035 (Create auth status and user menu components), Task 036 (Create signup and OAuth callback pages), or Task 037 (Create login page in playground) are ready to implement. Task 037 is P0 and creates the actual login page route in the playground app. Task 035 is P1 and creates the user menu/avatar components for the header. All auth guard functionality is now complete and ready for use in protected routes.
