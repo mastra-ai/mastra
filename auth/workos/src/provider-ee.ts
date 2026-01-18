@@ -125,6 +125,7 @@ export class MastraAuthWorkosEE extends MastraAuthProvider<EEUser> {
     };
 
     this.authService = createAuthService<Request, Response>({
+      ...authKitConfig,
       sessionStorageFactory: config => new WebSessionStorage(config),
     });
 
