@@ -101,8 +101,10 @@ export class InMemoryAuditStorage extends AuditStorage {
     // Filter by action (supports wildcards)
     if (filter.action) {
       if (filter.action.includes('*')) {
+        // Escape regex metacharacters before converting wildcards to avoid ReDoS
+        const escaped = filter.action.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
         // Convert wildcard pattern to regex
-        const pattern = filter.action.replace(/\*/g, '.*');
+        const pattern = escaped.replace(/\*/g, '.*');
         const regex = new RegExp(`^${pattern}$`);
         filtered = filtered.filter(e => regex.test(e.action));
       } else {
