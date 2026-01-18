@@ -187,7 +187,17 @@ export class WorkOSAuditExporter implements IAuditLogger {
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         flattened[key] = String(value);
       } else if (value !== null && value !== undefined) {
-        flattened[key] = JSON.stringify(value);
+        try {
+          flattened[key] = JSON.stringify(value);
+        } catch (error) {
+          // Handle BigInt values
+          if (typeof value === 'bigint') {
+            flattened[key] = String(value);
+          } else {
+            // Handle circular references or other serialization errors
+            flattened[key] = '<unserializable>';
+          }
+        }
       }
     }
     return flattened;
