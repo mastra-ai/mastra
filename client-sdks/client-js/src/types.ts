@@ -711,7 +711,8 @@ export interface ListAgentVersionsResponse {
   versions: AgentVersionResponse[];
   total: number;
   page: number;
-  perPage: number;
+  perPage: number | false;
+  hasMore: boolean;
 }
 
 export interface CreateAgentVersionParams {
