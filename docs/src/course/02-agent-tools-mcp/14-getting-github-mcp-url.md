@@ -1,11 +1,5 @@
 # Getting a GitHub MCP Server
 
-:::warning Smithery Authentication Update
-
-**Important:** Smithery has migrated to OAuth-only authentication and no longer supports API key–based access. The previous instructions using `@smithery/sdk` with API keys are now outdated and will not work.
-
-:::
-
 For this course, we'll use the **Smithery CLI**. On first use, it opens a browser to complete OAuth consent. Alternatively, you can use the official GitHub MCP server directly.
 
 ## Option 1: Using Smithery CLI (Recommended for this course)
