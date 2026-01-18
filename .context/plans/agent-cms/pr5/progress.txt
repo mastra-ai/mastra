@@ -1510,3 +1510,16 @@ The highest priority remaining tasks are:
 
 These security vulnerabilities should be addressed before manual testing (Task 042).
 
+
+### 2026-01-18 - Task 046 Complete
+- Fixed open redirect vulnerability in OAuth callback page (packages/playground/src/pages/oauth/callback.tsx)
+- Added validation to ensure redirect URLs from state parameter are same-origin only
+- Redirect validation checks if URL starts with '/' (same-origin path)
+- External URLs (http://evil.com) are now rejected and fallback to '/'
+- Fixed all useEffect branches to return cleanup functions for timeout management
+- Removed default export, keeping only named export per coding guidelines
+- Verified pnpm typecheck passes with no errors
+- Verified pnpm build passes successfully (124 tasks successful)
+- Security fix prevents phishing attacks via OAuth callback redirect manipulation
+
+Next engineer: Task 047 (Fix open redirect vulnerability in signup page) is the next P0 security task. Similar validation pattern should be applied.

@@ -30,10 +30,10 @@ export function OAuthCallback() {
       setErrorMessage(errorDescription || error);
 
       // Redirect back to login page after a delay
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         navigate('/login?error=' + encodeURIComponent(errorDescription || error), { replace: true });
       }, 3000);
-      return;
+      return () => clearTimeout(timeout);
     }
 
     // If we reach this page with code, the server will handle the OAuth callback
@@ -43,7 +43,12 @@ export function OAuthCallback() {
     if (code) {
       // Wait for server redirect; if it doesn't happen, redirect manually
       const timeout = setTimeout(() => {
-        const redirectTo = searchParams.get('state')?.split('|')[1] || '/';
+        const redirectParam = searchParams.get('state')?.split('|')[1] || '/';
+
+        // Security: Validate redirect URL is same-origin only to prevent open redirect attacks
+        // Only allow paths starting with '/' (same-origin), reject external URLs
+        const redirectTo = redirectParam.startsWith('/') ? redirectParam : '/';
+
         navigate(redirectTo, { replace: true });
       }, 5000);
 
@@ -52,9 +57,10 @@ export function OAuthCallback() {
       // No code and no error - unexpected state
       setStatus('error');
       setErrorMessage('Invalid OAuth callback state');
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         navigate('/login', { replace: true });
       }, 3000);
+      return () => clearTimeout(timeout);
     }
   }, [searchParams, navigate]);
 
@@ -85,5 +91,3 @@ export function OAuthCallback() {
     </div>
   );
 }
-
-export default OAuthCallback;
