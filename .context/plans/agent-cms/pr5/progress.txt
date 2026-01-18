@@ -1282,3 +1282,46 @@ Implementation details:
 - All components properly integrate with auth hooks ecosystem
 
 Next engineer: Task 038 (Create audit log page) or Task 039 (Integrate auth into playground layout) are ready to implement. Task 039 is P0 and integrates the auth status/user menu into the playground header. All frontend auth pages (login, signup, OAuth callback) are now complete.
+
+### 2026-01-18 - Task 038 Complete
+- Created packages/playground-ui/src/domains/audit/ directory structure
+- Created audit/types.ts with complete type definitions:
+  - AuditActorType, AuditOutcome, AuditExportFormat types
+  - AuditActor, AuditResource, AuditEvent, AuditFilter interfaces
+  - AuditListResponse interface for paginated results
+- Created audit/hooks/use-audit-logs.ts with useAuditLogs and useExportAuditLogs hooks:
+  - useAuditLogs fetches from /api/audit endpoint with filtering and pagination
+  - Short cache (30s staleTime) for auth state freshness
+  - Converts timestamp strings to Date objects
+  - useExportAuditLogs triggers browser download for JSON or CSV format
+- Created audit/components/audit-log-list.tsx with AuditLogList component:
+  - Filter dropdowns for outcome (success/failure/denied) and actor type (user/system/apikey)
+  - Export buttons for JSON and CSV formats
+  - Uses EntryList component for table display with columns
+  - Badge component for color-coded outcome display (green/red/yellow)
+  - Pagination with Previous/Next buttons
+  - Formats timestamps with date-fns
+- Created audit/components/index.ts and audit/index.ts for clean exports
+- Updated packages/playground-ui/src/index.ts to export audit module
+- Created packages/playground/src/pages/audit/index.tsx with Audit page component:
+  - Wrapped with AuthRequired component requiring 'audit:read' permission
+  - Uses PageHeader with title and description
+  - Includes AuditLogList with 50 items per page
+- Updated packages/playground/src/App.tsx:
+  - Added import for Audit component
+  - Registered /audit route within Layout wrapper
+- Fixed import paths to use @mastra/playground-ui instead of @mastra/playground-ui/ds
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (124 tasks successful)
+- All acceptance criteria met
+
+Implementation details:
+- Audit log list uses simplified table approach with EntryList component
+- Follows same patterns as ScoresList component for consistency
+- Filters reset pagination offset to 0 when changed
+- Export functionality triggers browser download with filename timestamp
+- Page requires audit:read permission enforced by AuthRequired guard
+- Component integrates seamlessly with server audit API endpoints (Task 019)
+- All types align with server schemas from packages/server/src/server/schemas/audit.ts
+
+Next engineer: Task 039 (Integrate auth into playground layout) or Task 041 (Run and fix affected package tests) are ready to implement. Task 039 is P0 and adds auth status/user menu to the playground header. Task 041 runs tests for all modified packages. The audit log page is now complete and accessible at /audit route with proper permission checking.
