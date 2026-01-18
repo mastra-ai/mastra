@@ -68,3 +68,6 @@ export { mapWorkOSUserToEEUser } from './types.js';
 export { WorkOSSSOProvider } from './sso.js';
 export { WorkOSSessionProvider } from './session.js';
 export { WebSessionStorage } from './session-storage.js';
+export { WorkOSUserProvider } from './user.js';
+export { MastraRBACWorkos } from './rbac.js';
+export type { WorkOSRBACConfig } from './rbac.js';

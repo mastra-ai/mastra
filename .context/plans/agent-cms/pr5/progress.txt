@@ -618,3 +618,37 @@ Implementation details:
 - Cookie security: HttpOnly, SameSite=Lax, configurable domain and path
 
 Next engineer: Task 023 (Implement WorkOS user provider and RBAC) is ready to implement. This will add user management and role-based access control using WorkOS organization memberships. The SSO and session providers are complete and ready for integration.
+
+### 2026-01-17 - Task 023 Complete
+- Created auth/workos/src/user.ts with WorkOSUserProvider implementing IUserProvider
+- Implemented getCurrentUser using AuthService.withAuth() to extract user from session
+- Fixed type error: withAuth returns { auth: AuthResult } not { user }
+- Implemented getUser fetching user by ID from WorkOS User Management API
+- Implemented getUserProfileUrl returning WorkOS dashboard user profile URL
+- Private mapToWorkOSUser helper maps WorkOS API user to WorkOSUser format with all fields
+- Created auth/workos/src/rbac.ts with MastraRBACWorkos implementing IRBACProvider
+- Defined WorkOSRBACConfig interface for role mapping and organization configuration
+- Implemented getRoles extracting role from WorkOS organization membership
+- Fixed API error: used listOrganizationMemberships instead of getOrganizationMembership
+- Defaults to 'viewer' role if user not in organization or membership not found
+- Implemented hasRole checking if user has specific role
+- Implemented getPermissions expanding roles to permissions via role mapping
+- Uses DEFAULT_ROLE_MAPPING from @mastra/core/ee by default
+- Implemented hasPermission with full wildcard support ('*', 'namespace:*', exact match)
+- Implemented hasAllPermissions for AND permission checks
+- Implemented hasAnyPermission for OR permission checks
+- Updated auth/workos/src/index.ts to export WorkOSUserProvider and MastraRBACWorkos
+- Exported WorkOSRBACConfig type
+- Verified typecheck passes with npx tsc --noEmit
+- Verified full monorepo build passes with pnpm build
+- All exports accessible from @mastra/auth-workos
+
+Implementation details:
+- User provider uses WorkOS AuthKit for session validation
+- User data fetched from WorkOS User Management API
+- RBAC provider extracts roles from organization membership
+- Supports configurable role mapping or defaults to Mastra roles (owner, admin, member, viewer)
+- Permission wildcards: '*' (all), 'namespace:*' (namespace), exact match
+- Handles edge cases: no organization, membership not found, API errors
+
+Next engineer: Task 024 (Implement WorkOS directory sync and audit export) or Task 025 (Create main WorkOS auth provider class) are ready to implement. Task 025 is more critical (P0) as it composes all the sub-providers into the main MastraAuthWorkos class. Task 024 is P1 and adds optional directory sync and audit export features.
