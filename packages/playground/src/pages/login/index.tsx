@@ -16,8 +16,34 @@ function Login() {
   const [searchParams] = useSearchParams();
   const user = useCurrentUser();
 
-  // Get redirect URL from query parameter
-  const redirectTo = searchParams.get('redirect') || '/';
+  const rawRedirect = searchParams.get('redirect') || '/';
+
+  // Validate redirect URL - only allow same-origin redirects
+  const getSafeRedirect = (redirect: string): string => {
+    // If it starts with '/', it's a relative path - safe
+    if (redirect.startsWith('/')) {
+      return redirect;
+    }
+
+    // If it looks like a full URL, validate the origin
+    if (redirect.startsWith('http://') || redirect.startsWith('https://')) {
+      try {
+        const url = new URL(redirect);
+        // Only allow same-origin URLs
+        if (url.origin === window.location.origin) {
+          // Extract pathname + search + hash only
+          return url.pathname + url.search + url.hash;
+        }
+      } catch {
+        // Invalid URL, fall back to '/'
+      }
+    }
+
+    // For any other format or cross-origin URLs, fall back to '/'
+    return '/';
+  };
+
+  const redirectTo = getSafeRedirect(rawRedirect);
 
   // Redirect authenticated users to their intended destination
   useEffect(() => {
