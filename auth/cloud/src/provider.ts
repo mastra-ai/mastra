@@ -220,6 +220,16 @@ class CloudSSOProvider implements ISSOProvider<CloudUser> {
 
     const data = (await response.json()) as CloudSSOCallbackResponse;
 
+    // Determine if we're using HTTPS (for Secure flag)
+    const isSecure = (this.customDomain || this.endpoint).startsWith('https://');
+
+    // Build Set-Cookie value with security attributes
+    const cookieAttributes = [`mastra_cloud_session=${data.session_token}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
+
+    if (isSecure) {
+      cookieAttributes.push('Secure');
+    }
+
     return {
       user: this.mapToCloudUser(data.user),
       tokens: {
@@ -229,7 +239,7 @@ class CloudSSOProvider implements ISSOProvider<CloudUser> {
         expiresAt: new Date(data.expires_at).getTime(),
       },
       cookies: {
-        mastra_cloud_session: data.session_token,
+        mastra_cloud_session: cookieAttributes.join('; '),
       },
     };
   }
