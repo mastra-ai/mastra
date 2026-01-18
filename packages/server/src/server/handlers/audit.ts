@@ -15,7 +15,13 @@ import { AuditStorage } from '@mastra/core/storage';
 import { z } from 'zod';
 
 import { HTTPException } from '../http-exception';
-import { auditQuerySchema, auditListResponseSchema, auditEventSchema, auditExportQuerySchema } from '../schemas/audit';
+import {
+  auditQuerySchema,
+  auditListResponseSchema,
+  auditEventSchema,
+  auditExportQuerySchema,
+  auditExportResponseSchema,
+} from '../schemas/audit';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
@@ -215,6 +221,7 @@ export const GET_AUDIT_EXPORT_ROUTE = createRoute({
   method: 'GET',
   path: '/api/audit/export',
   responseType: 'json',
+  responseSchema: auditExportResponseSchema,
   queryParamSchema: auditExportQuerySchema,
   summary: 'Export audit events',
   description: 'Export audit events in JSON or CSV format with optional filtering. Requires audit:read permission.',

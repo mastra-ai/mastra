@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthBetterAuth } from './index';
 import type { BetterAuthUser } from './index';
 
+// Mock the better-auth library to avoid real database initialization
+vi.mock('better-auth', () => ({
+  betterAuth: vi.fn(() => ({
+    api: {
+      getSession: vi.fn(),
+    },
+  })),
+}));
+
 describe('MastraAuthBetterAuth', () => {
   const mockSession = {
     id: 'session-123',
@@ -31,6 +40,16 @@ describe('MastraAuthBetterAuth', () => {
     header: vi.fn(),
   } as any;
 
+  const validConfig = {
+    auth: mockAuth as any,
+    database: {
+      provider: 'postgresql' as const,
+      url: 'postgresql://localhost:5432/test',
+    },
+    secret: 'test-secret-key-that-is-at-least-32-characters-long',
+    baseURL: 'http://localhost:3000',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequest.header.mockReset();
@@ -38,26 +57,22 @@ describe('MastraAuthBetterAuth', () => {
 
   describe('initialization', () => {
     it('should initialize with provided auth instance', () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       expect(auth).toBeInstanceOf(MastraAuthBetterAuth);
     });
 
     it('should throw error when auth instance is not provided', () => {
-      expect(() => new MastraAuthBetterAuth({} as any)).toThrow('Better Auth instance is required');
+      expect(() => new MastraAuthBetterAuth({} as any)).toThrow('Better Auth: database configuration is required');
     });
 
     it('should use default name "better-auth" when not provided', () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       expect(auth.name).toBe('better-auth');
     });
 
     it('should use custom name when provided', () => {
       const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
+        ...validConfig,
         name: 'custom-auth',
       });
       expect(auth.name).toBe('custom-auth');
@@ -75,9 +90,7 @@ describe('MastraAuthBetterAuth', () => {
         return undefined;
       });
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authenticateToken('test-token', mockRequest);
 
       expect(mockAuth.api.getSession).toHaveBeenCalled();
@@ -91,9 +104,7 @@ describe('MastraAuthBetterAuth', () => {
       mockAuth.api.getSession.mockResolvedValue(null);
       mockRequest.header.mockReturnValue(undefined);
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authenticateToken('invalid-token', mockRequest);
 
       expect(result).toBeNull();
@@ -103,9 +114,7 @@ describe('MastraAuthBetterAuth', () => {
       mockAuth.api.getSession.mockRejectedValue(new Error('Session expired'));
       mockRequest.header.mockReturnValue(undefined);
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authenticateToken('expired-token', mockRequest);
 
       expect(result).toBeNull();
@@ -118,9 +127,7 @@ describe('MastraAuthBetterAuth', () => {
       });
       mockRequest.header.mockReturnValue(undefined);
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authenticateToken('test-token', mockRequest);
 
       expect(result).toBeNull();
@@ -133,9 +140,7 @@ describe('MastraAuthBetterAuth', () => {
       });
       mockRequest.header.mockReturnValue(undefined);
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authenticateToken('test-token', mockRequest);
 
       expect(result).toBeNull();
@@ -151,9 +156,7 @@ describe('MastraAuthBetterAuth', () => {
         return undefined;
       });
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       await auth.authenticateToken('test-token', mockRequest);
 
       expect(mockAuth.api.getSession).toHaveBeenCalledWith(
@@ -177,9 +180,7 @@ describe('MastraAuthBetterAuth', () => {
         return undefined;
       });
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       await auth.authenticateToken('test-token', mockRequest);
 
       const call = mockAuth.api.getSession.mock.calls[0][0];
@@ -193,9 +194,7 @@ describe('MastraAuthBetterAuth', () => {
       });
       mockRequest.header.mockReturnValue(undefined);
 
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       await auth.authenticateToken('my-bearer-token', mockRequest);
 
       const call = mockAuth.api.getSession.mock.calls[0][0];
@@ -205,9 +204,7 @@ describe('MastraAuthBetterAuth', () => {
 
   describe('authorizeUser', () => {
     it('should return true for valid user with session', async () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authorizeUser({
         session: mockSession,
         user: mockUser,
@@ -217,9 +214,7 @@ describe('MastraAuthBetterAuth', () => {
     });
 
     it('should return false when session id is missing', async () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authorizeUser({
         session: { ...mockSession, id: '' },
         user: mockUser,
@@ -229,9 +224,7 @@ describe('MastraAuthBetterAuth', () => {
     });
 
     it('should return false when user id is missing', async () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authorizeUser({
         session: mockSession,
         user: { ...mockUser, id: '' },
@@ -241,18 +234,14 @@ describe('MastraAuthBetterAuth', () => {
     });
 
     it('should return false when user is null', async () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authorizeUser(null as any);
 
       expect(result).toBe(false);
     });
 
     it('should return false when session is null', async () => {
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
+      const auth = new MastraAuthBetterAuth(validConfig);
       const result = await auth.authorizeUser({
         session: null,
         user: mockUser,
@@ -265,7 +254,7 @@ describe('MastraAuthBetterAuth', () => {
   describe('custom authorization', () => {
     it('can be overridden with custom authorization logic', async () => {
       const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
+        ...validConfig,
         async authorizeUser(user: BetterAuthUser): Promise<boolean> {
           // Custom logic: only allow verified emails
           return user?.user?.emailVerified === true;
@@ -289,7 +278,7 @@ describe('MastraAuthBetterAuth', () => {
 
     it('can implement role-based access control', async () => {
       const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
+        ...validConfig,
         async authorizeUser(user: BetterAuthUser): Promise<boolean> {
           // Custom logic: check for admin role
           const userWithRole = user?.user as any;
@@ -317,7 +306,7 @@ describe('MastraAuthBetterAuth', () => {
     it('should store public routes configuration when provided', () => {
       const publicRoutes = ['/health', '/api/status'];
       const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
+        ...validConfig,
         public: publicRoutes,
       });
 
@@ -327,7 +316,7 @@ describe('MastraAuthBetterAuth', () => {
     it('should store protected routes configuration when provided', () => {
       const protectedRoutes = ['/api/*', '/admin/*'];
       const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
+        ...validConfig,
         protected: protectedRoutes,
       });
 
@@ -339,7 +328,7 @@ describe('MastraAuthBetterAuth', () => {
       const protectedRoutes = ['/api/*', '/admin/*'];
 
       const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
+        ...validConfig,
         public: publicRoutes,
         protected: protectedRoutes,
       });

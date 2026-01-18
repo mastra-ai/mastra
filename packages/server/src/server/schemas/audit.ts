@@ -82,3 +82,14 @@ export const auditExportQuerySchema = z.object({
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
 });
+
+export const auditExportResponseSchema = z.union([
+  // JSON format returns array of events
+  z.array(auditEventSchema),
+  // CSV format returns object with data, contentType, and filename
+  z.object({
+    data: z.string(),
+    contentType: z.string(),
+    filename: z.string(),
+  }),
+]);
