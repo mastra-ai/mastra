@@ -517,3 +517,29 @@ Important notes for next engineer:
 
 Next engineer: Task 020 (Register auth and audit routes) is ready to implement. This will wire up the auth handlers (Task 018) and audit handlers (Task 019) to the server router, making all auth and audit endpoints accessible.
 
+### 2026-01-17 - Task 020 Complete
+- Created packages/server/src/server/server-adapter/routes/auth.ts with auth route exports
+- Exported all 7 auth routes: capabilities, current user, SSO login, SSO callback, logout, credentials sign-in, credentials sign-up
+- Created packages/server/src/server/server-adapter/routes/audit.ts with audit route exports
+- Exported all 3 audit routes: list events, get event by ID, export events
+- Updated packages/server/src/server/server-adapter/routes/index.ts to import and register routes
+- Added AUDIT_ROUTES and AUTH_ROUTES imports
+- Registered AUTH_ROUTES and AUDIT_ROUTES in SERVER_ROUTES array
+- Auth routes now accessible at /api/auth/*
+- Audit routes now accessible at /api/audit/*
+- All routes follow the same pattern as other route files (SYSTEM_ROUTES, AGENTS_ROUTES, etc.)
+- Routes include appropriate tags for OpenAPI organization
+- Verified server package typecheck passes with npx tsc --noEmit
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- Routes are ready for use by the server adapters (Express, Hono, etc.)
+
+Important notes for next engineer:
+- Auth and audit endpoints are now registered and will appear in the OpenAPI/Swagger documentation
+- The auth handlers still have getAuthProvider() stubbed - needs integration with Mastra config
+- The audit handlers still have getAuditStorage() stubbed - needs integration with Mastra config
+- Request object access still needed for proper getCurrentUser, session management, and permission checking
+- All routes follow RESTful conventions and return appropriate status codes
+- Routes are protected by middleware for authentication and permissions where appropriate
+
+Next engineer: Task 021 (Create WorkOS auth provider package structure) or other auth provider tasks (026, 028) are ready to implement. These are all P0 backend tasks that set up the actual auth provider packages. Alternatively, continue with frontend tasks (029-039) or testing tasks (040-043).
+

@@ -7,6 +7,8 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import { AUDIT_ROUTES } from './audit';
+import { AUTH_ROUTES } from './auth';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -101,6 +103,8 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
   ...SYSTEM_ROUTES,
+  ...AUTH_ROUTES,
+  ...AUDIT_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities
