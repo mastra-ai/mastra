@@ -65,18 +65,20 @@ function VersionListItem({ version, isActive, onActivate, onDelete }: VersionLis
   );
 }
 
+const PER_PAGE = 10;
+
 export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsListProps) {
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [isCompareDialogOpen, setIsCompareDialogOpen] = useState(false);
   const [page, setPage] = useState(0);
 
-  const { data, isLoading } = useAgentVersions({ agentId, params: { page, perPage: 10 } });
+  const { data, isLoading } = useAgentVersions({ agentId, params: { page, perPage: PER_PAGE } });
   const { mutate: activateVersion, isPending: isActivating } = useActivateAgentVersion({ agentId });
   const { mutate: deleteVersion, isPending: isDeleting } = useDeleteAgentVersion({ agentId });
 
   const versions = data?.versions || [];
   const total = data?.total || 0;
-  const totalPages = Math.ceil(total / 10);
+  const totalPages = Math.ceil(total / PER_PAGE);
 
   const handleActivate = (versionId: string) => {
     activateVersion(versionId, {

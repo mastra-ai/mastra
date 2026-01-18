@@ -1918,3 +1918,39 @@ Next Steps:
 - Run pnpm typecheck to ensure all packages pass type checking
 - Run pnpm build to ensure everything builds successfully
 - Commit the changes
+
+[2026-01-18] Task 044: Extract perPage constant in agent-versions-list - COMPLETED
+
+Summary:
+- Extracted magic number 10 to a named constant PER_PAGE at module level
+- Replaced both usages of the magic number with the constant:
+  1. Line 75: perPage: PER_PAGE in useAgentVersions hook
+  2. Line 81: Math.ceil(total / PER_PAGE) in totalPages calculation
+- This prevents potential divergence where one value might be updated without the other
+
+Files Modified:
+- packages/playground-ui/src/domains/agents/components/agent-versions/agent-versions-list.tsx
+
+Changes Made:
+- Added `const PER_PAGE = 10;` at line 68 (module level, before component export)
+- Updated perPage parameter in useAgentVersions call to use PER_PAGE
+- Updated totalPages calculation to use PER_PAGE
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build: PASSED (123 tasks successful)
+
+Code Quality Impact:
+- Eliminates magic number duplication
+- Makes pagination page size easier to change in future (single source of truth)
+- Improves code maintainability
+
+Next Steps:
+- 3 remaining P2 tasks:
+  - Task 042: Fix arbitrary Tailwind values in instructions-enhancer
+  - Task 043: Fix arbitrary Tailwind values in provider-select  
+  - Task 045: Fix pagination disabled state inconsistency
+- All tasks are polish/refactoring tasks
+- Consider working on task 045 next (same file, related improvement)
