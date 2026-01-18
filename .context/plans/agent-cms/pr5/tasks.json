@@ -11,10 +11,7 @@
       "priority": "P0",
       "title": "Create EE module structure and license validation",
       "description": "Set up the Enterprise Edition module structure with license key validation. This is the foundation for all EE features.",
-      "files": [
-        "packages/core/src/ee/index.ts",
-        "packages/core/src/ee/license.ts"
-      ],
+      "files": ["packages/core/src/ee/index.ts", "packages/core/src/ee/license.ts"],
       "steps": [
         "Create packages/core/src/ee/ directory structure",
         "Implement license.ts with validateLicense() function",
@@ -40,10 +37,7 @@
       "priority": "P0",
       "title": "Define EEUser and IUserProvider interface",
       "description": "Create the base user interface and user provider contract for retrieving current user information.",
-      "files": [
-        "packages/core/src/ee/interfaces/user.ts",
-        "packages/core/src/ee/interfaces/index.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/user.ts", "packages/core/src/ee/interfaces/index.ts"],
       "steps": [
         "Create packages/core/src/ee/interfaces/ directory",
         "Define EEUser interface with id, email, name, avatarUrl, metadata fields",
@@ -70,9 +64,7 @@
       "priority": "P0",
       "title": "Define Session and ISessionProvider interface",
       "description": "Create the session management interface for creating, validating, and destroying user sessions.",
-      "files": [
-        "packages/core/src/ee/interfaces/session.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/session.ts"],
       "steps": [
         "Define Session interface with id, userId, expiresAt, createdAt, metadata",
         "Define ISessionProvider<TSession extends Session> interface",
@@ -102,9 +94,7 @@
       "priority": "P0",
       "title": "Define ISSOProvider interface for OAuth/OIDC",
       "description": "Create the Single Sign-On provider interface for handling OAuth/OIDC redirect flows.",
-      "files": [
-        "packages/core/src/ee/interfaces/sso.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/sso.ts"],
       "steps": [
         "Define SSOLoginConfig interface with provider, text, icon, url fields",
         "Define SSOCallbackResult<TUser> with user, tokens (accessToken, refreshToken, idToken, expiresAt), cookies",
@@ -123,7 +113,8 @@
       ],
       "estimatedComplexity": "small",
       "dependencies": ["001"],
-      "status": "pending"
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "005",
@@ -131,9 +122,7 @@
       "priority": "P0",
       "title": "Define ICredentialsProvider interface",
       "description": "Create the credentials provider interface for email/password authentication.",
-      "files": [
-        "packages/core/src/ee/interfaces/credentials.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/credentials.ts"],
       "steps": [
         "Define CredentialsResult<TUser> with user, session, cookies fields",
         "Define ICredentialsProvider<TUser extends EEUser> interface",
@@ -160,9 +149,7 @@
       "priority": "P0",
       "title": "Define IRBACProvider interface for role-based access control",
       "description": "Create the RBAC provider interface for role and permission checking, decoupled from authentication.",
-      "files": [
-        "packages/core/src/ee/interfaces/rbac.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/rbac.ts"],
       "steps": [
         "Define RoleMapping type as { [role: string]: string[] }",
         "Define Role interface with id, name, permissions fields",
@@ -192,9 +179,7 @@
       "priority": "P1",
       "title": "Define IACLProvider interface for resource-level access control",
       "description": "Create the Access Control List provider interface for resource-level permissions.",
-      "files": [
-        "packages/core/src/ee/interfaces/acl.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/acl.ts"],
       "steps": [
         "Define ResourceIdentifier interface with type and id fields",
         "Define ACLGrant interface with subject, resource, actions, grantedAt, grantedBy",
@@ -223,9 +208,7 @@
       "priority": "P0",
       "title": "Define IAuditLogger interface for security event logging",
       "description": "Create the audit logging interface for compliance and security event tracking.",
-      "files": [
-        "packages/core/src/ee/interfaces/audit.ts"
-      ],
+      "files": ["packages/core/src/ee/interfaces/audit.ts"],
       "steps": [
         "Define AuditActor interface with type ('user' | 'system' | 'apikey'), id, email, ip, userAgent",
         "Define AuditEvent interface with id, timestamp, actor, action, resource, outcome, metadata, duration",
@@ -252,9 +235,7 @@
       "priority": "P0",
       "title": "Create MastraAuthProvider base class",
       "description": "Create the base authentication provider class that all auth providers extend.",
-      "files": [
-        "packages/core/src/ee/auth-provider.ts"
-      ],
+      "files": ["packages/core/src/ee/auth-provider.ts"],
       "steps": [
         "Define MastraAuthProviderConfig with optional name, logger fields",
         "Create abstract MastraAuthProvider<TUser extends EEUser> class",
@@ -281,9 +262,7 @@
       "priority": "P0",
       "title": "Create capabilities detection and response building",
       "description": "Implement the capability detection system for public and authenticated contexts.",
-      "files": [
-        "packages/core/src/ee/capabilities.ts"
-      ],
+      "files": ["packages/core/src/ee/capabilities.ts"],
       "steps": [
         "Define PublicAuthCapabilities interface with enabled, login config",
         "Define LoginConfig with type ('sso' | 'credentials' | 'both'), signUpEnabled, sso config",
@@ -311,9 +290,7 @@
       "priority": "P0",
       "title": "Create withEE composition helper",
       "description": "Implement the composition helper that wraps auth providers to add EE capabilities.",
-      "files": [
-        "packages/core/src/ee/with-ee.ts"
-      ],
+      "files": ["packages/core/src/ee/with-ee.ts"],
       "steps": [
         "Define WithEEOptions interface with optional licenseKey, user, session, sso, rbac, acl, audit",
         "Define EEAuthProvider<TUser> type combining auth provider with EE interfaces",
@@ -339,9 +316,7 @@
       "priority": "P1",
       "title": "Create default role definitions",
       "description": "Define the default role hierarchy and permission mappings for Mastra Studio.",
-      "files": [
-        "packages/core/src/ee/defaults/roles.ts"
-      ],
+      "files": ["packages/core/src/ee/defaults/roles.ts"],
       "steps": [
         "Create packages/core/src/ee/defaults/ directory",
         "Define DEFAULT_ROLES array with owner, admin, member, viewer roles",
@@ -368,9 +343,7 @@
       "priority": "P1",
       "title": "Implement MemorySessionProvider",
       "description": "Create an in-memory session provider for development and testing.",
-      "files": [
-        "packages/core/src/ee/defaults/session/memory.ts"
-      ],
+      "files": ["packages/core/src/ee/defaults/session/memory.ts"],
       "steps": [
         "Create packages/core/src/ee/defaults/session/ directory",
         "Implement MemorySessionProvider class implementing ISessionProvider",
@@ -400,9 +373,7 @@
       "priority": "P1",
       "title": "Implement CookieSessionProvider",
       "description": "Create a secure cookie-based session provider for production use.",
-      "files": [
-        "packages/core/src/ee/defaults/session/cookie.ts"
-      ],
+      "files": ["packages/core/src/ee/defaults/session/cookie.ts"],
       "steps": [
         "Implement CookieSessionProvider class implementing ISessionProvider",
         "Accept encryption secret in constructor",
@@ -431,9 +402,7 @@
       "priority": "P1",
       "title": "Implement StaticRBACProvider",
       "description": "Create a static RBAC provider using role mapping configuration.",
-      "files": [
-        "packages/core/src/ee/defaults/rbac/static.ts"
-      ],
+      "files": ["packages/core/src/ee/defaults/rbac/static.ts"],
       "steps": [
         "Create packages/core/src/ee/defaults/rbac/ directory",
         "Implement StaticRBACProvider<TUser> class implementing IRBACProvider",
@@ -462,9 +431,7 @@
       "priority": "P1",
       "title": "Implement ConsoleAuditLogger",
       "description": "Create a console-based audit logger for development and debugging.",
-      "files": [
-        "packages/core/src/ee/defaults/audit/console.ts"
-      ],
+      "files": ["packages/core/src/ee/defaults/audit/console.ts"],
       "steps": [
         "Create packages/core/src/ee/defaults/audit/ directory",
         "Implement ConsoleAuditLogger class implementing IAuditLogger",
@@ -526,10 +493,7 @@
       "priority": "P0",
       "title": "Create auth API handlers",
       "description": "Implement the server-side API endpoints for authentication.",
-      "files": [
-        "packages/server/src/server/handlers/auth.ts",
-        "packages/server/src/server/schemas/auth.ts"
-      ],
+      "files": ["packages/server/src/server/handlers/auth.ts", "packages/server/src/server/schemas/auth.ts"],
       "steps": [
         "Create Zod schemas for auth request/response validation",
         "Define LoginRequestSchema, LoginResponseSchema",
@@ -561,10 +525,7 @@
       "priority": "P1",
       "title": "Create audit API handlers",
       "description": "Implement the server-side API endpoints for audit log access.",
-      "files": [
-        "packages/server/src/server/handlers/audit.ts",
-        "packages/server/src/server/schemas/audit.ts"
-      ],
+      "files": ["packages/server/src/server/handlers/audit.ts", "packages/server/src/server/schemas/audit.ts"],
       "steps": [
         "Create Zod schemas for audit request/response validation",
         "Define AuditQuerySchema with actor, action, outcome, dateRange, pagination",
@@ -653,10 +614,7 @@
       "priority": "P0",
       "title": "Implement WorkOS SSO and session providers",
       "description": "Implement the WorkOS SSO flow and session management using AuthKit.",
-      "files": [
-        "auth/workos/src/sso.ts",
-        "auth/workos/src/session.ts"
-      ],
+      "files": ["auth/workos/src/sso.ts", "auth/workos/src/session.ts"],
       "steps": [
         "Create WorkOSSSOProvider class implementing ISSOProvider",
         "Implement getLoginUrl using WorkOS AuthKit authorization URL",
@@ -684,10 +642,7 @@
       "priority": "P0",
       "title": "Implement WorkOS user provider and RBAC",
       "description": "Implement WorkOS user management and role-based access control.",
-      "files": [
-        "auth/workos/src/user.ts",
-        "auth/workos/src/rbac.ts"
-      ],
+      "files": ["auth/workos/src/user.ts", "auth/workos/src/rbac.ts"],
       "steps": [
         "Create WorkOSUserProvider class implementing IUserProvider",
         "Implement getCurrentUser parsing session and fetching user",
@@ -714,10 +669,7 @@
       "priority": "P1",
       "title": "Implement WorkOS directory sync and audit export",
       "description": "Implement WorkOS Directory Sync (SCIM) and audit log export.",
-      "files": [
-        "auth/workos/src/directory-sync.ts",
-        "auth/workos/src/audit-export.ts"
-      ],
+      "files": ["auth/workos/src/directory-sync.ts", "auth/workos/src/audit-export.ts"],
       "steps": [
         "Create WorkOSDirectorySync class for SCIM webhooks",
         "Handle user provisioning events (create, update, delete)",
@@ -743,9 +695,7 @@
       "priority": "P0",
       "title": "Create main WorkOS auth provider class",
       "description": "Create the main WorkOS auth provider combining all sub-providers.",
-      "files": [
-        "auth/workos/src/provider.ts"
-      ],
+      "files": ["auth/workos/src/provider.ts"],
       "steps": [
         "Create MastraAuthWorkos class extending MastraAuthProvider",
         "Accept WorkOSConfig in constructor",
@@ -874,9 +824,7 @@
       "priority": "P0",
       "title": "Create auth capabilities React Query hook",
       "description": "Build the React Query hook for fetching authentication capabilities.",
-      "files": [
-        "packages/playground-ui/src/domains/auth/hooks/use-auth-capabilities.ts"
-      ],
+      "files": ["packages/playground-ui/src/domains/auth/hooks/use-auth-capabilities.ts"],
       "steps": [
         "Create packages/playground-ui/src/domains/auth/hooks/ directory",
         "Implement useAuthCapabilities hook",
@@ -966,9 +914,7 @@
       "priority": "P0",
       "title": "Create login page component",
       "description": "Build the main login page with SSO and credentials support.",
-      "files": [
-        "packages/playground-ui/src/domains/auth/components/login-page.tsx"
-      ],
+      "files": ["packages/playground-ui/src/domains/auth/components/login-page.tsx"],
       "steps": [
         "Create packages/playground-ui/src/domains/auth/components/ directory",
         "Implement LoginPage component",
@@ -998,9 +944,7 @@
       "priority": "P1",
       "title": "Create login button component",
       "description": "Build the SSO login button component with provider branding.",
-      "files": [
-        "packages/playground-ui/src/domains/auth/components/login-button.tsx"
-      ],
+      "files": ["packages/playground-ui/src/domains/auth/components/login-button.tsx"],
       "steps": [
         "Implement LoginButton component",
         "Accept provider config from capabilities",
@@ -1026,9 +970,7 @@
       "priority": "P0",
       "title": "Create AuthRequired guard component",
       "description": "Build the auth guard component for protecting routes.",
-      "files": [
-        "packages/playground-ui/src/domains/auth/components/auth-required.tsx"
-      ],
+      "files": ["packages/playground-ui/src/domains/auth/components/auth-required.tsx"],
       "steps": [
         "Implement AuthRequired component",
         "Accept children prop for protected content",
@@ -1091,10 +1033,7 @@
       "priority": "P1",
       "title": "Create signup and OAuth callback pages",
       "description": "Build the signup page and OAuth callback handler page.",
-      "files": [
-        "packages/playground/src/pages/signup/index.tsx",
-        "packages/playground/src/pages/oauth/callback.tsx"
-      ],
+      "files": ["packages/playground/src/pages/signup/index.tsx", "packages/playground/src/pages/oauth/callback.tsx"],
       "steps": [
         "Create packages/playground/src/pages/signup/ directory",
         "Implement SignUpPage component",
@@ -1127,9 +1066,7 @@
       "priority": "P0",
       "title": "Create login page in playground",
       "description": "Create the login page route in the playground application.",
-      "files": [
-        "packages/playground/src/pages/login/index.tsx"
-      ],
+      "files": ["packages/playground/src/pages/login/index.tsx"],
       "steps": [
         "Create packages/playground/src/pages/login/ directory",
         "Implement LoginPageWrapper component",
@@ -1190,10 +1127,7 @@
       "priority": "P1",
       "title": "Integrate auth into playground layout",
       "description": "Update the playground layout to include auth status and protected routes.",
-      "files": [
-        "packages/playground/src/app/layout.tsx",
-        "packages/playground/src/components/header.tsx"
-      ],
+      "files": ["packages/playground/src/app/layout.tsx", "packages/playground/src/components/header.tsx"],
       "steps": [
         "Update header component to include AuthStatus",
         "Position user menu in header right section",
@@ -1238,10 +1172,45 @@
       ],
       "estimatedComplexity": "medium",
       "dependencies": [
-        "001", "002", "003", "004", "005", "006", "007", "008", "009", "010",
-        "011", "012", "013", "014", "015", "016", "017", "018", "019", "020",
-        "021", "022", "023", "024", "025", "026", "027", "028", "029", "030",
-        "031", "032", "033", "034", "035", "036", "037", "038", "039"
+        "001",
+        "002",
+        "003",
+        "004",
+        "005",
+        "006",
+        "007",
+        "008",
+        "009",
+        "010",
+        "011",
+        "012",
+        "013",
+        "014",
+        "015",
+        "016",
+        "017",
+        "018",
+        "019",
+        "020",
+        "021",
+        "022",
+        "023",
+        "024",
+        "025",
+        "026",
+        "027",
+        "028",
+        "029",
+        "030",
+        "031",
+        "032",
+        "033",
+        "034",
+        "035",
+        "036",
+        "037",
+        "038",
+        "039"
       ],
       "status": "pending"
     },
@@ -1308,9 +1277,7 @@
       "priority": "P1",
       "title": "Add changeset for PR",
       "description": "Create changeset for the auth feature PR.",
-      "files": [
-        ".changeset/auth-enterprise-features.md"
-      ],
+      "files": [".changeset/auth-enterprise-features.md"],
       "steps": [
         "Create changeset file in .changeset directory",
         "Include @mastra/core, @mastra/server, @mastra/playground-ui packages",

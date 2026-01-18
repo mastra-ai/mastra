@@ -116,3 +116,21 @@ Next engineer: Task 003 (Define Session and ISessionProvider interface) is ready
 - Types are now accessible from @mastra/core/ee
 
 Next engineer: Task 004 (Define ISSOProvider interface for OAuth/OIDC) is ready to implement. Session management foundation is now in place.
+
+### 2026-01-17 - Task 004 Complete
+- Created packages/core/src/ee/interfaces/sso.ts
+- Defined SSOLoginConfig interface with provider, text, icon, url fields for rendering login buttons
+- Defined SSOTokens interface with accessToken, refreshToken, idToken, expiresAt for OAuth/OIDC tokens
+- Defined SSOCallbackResult<TUser> interface for callback handling with user, tokens, and cookies
+- Defined ISSOProvider<TUser> generic interface for OAuth 2.0 and OIDC flows
+- Added getLoginUrl(redirectUri, state) method for initiating SSO redirect
+- Added handleCallback(code, state) method for exchanging authorization code for tokens and user
+- Added optional getLogoutUrl(redirectUri) method for providers supporting federated logout
+- Added getLoginButtonConfig() method for providing UI rendering configuration
+- Exported all types from packages/core/src/ee/interfaces/index.ts
+- Verified core package typecheck passes
+- Verified core package build passes with pnpm build:core
+- Verified full monorepo build passes with pnpm build
+- Types are now accessible from @mastra/core/ee
+
+Next engineer: Task 005 (Define ICredentialsProvider interface) is ready to implement. SSO interface foundation is now in place.
