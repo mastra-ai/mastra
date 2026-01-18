@@ -79,6 +79,7 @@ export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsLis
   const versions = data?.versions || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / PER_PAGE);
+  const isMutating = isDeleting || isActivating;
 
   const handleActivate = (versionId: string) => {
     activateVersion(versionId, {
@@ -154,7 +155,7 @@ export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsLis
 
       {totalPages > 1 && (
         <div className="p-4 border-t border-border1 flex items-center justify-between">
-          <Button variant="ghost" size="md" onClick={() => setPage(p => p - 1)} disabled={page === 0 || isDeleting}>
+          <Button variant="ghost" size="md" onClick={() => setPage(p => p - 1)} disabled={page === 0 || isMutating}>
             Previous
           </Button>
           <span className="text-xs text-icon3">
@@ -164,7 +165,7 @@ export function AgentVersionsList({ agentId, activeVersionId }: AgentVersionsLis
             variant="ghost"
             size="md"
             onClick={() => setPage(p => p + 1)}
-            disabled={page >= totalPages - 1 || isDeleting}
+            disabled={page >= totalPages - 1 || isMutating}
           >
             Next
           </Button>

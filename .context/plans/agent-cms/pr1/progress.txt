@@ -1954,3 +1954,36 @@ Next Steps:
   - Task 045: Fix pagination disabled state inconsistency
 - All tasks are polish/refactoring tasks
 - Consider working on task 045 next (same file, related improvement)
+
+[2026-01-18] Task 045: Fix pagination disabled state inconsistency in agent-versions-list - COMPLETED
+
+Summary:
+- Fixed inconsistent pagination button disabled state
+- Previously, pagination was disabled only during delete operations but not during activate operations
+- Both mutations affect the list data, so pagination should be disabled during either operation
+
+Files Modified:
+- packages/playground-ui/src/domains/agents/components/agent-versions/agent-versions-list.tsx
+
+Changes Made:
+- Added const isMutating = isDeleting || isActivating; at line 82
+- Updated Previous button disabled prop: disabled={page === 0 || isMutating}
+- Updated Next button disabled prop: disabled={page >= totalPages - 1 || isMutating}
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED (no errors)
+- pnpm build: PASSED (123 tasks successful, 117 cached)
+
+UX Impact:
+- Prevents pagination changes during any mutation (delete OR activate)
+- Consistent behavior across both mutation types
+- Better user experience - no race conditions from page changes during mutations
+
+Next Steps:
+- 2 remaining P2 tasks:
+  - Task 042: Fix arbitrary Tailwind values in instructions-enhancer
+  - Task 043: Fix arbitrary Tailwind values in provider-select
+- Both are polish/refactoring tasks for design system compliance
+- Consider working on these next or marking feature complete if polish tasks are acceptable to defer
