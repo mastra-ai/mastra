@@ -26,6 +26,9 @@
   },
   "license": "Apache-2.0",
   "dependencies": {},
+  "peerDependencies": {
+    "@mastra/core": "workspace:*"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
