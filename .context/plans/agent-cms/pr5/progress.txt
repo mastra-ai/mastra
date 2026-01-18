@@ -454,3 +454,34 @@ Next engineer: Task 017 (Create audit storage interface and in-memory implementa
 - All audit storage types are now accessible from @mastra/core
 
 Next engineer: Task 018 (Create auth API handlers) is ready to implement. The audit storage layer is complete and ready for the server API handlers that will expose authentication and audit endpoints. This is a P0 task that implements the REST API for login, signup, SSO, and session management.
+
+### 2026-01-17 - Task 018 Complete
+- Created packages/server/src/server/schemas/auth.ts with comprehensive Zod schemas
+- Defined schemas for SSO, capabilities, login, signup, and logout responses
+- Created packages/server/src/server/handlers/auth.ts with all authentication endpoints
+- Implemented GET /api/auth/capabilities - returns public or authenticated capabilities
+- Implemented GET /api/auth/me - returns current authenticated user with roles/permissions
+- Implemented GET /api/auth/sso/login - initiates SSO redirect with state parameter
+- Implemented GET /api/auth/sso/callback - handles OAuth callback and sets session cookies
+- Implemented POST /api/auth/logout - destroys session and returns optional logout URL
+- Implemented POST /api/auth/credentials/sign-in - handles email/password login
+- Implemented POST /api/auth/credentials/sign-up - handles user registration
+- Added unified buildCapabilities() function to packages/core/src/ee/capabilities.ts
+- buildCapabilities handles both public (unauthenticated) and authenticated requests
+- All handlers include proper error handling with HTTPException
+- Cookie handling properly iterates over Record<string, string> using Object.values()
+- Handlers include TODOs for when Request object is made available in ServerContext
+- getAuthProvider() helper stub ready for Mastra config integration
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (123 tasks successful)
+- All endpoints follow RESTful conventions and return appropriate status codes
+
+Important notes for next engineer:
+- Auth handlers are implemented but getAuthProvider() currently returns null
+- Once auth provider is integrated into Mastra server config, update getAuthProvider()
+- Request object access needed for getCurrentUser, session management, and proper SSO callbacks
+- The handlers work with the current MastraAuthProvider<EEUser> interface from core/ee
+- Cookie iteration uses Object.values() to handle Record<string, string> type
+- All schemas use proper Zod types and align with core/ee interface definitions
+
+Next engineer: Task 019 (Create audit API handlers) or Task 020 (Register auth and audit routes) are ready to implement. Task 020 may be more logical as it wires up the auth handlers we just created to the server router.

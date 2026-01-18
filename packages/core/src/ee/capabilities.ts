@@ -164,3 +164,45 @@ export async function buildAuthenticatedCapabilities<TUser extends EEUser>(
     access,
   };
 }
+
+/**
+ * Build capabilities response based on auth configuration and request state.
+ *
+ * This unified function handles both public (unauthenticated) and authenticated cases.
+ * If a user is authenticated (determined by calling getCurrentUser), returns full
+ * authenticated capabilities. Otherwise, returns public capabilities only.
+ *
+ * @param provider - The auth provider (or null if auth not configured)
+ * @param request - The incoming HTTP request
+ * @returns Public or authenticated capabilities
+ */
+export async function buildCapabilities<TUser extends EEUser>(
+  provider: MastraAuthProvider<TUser> | null,
+  request: Request,
+): Promise<PublicAuthCapabilities | AuthenticatedCapabilities> {
+  // No provider means auth is not configured
+  if (!provider) {
+    return {
+      enabled: false,
+    };
+  }
+
+  // Try to get current user if user provider is available
+  let user: TUser | null = null;
+  if (provider.user) {
+    try {
+      user = await provider.user.getCurrentUser(request);
+    } catch {
+      // User not authenticated or session invalid
+      user = null;
+    }
+  }
+
+  // If no user, return public capabilities only
+  if (!user) {
+    return buildPublicCapabilities(provider);
+  }
+
+  // User is authenticated, return full capabilities
+  return buildAuthenticatedCapabilities(provider, user);
+}
