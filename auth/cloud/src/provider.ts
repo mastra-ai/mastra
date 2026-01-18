@@ -1,5 +1,5 @@
 import { MastraAuthProvider } from '@mastra/core/ee';
-import type { EEUser, ISSOProvider, IRBACProvider, SSOLoginConfig, SSOCallbackResult } from '@mastra/core/ee';
+import type { ISSOProvider, IRBACProvider, SSOLoginConfig, SSOCallbackResult } from '@mastra/core/ee';
 import type { CloudAuthConfig, CloudUser } from './types.js';
 
 /**
