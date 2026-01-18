@@ -896,3 +896,51 @@ Implementation details:
 
 Next engineer: Task 030 (Create current user and auth actions hooks) is ready to implement. This will build on the useAuthCapabilities hook to provide useCurrentUser and useAuthActions (signIn, signUp, signOut) hooks. The auth capabilities hook is complete and ready for use.
 
+### 2026-01-18 - Task 030 Complete
+- Created packages/playground-ui/src/domains/auth/hooks/use-current-user.ts
+- Implemented useCurrentUser hook that derives user from useAuthCapabilities
+- Returns AuthenticatedUser when authenticated, null when not authenticated, undefined when loading
+- Proper TypeScript typing with union type: AuthenticatedUser | null | undefined
+- Uses isAuthenticated() type guard for safe type narrowing
+- Created packages/playground-ui/src/domains/auth/hooks/use-auth-actions.ts
+- Implemented useAuthActions hook providing signIn, signUp, signOut mutations
+- Defined SignInCredentials interface with email and password fields
+- Defined SignUpCredentials interface with email, password, and optional name fields
+- Defined AuthResult interface for sign in/sign up responses with user and optional token
+- Defined LogoutResult interface for logout responses with success and optional redirectTo
+- Implemented signIn mutation:
+  - Calls POST /api/auth/credentials/sign-in with email and password
+  - Includes credentials: 'include' for session cookies
+  - Invalidates auth queries on success to refetch user state
+  - Proper error handling with user-friendly error messages
+- Implemented signUp mutation:
+  - Calls POST /api/auth/credentials/sign-up with email, password, and optional name
+  - Includes credentials: 'include' for session cookies
+  - Invalidates auth queries on success to refetch user state
+  - Proper error handling with user-friendly error messages
+- Implemented signOut mutation:
+  - Calls POST /api/auth/logout to destroy session
+  - Invalidates all auth queries to clear user state
+  - Handles optional SSO logout redirect via redirectTo field
+  - Automatically redirects to SSO logout URL if provided
+- Updated packages/playground-ui/src/domains/auth/hooks/index.ts to export new hooks
+- All hooks use @tanstack/react-query for state management
+- Query invalidation ensures auth state is always up to date after mutations
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (124 tasks successful)
+- All hooks accessible from @mastra/playground-ui
+
+Implementation details:
+- useCurrentUser provides simple API for checking auth state in components
+- Loading state (undefined) allows showing loading spinners
+- Null state allows showing login prompts
+- AuthenticatedUser state provides access to user info
+- useAuthActions provides mutation hooks with loading states and error handling
+- All mutations properly update auth state via query invalidation
+- SSO logout redirect handled automatically after successful signOut
+- Credentials are sent with all requests for proper session management
+- Error messages extracted from API responses when available
+- All endpoints match server API routes defined in packages/server
+
+Next engineer: Task 031 (Create permissions and credentials hooks) is ready to implement. This will add usePermissions for permission checking and specialized hooks for credentials login/signup forms. Alternatively, Task 032 (Create login page component) can be implemented to build the UI components that use the hooks we just created.
+
