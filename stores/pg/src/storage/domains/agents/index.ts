@@ -589,7 +589,6 @@ export class AgentsPG extends AgentsStorage {
 
   async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
     const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
-    const { field, direction } = this.parseVersionOrderBy(orderBy);
 
     if (page < 0) {
       throw new MastraError(
@@ -607,6 +606,7 @@ export class AgentsPG extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      const { field, direction } = this.parseVersionOrderBy(orderBy);
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
 
       // Get total count
