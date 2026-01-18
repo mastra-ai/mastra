@@ -295,6 +295,9 @@ importers:
       '@workos-inc/node':
         specifier: ^7.69.2
         version: 7.71.0(express@5.1.0)(koa@3.1.1)
+      '@workos/authkit-session':
+        specifier: ^0.3.4
+        version: 0.3.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -12568,6 +12571,14 @@ packages:
     resolution: {integrity: sha512-fkNLGqVqEJ5KOMX6TsPUHbF3cQmWCoSdOv5nHzo76O7ZYIuQbVPfUcWjMRGuZLnjWJO0b4KKNyzR6AyWCVwGcQ==}
     engines: {node: '>=16'}
 
+  '@workos-inc/node@8.0.0':
+    resolution: {integrity: sha512-D8VDfx0GXeiVm8vccAl0rElW7taebRnrteKPJzZwehwzI9W/Usa4qKfmwxj+7Lh1Z1deEocDRCpZpV7ml4GpWQ==}
+    engines: {node: '>=20.15.0'}
+
+  '@workos/authkit-session@0.3.4':
+    resolution: {integrity: sha512-lbLP1y8MHWL1Op9athZ3SrzKLcL0+xBVpADCMQLI39mPgSQj+/lopVdOx0Cku96hYnJBOJTLVTK3Zox4FbZl4A==}
+    engines: {node: '>=20.0.0'}
+
   '@xyflow/react@12.9.3':
     resolution: {integrity: sha512-PSWoJ8vHiEqSIkLIkge+0eiHWiw4C6dyFDA03VKWJkqbU4A13VlDIVwKqf/Znuysn2GQw/zA61zpHE4rGgax7Q==}
     peerDependencies:
@@ -15112,6 +15123,9 @@ packages:
   iron-webcrypto@0.2.8:
     resolution: {integrity: sha512-YPdCvjFMOBjXaYuDj5tiHst5CEk6Xw84Jo8Y2+jzhMceclAnb3+vNPP/CTtb5fO2ZEuXEaO4N+w62Vfko757KA==}
 
+  iron-webcrypto@2.0.0:
+    resolution: {integrity: sha512-rtffZKDUHciZElM8mjFCufBC7nVhCxHYyWHESqs89OioEDz4parOofd8/uhrejh/INhQFfYQfByS22LlezR9sQ==}
+
   is-alphabetical@1.0.4:
     resolution: {integrity: sha512-DwzsA04LQ10FHTZuL0/grVDk4rFoVH1pjAToYwBrHSxcrBIGQuXrQMtD5U1b0U2XVgKZCTLLP8u2Qxqhy3l2Vg==}
 
@@ -15427,6 +15441,9 @@ packages:
 
   jose@6.1.2:
     resolution: {integrity: sha512-MpcPtHLE5EmztuFIqB0vzHAWJPpmN1E6L4oo+kze56LIs3MyXIj9ZHMDxqOvkP38gBR7K1v3jqd4WU2+nrfONQ==}
+
+  jose@6.1.3:
+    resolution: {integrity: sha512-0TpaTfihd4QMNwrz/ob2Bp7X04yuxJkjRGi4aKmOqwhov54i6u79oCv7T+C7lo70MKH6BesI3vscD1yb/yzKXQ==}
 
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
@@ -27710,6 +27727,17 @@ snapshots:
       - koa
       - next
 
+  '@workos-inc/node@8.0.0':
+    dependencies:
+      iron-webcrypto: 2.0.0
+      jose: 6.1.3
+
+  '@workos/authkit-session@0.3.4':
+    dependencies:
+      '@workos-inc/node': 8.0.0
+      iron-webcrypto: 2.0.0
+      jose: 6.1.3
+
   '@xyflow/react@12.9.3(@types/react@19.2.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@xyflow/system': 0.0.73
@@ -30873,6 +30901,10 @@ snapshots:
     dependencies:
       buffer: 6.0.3
 
+  iron-webcrypto@2.0.0:
+    dependencies:
+      uint8array-extras: 1.5.0
+
   is-alphabetical@1.0.4: {}
 
   is-alphabetical@2.0.1: {}
@@ -31150,6 +31182,8 @@ snapshots:
   jose@5.6.3: {}
 
   jose@6.1.2: {}
+
+  jose@6.1.3: {}
 
   joycon@3.1.1: {}
 

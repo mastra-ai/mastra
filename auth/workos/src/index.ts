@@ -56,5 +56,15 @@ export class MastraAuthWorkos extends MastraAuthProvider<WorkosUser> {
   }
 }
 
-// Export EE types for new auth provider implementation
-export type { WorkOSConfig, WorkOSUser } from './types.js';
+// Export EE types and providers for new auth provider implementation
+export type {
+  WorkOSConfig,
+  WorkOSUser,
+  WorkOSSessionConfig,
+  WorkOSSSOConfig,
+  MastraAuthWorkosOptions,
+} from './types.js';
+export { mapWorkOSUserToEEUser } from './types.js';
+export { WorkOSSSOProvider } from './sso.js';
+export { WorkOSSessionProvider } from './session.js';
+export { WebSessionStorage } from './session-storage.js';

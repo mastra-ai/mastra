@@ -1,4 +1,56 @@
 import type { EEUser } from '@mastra/core/ee';
+import type { User as WorkOSApiUser } from '@workos-inc/node';
+
+/**
+ * Session configuration options
+ */
+export interface WorkOSSessionConfig {
+  /**
+   * Password for encrypting session cookies
+   * Must be at least 32 characters long for AES-256 encryption
+   */
+  cookiePassword: string;
+
+  /**
+   * Optional cookie name (defaults to 'wos_session')
+   */
+  cookieName?: string;
+
+  /**
+   * Optional cookie max age in seconds (defaults to 400 days)
+   */
+  maxAge?: number;
+
+  /**
+   * Optional cookie SameSite attribute
+   */
+  sameSite?: 'lax' | 'strict' | 'none';
+
+  /**
+   * Optional cookie domain
+   */
+  domain?: string;
+}
+
+/**
+ * SSO configuration options
+ */
+export interface WorkOSSSOConfig {
+  /**
+   * Specific OAuth provider to use (Google, Microsoft, GitHub, Apple)
+   */
+  provider?: 'GoogleOAuth' | 'MicrosoftOAuth' | 'GitHubOAuth' | 'AppleOAuth';
+
+  /**
+   * Specific connection ID to use for SSO
+   */
+  connection?: string;
+
+  /**
+   * Default organization ID for SSO
+   */
+  defaultOrganization?: string;
+}
 
 /**
  * Configuration options for WorkOS authentication provider
@@ -29,6 +81,16 @@ export interface WorkOSConfig {
   cookiePassword: string;
 
   /**
+   * Optional session configuration
+   */
+  session?: WorkOSSessionConfig;
+
+  /**
+   * Optional SSO configuration
+   */
+  sso?: WorkOSSSOConfig;
+
+  /**
    * Optional organization ID for restricting authentication to specific organization
    */
   organizationId?: string;
@@ -40,29 +102,29 @@ export interface WorkOSConfig {
 }
 
 /**
- * WorkOS user type extending the base EEUser with WorkOS-specific fields
+ * Extended configuration with provider name
  */
-export interface WorkOSUser extends EEUser {
+export interface MastraAuthWorkosOptions extends WorkOSConfig {
   /**
-   * WorkOS user ID (sub claim from JWT)
-   */
-  id: string;
-
-  /**
-   * User's email address
-   */
-  email: string;
-
-  /**
-   * User's full name
+   * Optional provider name
    */
   name?: string;
 
   /**
-   * User's avatar/profile image URL
+   * Optional session configuration
    */
-  avatarUrl?: string;
+  session?: WorkOSSessionConfig;
 
+  /**
+   * Optional SSO configuration
+   */
+  sso?: WorkOSSSOConfig;
+}
+
+/**
+ * WorkOS user type extending the base EEUser with WorkOS-specific fields
+ */
+export interface WorkOSUser extends EEUser {
   /**
    * WorkOS-specific fields
    */
@@ -112,4 +174,20 @@ export interface WorkOSUser extends EEUser {
    * Additional metadata
    */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Map a WorkOS API user to the EEUser format.
+ *
+ * @param user - WorkOS API user object
+ * @returns EEUser with basic fields populated
+ */
+export function mapWorkOSUserToEEUser(user: WorkOSApiUser): EEUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email,
+    avatarUrl: user.profilePictureUrl || undefined,
+    metadata: {},
+  };
 }

@@ -574,3 +574,47 @@ Important notes for next engineer:
 
 Next engineer: Task 022 (Implement WorkOS SSO and session providers) is ready to implement. This will create the WorkOS SSO flow and session management using the new EE interfaces and the types we just defined.
 
+
+### 2026-01-17 - Task 022 Complete
+- Created auth/workos/src/sso.ts with WorkOSSSOProvider implementing ISSOProvider
+- Implemented getLoginUrl supporting multiple SSO configurations:
+  - Specific connection ID
+  - Specific OAuth provider (Google, Microsoft, GitHub, Apple)
+  - Organization-specific SSO
+  - Default AuthKit hosted UI
+- Implemented handleCallback using AuthService's handleCallback for proper session creation
+- Handles code exchange, token retrieval, and user mapping to EEUser format
+- Implemented getLogoutUrl for federated logout redirect
+- Implemented getLoginButtonConfig with provider-specific branding
+- Created auth/workos/src/session.ts with WorkOSSessionProvider implementing ISessionProvider
+- Session management delegated to WorkOS AuthKit's encrypted cookie sessions
+- Implemented createSession, validateSession, destroySession, refreshSession methods
+- Session validation handled via AuthKit's withAuth() method
+- Implemented getSessionIdFromRequest (returns null as sessions are encrypted)
+- Implemented getSessionHeaders for Set-Cookie header generation
+- Implemented getClearSessionHeaders for logout cookie clearing
+- Created auth/workos/src/session-storage.ts with WebSessionStorage adapter
+- Extends CookieSessionStorage for Web Request/Response compatibility
+- Implements getSession to parse encrypted session cookie from request
+- Updated auth/workos/src/types.ts:
+  - Added WorkOSSessionConfig interface for session configuration
+  - Added WorkOSSSOConfig interface for SSO provider configuration
+  - Added MastraAuthWorkosOptions extending WorkOSConfig
+  - Updated WorkOSUser to remove redundant field declarations (inherits from EEUser)
+  - Added mapWorkOSUserToEEUser helper function for user mapping
+- Updated auth/workos/package.json:
+  - Added @workos/authkit-session@^0.3.4 dependency
+- Updated auth/workos/src/index.ts to export new providers and types
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (123 tasks successful)
+- All new providers and types are accessible from @mastra/auth-workos
+
+Implementation details:
+- Uses @workos/authkit-session for production-ready session management
+- Sessions stored in encrypted cookies (persist across server restarts)
+- No server-side session storage required
+- Supports multiple SSO providers and configurations
+- Token refresh handled automatically by AuthKit
+- Cookie security: HttpOnly, SameSite=Lax, configurable domain and path
+
+Next engineer: Task 023 (Implement WorkOS user provider and RBAC) is ready to implement. This will add user management and role-based access control using WorkOS organization memberships. The SSO and session providers are complete and ready for integration.
