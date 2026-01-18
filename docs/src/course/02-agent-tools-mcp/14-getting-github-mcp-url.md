@@ -32,4 +32,4 @@ You can create a token at [GitHub Settings > Developer settings > Personal acces
 
 ## What We'll Use
 
-For this course, we'll proceed with **Option 1 (Smithery CLI)** as it provides a simpler setup experience with OAuth handled automatically. The CLI will prompt you to authenticate when you first use it.
+For this course, we'll proceed with **Option 1 (Smithery CLI)**. The CLI prompts you to authenticate via browser on first use, eliminating the need to manually create and manage GitHub tokens.
