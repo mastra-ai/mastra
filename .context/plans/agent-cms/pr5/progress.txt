@@ -329,3 +329,34 @@ Next engineer: Task 013 (Implement MemorySessionProvider) or Task 015 (Implement
 - MemorySessionProvider is now accessible from @mastra/core/ee
 
 Next engineer: Task 014 (Implement CookieSessionProvider) or Task 015 (Implement StaticRBACProvider) are ready to implement. Task 014 continues the session provider implementations with encrypted cookie-based sessions for production use. Task 015 implements the static RBAC provider using the DEFAULT_ROLE_MAPPING created in Task 012.
+### 2026-01-17 - Task 014 Complete
+- Created packages/core/src/ee/defaults/session/cookie.ts
+- Implemented CookieSessionProvider class implementing ISessionProvider<Session>
+- Uses AES-256-GCM encryption for session payload security
+- Session data stored entirely in encrypted cookies (no server-side storage required)
+- Encryption implementation:
+  - Accepts encryption secret (minimum 32 characters for AES-256)
+  - Generates random 12-byte IV for each session
+  - Uses AES-256-GCM cipher with 16-byte authentication tag
+  - Combines IV + authTag + encrypted data in base64url format
+- Implemented createSession with UUID generation and configurable TTL (default 7 days)
+- Implemented validateSession with cookie decryption and expiry validation
+- Decryption failures (tampered/invalid cookies) return null
+- Implemented destroySession (no server-side cleanup needed)
+- Implemented refreshSession extending expiry in cookie
+- Implemented getSessionIdFromRequest parsing encrypted cookie value
+- Implemented getSessionHeaders returning Set-Cookie with encrypted session
+- Cookie security flags: HttpOnly, SameSite=Lax, Secure (in production), Max-Age
+- Implemented getClearSessionHeaders for logout with Max-Age=0
+- Configurable options: secret (required), ttl, cookieName (default: 'mastra_session'), cookieDomain, cookiePath (default: '/')
+- Added comprehensive JSDoc documentation with security considerations
+- Security notes in comments:
+  - Requires strong 32-byte encryption secret
+  - Session data encrypted but stored on client (don't store sensitive data)
+  - Cookie size limited to ~4KB browser limit
+- Exported CookieSessionProvider and CookieSessionConfig from packages/core/src/ee/defaults/session/index.ts
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm -w run build (123 tasks successful)
+- CookieSessionProvider is now accessible from @mastra/core/ee
+
+Next engineer: Task 015 (Implement StaticRBACProvider) is ready to implement. This will use the DEFAULT_ROLE_MAPPING from Task 012 to provide static role-based access control. The session providers (memory and cookie) are now complete.
