@@ -452,7 +452,6 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
     const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
-    const { field, direction } = this.parseVersionOrderBy(orderBy);
 
     if (page < 0) {
       throw new MastraError(
@@ -470,6 +469,8 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      const { field, direction } = this.parseVersionOrderBy(orderBy);
+
       // Get total count
       const total = await this.#db.selectTotalCount({
         tableName: TABLE_AGENT_VERSIONS,
