@@ -115,6 +115,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
   const toggleMode = () => {
     setMode(isSignIn ? 'signup' : 'signin');
     // Clear any errors when switching modes
+    loginHook.reset();
+    signupHook.reset();
   };
 
   return (
