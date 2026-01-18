@@ -56,7 +56,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       { collection: TABLE_AGENTS, keys: { createdAt: -1 } },
       { collection: TABLE_AGENTS, keys: { updatedAt: -1 } },
       { collection: TABLE_AGENT_VERSIONS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, versionNumber: -1 } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, versionNumber: -1 }, options: { unique: true } },
       { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, createdAt: -1 } },
     ];
   }
