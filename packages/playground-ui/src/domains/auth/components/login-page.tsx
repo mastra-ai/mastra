@@ -180,7 +180,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
               />
             </div>
 
-            {error && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{error}</div>}
+            {error && <div className="rounded-md bg-accent2Darker p-3 text-sm text-accent2">{error}</div>}
 
             <Button type="submit" disabled={isPending} className="w-full" size="lg">
               {isPending
