@@ -279,10 +279,15 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async deleteVersionsByAgentId(agentId: string): Promise<void> {
     this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByAgentId called for agent ${agentId}`);
 
+    const idsToDelete: string[] = [];
     for (const [id, version] of this.db.agentVersions.entries()) {
       if (version.agentId === agentId) {
-        this.db.agentVersions.delete(id);
+        idsToDelete.push(id);
       }
+    }
+
+    for (const id of idsToDelete) {
+      this.db.agentVersions.delete(id);
     }
   }
 
