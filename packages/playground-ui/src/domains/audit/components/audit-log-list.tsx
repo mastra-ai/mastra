@@ -141,6 +141,8 @@ export function AuditLogList({ defaultFilter, pageSize = 50 }: AuditLogListProps
           <EntryList.Header columns={auditLogColumns} />
           {error ? (
             <EntryList.Message message="Error loading audit logs" type="error" />
+          ) : isLoading ? (
+            <EntryList.Message message="Loading audit logs..." type="info" />
           ) : !data || events.length === 0 ? (
             <EntryList.Message message="No audit events found" type="info" />
           ) : (
