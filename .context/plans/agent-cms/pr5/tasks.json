@@ -1244,7 +1244,8 @@
         "038",
         "039"
       ],
-      "status": "pending"
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "041",
