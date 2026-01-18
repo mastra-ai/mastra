@@ -283,3 +283,21 @@ Next engineer: Task 011 (Create withEE composition helper) is ready to implement
 - Types are now accessible from @mastra/core/ee
 
 Next engineer: Task 012 (Create default role definitions) is ready to implement. The withEE composition helper is complete. The next logical tasks are the default implementations (012-017) which provide ready-to-use implementations of the EE interfaces for development and production use.
+### 2026-01-17 - Task 012 Complete
+- Created packages/core/src/ee/defaults/roles.ts with default role definitions
+- Defined DEFAULT_ROLES array with four standard roles:
+  - owner: Full access with ['*'] permission (all resources)
+  - admin: Administrative access to studio:*, agents:*, workflows:*, tools:*, logs:*, settings:*
+  - member: Read and execute permissions for agents, workflows, tools, logs
+  - viewer: Read-only access to studio, agents, workflows, logs
+- Defined DEFAULT_ROLE_MAPPING object mapping role names to permission arrays
+- Used consistent dot-notation for permissions (namespace:action format)
+- Added comprehensive JSDoc comments explaining role hierarchy and permission structure
+- Permission namespaces defined: studio, agents, workflows, tools, logs, settings
+- Exported DEFAULT_ROLES and DEFAULT_ROLE_MAPPING from packages/core/src/ee/defaults/index.ts
+- Types are re-exported from packages/core/src/ee/index.ts (defaults module already exported)
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- Role definitions are now accessible from @mastra/core/ee
+
+Next engineer: Task 013 (Implement MemorySessionProvider) or Task 015 (Implement StaticRBACProvider) are ready to implement. Both depend on completed tasks. Task 015 uses the DEFAULT_ROLE_MAPPING we just created, making it a logical next step.
