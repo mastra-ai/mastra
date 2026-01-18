@@ -4,4 +4,5 @@
  * @packageDocumentation
  */
 
-export { DEFAULT_ROLES, DEFAULT_ROLE_MAPPING } from './roles';
+export { DEFAULT_ROLES, DEFAULT_ROLE_MAPPING } from './roles.js';
+export { MemorySessionProvider, type MemorySessionConfig } from './session/index.js';
