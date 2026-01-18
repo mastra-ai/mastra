@@ -423,3 +423,34 @@ Next engineer: Task 016 (Implement ConsoleAuditLogger) is ready to implement. Th
 - ConsoleAuditLogger is now accessible from @mastra/core/ee
 
 Next engineer: Task 017 (Create audit storage interface and in-memory implementation) is ready to implement. This will provide persistent storage for audit events beyond console logging. The ConsoleAuditLogger is complete and ready for development use.
+
+### 2026-01-17 - Task 017 Complete
+- Created packages/core/src/storage/domains/audit/ directory structure
+- Defined AuditEventRecord type in types.ts extending AuditEvent interface
+- Created AuditStorage abstract base class in base.ts extending StorageDomain
+- Implemented abstract methods:
+  - store(event) returning Promise<AuditEventRecord> - generates id and timestamp
+  - query(filter: AuditFilter) returning Promise<AuditEventRecord[]> - filtering and pagination
+  - getById(id) returning Promise<AuditEventRecord | null> - single event lookup
+  - count(filter?) returning Promise<number> - total count with optional filtering
+- Implemented InMemoryAuditStorage class in inmemory.ts
+- Uses InMemoryDB.auditEvents Map<string, AuditEventRecord> for storage
+- Filtering support:
+  - Actor ID, actor type filtering
+  - Action filtering with wildcard pattern support (e.g., 'agents:*')
+  - Resource type and resource ID filtering
+  - Outcome filtering (success/failure/denied)
+  - Date range filtering (startDate, endDate)
+- Pagination support with offset and limit (default limit: 100)
+- Events sorted by timestamp (newest first) by default
+- Updated packages/core/src/storage/domains/inmemory-db.ts:
+  - Added auditEvents Map to InMemoryDB class
+  - Updated clear() method to clear audit events
+  - Added import for AuditEventRecord type
+- Updated packages/core/src/storage/domains/index.ts to export audit module
+- Created index.ts exporting all audit storage types and classes
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- All audit storage types are now accessible from @mastra/core
+
+Next engineer: Task 018 (Create auth API handlers) is ready to implement. The audit storage layer is complete and ready for the server API handlers that will expose authentication and audit endpoints. This is a P0 task that implements the REST API for login, signup, SSO, and session management.
