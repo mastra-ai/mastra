@@ -1,3 +1,4 @@
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { AuthCapabilities } from '../types';
 
@@ -8,10 +9,13 @@ import type { AuthCapabilities } from '../types';
  * - When authenticated: Returns full capabilities including user info, roles, and permissions
  */
 export function useAuthCapabilities() {
+  const client = useMastraClient();
+
   return useQuery<AuthCapabilities>({
     queryKey: ['auth', 'capabilities'],
     queryFn: async () => {
-      const response = await fetch('/api/auth/capabilities', {
+      const baseUrl = (client as any).options?.baseUrl || '';
+      const response = await fetch(`${baseUrl}/api/auth/capabilities`, {
         credentials: 'include', // Include cookies for session validation
       });
 

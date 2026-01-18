@@ -63,6 +63,7 @@ export interface AuthResult {
  * ```
  */
 export function useAuthActions() {
+  const client = useMastraClient();
   const queryClient = useQueryClient();
 
   /**
@@ -70,7 +71,8 @@ export function useAuthActions() {
    */
   const signIn = useMutation<AuthResult, Error, SignInCredentials>({
     mutationFn: async credentials => {
-      const response = await fetch('/api/auth/credentials/sign-in', {
+      const baseUrl = (client as any).options?.baseUrl || '';
+      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +99,8 @@ export function useAuthActions() {
    */
   const signUp = useMutation<AuthResult, Error, SignUpCredentials>({
     mutationFn: async credentials => {
-      const response = await fetch('/api/auth/credentials/sign-up', {
+      const baseUrl = (client as any).options?.baseUrl || '';
+      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-up`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

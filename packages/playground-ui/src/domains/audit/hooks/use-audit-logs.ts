@@ -1,3 +1,4 @@
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { AuditFilter, AuditListResponse } from '../types.js';
 
@@ -21,6 +22,7 @@ export interface UseAuditLogsOptions extends AuditFilter {
  * ```
  */
 export function useAuditLogs(options: UseAuditLogsOptions = {}) {
+  const client = useMastraClient();
   const { enabled = true, ...filter } = options;
 
   return useQuery<AuditListResponse>({
@@ -40,7 +42,8 @@ export function useAuditLogs(options: UseAuditLogsOptions = {}) {
       if (filter.offset !== undefined) params.append('offset', filter.offset.toString());
       if (filter.limit !== undefined) params.append('limit', filter.limit.toString());
 
-      const response = await fetch(`/api/audit?${params.toString()}`, {
+      const baseUrl = (client as any).options?.baseUrl || '';
+      const response = await fetch(`${baseUrl}/api/audit?${params.toString()}`, {
         credentials: 'include',
       });
 
@@ -82,6 +85,8 @@ export function useAuditLogs(options: UseAuditLogsOptions = {}) {
  * ```
  */
 export function useExportAuditLogs() {
+  const client = useMastraClient();
+
   return async (options: AuditFilter & { format: 'json' | 'csv' }) => {
     const { format, ...filter } = options;
     const params = new URLSearchParams({ format });
@@ -96,7 +101,8 @@ export function useExportAuditLogs() {
     if (filter.startDate) params.append('startDate', filter.startDate.toISOString());
     if (filter.endDate) params.append('endDate', filter.endDate.toISOString());
 
-    const response = await fetch(`/api/audit/export?${params.toString()}`, {
+    const baseUrl = (client as any).options?.baseUrl || '';
+    const response = await fetch(`${baseUrl}/api/audit/export?${params.toString()}`, {
       credentials: 'include',
     });
 

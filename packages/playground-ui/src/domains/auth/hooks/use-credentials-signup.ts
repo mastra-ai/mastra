@@ -1,3 +1,4 @@
+import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { SignUpCredentials, AuthResult } from './use-auth-actions.js';
@@ -46,6 +47,7 @@ import type { SignUpCredentials, AuthResult } from './use-auth-actions.js';
  * ```
  */
 export function useCredentialsSignup() {
+  const client = useMastraClient();
   const queryClient = useQueryClient();
   const [credentials, setCredentials] = useState<SignUpCredentials>({
     email: '',
@@ -55,7 +57,8 @@ export function useCredentialsSignup() {
 
   const mutation = useMutation<AuthResult, Error, void>({
     mutationFn: async () => {
-      const response = await fetch('/api/auth/credentials/sign-up', {
+      const baseUrl = (client as any).options?.baseUrl || '';
+      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-up`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
