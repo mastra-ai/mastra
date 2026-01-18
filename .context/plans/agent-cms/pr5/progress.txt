@@ -1552,3 +1552,19 @@ Next engineer: Task 048 (Fix CSV injection in audit export) is ready to implemen
 - Updated tasks.json to mark task 049 as completed with passing=true
 
 Next engineer: Task 048 (P1 - CSV injection fix) or Task 050 (P1 - package dependency fix) are next highest priority pending tasks.
+
+### 2026-01-18 - Task 048 Complete (CSV Injection Fix)
+- Fixed CSV injection vulnerability in packages/server/src/server/handlers/audit.ts
+- Added sanitizeCSVField() function to neutralize formula prefixes (=, +, -, @)
+- Values starting with formula characters are now prefixed with single quote (')
+- Applied sanitization to all CSV fields before applying quote escaping
+- This prevents malicious formulas from executing when CSV is opened in spreadsheet applications
+- Verified pnpm typecheck passes without errors
+- Verified pnpm build completes successfully (124/124 tasks successful)
+- All acceptance criteria met:
+  * Values starting with =, +, -, @ are prefixed with single quote
+  * CSV export is now safe from formula injection attacks
+  * Legitimate data is not corrupted
+- Updated tasks.json to mark task 048 as completed with passing=true
+
+Next engineer: Task 050 (P1 - Move @mastra/core to dependencies in auth/cloud) is next priority. After that, continue with remaining P1-P2 tasks (051-055).

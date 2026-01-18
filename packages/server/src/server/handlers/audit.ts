@@ -73,6 +73,20 @@ async function checkPermission(authProvider: MastraAuthProvider<EEUser> | null, 
 }
 
 /**
+ * Sanitize a CSV field to prevent formula injection.
+ * Prefixes values starting with =, +, -, @ with a single quote to neutralize them.
+ */
+function sanitizeCSVField(value: string): string {
+  if (!value) return value;
+
+  const firstChar = value.charAt(0);
+  if (firstChar === '=' || firstChar === '+' || firstChar === '-' || firstChar === '@') {
+    return `'${value}`;
+  }
+  return value;
+}
+
+/**
  * Convert audit events to CSV format
  */
 function convertToCSV(events: any[]): string {
@@ -106,7 +120,12 @@ function convertToCSV(events: any[]): string {
       event.outcome || '',
       event.duration?.toString() || '',
     ];
-    return row.map(field => `"${field.replace(/"/g, '""')}"`).join(',');
+    return row
+      .map(field => {
+        const sanitized = sanitizeCSVField(field);
+        return `"${sanitized.replace(/"/g, '""')}"`;
+      })
+      .join(',');
   });
 
   return [headers.join(','), ...rows].join('\n');
