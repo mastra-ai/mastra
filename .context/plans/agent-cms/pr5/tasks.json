@@ -1571,7 +1571,8 @@
       ],
       "estimatedComplexity": "small",
       "dependencies": [],
-      "status": "pending"
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "054",

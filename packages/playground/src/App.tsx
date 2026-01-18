@@ -51,7 +51,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
-import Login from './pages/login';
+import { Login } from './pages/login';
 import { SignUp } from './pages/signup';
 import { OAuthCallback } from './pages/oauth/callback';
 import { Audit } from './pages/audit';
