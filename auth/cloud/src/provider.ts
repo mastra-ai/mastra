@@ -189,7 +189,9 @@ class CloudSSOProvider implements ISSOProvider<CloudUser> {
   ) {}
 
   getLoginUrl(redirectUri: string, state?: string): string {
-    const url = new URL(`${this.endpoint}/v1/auth/sso/login`);
+    // Use customDomain for browser-facing URLs, fallback to endpoint
+    const baseUrl = this.customDomain ?? this.endpoint;
+    const url = new URL(`${baseUrl}/v1/auth/sso/login`);
     url.searchParams.set('redirect_uri', redirectUri);
     if (state) {
       url.searchParams.set('state', state);
@@ -227,7 +229,9 @@ class CloudSSOProvider implements ISSOProvider<CloudUser> {
   }
 
   getLogoutUrl(redirectUri?: string): string {
-    const url = new URL(`${this.endpoint}/v1/auth/sso/logout`);
+    // Use customDomain for browser-facing URLs, fallback to endpoint
+    const baseUrl = this.customDomain ?? this.endpoint;
+    const url = new URL(`${baseUrl}/v1/auth/sso/logout`);
     if (redirectUri) {
       url.searchParams.set('redirect_uri', redirectUri);
     }

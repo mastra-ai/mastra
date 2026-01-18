@@ -1610,3 +1610,25 @@ Next engineer: Task 051 (Fix cookie secret validation) or Task 052 (Fix customDo
 - Updated tasks.json to mark task 051 as completed with passing=true
 
 Next engineer: Task 052 (Fix customDomain in auth/cloud), Task 053 (Replace default exports), Task 054 (Replace fetch with useMastraClient), or Task 055 (Replace arbitrary Tailwind) are ready to implement. Task 052 is the highest priority P1 backend fix.
+
+### 2026-01-18 - Task 052 Complete
+- Fixed customDomain being ignored for SSO URLs in auth/cloud/src/provider.ts
+- Updated CloudSSOProvider.getLoginUrl() to use customDomain ?? endpoint for browser-facing URLs
+- Updated CloudSSOProvider.getLogoutUrl() to use customDomain ?? endpoint for browser-facing URLs
+- Backend API calls (like handleCallback) continue to use this.endpoint as intended
+- Added inline comments explaining the customDomain fallback pattern
+- Implementation changes:
+  * getLoginUrl: `const baseUrl = this.customDomain ?? this.endpoint;`
+  * getLogoutUrl: `const baseUrl = this.customDomain ?? this.endpoint;`
+  * Both methods use baseUrl to construct the URL instead of hardcoded this.endpoint
+- Verified pnpm typecheck passes without errors
+- Verified pnpm build completes successfully (124/124 tasks successful)
+- All acceptance criteria met:
+  * getLoginUrl uses customDomain when provided, falls back to endpoint otherwise
+  * getLogoutUrl uses customDomain when provided, falls back to endpoint otherwise
+  * Backend API calls use endpoint directly for server-to-server communication
+- Updated tasks.json to mark task 052 as completed with passing=true
+
+Use case: Allows users to configure a custom domain for browser-facing SSO redirects (e.g., auth.mycompany.com) while keeping backend API calls on the main endpoint (e.g., api.mastra.cloud). This is important for branding and CORS configurations.
+
+Next engineer: Task 053 (Replace default exports with named exports) or Task 054 (Replace fetch with useMastraClient) are ready to implement. Both are P1-P2 frontend tasks. Task 053 is higher priority as it fixes coding guideline violations.
