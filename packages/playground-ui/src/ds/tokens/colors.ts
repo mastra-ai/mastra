@@ -26,9 +26,28 @@ export const Colors = {
   neutral4: '#A9A9A9',
   neutral5: '#E6E6E6',
   neutral6: '#FFFFFF',
+
+  // Semantic state colors
+  success: '#1AFB6F',
+  warning: '#ECB047',
+  error: '#FF4931',
+  info: '#4A9DF2',
+
+  // Overlay colors
+  overlay: 'rgba(0, 0, 0, 0.8)',
+  overlayBlur: 'rgba(0, 0, 0, 0.6)',
 };
 
 export const BorderColors = {
   border1: 'rgba(48, 48, 48, 1)',
   border2: 'rgba(66, 66, 66, 1)',
+};
+
+// Gradient backgrounds
+export const Gradients = {
+  surface: 'linear-gradient(180deg, #0F0F0F 0%, #000000 100%)',
+  accent1: 'linear-gradient(135deg, #1AFB6F 0%, #16A34A 100%)',
+  accent2: 'linear-gradient(135deg, #FF4931 0%, #DC2626 100%)',
+  accent3: 'linear-gradient(135deg, #267AD2 0%, #1D4ED8 100%)',
+  accent5: 'linear-gradient(135deg, #4A9DF2 0%, #3B82F6 100%)',
 };
