@@ -461,9 +461,14 @@ describe('StoredAgent Resource', () => {
 
       it('should delete a version', async () => {
         const versionId = 'version-1';
-        mockFetchResponse(undefined);
+        const mockResponse = {
+          success: true,
+          message: 'Version deleted successfully',
+        };
+        mockFetchResponse(mockResponse);
 
-        await storedAgent.deleteVersion(versionId);
+        const result = await storedAgent.deleteVersion(versionId);
+        expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
           `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}`,
           expect.objectContaining({

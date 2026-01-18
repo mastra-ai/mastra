@@ -8,6 +8,7 @@ import type {
   AgentVersionResponse,
   CompareVersionsResponse,
   ActivateAgentVersionResponse,
+  DeleteAgentVersionResponse,
 } from '@mastra/client-js';
 
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
@@ -100,7 +101,7 @@ export const useDeleteAgentVersion = ({ agentId }: { agentId: string }) => {
   const queryClient = useQueryClient();
   const { requestContext } = usePlaygroundStore();
 
-  return useMutation<void, Error, string>({
+  return useMutation<DeleteAgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).deleteVersion(versionId, requestContext),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });

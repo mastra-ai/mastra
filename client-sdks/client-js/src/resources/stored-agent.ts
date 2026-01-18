@@ -11,6 +11,7 @@ import type {
   CreateAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
+  DeleteAgentVersionResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -169,9 +170,12 @@ export class StoredAgent extends BaseResource {
    * Deletes a specific version
    * @param versionId - The UUID of the version to delete
    * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise that resolves when deletion is complete
+   * @returns Promise that resolves with deletion response
    */
-  deleteVersion(versionId: string, requestContext?: RequestContext | Record<string, any>): Promise<void> {
+  deleteVersion(
+    versionId: string,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteAgentVersionResponse> {
     return this.request(
       `/api/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
       {
