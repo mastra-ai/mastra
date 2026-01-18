@@ -181,7 +181,8 @@ export const ProviderSelect = ({
       </PopoverTrigger>
       <PopoverContent
         onOpenAutoFocus={e => e.preventDefault()}
-        className="flex flex-col gap-0.5 w-[var(--radix-popover-trigger-width)] max-h-[300px] overflow-y-auto p-2"
+        style={{ width: 'var(--radix-popover-trigger-width)' }}
+        className="flex flex-col gap-0.5 max-h-dropdown-max-height overflow-y-auto p-2"
       >
         {filteredProviders.length === 0 ? (
           <div className="text-sm text-gray-500 p-2">No providers found</div>

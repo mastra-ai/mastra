@@ -40,7 +40,9 @@
       "priority": "P0",
       "title": "Implement in-memory stored agent storage",
       "description": "Create the in-memory implementation of the stored agent storage interface for development and testing.",
-      "files": ["packages/core/src/storage/domains/agents/inmemory.ts"],
+      "files": [
+        "packages/core/src/storage/domains/agents/inmemory.ts"
+      ],
       "steps": [
         "Create InMemoryStoredAgentStorage class implementing IStoredAgentStorage",
         "Implement CRUD operations using Map or array storage",
@@ -56,7 +58,9 @@
         "restoreVersion correctly updates agent with historical config"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["001"],
+      "dependencies": [
+        "001"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -66,7 +70,9 @@
       "priority": "P0",
       "title": "Add stored agent methods to Mastra class",
       "description": "Extend the Mastra class to support stored agents alongside code-defined agents.",
-      "files": ["packages/core/src/mastra/index.ts"],
+      "files": [
+        "packages/core/src/mastra/index.ts"
+      ],
       "steps": [
         "Add storedAgentStorage property to Mastra configuration",
         "Implement getStoredAgent(id) method that retrieves and instantiates agent from storage",
@@ -83,7 +89,10 @@
         "getAgent() can resolve both code and stored agents"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["001", "002"],
+      "dependencies": [
+        "001",
+        "002"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -113,7 +122,9 @@
         "OpenAPI spec is generated correctly"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["003"],
+      "dependencies": [
+        "003"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -142,7 +153,9 @@
         "Proper 404 errors for non-existent agents/versions"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["004"],
+      "dependencies": [
+        "004"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -170,7 +183,10 @@
         "Route middleware (auth, validation) is applied correctly"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["004", "005"],
+      "dependencies": [
+        "004",
+        "005"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -180,7 +196,9 @@
       "priority": "P1",
       "title": "Create agent form validation schema",
       "description": "Define Zod validation schema for the agent creation/edit form.",
-      "files": ["packages/playground-ui/src/domains/agents/components/create-agent/form-validation.ts"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/create-agent/form-validation.ts"
+      ],
       "steps": [
         "Define agentFormSchema with all required fields",
         "Add validation for name (required, min length)",
@@ -258,7 +276,10 @@
         "Submit button is disabled during submission"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["007", "008"],
+      "dependencies": [
+        "007",
+        "008"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -268,7 +289,9 @@
       "priority": "P1",
       "title": "Create stored agents React Query hooks",
       "description": "Build React Query hooks for fetching and mutating stored agents.",
-      "files": ["packages/playground-ui/src/domains/agents/hooks/use-stored-agents.ts"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/hooks/use-stored-agents.ts"
+      ],
       "steps": [
         "Create useStoredAgents hook for listing agents",
         "Create useStoredAgent(id) hook for single agent",
@@ -285,7 +308,9 @@
         "TypeScript types are correctly inferred"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["006"],
+      "dependencies": [
+        "006"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -295,7 +320,9 @@
       "priority": "P1",
       "title": "Create agent versions React Query hooks",
       "description": "Build React Query hooks for agent version management.",
-      "files": ["packages/playground-ui/src/domains/agents/hooks/use-agent-versions.ts"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/hooks/use-agent-versions.ts"
+      ],
       "steps": [
         "Create useAgentVersions(agentId) hook for listing versions",
         "Create useAgentVersion(agentId, versionId) hook for single version",
@@ -311,7 +338,9 @@
         "Error states are properly handled"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["006"],
+      "dependencies": [
+        "006"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -321,7 +350,9 @@
       "priority": "P1",
       "title": "Create agent creation dialog",
       "description": "Build the modal dialog for creating new agents.",
-      "files": ["packages/playground-ui/src/domains/agents/components/create-agent/create-agent-dialog.tsx"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/create-agent/create-agent-dialog.tsx"
+      ],
       "steps": [
         "Create CreateAgentDialog component using Dialog from UI library",
         "Add dialog trigger button",
@@ -338,7 +369,10 @@
         "Errors display in dialog without closing"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["009", "010"],
+      "dependencies": [
+        "009",
+        "010"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -348,7 +382,9 @@
       "priority": "P1",
       "title": "Create agent edit dialog",
       "description": "Build the modal dialog for editing existing agents.",
-      "files": ["packages/playground-ui/src/domains/agents/components/create-agent/edit-agent-dialog.tsx"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/create-agent/edit-agent-dialog.tsx"
+      ],
       "steps": [
         "Create EditAgentDialog component accepting agent prop",
         "Pre-populate AgentForm with existing agent data",
@@ -364,7 +400,10 @@
         "Success shows notification and closes dialog"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["009", "010"],
+      "dependencies": [
+        "009",
+        "010"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -374,7 +413,9 @@
       "priority": "P1",
       "title": "Create agent delete confirmation dialog",
       "description": "Build the confirmation dialog for deleting agents.",
-      "files": ["packages/playground-ui/src/domains/agents/components/create-agent/delete-agent-confirm.tsx"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/create-agent/delete-agent-confirm.tsx"
+      ],
       "steps": [
         "Create DeleteAgentConfirm component with agent name prop",
         "Display warning message about permanent deletion",
@@ -390,7 +431,9 @@
         "Success closes dialog and shows notification"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["010"],
+      "dependencies": [
+        "010"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -400,7 +443,9 @@
       "priority": "P2",
       "title": "Create agent versions list component",
       "description": "Build the UI for displaying agent version history.",
-      "files": ["packages/playground-ui/src/domains/agents/components/agent-versions/agent-versions-list.tsx"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/agent-versions/agent-versions-list.tsx"
+      ],
       "steps": [
         "Create AgentVersionsList component accepting agentId prop",
         "Use useAgentVersions hook to fetch versions",
@@ -417,7 +462,9 @@
         "Empty state shows helpful message"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["011"],
+      "dependencies": [
+        "011"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -427,7 +474,9 @@
       "priority": "P2",
       "title": "Create save version dialog",
       "description": "Build the dialog for saving a new agent version.",
-      "files": ["packages/playground-ui/src/domains/agents/components/agent-versions/save-version-dialog.tsx"],
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/agent-versions/save-version-dialog.tsx"
+      ],
       "steps": [
         "Create SaveVersionDialog component with agentId prop",
         "Add description input field for version notes",
@@ -443,7 +492,9 @@
         "Dialog closes and version list refreshes"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["011"],
+      "dependencies": [
+        "011"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -472,7 +523,9 @@
         "Large configs are scrollable"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["011"],
+      "dependencies": [
+        "011"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -482,7 +535,9 @@
       "priority": "P1",
       "title": "Update agents page with stored agents",
       "description": "Modify the agents page to display and manage stored agents.",
-      "files": ["packages/playground/src/pages/agents/index.tsx"],
+      "files": [
+        "packages/playground/src/pages/agents/index.tsx"
+      ],
       "steps": [
         "Fetch both code agents and stored agents",
         "Display stored agents in a separate section or with badge",
@@ -498,7 +553,12 @@
         "Stored agents can be used in chat interface"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["012", "013", "014", "015"],
+      "dependencies": [
+        "012",
+        "013",
+        "014",
+        "015"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -508,7 +568,9 @@
       "priority": "P1",
       "title": "Implement PostgreSQL stored agent storage",
       "description": "Create PostgreSQL implementation of stored agent storage.",
-      "files": ["stores/pg/src/storage/domains/agents/index.ts"],
+      "files": [
+        "stores/pg/src/storage/domains/agents/index.ts"
+      ],
       "steps": [
         "Create PgStoredAgentStorage class",
         "Implement table schema for stored_agents",
@@ -525,7 +587,9 @@
         "JSON fields properly serialized/deserialized"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["001"],
+      "dependencies": [
+        "001"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -535,7 +599,9 @@
       "priority": "P1",
       "title": "Implement LibSQL stored agent storage",
       "description": "Create LibSQL implementation of stored agent storage.",
-      "files": ["stores/libsql/src/storage/domains/agents/index.ts"],
+      "files": [
+        "stores/libsql/src/storage/domains/agents/index.ts"
+      ],
       "steps": [
         "Create LibSqlStoredAgentStorage class",
         "Implement table schema for stored_agents",
@@ -551,7 +617,9 @@
         "Timestamps handled correctly"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["001"],
+      "dependencies": [
+        "001"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -561,7 +629,9 @@
       "priority": "P2",
       "title": "Implement MongoDB stored agent storage",
       "description": "Create MongoDB implementation of stored agent storage.",
-      "files": ["stores/mongodb/src/storage/domains/agents/index.ts"],
+      "files": [
+        "stores/mongodb/src/storage/domains/agents/index.ts"
+      ],
       "steps": [
         "Create MongoStoredAgentStorage class",
         "Define collection schema for stored_agents",
@@ -577,7 +647,9 @@
         "ObjectId handled correctly"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["001"],
+      "dependencies": [
+        "001"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -587,7 +659,10 @@
       "priority": "P2",
       "title": "Create client SDK stored agent resource",
       "description": "Add stored agent methods to the JavaScript client SDK.",
-      "files": ["client-sdks/client-js/src/resources/stored-agent.ts", "client-sdks/client-js/src/resources/index.ts"],
+      "files": [
+        "client-sdks/client-js/src/resources/stored-agent.ts",
+        "client-sdks/client-js/src/resources/index.ts"
+      ],
       "steps": [
         "Create StoredAgentResource class",
         "Implement list() method",
@@ -607,7 +682,9 @@
         "Methods are documented with JSDoc"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["006"],
+      "dependencies": [
+        "006"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -617,7 +694,9 @@
       "priority": "P2",
       "title": "Add client SDK stored agent tests",
       "description": "Write tests for the stored agent client SDK resource.",
-      "files": ["client-sdks/client-js/src/resources/stored-agent.test.ts"],
+      "files": [
+        "client-sdks/client-js/src/resources/stored-agent.test.ts"
+      ],
       "steps": [
         "Set up test mocks for HTTP client",
         "Test list() returns array of agents",
@@ -635,7 +714,9 @@
         "Tests pass in CI"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["022"],
+      "dependencies": [
+        "022"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -709,7 +790,9 @@
         "New code has reasonable test coverage"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["024"],
+      "dependencies": [
+        "024"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -741,7 +824,9 @@
         "Delete removes agent permanently"
       ],
       "estimatedComplexity": "medium",
-      "dependencies": ["025"],
+      "dependencies": [
+        "025"
+      ],
       "status": "completed",
       "passing": true
     },
@@ -768,7 +853,9 @@
         "Tests updated to verify return value"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["022"],
+      "dependencies": [
+        "022"
+      ],
       "status": "completed",
       "passing": true,
       "source": "coderabbit-review"
@@ -1052,7 +1139,9 @@
         "Playground UI hook uses correct type"
       ],
       "estimatedComplexity": "small",
-      "dependencies": ["022"],
+      "dependencies": [
+        "022"
+      ],
       "status": "completed",
       "passing": true,
       "source": "coderabbit-review-round2"
@@ -1181,8 +1270,8 @@
       ],
       "estimatedComplexity": "small",
       "dependencies": [],
-      "status": "pending",
-      "passing": false,
+      "status": "completed",
+      "passing": true,
       "source": "coderabbit-review-round2"
     },
     {

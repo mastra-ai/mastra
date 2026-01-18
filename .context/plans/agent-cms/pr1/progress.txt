@@ -2051,3 +2051,27 @@ Verification:
 
 Next Steps:
 - Task 043: Fix remaining arbitrary Tailwind values in provider-select (last remaining task)
+
+[2026-01-18] Task 043: Fix remaining arbitrary Tailwind values in provider-select - COMPLETED
+
+Summary:
+- Fixed arbitrary Tailwind values in provider-select.tsx line 184
+- Replaced w-[var(--radix-popover-trigger-width)] with inline style: style={{ width: 'var(--radix-popover-trigger-width)' }}
+- Replaced max-h-[300px] with max-h-dropdown-max-height (using existing design token)
+- This ensures CSS variables are accessed via inline styles and Tailwind classes use design tokens
+
+Files Modified:
+- packages/playground-ui/src/domains/agents/components/model-picker/provider-select.tsx
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/playground-ui: PASSED
+- pnpm build: PASSED
+- No arbitrary Tailwind values remain
+- Visual appearance unchanged (width still uses CSS variable, max-height uses design token)
+
+Notes:
+- All tasks in PR1 are now completed
+- All builds and typechecks pass
+- Ready for final verification and commit
