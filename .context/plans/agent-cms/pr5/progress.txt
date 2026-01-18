@@ -360,3 +360,29 @@ Next engineer: Task 014 (Implement CookieSessionProvider) or Task 015 (Implement
 - CookieSessionProvider is now accessible from @mastra/core/ee
 
 Next engineer: Task 015 (Implement StaticRBACProvider) is ready to implement. This will use the DEFAULT_ROLE_MAPPING from Task 012 to provide static role-based access control. The session providers (memory and cookie) are now complete.
+
+### 2026-01-17 - Task 015 Complete
+- Created packages/core/src/ee/defaults/rbac/ directory structure
+- Implemented StaticRBACProvider<TUser extends EEUser> class implementing IRBACProvider
+- Defined StaticRBACConfig interface with roleMapping and getRolesFromUser callback
+- roleMapping defaults to DEFAULT_ROLE_MAPPING if not provided
+- getRolesFromUser callback allows flexible role extraction from user object (supports sync and async)
+- Implemented getRoles(user) method delegating to callback function
+- Implemented hasRole(user, role) checking if user has specific role
+- Implemented getPermissions(user) expanding roles to permissions via role mapping
+- Permission expansion uses Set to automatically deduplicate permissions across roles
+- Implemented hasPermission(user, permission) with comprehensive wildcard support:
+  - Super admin wildcard: '*' matches any permission
+  - Namespace wildcard: 'agents:*' matches 'agents:read', 'agents:write', etc.
+  - Exact match: 'agents:read' only matches 'agents:read'
+- Implemented hasAllPermissions(user, permissions[]) for AND permission checks
+- Implemented hasAnyPermission(user, permissions[]) for OR permission checks
+- All methods properly handle permission hierarchy and wildcard matching
+- Created packages/core/src/ee/defaults/rbac/index.ts exporting StaticRBACProvider and StaticRBACConfig
+- Updated packages/core/src/ee/defaults/index.ts to export rbac module
+- Added comprehensive JSDoc documentation with usage examples
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- StaticRBACProvider is now accessible from @mastra/core/ee
+
+Next engineer: Task 016 (Implement ConsoleAuditLogger) is ready to implement. This will provide a console-based audit logger for development and debugging. The RBAC provider is now complete.
