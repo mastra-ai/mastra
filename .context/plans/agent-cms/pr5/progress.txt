@@ -1,0 +1,118 @@
+# PR5: Auth (WorkOS, Better Auth, Cloud) - Progress Tracking
+
+## Status: In Progress
+
+## Task Progress
+
+### Backend - EE Core Infrastructure
+- [x] 001: Create EE module structure and license validation
+- [x] 002: Define EEUser and IUserProvider interface
+- [x] 003: Define Session and ISessionProvider interface
+- [ ] 004: Define ISSOProvider interface for OAuth/OIDC
+- [ ] 005: Define ICredentialsProvider interface
+- [ ] 006: Define IRBACProvider interface for role-based access control
+- [ ] 007: Define IACLProvider interface for resource-level access control
+- [ ] 008: Define IAuditLogger interface for security event logging
+- [ ] 009: Create MastraAuthProvider base class
+- [ ] 010: Create capabilities detection and response building
+- [ ] 011: Create withEE composition helper
+
+### Backend - Default Implementations
+- [ ] 012: Create default role definitions
+- [ ] 013: Implement MemorySessionProvider
+- [ ] 014: Implement CookieSessionProvider
+- [ ] 015: Implement StaticRBACProvider
+- [ ] 016: Implement ConsoleAuditLogger
+- [ ] 017: Create audit storage interface and in-memory implementation
+
+### Backend - Server API
+- [ ] 018: Create auth API handlers
+- [ ] 019: Create audit API handlers
+- [ ] 020: Register auth and audit routes
+
+### Backend - WorkOS Provider
+- [ ] 021: Create WorkOS auth provider package structure
+- [ ] 022: Implement WorkOS SSO and session providers
+- [ ] 023: Implement WorkOS user provider and RBAC
+- [ ] 024: Implement WorkOS directory sync and audit export
+- [ ] 025: Create main WorkOS auth provider class
+
+### Backend - Better Auth Provider
+- [ ] 026: Create Better Auth provider package structure
+- [ ] 027: Implement Better Auth credentials and user providers
+
+### Backend - Cloud Auth Provider
+- [ ] 028: Create Mastra Cloud auth provider package
+
+### Frontend - Auth Hooks
+- [ ] 029: Create auth capabilities React Query hook
+- [ ] 030: Create current user and auth actions hooks
+- [ ] 031: Create permissions and credentials hooks
+
+### Frontend - Auth Components
+- [ ] 032: Create login page component
+- [ ] 033: Create login button component
+- [ ] 034: Create AuthRequired guard component
+- [ ] 035: Create auth status and user menu components
+
+### Frontend - Pages
+- [ ] 036: Create signup and OAuth callback pages
+- [ ] 037: Create login page in playground
+- [ ] 038: Create audit log page
+- [ ] 039: Integrate auth into playground layout
+
+### Testing & Verification
+- [ ] 040: Verify build and typecheck pass
+- [ ] 041: Run and fix affected package tests
+- [ ] 042: Manual end-to-end testing
+- [ ] 043: Add changeset for PR
+
+## Notes
+
+---
+
+## Session Log
+
+### 2026-01-17 - Task 001 Complete
+- Created EE module structure at packages/core/src/ee/
+- Implemented license.ts with validateLicense() function
+- Added support for MASTRA_EE_LICENSE environment variable
+- Created LicenseInfo type with validation logic (>= 32 chars)
+- Created index.ts that exports all EE interfaces and utilities
+- Added placeholder files for interfaces, capabilities, with-ee, and defaults to enable compilation
+- Verified build passes with pnpm build:core
+- Module is now accessible from @mastra/core/ee
+
+Next engineer: Task 002 (Define EEUser and IUserProvider interface) is ready to implement. All dependencies are in place.
+
+### 2026-01-17 - Task 002 Complete
+- Created packages/core/src/ee/interfaces/user.ts
+- Defined EEUser interface with id, email, name, avatarUrl, metadata fields
+- Defined IUserProvider<TUser extends EEUser> generic interface
+- Added getCurrentUser(request: Request) method for retrieving current user from HTTP request
+- Added getUser(userId: string) method for user lookup by ID
+- Added optional getUserProfileUrl(user: TUser) method for profile URL generation
+- Exported types from packages/core/src/ee/interfaces/index.ts
+- Verified core package typecheck passes (packages/core typecheck: Done)
+- Verified core package build passes with pnpm build:core
+- Types are now accessible from @mastra/core/ee
+
+Next engineer: Task 003 (Define Session and ISessionProvider interface) is ready to implement. The user interface foundation is now in place.
+
+### 2026-01-17 - Task 003 Complete
+- Created packages/core/src/ee/interfaces/session.ts
+- Defined Session interface with id, userId, expiresAt, createdAt, metadata fields
+- Defined ISessionProvider<TSession extends Session> generic interface
+- Added createSession(userId, metadata?) method for creating user sessions
+- Added validateSession(sessionId) method for session validation
+- Added destroySession(sessionId) method for logout
+- Added refreshSession(sessionId) method for extending session expiry
+- Added getSessionIdFromRequest(request) method for extracting session from HTTP request
+- Added getSessionHeaders(session) method for generating Set-Cookie headers
+- Added getClearSessionHeaders() method for logout cookie clearing
+- Exported types from packages/core/src/ee/interfaces/index.ts
+- Verified core package typecheck passes
+- Verified core package build passes with pnpm -w run build:core
+- Types are now accessible from @mastra/core/ee
+
+Next engineer: Task 004 (Define ISSOProvider interface for OAuth/OIDC) is ready to implement. Session management foundation is now in place.

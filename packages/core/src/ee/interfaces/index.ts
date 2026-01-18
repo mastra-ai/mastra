@@ -8,3 +8,4 @@
  */
 
 export type { EEUser, IUserProvider } from './user.js';
+export type { Session, ISessionProvider } from './session.js';
