@@ -35,6 +35,13 @@ export interface LocalSandboxOptions {
   id?: string;
   /** Working directory for command execution */
   workingDirectory?: string;
+  /**
+   * Directory for temporary script files.
+   * If provided, scripts are written here instead of os.tmpdir().
+   * This enables __dirname to resolve within the workspace context.
+   * Should be gitignored if within the workspace (e.g., '.mastra/sandbox').
+   */
+  scriptDirectory?: string;
   /** Environment variables to set */
   env?: Record<string, string>;
   /** Default timeout for operations in ms (default: 30000) */
@@ -69,6 +76,7 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   private _status: SandboxStatus = 'stopped';
   private readonly workingDirectory: string;
+  private readonly scriptDirectory?: string;
   private readonly env: Record<string, string>;
   private readonly timeout: number;
   private detectedRuntimes: SandboxRuntime[] = [];
@@ -77,6 +85,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
     this.workingDirectory = options.workingDirectory ?? process.cwd();
+    this.scriptDirectory = options.scriptDirectory;
     this.env = options.env ?? {};
     this.timeout = options.timeout ?? 30000;
     this.configuredRuntimes = options.runtimes;
@@ -103,6 +112,12 @@ export class LocalSandbox implements WorkspaceSandbox {
 
     try {
       await fs.mkdir(this.workingDirectory, { recursive: true });
+
+      // Create script directory if configured (enables __dirname to work within workspace)
+      if (this.scriptDirectory) {
+        await fs.mkdir(this.scriptDirectory, { recursive: true });
+      }
+
       await this.detectRuntimes();
       this._status = 'running';
     } catch (error) {
@@ -136,6 +151,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       },
       metadata: {
         workingDirectory: this.workingDirectory,
+        scriptDirectory: this.scriptDirectory ?? os.tmpdir(),
         platform: os.platform(),
         nodeVersion: process.version,
       },
@@ -202,13 +218,22 @@ export class LocalSandbox implements WorkspaceSandbox {
     }
   }
 
+  /**
+   * Get the directory for temporary script files.
+   * Uses scriptDirectory if configured, otherwise falls back to os.tmpdir().
+   */
+  private getScriptDirectory(): string {
+    return this.scriptDirectory ?? os.tmpdir();
+  }
+
   private async executeCodeForRuntime(
     code: string,
     runtime: SandboxRuntime,
     options: ExecuteCodeOptions,
     timeout: number,
   ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const tempFile = path.join(os.tmpdir(), `mastra-code-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const scriptDir = this.getScriptDirectory();
+    const tempFile = path.join(scriptDir, `mastra-code-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
     try {
       switch (runtime) {

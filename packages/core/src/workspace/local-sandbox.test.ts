@@ -477,4 +477,83 @@ echo "Hello, $NAME!"
       expect(fs).toBeUndefined();
     });
   });
+
+  // ===========================================================================
+  // scriptDirectory
+  // ===========================================================================
+  describe('scriptDirectory', () => {
+    it('should use os.tmpdir() by default', async () => {
+      await sandbox.start();
+
+      const info = await sandbox.getInfo();
+
+      expect(info.metadata?.scriptDirectory).toBe(os.tmpdir());
+    });
+
+    it('should use configured scriptDirectory', async () => {
+      const scriptDir = path.join(tempDir, '.mastra', 'sandbox');
+      const customSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        scriptDirectory: scriptDir,
+      });
+
+      await customSandbox.start();
+
+      const info = await customSandbox.getInfo();
+      expect(info.metadata?.scriptDirectory).toBe(scriptDir);
+
+      await customSandbox.destroy();
+    });
+
+    it('should create scriptDirectory on start', async () => {
+      const scriptDir = path.join(tempDir, '.mastra', 'sandbox', 'scripts');
+      const customSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        scriptDirectory: scriptDir,
+      });
+
+      await customSandbox.start();
+
+      // Verify directory was created
+      const stats = await fs.stat(scriptDir);
+      expect(stats.isDirectory()).toBe(true);
+
+      await customSandbox.destroy();
+    });
+
+    it('should resolve __dirname to scriptDirectory when configured', async () => {
+      const scriptDir = path.join(tempDir, '.mastra', 'sandbox');
+      const customSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        scriptDirectory: scriptDir,
+      });
+
+      await customSandbox.start();
+
+      // Execute code that prints __dirname
+      const result = await customSandbox.executeCode('console.log(__dirname)', {
+        runtime: 'node',
+      });
+
+      expect(result.success).toBe(true);
+      // Use realpath to handle macOS symlinks (/var -> /private/var)
+      const expectedDir = await fs.realpath(scriptDir);
+      expect(result.stdout.trim()).toBe(expectedDir);
+
+      await customSandbox.destroy();
+    });
+
+    it('should resolve __dirname to os.tmpdir() when scriptDirectory not configured', async () => {
+      await sandbox.start();
+
+      const result = await sandbox.executeCode('console.log(__dirname)', {
+        runtime: 'node',
+      });
+
+      expect(result.success).toBe(true);
+      // Use realpath to handle macOS symlinks (/var -> /private/var)
+      const expectedDir = await fs.realpath(os.tmpdir());
+      expect(result.stdout.trim()).toBe(expectedDir);
+    });
+  });
 });

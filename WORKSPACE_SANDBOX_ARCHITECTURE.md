@@ -151,9 +151,9 @@ await workspace.syncFromSandbox(['/dist', '/output.json']);
 
 ## Validation Rules
 
-### Skills Validation
+### Skills Validation ✅ Implemented
 
-Skills require filesystem - throw if misconfigured:
+Skills require filesystem - throws error if misconfigured:
 
 ```typescript
 if (config.skillsPaths && !config.filesystem) {
@@ -163,6 +163,8 @@ if (config.skillsPaths && !config.filesystem) {
   );
 }
 ```
+
+This validation is enforced in the `Workspace` constructor.
 
 ### Sandbox Validation
 
@@ -192,9 +194,9 @@ if (config.sandbox && !config.filesystem) {
 
 ## Design Decisions
 
-### Sandbox Directory
+### Sandbox Directory ✅ Implemented
 
-The sandbox temp/script directory should be **configurable**:
+The sandbox temp/script directory is **configurable** via the `scriptDirectory` option:
 
 ```typescript
 const sandbox = new LocalSandbox({
@@ -203,9 +205,29 @@ const sandbox = new LocalSandbox({
 });
 ```
 
-- If not provided, use current behavior (`os.tmpdir()`)
-- If provided, write script files there (enables `__dirname` to work)
-- Should be gitignored if within the workspace
+**Implementation details:**
+
+- If `scriptDirectory` not provided, uses `os.tmpdir()` (default behavior)
+- If provided, script files are written there (enables `__dirname` to resolve within workspace)
+- The directory is automatically created on `sandbox.start()` if it doesn't exist
+- `getInfo()` includes `scriptDirectory` in metadata
+- Should be gitignored if within the workspace (e.g., add `.mastra/` to `.gitignore`)
+
+**Example with workspace context:**
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+    scriptDirectory: './workspace/.mastra/sandbox',
+  }),
+});
+
+// Now __dirname in executed code resolves to ./workspace/.mastra/sandbox
+const result = await workspace.executeCode('console.log(__dirname)');
+// Output: ./workspace/.mastra/sandbox
+```
 
 ### Filesystem Awareness
 
