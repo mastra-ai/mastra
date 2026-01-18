@@ -735,3 +735,38 @@ Implementation details:
 - Original MastraAuthWorkos remains for backward compatibility
 
 Next engineer: All backend tasks for WorkOS auth provider (Tasks 021-025) are now complete. The next P0 tasks are frontend tasks (029-037) for building the auth UI components and hooks, or you can start on the Better Auth provider (Tasks 026-027) or Mastra Cloud Auth provider (Task 028). Task 040 (verify build and typecheck) should be run after completing more frontend/backend tasks to ensure everything still works together.
+
+### 2026-01-18 - Task 026 Complete
+- Created auth/better-auth/ directory structure with package configuration
+- Created auth/better-auth/package.json with @mastra/auth-better-auth name
+- Added dependency: better-auth@^1.1.4 for self-hosted authentication
+- Added devDependencies: @mastra/core, @internal/lint, @internal/types-builder, typescript, vitest, etc.
+- Package follows same pattern as other auth packages (auth0, clerk, firebase, supabase, workos)
+- Created auth/better-auth/tsconfig.json extending base config (../../tsconfig.node.json)
+- Created auth/better-auth/tsup.config.ts with standard build configuration
+- Entry point: src/index.ts with ESM and CJS output formats
+- Sourcemaps enabled, tree-shaking enabled, type generation via @internal/types-builder
+- Created auth/better-auth/src/types.ts with comprehensive interfaces:
+  - BetterAuthConfig interface with database, secret, baseURL, emailAndPassword, session, options fields
+  - Database support: postgresql, mysql, sqlite, mongodb
+  - Email/password authentication configuration: enabled, requireEmailVerification, minPasswordLength, allowPasswordReset
+  - Session configuration: expiresIn (default 7 days), cookieName (default 'better_auth_session')
+  - BetterAuthUser interface extending EEUser with Better Auth specific fields (userId, emailVerified, timestamps)
+- Created auth/better-auth/src/index.ts exporting types
+- Provider implementation stub ready for Task 027
+- Comprehensive JSDoc documentation with usage examples
+- Verified package builds successfully with pnpm build
+- Verified package typecheck passes with npx tsc --noEmit
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- Package structure is now ready for implementation of credentials and user providers
+
+Implementation details:
+- Better Auth is a self-hosted authentication solution supporting multiple database backends
+- No external SaaS dependencies - all data stored in user's database
+- Supports email/password authentication, email verification, password reset flows
+- Session management via encrypted cookies (configurable expiry and cookie name)
+- Flexible database provider support via Better Auth's adapter system
+- Configuration supports passing through additional Better Auth options for advanced use cases
+
+Next engineer: Task 027 (Implement Better Auth credentials and user providers) is ready to implement. This will create the BetterAuthCredentialsProvider, BetterAuthUserProvider, and main MastraAuthBetterAuth class that compose these providers together. The package structure and types are complete.

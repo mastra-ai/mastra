@@ -1,7 +1,7 @@
 {
   "name": "@mastra/auth-better-auth",
   "version": "1.0.0-beta.2",
-  "description": "Mastra Better Auth integration - self-hosted authentication",
+  "description": "Mastra Better Auth integration for self-hosted authentication",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,14 +26,13 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "better-auth": "^1.4.5"
+    "better-auth": "^1.1.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.13.17",
-    "hono": "^4.11.3",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
