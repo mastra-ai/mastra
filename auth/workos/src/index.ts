@@ -55,3 +55,6 @@ export class MastraAuthWorkos extends MastraAuthProvider<WorkosUser> {
     return isAdmin;
   }
 }
+
+// Export EE types for new auth provider implementation
+export type { WorkOSConfig, WorkOSUser } from './types.js';

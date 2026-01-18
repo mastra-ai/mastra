@@ -543,3 +543,34 @@ Important notes for next engineer:
 
 Next engineer: Task 021 (Create WorkOS auth provider package structure) or other auth provider tasks (026, 028) are ready to implement. These are all P0 backend tasks that set up the actual auth provider packages. Alternatively, continue with frontend tasks (029-039) or testing tasks (040-043).
 
+### 2026-01-17 - Task 021 Complete
+- Created auth/workos/src/types.ts with WorkOSConfig and WorkOSUser interfaces
+- Defined WorkOSConfig interface with required fields:
+  - apiKey: WorkOS API key from dashboard
+  - clientId: WorkOS client ID from dashboard
+  - redirectUri: OAuth callback URL (must match WorkOS dashboard config)
+  - cookiePassword: Encryption secret for session cookies (min 32 chars for AES-256)
+  - Optional: organizationId, customDomain for advanced configurations
+- Defined WorkOSUser interface extending EEUser with WorkOS-specific fields:
+  - Base fields: id, email, name, avatarUrl, metadata
+  - workos object with userId, organizationId, role, firstName, lastName, emailVerified, timestamps
+- Updated auth/workos/src/index.ts to export WorkOSConfig and WorkOSUser types
+- Package structure already existed with correct dependencies:
+  - @workos-inc/node (v7.69.2) for WorkOS SDK
+  - @mastra/core for EE types and interfaces
+- Package.json has @mastra/auth-workos name with proper build scripts
+- tsconfig.json extends base config (../../tsconfig.node.json)
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (123 tasks successful)
+- WorkOS auth provider package structure is ready for implementation
+
+Important notes for next engineer:
+- The existing index.ts contains the OLD auth provider implementation using @mastra/auth
+- The OLD implementation should remain functional until we complete the NEW EE provider
+- Task 022-025 will implement the NEW WorkOS provider using EE interfaces
+- The types.ts file provides the foundation for the NEW implementation
+- Once the NEW provider is complete, we can deprecate/remove the OLD implementation
+- The package can export both implementations during the transition
+
+Next engineer: Task 022 (Implement WorkOS SSO and session providers) is ready to implement. This will create the WorkOS SSO flow and session management using the new EE interfaces and the types we just defined.
+
