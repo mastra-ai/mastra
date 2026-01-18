@@ -1588,3 +1588,25 @@ Implementation notes:
 - Package will work correctly when published to npm
 
 Next engineer: Task 051 (Fix cookie secret validation) or Task 052 (Fix customDomain in auth/cloud) are ready to implement. Both are P1 backend tasks with no dependencies. Task 051 fixes a cryptographic security issue in CookieSessionProvider, making it higher priority.
+
+### 2026-01-18 - Task 051 Complete
+- Fixed cookie secret validation in packages/core/src/ee/defaults/session/cookie.ts
+- Changed validation from string length to Buffer byte length
+- Constructor now converts secret to Buffer first before checking length
+- Validation ensures >= 32 bytes (256 bits) for AES-256 encryption
+- Fixed issue where multi-byte UTF-8 characters could result in <32 bytes
+- Updated error message to mention "32 bytes" instead of "32 characters"
+- Updated JSDoc to clarify the requirement is 32 bytes when UTF-8 encoded
+- Implementation changes:
+  * Convert config.secret to Buffer first: `Buffer.from(config.secret || '', 'utf-8')`
+  * Check byte length: `if (secretBuffer.length < 32)`
+  * Use buffer directly for key: `this.secret = secretBuffer.subarray(0, 32)`
+- Verified pnpm typecheck passes without errors
+- Verified pnpm build completes successfully (124/124 tasks successful)
+- All acceptance criteria met:
+  * Validation checks Buffer byte length, not string length
+  * Error message mentions '32 bytes' not '32 characters'
+  * Multi-byte UTF-8 secrets are now handled correctly
+- Updated tasks.json to mark task 051 as completed with passing=true
+
+Next engineer: Task 052 (Fix customDomain in auth/cloud), Task 053 (Replace default exports), Task 054 (Replace fetch with useMastraClient), or Task 055 (Replace arbitrary Tailwind) are ready to implement. Task 052 is the highest priority P1 backend fix.

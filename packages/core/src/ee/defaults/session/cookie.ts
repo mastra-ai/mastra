@@ -24,7 +24,8 @@ import type { ISessionProvider, Session } from '../../interfaces/session.js';
 export interface CookieSessionConfig {
   /**
    * Encryption secret for session cookies.
-   * MUST be at least 32 bytes (256 bits) for AES-256-GCM.
+   * MUST be at least 32 bytes when UTF-8 encoded (256 bits) for AES-256-GCM.
+   * Note: Multi-byte UTF-8 characters count as multiple bytes.
    *
    * @example
    * ```typescript
@@ -85,13 +86,16 @@ export class CookieSessionProvider implements ISessionProvider<Session> {
   private readonly cookiePath: string;
 
   constructor(config: CookieSessionConfig) {
-    // Validate secret length
-    if (!config.secret || config.secret.length < 32) {
-      throw new Error('Session secret must be at least 32 characters (256 bits) for AES-256-GCM encryption');
+    // Convert secret to Buffer first to check byte length (not character length)
+    const secretBuffer = Buffer.from(config.secret || '', 'utf-8');
+
+    // Validate secret byte length (must be at least 32 bytes for AES-256)
+    if (secretBuffer.length < 32) {
+      throw new Error('Session secret must be at least 32 bytes (256 bits) for AES-256-GCM encryption');
     }
 
-    // Convert secret to Buffer (use first 32 bytes for AES-256)
-    this.secret = Buffer.from(config.secret.slice(0, 64), 'utf-8').subarray(0, 32);
+    // Use first 32 bytes for AES-256 key
+    this.secret = secretBuffer.subarray(0, 32);
     this.ttl = config.ttl ?? 7 * 24 * 60 * 60 * 1000; // 7 days default
     this.cookieName = config.cookieName ?? 'mastra_session';
     this.cookieDomain = config.cookieDomain;
