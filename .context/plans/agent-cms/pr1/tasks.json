@@ -1347,6 +1347,108 @@
       "status": "completed",
       "passing": true,
       "source": "coderabbit-review-round2"
+    },
+    {
+      "id": "047",
+      "category": "bugfix",
+      "priority": "P0",
+      "title": "Fix integrationId property issue in edit-agent-dialog.tsx",
+      "description": "The code casts toolsData entries to include integrationId (line 35-39) but GetToolResponse type doesn't have this field. This means integration tools are never detected since integrationId is always undefined. The tool classification logic is broken.",
+      "files": [
+        "packages/playground-ui/src/domains/agents/components/create-agent/edit-agent-dialog.tsx"
+      ],
+      "steps": [
+        "Option A: Update GetToolResponse type to include integrationId if the API returns it",
+        "Option B: Change classification logic to cross-reference agent.integrations list instead of checking integrationId from toolsData",
+        "For each toolId in values.tools, check agent.integrationTools to determine if it belongs to an integration",
+        "Update integrationToolIds, integrationIdsSet, and codeDefinedTools population logic"
+      ],
+      "acceptanceCriteria": [
+        "Integration tools are correctly identified and separated from code-defined tools",
+        "integrationToolIds and integrationIdsSet are populated correctly",
+        "No type casting workarounds needed"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true,
+      "source": "coderabbit-review"
+    },
+    {
+      "id": "048",
+      "category": "bugfix",
+      "priority": "P2",
+      "title": "Add changeType field to VersionDiff interface",
+      "description": "The VersionDiff interface in client-sdks/client-js/src/types.ts is missing the changeType property that appears in compare response test data. Test mocks include changeType: 'modified', indicating the API contract expects this field.",
+      "files": [
+        "client-sdks/client-js/src/types.ts"
+      ],
+      "steps": [
+        "Add changeType?: 'added' | 'removed' | 'modified' to VersionDiff interface",
+        "Verify server returns this field in compare endpoint",
+        "Update any consumers if needed"
+      ],
+      "acceptanceCriteria": [
+        "VersionDiff interface includes changeType field",
+        "TypeScript types match server response schema",
+        "No strict type checking violations"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false,
+      "source": "coderabbit-review-round3"
+    },
+    {
+      "id": "049",
+      "category": "bugfix",
+      "priority": "P1",
+      "title": "Ensure versionNumber uniqueness per agent in inmemory.ts",
+      "description": "The createVersion method only guards by version id, not (agentId, versionNumber) pair. Duplicate version numbers for the same agent can slip in, making getVersionByNumber and getLatestVersion nondeterministic.",
+      "files": [
+        "packages/core/src/storage/domains/agents/inmemory.ts"
+      ],
+      "steps": [
+        "Before creating version, search this.db.agentVersions for any AgentVersion where agentId === input.agentId && versionNumber === input.versionNumber",
+        "Throw an Error if duplicate versionNumber found for the same agent",
+        "Add guard similar to existing id check"
+      ],
+      "acceptanceCriteria": [
+        "(agentId, versionNumber) uniqueness is enforced",
+        "Duplicate versionNumber for same agent throws Error",
+        "getVersionByNumber and getLatestVersion remain deterministic"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false,
+      "source": "coderabbit-review-round3"
+    },
+    {
+      "id": "050",
+      "category": "bugfix",
+      "priority": "P1",
+      "title": "Protect stored versions from external mutation in inmemory.ts",
+      "description": "AgentVersion objects are only shallow-copied when returned. Since snapshot and changedFields are shared references, callers can mutate the in-memory store even though versions are supposed to be immutable.",
+      "files": [
+        "packages/core/src/storage/domains/agents/inmemory.ts"
+      ],
+      "steps": [
+        "Create a cloneVersion helper that deeply clones snapshot and changedFields",
+        "Use cloneVersion in getVersion, getVersionByNumber, getLatestVersion, listVersions",
+        "Use cloneVersion when storing new versions to this.db.agentVersions",
+        "Reuse the same deep-cloning approach used in getAgentById"
+      ],
+      "acceptanceCriteria": [
+        "Versions returned from storage are deep clones",
+        "External mutation of returned versions doesn't affect stored data",
+        "Version immutability is enforced"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false,
+      "source": "coderabbit-review-round3"
     }
   ]
 }

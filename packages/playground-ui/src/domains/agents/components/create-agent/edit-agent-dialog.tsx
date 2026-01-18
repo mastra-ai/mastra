@@ -26,17 +26,18 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
   const handleSubmit = async (values: AgentFormValues) => {
     try {
       // Separate code-defined tools from integration tools
+      // Integration tools are identified by checking if they exist in the agent's integrationTools array
       const codeDefinedTools: string[] = [];
       const integrationToolIds: string[] = [];
-      const integrationIdsSet = new Set<string>();
 
-      if (values.tools && toolsData) {
+      // If the agent has integration tools, use those to separate tool types
+      const existingIntegrationTools = new Set(agent?.integrationTools || []);
+
+      if (values.tools) {
         for (const toolId of values.tools) {
-          const toolData = toolsData[toolId] as { integrationId?: string } | undefined;
-          if (toolData?.integrationId) {
-            // This is an integration tool - store the specific tool ID and its integration ID
+          if (existingIntegrationTools.has(toolId)) {
+            // This tool was previously marked as an integration tool
             integrationToolIds.push(toolId);
-            integrationIdsSet.add(toolData.integrationId);
           } else {
             // This is a code-defined tool
             codeDefinedTools.push(toolId);
@@ -44,7 +45,8 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         }
       }
 
-      const integrationIds = Array.from(integrationIdsSet);
+      // Keep the same integration IDs as before (we don't modify integrations in the edit form)
+      const integrationIds = agent?.integrations || [];
 
       await updateStoredAgent.mutateAsync({
         name: values.name,

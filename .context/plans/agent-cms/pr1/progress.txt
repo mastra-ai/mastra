@@ -2075,3 +2075,46 @@ Notes:
 - All tasks in PR1 are now completed
 - All builds and typechecks pass
 - Ready for final verification and commit
+
+[2026-01-18] Task 047: Fix integrationId property issue in edit-agent-dialog.tsx - COMPLETED
+
+Summary:
+- Fixed broken tool classification logic in edit-agent-dialog.tsx
+- Removed type casting workaround (line 35: const toolData = toolsData[toolId] as { integrationId?: string })
+- Changed classification logic to use agent.integrationTools array instead of non-existent integrationId field
+- Now correctly identifies integration tools by checking if toolId exists in agent.integrationTools
+- Preserves existing integrations array instead of trying to reconstruct it from tool data
+- Classification now works correctly:
+  * Tools in agent.integrationTools → integrationToolIds array
+  * All other tools → codeDefinedTools array
+  * Integration IDs preserved from agent.integrations
+
+Files Modified:
+- packages/playground-ui/src/domains/agents/components/create-agent/edit-agent-dialog.tsx
+
+Implementation Approach:
+- Used Option B from task description: cross-reference agent.integrations list
+- Created Set from agent.integrationTools for O(1) lookup
+- Removed dependency on GetToolResponse type having integrationId field
+- Integration IDs now taken directly from agent.integrations (not reconstructed)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm turbo build --filter @mastra/playground-ui: PASSED
+- pnpm build (full monorepo): PASSED (123 tasks successful)
+- pnpm typecheck: PASSED
+- pnpm test (playground-ui): PASSED (24 tests)
+
+Acceptance Criteria Met:
+✓ Integration tools are correctly identified using agent.integrationTools array
+✓ integrationToolIds populated correctly from agent.integrationTools
+✓ codeDefinedTools populated correctly for non-integration tools
+✓ No type casting workarounds needed
+✓ Logic matches data model (StoredAgentResponse has integrations and integrationTools fields)
+
+Next Steps:
+- 3 remaining tasks (1x P1, 2x P2):
+  - Task 048 (P2): Add changeType field to VersionDiff interface
+  - Task 049 (P1): Ensure versionNumber uniqueness per agent in inmemory.ts
+  - Task 050 (P1): Protect stored versions from external mutation in inmemory.ts
