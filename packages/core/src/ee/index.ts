@@ -9,6 +9,9 @@
 // Interfaces
 export * from './interfaces';
 
+// Base Auth Provider
+export { MastraAuthProvider, type MastraAuthProviderConfig, type CapabilityFlags } from './auth-provider';
+
 // Capabilities
 export * from './capabilities';
 
