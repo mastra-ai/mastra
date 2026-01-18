@@ -179,7 +179,9 @@ export class WorkOSSSOProvider implements ISSOProvider<EEUser> {
       params.set('redirect_uri', redirectUri);
     }
 
-    return `https://api.workos.com/user_management/logout?${params.toString()}`;
+    // Use customDomain if configured, otherwise default to api.workos.com
+    const domain = this.config.customDomain || 'api.workos.com';
+    return `https://${domain}/user_management/logout?${params.toString()}`;
   }
 
   /**
