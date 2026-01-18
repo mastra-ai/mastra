@@ -2171,3 +2171,45 @@ Acceptance Criteria Met:
 
 Next Steps:
 - Task 050: Protect stored versions from external mutation in inmemory.ts (P1 priority, last remaining task)
+
+[2026-01-18] Task 050: Protect stored versions from external mutation in inmemory.ts - COMPLETED
+
+Summary:
+- Created cloneAgent() and cloneVersion() helper methods for deep cloning
+- cloneAgent() deeply clones all nested fields: metadata, model, tools, workflows, agents, scorers
+- cloneVersion() deeply clones version with snapshot (using cloneAgent) and changedFields array
+- Applied deep cloning to all version retrieval methods:
+  * createVersion: Deep clone before storing and when returning
+  * getVersion: Returns deep clone
+  * getVersionByNumber: Returns deep clone
+  * getLatestVersion: Returns deep clone
+  * listVersions: Maps versions through cloneVersion
+- Also refactored getAgentById and listAgents to use the new cloneAgent helper
+- This prevents external mutation of stored data and enforces immutability
+
+Files Modified:
+- packages/core/src/storage/domains/agents/inmemory.ts
+
+Implementation Details:
+- Added private cloneAgent() method that performs deep clone of StorageAgentType
+- Added private cloneVersion() method that uses cloneAgent for snapshot and clones changedFields array
+- Refactored all version methods to use cloneVersion for returned data
+- Refactored getAgentById to use cloneAgent (DRY principle)
+- Refactored listAgents to use cloneAgent in map (DRY principle)
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build: PASSED (123 tasks, all successful)
+
+Acceptance Criteria Met:
+✓ Versions returned from storage are deep clones
+✓ External mutation of returned versions doesn't affect stored data
+✓ Version immutability is enforced
+✓ Code reuse through cloneAgent and cloneVersion helpers
+
+ALL TASKS COMPLETED ✓
+- All 50 tasks in PR1 are now completed
+- All builds, typechecks pass
+- Ready for final commit and PR creation
