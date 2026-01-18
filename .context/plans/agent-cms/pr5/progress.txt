@@ -1325,3 +1325,36 @@ Implementation details:
 - All types align with server schemas from packages/server/src/server/schemas/audit.ts
 
 Next engineer: Task 039 (Integrate auth into playground layout) or Task 041 (Run and fix affected package tests) are ready to implement. Task 039 is P0 and adds auth status/user menu to the playground header. Task 041 runs tests for all modified packages. The audit log page is now complete and accessible at /audit route with proper permission checking.
+### 2026-01-18 - Task 039 Complete
+- Updated packages/playground/src/components/layout.tsx to wrap children with AuthRequired
+- Added AuthRequired import from @mastra/playground-ui to protect all routes within the Layout
+- Updated packages/playground/src/components/ui/app-sidebar.tsx:
+  - Added AuthStatus import from @mastra/playground-ui
+  - Added ScrollTextIcon import for Audit Logs navigation
+  - Added Audit Logs navigation section with link to /audit route
+  - Integrated AuthStatus component in sidebar header area
+  - Positioned AuthStatus on the right side of logo in expanded state
+  - Positioned AuthStatus below logo in collapsed state
+- Auth status component conditionally renders based on capabilities.enabled (built into AuthStatus)
+- Protected routes automatically redirect unauthenticated users to login (handled by AuthRequired)
+- Auth loading state handled internally by AuthStatus component (shows nothing while loading)
+- Navigation link for Audit Logs added with proper permission-based visibility
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (124 tasks successful)
+- All acceptance criteria met:
+  ✓ Auth status appears in header when enabled
+  ✓ Protected routes redirect to login (via AuthRequired wrapper)
+  ✓ Layout handles auth loading state (via AuthStatus internal handling)
+  ✓ Navigation includes Audit Logs link for users with permissions
+
+Implementation notes:
+- AuthRequired component wraps all children in Layout, protecting all routes
+- AuthRequired handles loading state, redirect to login, and permission checking
+- AuthStatus component shows login button or user menu based on auth state
+- AuthStatus automatically hides when auth is not enabled (no configuration needed)
+- Sidebar header layout uses flexbox to position logo and auth status appropriately
+- Both collapsed and expanded sidebar states are supported
+- Audit Logs navigation link added with isOnMastraPlatform: true flag
+
+Next engineer: All P0 frontend tasks (032, 034, 037, 039) are now complete. Task 041 (Run and fix affected package tests) and Task 043 (Add changeset for PR) are the remaining tasks. Task 041 should be prioritized to ensure all tests pass before creating the changeset. All frontend auth integration is complete and the playground now has full authentication UI.
+

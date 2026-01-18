@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  ScrollTextIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -24,6 +25,7 @@ import {
   MastraVersionFooter,
   useMastraPlatform,
   NavLink,
+  AuthStatus,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -78,6 +80,18 @@ const mainNavigation: NavSection[] = [
         name: 'Observability',
         url: '/observability',
         icon: <EyeIcon />,
+        isOnMastraPlatform: true,
+      },
+    ],
+  },
+  {
+    key: 'audit',
+    separator: true,
+    links: [
+      {
+        name: 'Audit Logs',
+        url: '/audit',
+        icon: <ScrollTextIcon />,
         isOnMastraPlatform: true,
       },
     ],
@@ -166,12 +180,20 @@ export function AppSidebar() {
     <MainSidebar>
       <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
-          <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+          <div className="flex flex-col gap-3">
+            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+            <AuthStatus />
+          </div>
         ) : (
-          <span className="flex items-center gap-2 pl-3">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-serif text-sm">Mastra Studio</span>
-          </span>
+          <div className="flex flex-col gap-3">
+            <span className="flex items-center justify-between pl-3 pr-2">
+              <span className="flex items-center gap-2">
+                <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+                <span className="font-serif text-sm">Mastra Studio</span>
+              </span>
+              <AuthStatus />
+            </span>
+          </div>
         )}
       </div>
 
