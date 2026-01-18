@@ -814,3 +814,53 @@ Known limitations:
 
 Next engineer: Task 028 (Create Mastra Cloud auth provider package) or other frontend/testing tasks (029-043) are ready to implement. Task 028 is P0 and creates the zero-config Mastra Cloud authentication provider. All backend auth providers for this PR are now complete (WorkOS, Better Auth). Testing tasks (040-043) should be prioritized after completing more frontend tasks or when ready to verify the full implementation.
 
+### 2026-01-18 - Task 028 Complete
+- Created auth/cloud/ directory structure with complete package configuration
+- Created auth/cloud/package.json with @mastra/auth-cloud name and dependencies
+- Added @mastra/core as devDependency (no external runtime dependencies)
+- Created auth/cloud/tsconfig.json extending base config (../../tsconfig.node.json)
+- Created auth/cloud/tsup.config.ts with standard build configuration
+- Created auth/cloud/eslint.config.js, tsconfig.build.json, vitest.config.ts for complete package setup
+- Created auth/cloud/src/types.ts with comprehensive interfaces:
+  - CloudAuthConfig interface with optional apiKey, endpoint, customDomain fields
+  - Zero-config design: defaults to MASTRA_CLOUD_API_KEY env var and https://api.mastra.cloud endpoint
+  - CloudUser interface extending EEUser with cloud-specific fields (userId, organizationId, role, emailVerified, timestamps)
+- Created auth/cloud/src/provider.ts with full implementation:
+  - MastraAuthCloud class extending MastraAuthProvider<CloudUser>
+  - Set isMastraCloudAuth = true for automatic license bypass
+  - Implemented getCurrentUser via Mastra Cloud API GET /v1/auth/me endpoint
+  - Session validation using mastra_cloud_session cookie
+  - Created CloudSSOProvider implementing ISSOProvider for OAuth/OIDC flows
+  - SSO login redirects to Mastra Cloud GET /v1/auth/sso/login endpoint
+  - SSO callback via POST /v1/auth/sso/callback exchanges code for tokens and user
+  - Created CloudRBACProvider implementing IRBACProvider for permissions management
+  - getRoles() via GET /v1/rbac/users/:userId/roles endpoint
+  - getPermissions() via GET /v1/rbac/users/:userId/permissions endpoint
+  - Full permission wildcard support: '*', 'namespace:*', exact match
+  - Fallback to user's organization role when API calls fail
+- Created auth/cloud/src/index.ts exporting all types and provider (default and named export)
+- Added API response type interfaces for type-safe JSON parsing (CloudAPIUser, CloudSSOCallbackResponse, CloudRolesResponse, CloudPermissionsResponse)
+- Comprehensive JSDoc documentation with zero-config usage examples
+- Fixed all TypeScript errors:
+  - Used type-only imports for EEUser (verbatimModuleSyntax compliance)
+  - Added proper type assertions for fetch JSON responses
+  - Fixed token expiry to use Unix milliseconds (number) instead of Date
+  - Fixed optional field handling (avatarUrl, refreshToken, idToken use undefined not null)
+- Verified package builds successfully with pnpm build
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (124 tasks successful)
+- Package is now accessible from @mastra/auth-cloud
+
+Implementation details:
+- Zero-configuration design: works immediately with no setup required
+- Uses environment variable MASTRA_CLOUD_API_KEY if available
+- Falls back to anonymous access (suitable for development) if no API key provided
+- Default endpoint: https://api.mastra.cloud
+- Session management via encrypted cookies (mastra_cloud_session)
+- SSO via Mastra Cloud hosted OAuth/OIDC service
+- RBAC permissions fetched from Mastra Cloud API
+- isMastraCloudAuth flag exempts from all license checks
+- No external runtime dependencies (only @mastra/core types)
+
+Next engineer: All backend auth provider tasks (Tasks 021-028) are now complete. WorkOS, Better Auth, and Mastra Cloud auth providers are all implemented and passing builds. The next logical tasks are frontend tasks (029-039) for building the auth UI components and hooks, or testing tasks (040-043) to verify the complete implementation. Task 040 (verify build and typecheck) should be run periodically to ensure everything still works together as more tasks are completed.
+
