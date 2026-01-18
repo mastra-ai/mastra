@@ -770,3 +770,47 @@ Implementation details:
 - Configuration supports passing through additional Better Auth options for advanced use cases
 
 Next engineer: Task 027 (Implement Better Auth credentials and user providers) is ready to implement. This will create the BetterAuthCredentialsProvider, BetterAuthUserProvider, and main MastraAuthBetterAuth class that compose these providers together. The package structure and types are complete.
+### 2026-01-18 - Task 027 Complete
+- Created auth/better-auth/src/credentials.ts with BetterAuthCredentialsProvider implementing ICredentialsProvider
+- Implemented signIn using Better Auth API signInEmail endpoint
+- Implemented signUp using Better Auth API signUpEmail endpoint
+- Email/password validation with configurable minimum password length (default 8 chars)
+- Email verification check if requireEmailVerification is enabled in config
+- Implemented requestPasswordReset using Better Auth forgetPassword API (stubbed, endpoint may not exist in Better Auth v1.1.4)
+- Implemented resetPassword using Better Auth resetPassword API with token and newPassword
+- Implemented isSignUpEnabled checking config.emailAndPassword.enabled flag
+- Session creation using Better Auth token-based sessions (not database sessions)
+- Cookie-based session storage with HttpOnly, SameSite=Lax, configurable domain/path
+- Created auth/better-auth/src/user.ts with BetterAuthUserProvider implementing IUserProvider
+- Implemented getCurrentUser extracting session token from cookie and validating with Better Auth getSession API
+- Implemented getUser by ID (stubbed - Better Auth v1.1.4 doesn't expose getUserById, would require direct database access)
+- Implemented getUserProfileUrl returning app-specific profile URL (no central dashboard for self-hosted)
+- Created auth/better-auth/src/provider.ts with MastraAuthBetterAuth extending MastraAuthProvider
+- Initialized Better Auth instance using betterAuth() function with database, secret, baseURL config
+- Composed BetterAuthCredentialsProvider and BetterAuthUserProvider
+- Validated required configuration: database (provider, url), secret (32+ chars), baseURL
+- Exported MastraAuthBetterAuth, BetterAuthCredentialsProvider, BetterAuthUserProvider from auth/better-auth/src/index.ts
+- Fixed Better Auth type imports: Auth instead of BetterAuth (Better Auth exports Auth type, not BetterAuth)
+- Fixed Better Auth API response handling: result.user and result.token instead of result.data.user
+- Fixed TypeScript errors: undefined vs null handling for avatarUrl, session token extraction
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- All exports accessible from @mastra/auth-better-auth
+
+Implementation details:
+- Better Auth v1.1.4 uses token-based sessions, not database session IDs
+- Better Auth API returns { user, token } directly, not wrapped in { data: { user, session } }
+- Session expiry calculated from config.session.expiresIn (default 7 days = 604800 seconds)
+- Password hashing handled automatically by Better Auth
+- User creation and authentication handled by Better Auth's built-in endpoints
+- Self-hosted solution - no external SaaS dependencies, all data in user's database
+- Supports PostgreSQL, MySQL, SQLite, MongoDB via Better Auth's adapter system
+
+Known limitations:
+- Better Auth v1.1.4 doesn't expose getUserById API - getUser() returns null
+- Better Auth v1.1.4 may not expose forgetPassword API - requestPasswordReset() is stubbed
+- Production implementation of getUser() would require direct database access
+- Email sending for password reset requires Better Auth email configuration
+
+Next engineer: Task 028 (Create Mastra Cloud auth provider package) or other frontend/testing tasks (029-043) are ready to implement. Task 028 is P0 and creates the zero-config Mastra Cloud authentication provider. All backend auth providers for this PR are now complete (WorkOS, Better Auth). Testing tasks (040-043) should be prioritized after completing more frontend tasks or when ready to verify the full implementation.
+

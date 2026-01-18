@@ -24,5 +24,7 @@
 // Export types
 export type { BetterAuthConfig, BetterAuthUser } from './types.js';
 
-// Provider will be exported in Task 027
-// export { MastraAuthBetterAuth } from './provider.js';
+// Export providers
+export { MastraAuthBetterAuth } from './provider.js';
+export { BetterAuthCredentialsProvider } from './credentials.js';
+export { BetterAuthUserProvider } from './user.js';
