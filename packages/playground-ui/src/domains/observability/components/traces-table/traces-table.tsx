@@ -7,10 +7,10 @@ import React, { useMemo, forwardRef } from 'react';
 
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { SpanRecord } from '@mastra/core/storage';
 import { EyeIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TracesTools, EntityOptions } from '../traces-tools';
 
 type Trace = Pick<SpanRecord, 'traceId' | 'name' | 'entityType' | 'entityId' | 'entityName'> & {
   attributes?: Record<string, any> | null;
@@ -31,8 +31,14 @@ export interface TracesTableProps {
   filtersApplied?: boolean;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
-  onSearch?: (search: string) => void;
-  showSearchbar?: boolean;
+  // Filter props
+  selectedEntity?: EntityOptions;
+  entityOptions?: EntityOptions[];
+  onEntityChange?: (val: EntityOptions) => void;
+  selectedDateFrom?: Date;
+  selectedDateTo?: Date;
+  onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
+  onReset?: () => void;
 }
 
 const StatusIndicator = ({ status }: { status?: 'success' | 'failed' }) => {
@@ -107,8 +113,14 @@ export const TracesTable = forwardRef<HTMLDivElement, TracesTableProps>(function
     filtersApplied,
     isFetchingNextPage,
     hasNextPage,
-    onSearch,
-    showSearchbar = false,
+    // Filter props
+    selectedEntity,
+    entityOptions,
+    onEntityChange,
+    selectedDateFrom,
+    selectedDateTo,
+    onDateChange,
+    onReset,
   },
   ref,
 ) {
@@ -130,6 +142,8 @@ export const TracesTable = forwardRef<HTMLDivElement, TracesTableProps>(function
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
 
+  const showFilters = onEntityChange && entityOptions;
+
   if (errorMsg) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -145,41 +159,66 @@ export const TracesTable = forwardRef<HTMLDivElement, TracesTableProps>(function
 
   if (rows.length === 0 && !isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<EyeIcon />}
-          titleSlot={filtersApplied ? 'No traces found' : 'No traces yet'}
-          descriptionSlot={
-            filtersApplied
-              ? 'No traces found for the applied filters. Try adjusting your filters.'
-              : 'Traces will appear here once you start running agents or workflows.'
-          }
-          actionSlot={
-            <Button
-              size="lg"
-              className="w-full"
-              variant="light"
-              as="a"
-              href="https://mastra.ai/en/docs/observability/tracing/overview"
-              target="_blank"
-            >
-              <Icon>
-                <EyeIcon />
-              </Icon>
-              Docs
-            </Button>
-          }
-        />
+      <div>
+        {showFilters && (
+          <div className="mb-6">
+            <TracesTools
+              onEntityChange={onEntityChange}
+              onReset={onReset}
+              selectedEntity={selectedEntity}
+              entityOptions={entityOptions}
+              onDateChange={onDateChange}
+              selectedDateFrom={selectedDateFrom}
+              selectedDateTo={selectedDateTo}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+        <div className="flex h-full items-center justify-center">
+          <EmptyState
+            iconSlot={<EyeIcon />}
+            titleSlot={filtersApplied ? 'No traces found' : 'No traces yet'}
+            descriptionSlot={
+              filtersApplied
+                ? 'No traces found for the applied filters. Try adjusting your filters.'
+                : 'Traces will appear here once you start running agents or workflows.'
+            }
+            actionSlot={
+              <Button
+                size="lg"
+                className="w-full"
+                variant="light"
+                as="a"
+                href="https://mastra.ai/en/docs/observability/tracing/overview"
+                target="_blank"
+              >
+                <Icon>
+                  <EyeIcon />
+                </Icon>
+                Docs
+              </Button>
+            }
+          />
+        </div>
       </div>
     );
   }
 
   return (
     <div ref={ref}>
-      {showSearchbar && onSearch && (
-        <SearchbarWrapper>
-          <Searchbar onSearch={onSearch} label="Search traces" placeholder="Search traces" />
-        </SearchbarWrapper>
+      {showFilters && (
+        <div className="mb-6">
+          <TracesTools
+            onEntityChange={onEntityChange}
+            onReset={onReset}
+            selectedEntity={selectedEntity}
+            entityOptions={entityOptions}
+            onDateChange={onDateChange}
+            selectedDateFrom={selectedDateFrom}
+            selectedDateTo={selectedDateTo}
+            isLoading={isLoading}
+          />
+        </div>
       )}
 
       {isLoading ? (

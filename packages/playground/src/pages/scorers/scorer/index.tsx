@@ -6,7 +6,6 @@ import {
   MainContentLayout,
   MainContentContent,
   PageHeader,
-  ScoresTools,
   ScoreDialog,
   type ScoreEntityOption as EntityOptions,
   KeyValueList,
@@ -196,24 +195,19 @@ export default function Scorer() {
             <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
           </div>
 
-          <div className="mb-6">
-            <ScoresTools
-              selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onEntityChange={handleSelectedEntityChange}
-              onReset={() => setSearchParams({ entity: 'all' })}
-              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-            />
-          </div>
-
           <ScoresTable
             scores={scores}
-            isLoading={isLoadingScores}
+            isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
             selectedScoreId={selectedScoreId}
             pagination={pagination}
             onScoreClick={handleScoreClick}
             onPageChange={setScoresPage}
             errorMsg={scoresError?.message}
+            // Filter props
+            selectedEntity={selectedEntityOption}
+            entityOptions={entityOptions}
+            onEntityChange={handleSelectedEntityChange}
+            onReset={() => setSearchParams({ entity: 'all' })}
           />
         </MainContentContent>
       </MainContentLayout>

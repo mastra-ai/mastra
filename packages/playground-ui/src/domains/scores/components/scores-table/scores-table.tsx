@@ -6,6 +6,7 @@ import React, { useMemo } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { CircleGaugeIcon } from 'lucide-react';
+import { ScoresTools, ScoreEntityOption } from '../scores-tools';
 
 type ScoresTableData = ClientScoreRowData & {
   inputStr: string;
@@ -24,6 +25,11 @@ type ScoresTableProps = {
   onPageChange?: (page: number) => void;
   errorMsg?: string;
   isLoading?: boolean;
+  // Filter props
+  selectedEntity?: ScoreEntityOption;
+  entityOptions?: ScoreEntityOption[];
+  onEntityChange?: (val: ScoreEntityOption) => void;
+  onReset?: () => void;
 };
 
 const columns: ColumnDef<ScoresTableData>[] = [
@@ -60,6 +66,11 @@ export function ScoresTable({
   errorMsg,
   selectedScoreId,
   isLoading,
+  // Filter props
+  selectedEntity,
+  entityOptions,
+  onEntityChange,
+  onReset,
 }: ScoresTableProps) {
   const tableData: ScoresTableData[] = useMemo(
     () =>
@@ -79,6 +90,8 @@ export function ScoresTable({
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
 
+  const showFilters = onEntityChange && entityOptions;
+
   if (errorMsg) {
     return (
       <div className="flex h-full items-center justify-center py-8">
@@ -93,18 +106,46 @@ export function ScoresTable({
   }
 
   if (isLoading) {
-    return <ScoresTableSkeleton />;
+    return (
+      <div>
+        {showFilters && (
+          <div className="mb-6">
+            <ScoresTools
+              onEntityChange={onEntityChange}
+              onReset={onReset}
+              selectedEntity={selectedEntity}
+              entityOptions={entityOptions}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+        <ScoresTableSkeleton />
+      </div>
+    );
   }
 
   if (rows.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center py-8">
-        <EmptyState
-          iconSlot={<CircleGaugeIcon />}
-          titleSlot="No scores yet"
-          descriptionSlot="No scores for this scorer yet."
-          actionSlot={null}
-        />
+      <div>
+        {showFilters && (
+          <div className="mb-6">
+            <ScoresTools
+              onEntityChange={onEntityChange}
+              onReset={onReset}
+              selectedEntity={selectedEntity}
+              entityOptions={entityOptions}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+        <div className="flex h-full items-center justify-center py-8">
+          <EmptyState
+            iconSlot={<CircleGaugeIcon />}
+            titleSlot="No scores yet"
+            descriptionSlot="No scores for this scorer yet."
+            actionSlot={null}
+          />
+        </div>
       </div>
     );
   }
@@ -114,6 +155,18 @@ export function ScoresTable({
 
   return (
     <div>
+      {showFilters && (
+        <div className="mb-6">
+          <ScoresTools
+            onEntityChange={onEntityChange}
+            onReset={onReset}
+            selectedEntity={selectedEntity}
+            entityOptions={entityOptions}
+            isLoading={isLoading}
+          />
+        </div>
+      )}
+
       <ScrollableContainer>
         <Table>
           <Thead className="sticky top-0">

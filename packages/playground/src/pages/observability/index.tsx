@@ -5,7 +5,6 @@ import {
   MainContentContent,
   TracesTable,
   EntityOptions,
-  TracesTools,
   TraceDialog,
   parseError,
   Icon,
@@ -178,22 +177,9 @@ export default function Observability() {
         </Header>
 
         <MainContentContent isCentered={isEmpty}>
-          <div className="mb-6">
-            <TracesTools
-              onEntityChange={handleSelectedEntityChange}
-              onReset={handleReset}
-              selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onDateChange={handleDataChange}
-              selectedDateFrom={selectedDateFrom}
-              selectedDateTo={selectedDateTo}
-              isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
-            />
-          </div>
-
           <TracesTable
             traces={traces}
-            isLoading={isTracesLoading}
+            isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
             selectedTraceId={selectedTraceId}
             onTraceClick={handleTraceClick}
             errorMsg={error?.error}
@@ -201,6 +187,14 @@ export default function Observability() {
             filtersApplied={Boolean(filtersApplied)}
             isFetchingNextPage={isFetchingNextPage}
             hasNextPage={hasNextPage}
+            // Filter props
+            selectedEntity={selectedEntityOption}
+            entityOptions={entityOptions}
+            onEntityChange={handleSelectedEntityChange}
+            selectedDateFrom={selectedDateFrom}
+            selectedDateTo={selectedDateTo}
+            onDateChange={handleDataChange}
+            onReset={handleReset}
           />
         </MainContentContent>
       </MainContentLayout>
