@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffectEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { Button } from '@/ds/components/Button';
 import { toast } from '@/lib/toast';
@@ -17,7 +18,7 @@ export interface DeleteAgentConfirmProps {
 export function DeleteAgentConfirm({ agentId, agentName, open, onOpenChange, onSuccess }: DeleteAgentConfirmProps) {
   const { deleteStoredAgent } = useStoredAgentMutations(agentId);
 
-  const handleDelete = async () => {
+  const handleDelete = useEffectEvent(async () => {
     try {
       await deleteStoredAgent.mutateAsync();
       toast.success(`Agent "${agentName}" deleted successfully`);
@@ -26,11 +27,11 @@ export function DeleteAgentConfirm({ agentId, agentName, open, onOpenChange, onS
     } catch (error) {
       toast.error(`Failed to delete agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  });
 
-  const handleCancel = () => {
+  const handleCancel = useEffectEvent(() => {
     onOpenChange(false);
-  };
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
