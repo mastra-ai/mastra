@@ -134,3 +134,20 @@ Next engineer: Task 004 (Define ISSOProvider interface for OAuth/OIDC) is ready 
 - Types are now accessible from @mastra/core/ee
 
 Next engineer: Task 005 (Define ICredentialsProvider interface) is ready to implement. SSO interface foundation is now in place.
+
+### 2026-01-17 - Task 005 Complete
+- Created packages/core/src/ee/interfaces/credentials.ts
+- Defined CredentialsResult<TUser> interface with user, session, cookies fields for successful authentication
+- Defined ICredentialsProvider<TUser extends EEUser> generic interface for email/password authentication
+- Added signIn(email, password, request?) method for user authentication
+- Added signUp(email, password, name?, request?) method for user registration
+- Added optional requestPasswordReset(email) method for password reset flow
+- Added optional resetPassword(token, newPassword) method for completing password reset
+- Added optional isSignUpEnabled() method to allow disabling registration while keeping login active
+- Exported CredentialsResult and ICredentialsProvider from packages/core/src/ee/interfaces/index.ts
+- Request parameter supports rate limiting and IP logging via HTTP Request object
+- Verified core package typecheck passes
+- Verified core package build passes with pnpm build:core
+- Types are now accessible from @mastra/core/ee
+
+Next engineer: Task 006 (Define IRBACProvider interface for role-based access control) is ready to implement. Authentication interfaces are complete, now ready for access control interfaces.
