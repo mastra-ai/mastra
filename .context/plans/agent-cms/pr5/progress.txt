@@ -1122,3 +1122,53 @@ Implementation details:
 - Follows playground-ui patterns for navigation and component composition
 
 Next engineer: Task 035 (Create auth status and user menu components), Task 036 (Create signup and OAuth callback pages), or Task 037 (Create login page in playground) are ready to implement. Task 037 is P0 and creates the actual login page route in the playground app. Task 035 is P1 and creates the user menu/avatar components for the header. All auth guard functionality is now complete and ready for use in protected routes.
+
+### 2026-01-18 - Task 035 Complete
+- Created packages/playground-ui/src/domains/auth/components/user-avatar.tsx
+- Implemented UserAvatar component using Avatar from design system
+- Component accepts AuthenticatedUser and displays avatar image or initials fallback
+- Supports three sizes: sm, md, lg (passed through to Avatar component)
+- Uses user.name for display name, falls back to user.email or 'User'
+- Created packages/playground-ui/src/domains/auth/components/user-menu.tsx
+- Implemented UserMenu component as dropdown menu using Popover component
+- Component features:
+  - UserAvatar trigger button that opens popover menu
+  - User info display with name and email
+  - Optional role and permissions display (showRolesAndPermissions prop)
+  - Profile link (if profileUrl provided)
+  - Sign out button with loading state
+- Uses useLogout hook for session destruction
+- Handles SSO logout redirect via LogoutResponse.redirectTo
+- Roles displayed as tags (limited to reasonable display count)
+- Permissions displayed as tags (limited to 5 with "+N more" indicator)
+- Created packages/playground-ui/src/domains/auth/components/auth-status.tsx
+- Implemented AuthStatus component as auth state adapter
+- Component behavior:
+  - Shows loading spinner while checking auth state (using Spinner component)
+  - Shows "Sign In" button when not authenticated (redirects to login page with return URL)
+  - Shows UserMenu when authenticated
+  - Hides when auth is disabled (unless showWhenDisabled=true)
+- Props support:
+  - loginRedirectUrl: Custom redirect after login
+  - loginUrl: Custom login page URL (defaults to /login)
+  - userMenuProps: Props passed through to UserMenu
+  - loadingComponent: Custom loading UI override
+  - showWhenDisabled: Force display even when auth is disabled
+- Updated packages/playground-ui/src/domains/auth/components/index.ts to export all new components
+- Fixed import path for Popover (use @/ds/components/Popover not Popover.tsx)
+- Fixed Button variant to use "default" not "primary"
+- Verified playground-ui package typecheck passes with npx tsc --noEmit
+- Verified full monorepo build passes with pnpm build (124 tasks successful)
+- All components accessible from @mastra/playground-ui
+
+Implementation details:
+- UserAvatar wraps design system Avatar component with auth-specific user handling
+- UserMenu uses Radix UI Popover for dropdown behavior
+- Popover positioned with align="end" for right-aligned dropdown
+- Sign out properly invalidates auth queries via useLogout hook
+- AuthStatus provides single unified API for header auth UI
+- Components integrate seamlessly with existing auth hooks ecosystem
+- All components use design system primitives (Avatar, Popover, Button, Txt, Spinner)
+- JSDoc documentation with usage examples for all components
+
+Next engineer: Task 036 (Create signup and OAuth callback pages), Task 037 (Create login page in playground), or Task 038 (Create audit log page) are ready to implement. Task 037 is P0 and creates the actual login page route in the playground application using the LoginPage component from Task 032. Task 036 is P1 and creates signup and OAuth callback pages. All auth UI components are now complete and ready for integration into the playground app layout (Task 039).
