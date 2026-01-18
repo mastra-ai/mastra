@@ -1,9 +1,9 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, PlaywrightTestConfig } from '@playwright/test';
 
 const PORT = process.env.E2E_PORT;
 const BASE_URL = `http://localhost:${PORT || '4111'}`;
 
-const webservers = [
+const webservers: PlaywrightTestConfig['webServer'] = [
   {
     command: `pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
@@ -16,6 +16,7 @@ if (PORT) {
     command: `echo "App is running on :${PORT}"`,
     url: `http://localhost:${PORT}`,
     timeout: 120_000,
+    reuseExistingServer: true,
   });
 }
 
