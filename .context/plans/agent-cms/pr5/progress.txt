@@ -386,3 +386,40 @@ Next engineer: Task 015 (Implement StaticRBACProvider) is ready to implement. Th
 - StaticRBACProvider is now accessible from @mastra/core/ee
 
 Next engineer: Task 016 (Implement ConsoleAuditLogger) is ready to implement. This will provide a console-based audit logger for development and debugging. The RBAC provider is now complete.
+
+### 2026-01-17 - Task 016 Complete
+- Created packages/core/src/ee/defaults/audit/ directory structure
+- Implemented ConsoleAuditLogger class implementing IAuditLogger
+- Defined ConsoleAuditLoggerOptions interface with prefix, outcomes, actionPatterns, json fields
+- Constructor accepts optional configuration for filtering and formatting
+- Filtering capabilities:
+  - outcomes: Only log specific outcomes (success/failure/denied)
+  - actionPatterns: Filter by regex patterns on action names
+- Implemented log(event) method:
+  - Generates unique ID with crypto.randomUUID()
+  - Adds timestamp to event
+  - Filters by outcome and action patterns if configured
+  - Supports JSON output mode for structured logging
+  - Formats human-readable console output with timestamp, outcome icon, actor, action, resource, duration
+- Output formatting:
+  - Outcome icons: ✓ (success), ✗ (failure), ⊘ (denied)
+  - Actor format: type:email or type:id
+  - Resource format: type:id
+  - Duration in milliseconds when available
+- Console output routing:
+  - console.error() for failures (red in terminal)
+  - console.warn() for denied (yellow in terminal)
+  - console.log() for success (default)
+- Private helper methods:
+  - formatTimestamp(date): Returns ISO 8601 timestamp
+  - formatOutcome(outcome): Returns Unicode symbols for visual distinction
+  - formatActor(actor): Formats actor with email preference
+- Created packages/core/src/ee/defaults/audit/index.ts exporting ConsoleAuditLogger and ConsoleAuditLoggerOptions
+- Updated packages/core/src/ee/defaults/index.ts to export audit module
+- Added comprehensive JSDoc documentation with usage examples
+- WARNING comment: Not suitable for production as logs are not persisted
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- ConsoleAuditLogger is now accessible from @mastra/core/ee
+
+Next engineer: Task 017 (Create audit storage interface and in-memory implementation) is ready to implement. This will provide persistent storage for audit events beyond console logging. The ConsoleAuditLogger is complete and ready for development use.
