@@ -48,7 +48,13 @@ export class WebSessionStorage extends CookieSessionStorage<Request, Response> {
         const [name, ...valueParts] = cookie.trim().split('=');
         if (name) {
           // Rejoin in case value contains '='
-          acc[name] = decodeURIComponent(valueParts.join('='));
+          const rawValue = valueParts.join('=');
+          try {
+            acc[name] = decodeURIComponent(rawValue);
+          } catch {
+            // Fall back to raw value if decoding fails due to malformed percent-encoding
+            acc[name] = rawValue;
+          }
         }
         return acc;
       },
