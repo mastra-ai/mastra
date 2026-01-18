@@ -13,3 +13,13 @@ export type { ISSOProvider, SSOLoginConfig, SSOCallbackResult, SSOTokens } from 
 export type { ICredentialsProvider, CredentialsResult } from './credentials.js';
 export type { IRBACProvider, RoleMapping, Role } from './rbac.js';
 export type { IACLProvider, IACLManager, ResourceIdentifier, ACLGrant } from './acl.js';
+export type {
+  IAuditLogger,
+  AuditEvent,
+  AuditActor,
+  AuditActorType,
+  AuditOutcome,
+  AuditResource,
+  AuditFilter,
+  AuditExportFormat,
+} from './audit.js';
