@@ -6,7 +6,6 @@ export type UserAvatarSize = 'sm' | 'md' | 'lg';
 export interface UserAvatarProps {
   user: AuthenticatedUser;
   size?: UserAvatarSize;
-  className?: string;
 }
 
 /**
@@ -29,7 +28,7 @@ export interface UserAvatarProps {
  * }
  * ```
  */
-export function UserAvatar({ user, size = 'sm', className }: UserAvatarProps) {
+export function UserAvatar({ user, size = 'sm' }: UserAvatarProps) {
   // Use name for avatar, fallback to email or 'U' if neither available
   const displayName = user.name || user.email || 'User';
 
