@@ -256,7 +256,7 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
 export const POST_LOGOUT_ROUTE = createRoute({
   method: 'POST',
   path: '/api/auth/logout',
-  responseType: 'json',
+  responseType: 'datastream-response',
   responseSchema: logoutResponseSchema,
   summary: 'Logout',
   description: 'Destroys the current session and returns logout redirect URL if available.',
@@ -266,11 +266,20 @@ export const POST_LOGOUT_ROUTE = createRoute({
       const authProvider = getAuthProvider(mastra);
 
       if (!authProvider) {
-        return { success: true };
+        // No auth configured, just return success
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
-      // TODO: Get session ID from Request object and destroy it
-      // For now, just return success
+      // Get session ID from request and destroy it if session provider is available
+      // TODO: Once Request object is available in handler context, use it to get session
+      // For now, we'll return the clearing headers regardless
+      // const sessionId = authProvider.session?.getSessionIdFromRequest(request);
+      // if (sessionId && authProvider.session) {
+      //   await authProvider.session.destroySession(sessionId);
+      // }
 
       // Get logout URL if available
       let redirectTo: string | undefined;
@@ -278,10 +287,28 @@ export const POST_LOGOUT_ROUTE = createRoute({
         redirectTo = authProvider.sso.getLogoutUrl('/');
       }
 
-      return {
+      // Build response with cookie clearing headers
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+      });
+
+      // Get session clearing headers from the session provider
+      if (authProvider.session) {
+        const clearHeaders = authProvider.session.getClearSessionHeaders();
+        for (const [key, value] of Object.entries(clearHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      const responseBody = JSON.stringify({
         success: true,
         redirectTo,
-      };
+      });
+
+      return new Response(responseBody, {
+        status: 200,
+        headers,
+      });
     } catch (error) {
       return handleError(error, 'Error logging out');
     }
