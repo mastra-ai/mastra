@@ -91,7 +91,7 @@ export class BetterAuthCredentialsProvider implements ICredentialsProvider<Bette
         id: result.token,
         userId: betterAuthUser.id,
         expiresAt,
-        createdAt: new Date(betterAuthUser.createdAt),
+        createdAt: new Date(),
         metadata: {
           token: result.token,
         },
@@ -187,7 +187,7 @@ export class BetterAuthCredentialsProvider implements ICredentialsProvider<Bette
         id: result.token,
         userId: betterAuthUser.id,
         expiresAt,
-        createdAt: new Date(betterAuthUser.createdAt),
+        createdAt: new Date(),
         metadata: {
           token: result.token,
         },
