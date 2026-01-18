@@ -55,3 +55,18 @@ export type AuthCapabilities = PublicAuthCapabilities | AuthenticatedCapabilitie
 export function isAuthenticated(capabilities: AuthCapabilities): capabilities is AuthenticatedCapabilities {
   return 'user' in capabilities;
 }
+
+/**
+ * SSO login response
+ */
+export interface SSOLoginResponse {
+  url: string;
+}
+
+/**
+ * Logout response
+ */
+export interface LogoutResponse {
+  success: boolean;
+  redirectTo?: string;
+}

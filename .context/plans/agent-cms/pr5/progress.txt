@@ -991,3 +991,49 @@ Implementation details:
 
 Next engineer: Task 032 (Create login page component) is ready to implement. This will build the main login page using the hooks we just created (useAuthCapabilities, useCredentialsLogin, usePermissions). The complete auth hook system is now in place and ready for UI components.
 
+
+### 2026-01-18 - Task 032 Complete
+- Created packages/playground-ui/src/domains/auth/components/ directory structure
+- Created packages/playground-ui/src/domains/auth/components/login-page.tsx with full LoginPage component implementation
+- Component supports three auth modes: SSO-only, credentials-only, and both
+- Implemented dynamic rendering based on auth capabilities from useAuthCapabilities hook
+- Created components/index.ts exporting LoginPage
+- Updated main auth/index.ts to export components module
+- Extended use-auth-actions.ts with useSSOLogin and useLogout hooks
+- Updated auth/types.ts with SSOLoginResponse and LogoutResponse interfaces
+- Component features:
+  - Integrates with useCredentialsLogin and useCredentialsSignup hooks for form state management
+  - Uses useSSOLogin hook for SSO redirect flow
+  - Displays loading state while checking auth capabilities
+  - Shows "Authentication is not configured" message when auth is disabled
+  - Renders SSO button with provider branding (icon and text) when SSO is available
+  - Renders email/password form with sign in/sign up toggle when credentials auth is available
+  - Shows both SSO and credentials options with divider when type is 'both'
+  - Form fields: name (signup only), email, password
+  - Proper error display for failed authentication attempts
+  - Loading states during form submission
+  - Sign up can be disabled via capabilities.login.signUpEnabled flag
+  - Redirect support via redirectUri prop or onSuccess callback
+  - Falls back to '/' redirect if no redirect specified
+- Fixed TypeScript errors:
+  - Updated to use hook APIs correctly (signIn/signUp methods instead of mutate)
+  - Changed Input prop from customSize to size (lg)
+  - Fixed error display to use string instead of error.message
+  - Integrated credentials state management directly from hooks
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (124 tasks successful)
+- LoginPage component is now accessible from @mastra/playground-ui
+
+Implementation details:
+- LoginPage dynamically adapts UI based on auth provider capabilities
+- Form validation handled by hooks with proper error messages
+- Loading states prevent double-submission
+- SSO redirect flow uses server-side SSO login endpoint
+- Credentials login/signup use encrypted cookie sessions
+- Component is self-contained with no external state dependencies
+- Uses Mastra design system components (Button, Input, Logo)
+- Responsive layout with centered card design
+- Sign in/sign up mode toggle with proper state management
+
+Next engineer: Task 033 (Create login button component), Task 034 (Create AuthRequired guard component), or Task 037 (Create login page in playground) are ready to implement. Task 034 is P0 and provides the route guard for protecting authenticated routes. Task 037 creates the actual login page route in the playground app that uses the LoginPage component we just created.
+
