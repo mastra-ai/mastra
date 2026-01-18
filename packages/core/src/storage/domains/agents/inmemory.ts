@@ -189,6 +189,13 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Version with id ${input.id} already exists`);
     }
 
+    // Check for duplicate (agentId, versionNumber) pair
+    for (const version of this.db.agentVersions.values()) {
+      if (version.agentId === input.agentId && version.versionNumber === input.versionNumber) {
+        throw new Error(`Version number ${input.versionNumber} already exists for agent ${input.agentId}`);
+      }
+    }
+
     const version: AgentVersion = {
       ...input,
       createdAt: new Date(),

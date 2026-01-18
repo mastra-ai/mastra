@@ -2140,3 +2140,34 @@ Verification:
 Next Steps:
 - Task 049: Ensure versionNumber uniqueness per agent in inmemory.ts (P1 priority)
 - Task 050: Protect stored versions from external mutation in inmemory.ts (P1 priority)
+
+[2026-01-18] Task 049: Ensure versionNumber uniqueness per agent in inmemory.ts - COMPLETED
+
+Summary:
+- Added uniqueness check for (agentId, versionNumber) pair in createVersion method
+- Before creating a version, the method now checks if another version with the same versionNumber exists for the same agent
+- Throws descriptive error: "Version number X already exists for agent Y" if duplicate found
+- This prevents duplicate version numbers for the same agent, making getVersionByNumber and getLatestVersion deterministic
+- Check is performed after the existing version ID uniqueness check
+
+Files Modified:
+- packages/core/src/storage/domains/agents/inmemory.ts
+
+Implementation:
+- Added loop through this.db.agentVersions.values() to check for duplicate (agentId, versionNumber) pairs
+- Throws Error if duplicate found before creating the version
+- Guard placed after ID uniqueness check and before version creation
+
+Status: PASSING ✓
+
+Verification:
+- pnpm typecheck: PASSED
+- pnpm build: PASSED (123 tasks, all successful)
+
+Acceptance Criteria Met:
+✓ (agentId, versionNumber) uniqueness is enforced
+✓ Duplicate versionNumber for same agent throws Error
+✓ getVersionByNumber and getLatestVersion remain deterministic
+
+Next Steps:
+- Task 050: Protect stored versions from external mutation in inmemory.ts (P1 priority, last remaining task)
