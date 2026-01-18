@@ -864,3 +864,35 @@ Implementation details:
 
 Next engineer: All backend auth provider tasks (Tasks 021-028) are now complete. WorkOS, Better Auth, and Mastra Cloud auth providers are all implemented and passing builds. The next logical tasks are frontend tasks (029-039) for building the auth UI components and hooks, or testing tasks (040-043) to verify the complete implementation. Task 040 (verify build and typecheck) should be run periodically to ensure everything still works together as more tasks are completed.
 
+### 2026-01-18 - Task 029 Complete
+- Created packages/playground-ui/src/domains/auth/ directory structure
+- Created auth/types.ts with comprehensive type definitions:
+  - SSOConfig, LoginConfig, AuthenticatedUser, CapabilityFlags interfaces
+  - UserAccess interface for roles and permissions
+  - PublicAuthCapabilities and AuthenticatedCapabilities interfaces
+  - AuthCapabilities union type for both authenticated and unauthenticated states
+  - isAuthenticated() type guard function for narrowing AuthCapabilities type
+- Created auth/hooks/use-auth-capabilities.ts with useAuthCapabilities hook:
+  - Uses @tanstack/react-query's useQuery for data fetching
+  - Fetches from /api/auth/capabilities endpoint with credentials: 'include'
+  - Properly typed with AuthCapabilities return type
+  - Configured with short staleTime (30s) and gcTime (60s) for auth state freshness
+  - retry: false for fast failure on auth checks
+  - Includes proper error handling for failed requests
+- Created auth/hooks/index.ts exporting all hooks
+- Created auth/index.ts exporting hooks and types modules
+- All types match server schemas from packages/server/src/server/schemas/auth.ts
+- Verified playground-ui typecheck passes with npx tsc --noEmit
+- Full monorepo typecheck is running successfully
+- Auth capabilities hook is ready for use in UI components
+
+Implementation details:
+- Hook works both when authenticated and unauthenticated
+- When unauthenticated: Returns PublicAuthCapabilities with login configuration
+- When authenticated: Returns AuthenticatedCapabilities with user info, roles, permissions
+- credentials: 'include' ensures session cookies are sent with requests
+- Short staleTime ensures auth state changes are detected quickly
+- Type guard function enables safe type narrowing in components
+
+Next engineer: Task 030 (Create current user and auth actions hooks) is ready to implement. This will build on the useAuthCapabilities hook to provide useCurrentUser and useAuthActions (signIn, signUp, signOut) hooks. The auth capabilities hook is complete and ready for use.
+
