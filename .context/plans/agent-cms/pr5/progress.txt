@@ -8,10 +8,10 @@
 - [x] 001: Create EE module structure and license validation
 - [x] 002: Define EEUser and IUserProvider interface
 - [x] 003: Define Session and ISessionProvider interface
-- [ ] 004: Define ISSOProvider interface for OAuth/OIDC
-- [ ] 005: Define ICredentialsProvider interface
-- [ ] 006: Define IRBACProvider interface for role-based access control
-- [ ] 007: Define IACLProvider interface for resource-level access control
+- [x] 004: Define ISSOProvider interface for OAuth/OIDC
+- [x] 005: Define ICredentialsProvider interface
+- [x] 006: Define IRBACProvider interface for role-based access control
+- [x] 007: Define IACLProvider interface for resource-level access control
 - [ ] 008: Define IAuditLogger interface for security event logging
 - [ ] 009: Create MastraAuthProvider base class
 - [ ] 010: Create capabilities detection and response building
@@ -173,3 +173,24 @@ Next engineer: Task 006 (Define IRBACProvider interface for role-based access co
 - Types are now accessible from @mastra/core/ee
 
 Next engineer: Task 007 (Define IACLProvider interface for resource-level access control) is ready to implement. The RBAC foundation is complete and ready for granular resource-level ACL.
+
+### 2026-01-17 - Task 007 Complete
+- Created packages/core/src/ee/interfaces/acl.ts
+- Defined ResourceIdentifier interface with type and id fields for identifying resources
+- Defined ACLGrant interface with subject, resource, actions, grantedAt, grantedBy for tracking access grants
+- Defined IACLProvider<TUser extends EEUser> interface for read-only ACL operations
+- Added canAccess(user, resource, action) method returning Promise<boolean> for permission checks
+- Added listAccessible(user, resourceType, action) method returning Promise<string[]> for listing accessible resource IDs
+- Added filterAccessible(user, resources[], resourceType, action) method for batch filtering operations
+- Defined optional IACLManager<TUser> interface extending IACLProvider for write operations
+- Added grant(subject, resource, actions, grantedBy) method for granting permissions
+- Added revoke(subject, resource, actions?) method for revoking permissions
+- Exported ResourceIdentifier, ACLGrant, IACLProvider, and IACLManager from packages/core/src/ee/interfaces/index.ts
+- ACL is fully decoupled from RBAC, providing granular resource-level access control
+- Read interface (IACLProvider) is separate from write interface (IACLManager) for flexibility
+- Supports batch operations via filterAccessible for efficient permission checking
+- Verified core package typecheck passes
+- Verified core package build passes with pnpm build:core
+- Types are now accessible from @mastra/core/ee
+
+Next engineer: Task 008 (Define IAuditLogger interface for security event logging) is ready to implement. The access control interfaces (RBAC + ACL) are complete and ready for audit logging.

@@ -202,7 +202,8 @@
       ],
       "estimatedComplexity": "small",
       "dependencies": ["001"],
-      "status": "pending"
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "008",
