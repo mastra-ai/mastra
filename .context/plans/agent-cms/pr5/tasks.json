@@ -1331,6 +1331,290 @@
       "dependencies": [],
       "status": "completed",
       "passing": true
+    },
+    {
+      "id": "044",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix CVE-2024-56734: Upgrade better-auth to ≥1.1.6",
+      "description": "The better-auth dependency v1.1.4 has a critical open-redirect vulnerability (CVE-2024-56734) in the email verification endpoint. Must upgrade to at least v1.1.6.",
+      "files": ["auth/better-auth/package.json"],
+      "steps": [
+        "Update better-auth version from ^1.1.4 to ^1.1.6 in package.json",
+        "Run pnpm install to update lockfile",
+        "Verify the package builds successfully",
+        "Run tests to ensure no breaking changes"
+      ],
+      "acceptanceCriteria": [
+        "better-auth version is ≥1.1.6 in package.json",
+        "pnpm-lock.yaml reflects the updated version",
+        "Package builds successfully",
+        "Tests pass"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "045",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Fix invalid TypeScript syntax in WorkOS audit-export.ts",
+      "description": "The method declaration 'async query?' uses invalid TypeScript syntax. The ? modifier on method names is only valid in interface/type declarations, not in class method implementations.",
+      "files": ["auth/workos/src/audit-export.ts"],
+      "steps": [
+        "Remove the ? from 'async query?' method declaration",
+        "Keep the thrown Error behavior until WorkOS SDK supports query",
+        "Verify typecheck passes",
+        "Verify build passes"
+      ],
+      "acceptanceCriteria": [
+        "Method declaration is 'async query(filter: AuditFilter): Promise<AuditEvent[]>'",
+        "TypeScript compiles without errors",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "046",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix open redirect vulnerability in OAuth callback page",
+      "description": "The OAuth callback page allows user-controlled redirects via the state parameter without validation, enabling phishing attacks. Must validate redirects are same-origin only.",
+      "files": ["packages/playground/src/pages/oauth/callback.tsx"],
+      "steps": [
+        "Add validation for redirect URL from state parameter",
+        "Ensure redirects only go to same-origin (starts with '/')",
+        "Fall back to '/' for invalid or external URLs",
+        "Clean up all timeouts with proper return statements in useEffect",
+        "Remove default export (use named export only per guidelines)"
+      ],
+      "acceptanceCriteria": [
+        "Redirects are validated to be same-origin only",
+        "External URLs (http://evil.com) are rejected and fallback to '/'",
+        "All useEffect branches return cleanup functions",
+        "Only named export is used"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "047",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix open redirect vulnerability in signup page",
+      "description": "The signup page allows arbitrary redirect URLs from query parameters, enabling phishing attacks. Must validate redirects are same-origin only.",
+      "files": ["packages/playground/src/pages/signup/index.tsx"],
+      "steps": [
+        "Add validation for redirect URL from query parameter",
+        "Parse URL and check origin matches window.location.origin",
+        "Extract only pathname/search/hash for same-origin URLs",
+        "Fall back to '/' for invalid or cross-origin URLs",
+        "Remove direct window.location.href assignment for external URLs"
+      ],
+      "acceptanceCriteria": [
+        "Redirects are validated to be same-origin only",
+        "Cross-origin URLs are rejected and fallback to '/'",
+        "No window.location.href with user-controlled URLs",
+        "Uses navigate() for all redirects"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "048",
+      "category": "security",
+      "priority": "P1",
+      "title": "Fix CSV injection in audit export",
+      "description": "The audit CSV export doesn't sanitize formula prefixes (=, +, -, @) which can execute arbitrary formulas when opened in spreadsheet applications.",
+      "files": ["packages/server/src/server/handlers/audit.ts"],
+      "steps": [
+        "Create sanitize function to neutralize formula prefixes",
+        "Prefix values starting with =, +, -, @ with a single quote",
+        "Apply sanitization to all CSV fields before quoting",
+        "Test with malicious payloads to verify protection"
+      ],
+      "acceptanceCriteria": [
+        "Values starting with =, +, -, @ are prefixed with single quote",
+        "CSV export is safe from formula injection",
+        "Legitimate data is not corrupted"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "049",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Fix Set-Cookie parsing that truncates values with = characters",
+      "description": "The WorkOS SSO cookie parsing truncates values containing = characters, which corrupts encrypted/base64 session cookies. Also need to handle header casing variations.",
+      "files": ["auth/workos/src/sso.ts"],
+      "steps": [
+        "Handle both 'Set-Cookie' and 'set-cookie' header casing",
+        "Fix cookie value parsing to preserve = in values using spread operator",
+        "Split on first = only, join remaining parts",
+        "Test with encrypted cookies containing = characters"
+      ],
+      "acceptanceCriteria": [
+        "Cookie values containing = are preserved correctly",
+        "Both Set-Cookie and set-cookie headers are handled",
+        "Encrypted session cookies work correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "050",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Move @mastra/core to dependencies in auth/cloud package",
+      "description": "The MastraAuthCloud class extends MastraAuthProvider from @mastra/core/ee at runtime. Having it in devDependencies will break consumers after publish.",
+      "files": ["auth/cloud/package.json"],
+      "steps": [
+        "Move @mastra/core from devDependencies to dependencies",
+        "Alternatively, move to peerDependencies if intended",
+        "Run pnpm install to update lockfile",
+        "Verify build passes"
+      ],
+      "acceptanceCriteria": [
+        "@mastra/core is in dependencies or peerDependencies",
+        "Package installs correctly for consumers",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "051",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix cookie secret validation to check byte length",
+      "description": "CookieSessionProvider validates string length (32 chars) but derives key from UTF-8 bytes. Multi-byte characters could result in less than 32 bytes, causing cryptographic issues.",
+      "files": ["packages/core/src/ee/defaults/session/cookie.ts"],
+      "steps": [
+        "Convert secret to Buffer first, then check byte length",
+        "Change error message to mention bytes instead of characters",
+        "Use the Buffer directly for key derivation",
+        "Consider adding HKDF or PBKDF2 key derivation for production"
+      ],
+      "acceptanceCriteria": [
+        "Validation checks Buffer byte length, not string length",
+        "Error message mentions '32 bytes' not '32 characters'",
+        "Multi-byte UTF-8 secrets are handled correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "052",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix customDomain being ignored for SSO URLs in auth/cloud",
+      "description": "The customDomain config option is accepted but never used. SSO URLs are always built from endpoint, making the option ineffective.",
+      "files": ["auth/cloud/src/provider.ts"],
+      "steps": [
+        "Use customDomain ?? endpoint for browser-facing SSO URLs",
+        "Update getLoginUrl to use customDomain if set",
+        "Update getLogoutUrl to use customDomain if set",
+        "Add tests for customDomain configuration"
+      ],
+      "acceptanceCriteria": [
+        "getLoginUrl uses customDomain when provided",
+        "getLogoutUrl uses customDomain when provided",
+        "Falls back to endpoint when customDomain is not set"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "053",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Replace default exports with named exports in playground pages",
+      "description": "Multiple files in packages/playground use default exports which are forbidden per coding guidelines. Must convert to named exports.",
+      "files": [
+        "packages/playground/src/pages/login/index.tsx",
+        "packages/playground/src/pages/signup/index.tsx",
+        "packages/playground/src/pages/oauth/callback.tsx",
+        "packages/playground/src/App.tsx"
+      ],
+      "steps": [
+        "Change 'export default Login' to 'export { Login }' in login/index.tsx",
+        "Change 'export default SignUp' to 'export { SignUp }' in signup/index.tsx",
+        "Remove default export from oauth/callback.tsx (keep named export)",
+        "Update imports in App.tsx to use named imports",
+        "Verify build passes"
+      ],
+      "acceptanceCriteria": [
+        "No default exports in packages/playground files",
+        "All imports use named import syntax",
+        "Build passes",
+        "Routes work correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "054",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Replace direct fetch() calls with useMastraClient in auth hooks",
+      "description": "Multiple auth hooks use direct fetch() calls which is forbidden in packages/playground-ui. Must use useMastraClient to ensure consistent API handling.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/hooks/use-auth-capabilities.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-auth-actions.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-credentials-login.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-credentials-signup.ts",
+        "packages/playground-ui/src/domains/audit/hooks/use-audit-logs.ts"
+      ],
+      "steps": [
+        "Import useMastraClient in each hook",
+        "Get baseUrl from client.options?.baseUrl",
+        "Replace hardcoded '/api/' URLs with baseUrl + path",
+        "Use useMutation pattern for export function",
+        "Remove (client as any) type casting if possible"
+      ],
+      "acceptanceCriteria": [
+        "No direct fetch() calls with hardcoded URLs",
+        "All hooks use useMastraClient for baseUrl",
+        "Credentials are properly included",
+        "Type casting is minimized"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "055",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Replace arbitrary Tailwind width with design token",
+      "description": "The audit-log-list.tsx uses w-[180px] which violates coding guidelines. Must use design system tokens.",
+      "files": ["packages/playground-ui/src/domains/audit/components/audit-log-list.tsx"],
+      "steps": [
+        "Review available width tokens in src/ds/tokens/index.ts",
+        "Replace w-[180px] with appropriate token or add new token",
+        "Ensure consistent styling across components"
+      ],
+      "acceptanceCriteria": [
+        "No arbitrary Tailwind values in the file",
+        "Uses design system tokens",
+        "Visual appearance is preserved"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending"
     }
   ]
 }
