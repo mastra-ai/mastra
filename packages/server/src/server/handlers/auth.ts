@@ -45,6 +45,42 @@ function getAuthProvider(mastra: any): MastraAuthProvider<EEUser> | null {
   return null;
 }
 
+/**
+ * Validates a redirect URL to prevent open redirect attacks.
+ * Only allows same-origin paths (starting with '/').
+ * Rejects URLs with protocols or external hosts.
+ *
+ * @param url - URL to validate
+ * @returns Validated path or '/' if invalid
+ */
+function validateRedirectUrl(url: string): string {
+  // Default to '/' for safety
+  if (!url || typeof url !== 'string') {
+    return '/';
+  }
+
+  // Trim whitespace
+  url = url.trim();
+
+  // Must start with '/' to be a same-origin path
+  if (!url.startsWith('/')) {
+    return '/';
+  }
+
+  // Reject protocol-relative URLs (//example.com)
+  if (url.startsWith('//')) {
+    return '/';
+  }
+
+  // Reject URLs with protocols (http://, https://, javascript:, data:, etc.)
+  if (url.includes(':')) {
+    return '/';
+  }
+
+  // Valid same-origin path
+  return url;
+}
+
 // ============================================================================
 // GET /api/auth/capabilities
 // ============================================================================
@@ -173,7 +209,9 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
       const [id, encodedRedirect] = state.split('|', 2);
       stateId = id!;
       try {
-        redirectTo = decodeURIComponent(encodedRedirect!);
+        const decodedRedirect = decodeURIComponent(encodedRedirect!);
+        // Validate redirect to prevent open redirect attacks
+        redirectTo = validateRedirectUrl(decodedRedirect);
       } catch {
         redirectTo = '/';
       }
