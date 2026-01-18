@@ -1,11 +1,4 @@
 import {
-  LIST_STORED_AGENTS_ROUTE,
-  GET_STORED_AGENT_ROUTE,
-  CREATE_STORED_AGENT_ROUTE,
-  UPDATE_STORED_AGENT_ROUTE,
-  DELETE_STORED_AGENT_ROUTE,
-} from '../../handlers/stored-agents';
-import {
   LIST_AGENT_VERSIONS_ROUTE,
   CREATE_AGENT_VERSION_ROUTE,
   GET_AGENT_VERSION_ROUTE,
@@ -14,6 +7,13 @@ import {
   DELETE_AGENT_VERSION_ROUTE,
   COMPARE_AGENT_VERSIONS_ROUTE,
 } from '../../handlers/agent-versions';
+import {
+  LIST_STORED_AGENTS_ROUTE,
+  GET_STORED_AGENT_ROUTE,
+  CREATE_STORED_AGENT_ROUTE,
+  UPDATE_STORED_AGENT_ROUTE,
+  DELETE_STORED_AGENT_ROUTE,
+} from '../../handlers/stored-agents';
 import type { ServerRoute } from '.';
 
 /**
