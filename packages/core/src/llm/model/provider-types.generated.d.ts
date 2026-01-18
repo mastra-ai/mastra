@@ -1872,7 +1872,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.1-fast-reasoning',
     'xai/grok-code-fast-1',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.6', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-7-sonnet-20250219',
