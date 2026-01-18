@@ -71,3 +71,7 @@ export { WebSessionStorage } from './session-storage.js';
 export { WorkOSUserProvider } from './user.js';
 export { MastraRBACWorkos } from './rbac.js';
 export type { WorkOSRBACConfig } from './rbac.js';
+export { WorkOSDirectorySync } from './directory-sync.js';
+export type { WorkOSDirectorySyncConfig, DirectorySyncEvent, DirectorySyncEventType } from './directory-sync.js';
+export { WorkOSAuditExporter } from './audit-export.js';
+export type { WorkOSAuditExporterConfig } from './audit-export.js';

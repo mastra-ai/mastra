@@ -652,3 +652,49 @@ Implementation details:
 - Handles edge cases: no organization, membership not found, API errors
 
 Next engineer: Task 024 (Implement WorkOS directory sync and audit export) or Task 025 (Create main WorkOS auth provider class) are ready to implement. Task 025 is more critical (P0) as it composes all the sub-providers into the main MastraAuthWorkos class. Task 024 is P1 and adds optional directory sync and audit export features.
+
+### 2026-01-18 - Task 024 Complete
+- Created auth/workos/src/directory-sync.ts with WorkOSDirectorySync class
+- Implemented WorkOSDirectorySyncConfig interface for SCIM configuration
+- Defined DirectorySyncEvent and DirectorySyncEventType for webhook events
+- Implemented handleWebhook(event) method for processing SCIM events
+- Event types supported:
+  - dsync.user.created - User provisioning
+  - dsync.user.updated - User updates
+  - dsync.user.deleted - User deprovisioning
+  - dsync.group.user_added - User added to group
+  - dsync.group.user_removed - User removed from group
+- Added callback handlers:
+  - onUserCreated(user) - Called when user is provisioned
+  - onUserUpdated(user) - Called when user is updated
+  - onUserDeleted(userId) - Called when user is deprovisioned
+  - onUserAddedToGroup(userId, group) - Called when user added to group
+  - onUserRemovedFromGroup(userId, group) - Called when user removed from group
+- Implemented listUsers() and listGroups() for directory listing
+- Implemented getUser(userId) and getGroup(groupId) for fetching entities
+- Created auth/workos/src/audit-export.ts with WorkOSAuditExporter class
+- Implemented WorkOSAuditExporterConfig interface for audit export configuration
+- Implemented IAuditLogger interface for exporting audit events to WorkOS
+- Implemented log(event) method to export Mastra audit events to WorkOS Audit Logs API
+- Map Mastra audit events to WorkOS event format:
+  - Action prefixing with configurable eventPrefix (default: 'mastra')
+  - Actor mapping with metadata storage (email, IP, user agent)
+  - Resource mapping to WorkOS targets
+  - Outcome and duration stored in metadata
+- Query and export methods are stubbed (WorkOS SDK v7 may not expose these APIs)
+- Events are exportable via WorkOS dashboard and SIEM integrations
+- Updated auth/workos/src/index.ts to export new classes and types
+- Exported WorkOSDirectorySync, WorkOSAuditExporter and related types
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (123 tasks successful)
+- All exports accessible from @mastra/auth-workos
+
+Implementation details:
+- Directory Sync supports Azure AD, Okta, Google Workspace, and other SCIM providers
+- Webhook handler filters events by directory ID
+- Group membership events can be used to map groups to roles for RBAC
+- Audit events are tamper-proof when stored in WorkOS Audit Logs
+- SIEM integration available via WorkOS (Splunk, Datadog, etc.)
+- Query and export via WorkOS dashboard (SDK methods to be implemented later)
+
+Next engineer: Task 025 (Create main WorkOS auth provider class) is ready to implement. This will compose all the WorkOS sub-providers (SSO, session, user, RBAC, directory sync, audit export) into the main MastraAuthWorkos provider class. This is a P0 task that completes the WorkOS auth provider implementation.
