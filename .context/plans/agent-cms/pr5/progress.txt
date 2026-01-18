@@ -1037,3 +1037,41 @@ Implementation details:
 
 Next engineer: Task 033 (Create login button component), Task 034 (Create AuthRequired guard component), or Task 037 (Create login page in playground) are ready to implement. Task 034 is P0 and provides the route guard for protecting authenticated routes. Task 037 creates the actual login page route in the playground app that uses the LoginPage component we just created.
 
+
+### 2026-01-18 - Task 033 Complete
+- Created packages/playground-ui/src/domains/auth/components/login-button.tsx
+- Implemented LoginButton component with SSO and credentials support
+- Component accepts LoginConfig and determines rendering based on auth type
+- For SSO login:
+  - Uses useSSOLogin hook to initiate OAuth flow
+  - Displays provider branding (icon and text) from SSO config
+  - Shows loading state during redirect (isPending)
+  - Redirects to SSO provider URL on button click
+- For credentials login:
+  - Redirects to login page (/login by default, configurable via loginUrl prop)
+  - Preserves redirect URL via query parameter
+  - Supports custom login page URL via loginUrl prop
+- For 'both' mode:
+  - Prioritizes SSO if available, falls back to credentials redirect
+- Component props:
+  - config: LoginConfig (required) - determines rendering mode
+  - redirectUri?: string - URL to redirect to after successful login
+  - className?: string - custom CSS classes for styling
+  - loginUrl?: string - custom login page URL (defaults to /login)
+- Updated packages/playground-ui/src/domains/auth/components/index.ts to export LoginButton
+- Comprehensive JSDoc documentation with usage examples
+- Verified playground-ui typecheck passes with npx tsc --noEmit
+- Verified full monorepo build passes with pnpm build
+- LoginButton component is now accessible from @mastra/playground-ui
+
+Implementation details:
+- LoginButton adapts UI based on auth provider capabilities (same as LoginPage)
+- SSO button uses provider text and icon for branding
+- Credentials button shows generic "Sign in" text
+- Loading state prevents double-clicks during SSO redirect
+- Redirect URL is preserved through login flow via query parameter
+- Component integrates seamlessly with useAuthCapabilities hook
+- Uses Mastra design system Button component
+- Accessible and keyboard navigable
+
+Next engineer: Task 034 (Create AuthRequired guard component) is ready to implement. This is a P0 frontend task that creates the route guard component for protecting authenticated routes. It depends on Tasks 030 and 031 (current user and permissions hooks), which are both complete. All necessary hooks (useAuthCapabilities, useCurrentUser, usePermissions) are in place for this implementation.
