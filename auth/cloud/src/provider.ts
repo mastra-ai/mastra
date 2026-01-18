@@ -151,7 +151,13 @@ export class MastraAuthCloud extends MastraAuthProvider<CloudUser> {
       return null;
     }
 
-    const value = sessionCookie.split('=')[1];
+    // Preserve = characters in the value (common in base64-encoded tokens)
+    const firstEqualIndex = sessionCookie.indexOf('=');
+    if (firstEqualIndex === -1) {
+      return null;
+    }
+
+    const value = sessionCookie.slice(firstEqualIndex + 1);
     return value || null;
   }
 
