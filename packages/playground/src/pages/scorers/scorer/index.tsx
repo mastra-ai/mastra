@@ -1,10 +1,10 @@
 import {
   Breadcrumb,
   Crumb,
-  ScoresList,
-  scoresListColumns,
+  ScoresTable,
   Header,
   MainContentLayout,
+  MainContentContent,
   PageHeader,
   ScoresTools,
   ScoreDialog,
@@ -16,7 +16,6 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
@@ -28,7 +27,6 @@ import {
 import { useParams, Link, useSearchParams } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -154,6 +152,8 @@ export default function Scorer() {
   const toNextScore = getToNextEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
   const toPreviousScore = getToPreviousEntryFn({ entries: scores, id: selectedScoreId, update: setSelectedScoreId });
 
+  const isEmpty = !isLoadingScores && scores.length === 0;
+
   return (
     <>
       <MainContentLayout>
@@ -183,16 +183,20 @@ export default function Scorer() {
           </HeaderAction>
         </Header>
 
-        <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
+        <MainContentContent isCentered={isEmpty}>
+          <div className="mb-6">
             <PageHeader
               title={scorer?.scorer?.config?.name || 'loading'}
               description={scorer?.scorer?.config?.description || 'loading'}
               icon={<GaugeIcon />}
             />
+          </div>
 
+          <div className="mb-6">
             <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
+          </div>
 
+          <div className="mb-6">
             <ScoresTools
               selectedEntity={selectedEntityOption}
               entityOptions={entityOptions}
@@ -200,21 +204,18 @@ export default function Scorer() {
               onReset={() => setSearchParams({ entity: 'all' })}
               isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
             />
-
-            {isLoadingScores ? (
-              <EntryListSkeleton columns={scoresListColumns} />
-            ) : (
-              <ScoresList
-                scores={scores}
-                selectedScoreId={selectedScoreId}
-                pagination={pagination}
-                onScoreClick={handleScoreClick}
-                onPageChange={setScoresPage}
-                errorMsg={scoresError?.message}
-              />
-            )}
           </div>
-        </div>
+
+          <ScoresTable
+            scores={scores}
+            isLoading={isLoadingScores}
+            selectedScoreId={selectedScoreId}
+            pagination={pagination}
+            onScoreClick={handleScoreClick}
+            onPageChange={setScoresPage}
+            errorMsg={scoresError?.message}
+          />
+        </MainContentContent>
       </MainContentLayout>
       <ScoreDialog
         scorerName={scorer?.scorer?.config?.name}

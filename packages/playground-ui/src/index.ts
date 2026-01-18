@@ -55,8 +55,8 @@ export * from './ds/components/Sections';
 // DS Components - Migrated Complex Elements
 export * from './ds/components/CombinedButtons';
 export * from './ds/components/DateTimePicker';
-export * from './ds/components/EntryList';
 export * from './ds/components/FormFields';
+export * from './ds/components/ScrollableContainer';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/Notification';
@@ -70,6 +70,9 @@ export * from './ds/components/Text';
 
 // Form utilities (AutoForm)
 export * from './lib/form';
+
+// Utility helpers
+export * from './lib/helpers';
 
 // DS Icons
 export * from './ds/icons/index';

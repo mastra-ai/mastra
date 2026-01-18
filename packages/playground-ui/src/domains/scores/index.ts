@@ -1,4 +1,4 @@
-export * from './components/scores-list';
+export * from './components/scores-table';
 export * from './components/score-dialog';
 export * from './components/scores-tools';
 export * from './components/scorer-combobox';

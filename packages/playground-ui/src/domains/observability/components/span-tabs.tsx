@@ -5,7 +5,7 @@ import {
   Section,
   Sections,
   SpanScoring,
-  SpanScoreList,
+  SpanScoreTable,
   useLinkComponent,
 } from '@/index';
 import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
@@ -87,7 +87,7 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scores
               </Section.Heading>
             </Section.Header>
-            <SpanScoreList
+            <SpanScoreTable
               scoresData={spanScoresData}
               onPageChange={onSpanScoresPageChange}
               isLoadingScoresData={isLoadingSpanScoresData}

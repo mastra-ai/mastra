@@ -1,11 +1,9 @@
-import { cn } from '@/lib/utils';
 import {
   HeaderTitle,
   Header,
   MainContentLayout,
-  TracesList,
-  tracesListColumns,
-  PageHeader,
+  MainContentContent,
+  TracesTable,
   EntityOptions,
   TracesTools,
   TraceDialog,
@@ -14,7 +12,6 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
@@ -157,6 +154,8 @@ export default function Observability() {
     update: setSelectedTraceId,
   });
 
+  const isEmpty = !isTracesLoading && traces.length === 0;
+
   return (
     <>
       <MainContentLayout>
@@ -178,14 +177,8 @@ export default function Observability() {
           </HeaderAction>
         </Header>
 
-        <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] px-12 mx-auto grid content-start gap-8 h-full')}>
-            <PageHeader
-              title="Observability"
-              description="Explore observability traces for your entities"
-              icon={<EyeIcon />}
-            />
-
+        <MainContentContent isCentered={isEmpty}>
+          <div className="mb-6">
             <TracesTools
               onEntityChange={handleSelectedEntityChange}
               onReset={handleReset}
@@ -196,23 +189,20 @@ export default function Observability() {
               selectedDateTo={selectedDateTo}
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
             />
-
-            {isTracesLoading ? (
-              <EntryListSkeleton columns={tracesListColumns} />
-            ) : (
-              <TracesList
-                traces={traces}
-                selectedTraceId={selectedTraceId}
-                onTraceClick={handleTraceClick}
-                errorMsg={error?.error}
-                setEndOfListElement={setEndOfListElement}
-                filtersApplied={Boolean(filtersApplied)}
-                isFetchingNextPage={isFetchingNextPage}
-                hasNextPage={hasNextPage}
-              />
-            )}
           </div>
-        </div>
+
+          <TracesTable
+            traces={traces}
+            isLoading={isTracesLoading}
+            selectedTraceId={selectedTraceId}
+            onTraceClick={handleTraceClick}
+            errorMsg={error?.error}
+            setEndOfListElement={setEndOfListElement}
+            filtersApplied={Boolean(filtersApplied)}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+          />
+        </MainContentContent>
       </MainContentLayout>
       <TraceDialog
         traceSpans={Trace?.spans}
