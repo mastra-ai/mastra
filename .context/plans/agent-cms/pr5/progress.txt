@@ -1523,3 +1523,21 @@ These security vulnerabilities should be addressed before manual testing (Task 0
 - Security fix prevents phishing attacks via OAuth callback redirect manipulation
 
 Next engineer: Task 047 (Fix open redirect vulnerability in signup page) is the next P0 security task. Similar validation pattern should be applied.
+
+### 2026-01-18 - Task 047 Complete
+- Fixed open redirect vulnerability in signup page (packages/playground/src/pages/signup/index.tsx)
+- Added getSafeRedirect() function to validate redirect URLs
+- Only allows same-origin redirects (paths starting with '/' or URLs matching window.location.origin)
+- Cross-origin URLs are rejected and fallback to '/'
+- Removed all window.location.href assignments for user-controlled URLs
+- Now uses navigate() exclusively for all redirects
+- Removed default export per coding guidelines (uses named export only)
+- Verified pnpm typecheck passes
+- Verified pnpm build passes
+- All acceptance criteria met:
+  * Redirects are validated to be same-origin only
+  * Cross-origin URLs are rejected and fallback to '/'
+  * No window.location.href with user-controlled URLs
+  * Uses navigate() for all redirects
+
+Next engineer: Task 048 (Fix CSV injection in audit export) is ready to implement. This is a P1 security fix for the audit CSV export functionality.
