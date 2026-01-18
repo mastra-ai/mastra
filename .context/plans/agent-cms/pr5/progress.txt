@@ -1541,3 +1541,14 @@ Next engineer: Task 047 (Fix open redirect vulnerability in signup page) is the 
   * Uses navigate() for all redirects
 
 Next engineer: Task 048 (Fix CSV injection in audit export) is ready to implement. This is a P1 security fix for the audit CSV export functionality.
+
+### 2026-01-18 - Task 049 Complete
+- Fixed Set-Cookie parsing bug in auth/workos/src/sso.ts
+- Added support for both 'Set-Cookie' and 'set-cookie' header casing
+- Fixed cookie value parsing to preserve = characters (critical for base64/encrypted cookies)
+- Changed from split('=') to indexOf('=') + slice() to only split on first = 
+- Verified typecheck passes (124/124 successful)
+- Verified build passes (124/124 tasks, 122 cached)
+- Updated tasks.json to mark task 049 as completed with passing=true
+
+Next engineer: Task 048 (P1 - CSV injection fix) or Task 050 (P1 - package dependency fix) are next highest priority pending tasks.

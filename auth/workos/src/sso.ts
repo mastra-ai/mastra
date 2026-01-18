@@ -125,7 +125,8 @@ export class WorkOSSSOProvider implements ISSOProvider<EEUser> {
     };
 
     // Extract session cookie from response headers
-    const sessionCookie = result.headers?.['Set-Cookie'];
+    // Handle both 'Set-Cookie' and 'set-cookie' header casing
+    const sessionCookie = result.headers?.['Set-Cookie'] || result.headers?.['set-cookie'];
     const cookies: Record<string, string> = {};
 
     if (sessionCookie) {
@@ -134,9 +135,14 @@ export class WorkOSSSOProvider implements ISSOProvider<EEUser> {
       cookieArray.forEach(cookie => {
         const [nameValue] = cookie.split(';');
         if (nameValue) {
-          const [name, value] = nameValue.split('=');
-          if (name && value) {
-            cookies[name.trim()] = value.trim();
+          // Split on first = only to preserve = characters in values (e.g., base64/encrypted cookies)
+          const firstEqualIdx = nameValue.indexOf('=');
+          if (firstEqualIdx > 0) {
+            const name = nameValue.slice(0, firstEqualIdx);
+            const value = nameValue.slice(firstEqualIdx + 1);
+            if (name && value) {
+              cookies[name.trim()] = value.trim();
+            }
           }
         }
       });
