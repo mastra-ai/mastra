@@ -250,10 +250,10 @@ export function createWorkspaceTools(workspace: Workspace) {
         code: z.string().describe('The code to execute'),
         runtime: z
           .enum(['node', 'python', 'bash', 'shell', 'ruby'])
-          .optional()
+          .nullish()
           .default('node')
           .describe('The runtime to use for execution'),
-        timeout: z.number().optional().describe('Maximum execution time in milliseconds'),
+        timeout: z.number().nullish().describe('Maximum execution time in milliseconds'),
       }),
       outputSchema: z.object({
         success: z.boolean().describe('Whether the code executed successfully (exit code 0)'),
@@ -263,7 +263,10 @@ export function createWorkspaceTools(workspace: Workspace) {
         executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
       }),
       execute: async ({ code, runtime, timeout }) => {
-        const result = await workspace.executeCode(code, { runtime, timeout });
+        const result = await workspace.executeCode(code, {
+          runtime: runtime ?? undefined,
+          timeout: timeout ?? undefined,
+        });
         return {
           success: result.success,
           stdout: result.stdout,
@@ -279,9 +282,9 @@ export function createWorkspaceTools(workspace: Workspace) {
       description: 'Execute a shell command in the workspace sandbox',
       inputSchema: z.object({
         command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
-        args: z.array(z.string()).optional().default([]).describe('Arguments to pass to the command'),
-        timeout: z.number().optional().describe('Maximum execution time in milliseconds'),
-        cwd: z.string().optional().describe('Working directory for the command'),
+        args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
+        timeout: z.number().nullish().describe('Maximum execution time in milliseconds'),
+        cwd: z.string().nullish().describe('Working directory for the command'),
       }),
       outputSchema: z.object({
         success: z.boolean().describe('Whether the command executed successfully (exit code 0)'),
@@ -291,7 +294,10 @@ export function createWorkspaceTools(workspace: Workspace) {
         executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
       }),
       execute: async ({ command, args, timeout, cwd }) => {
-        const result = await workspace.executeCommand(command, args, { timeout, cwd });
+        const result = await workspace.executeCommand(command, args ?? [], {
+          timeout: timeout ?? undefined,
+          cwd: cwd ?? undefined,
+        });
         return {
           success: result.success,
           stdout: result.stdout,
