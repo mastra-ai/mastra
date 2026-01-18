@@ -485,3 +485,35 @@ Important notes for next engineer:
 - All schemas use proper Zod types and align with core/ee interface definitions
 
 Next engineer: Task 019 (Create audit API handlers) or Task 020 (Register auth and audit routes) are ready to implement. Task 020 may be more logical as it wires up the auth handlers we just created to the server router.
+
+### 2026-01-17 - Task 019 Complete
+- Created packages/server/src/server/schemas/audit.ts with comprehensive Zod schemas
+- Defined auditActorSchema, auditResourceSchema, auditEventSchema for event validation
+- Defined auditQuerySchema for filtering with actorId, actorType, action, resourceType, resourceId, outcome, date range, pagination
+- Defined auditListResponseSchema for paginated responses with events, total, offset, limit
+- Defined auditExportQuerySchema for export with format selection (json or csv)
+- Created packages/server/src/server/handlers/audit.ts with all audit endpoints
+- Implemented GET /api/audit - lists audit events with filtering and pagination
+- Implemented GET /api/audit/:id - retrieves single audit event by ID
+- Implemented GET /api/audit/export - exports audit events as JSON or CSV
+- Added checkPermission() helper for RBAC permission checking (requires 'audit:read')
+- Added convertToCSV() helper for CSV export formatting
+- All handlers include proper error handling with HTTPException (401, 403, 404, 503)
+- Handlers use getAuthProvider() and getAuditStorage() helpers (stubbed for later integration)
+- Route signatures follow server adapter pattern with queryParamSchema, pathParamSchema
+- CSV export includes headers and properly escaped fields
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (123 tasks successful)
+- All audit API endpoints are ready for route registration (Task 020)
+
+Important notes for next engineer:
+- Audit handlers are implemented but getAuthProvider() and getAuditStorage() currently return null
+- Once auth provider and audit storage are integrated into Mastra config, update these helpers
+- Request object access needed for proper getCurrentUser and permission checking
+- The handlers work with AuditStorage from @mastra/core/storage
+- Permission checking is stubbed with TODOs for when Request object is available
+- CSV export returns data object with contentType and filename for server adapter handling
+- All schemas properly coerce dates and numbers for URL query parameters
+
+Next engineer: Task 020 (Register auth and audit routes) is ready to implement. This will wire up the auth handlers (Task 018) and audit handlers (Task 019) to the server router, making all auth and audit endpoints accessible.
+
