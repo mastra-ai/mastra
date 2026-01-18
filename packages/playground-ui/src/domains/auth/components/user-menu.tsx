@@ -131,7 +131,7 @@ export function UserMenu({
                   </div>
                 </div>
               )}
-              {access.permissions.length > 0 && access.permissions.length <= 5 && (
+              {access.permissions.length > 0 && (
                 <div>
                   <Txt variant="ui-xs" className="text-neutral2 uppercase mb-1">
                     Permissions
