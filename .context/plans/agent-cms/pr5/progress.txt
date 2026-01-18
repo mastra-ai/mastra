@@ -1479,3 +1479,34 @@ Next engineer: Start with Task 044 (CVE fix) as it's the simplest critical fix, 
 - Security vulnerability is now patched
 
 Next engineer: Continue with remaining security fixes and improvements (Tasks 045-055). Task 045 (Fix invalid TypeScript syntax in WorkOS audit-export.ts) is the next P0 priority.
+
+---
+
+## Task 045: Fix invalid TypeScript syntax in WorkOS audit-export.ts (2026-01-18)
+
+**Status**: ✅ Completed
+
+**Changes Made**:
+- Fixed invalid TypeScript syntax in `auth/workos/src/audit-export.ts`
+- Removed `?` modifier from `async query?()` method declaration (line 117)
+- Removed `?` modifier from `async export?()` method declaration (line 132)
+- Both methods now properly implement the IAuditLogger interface
+
+**Verification**:
+- ✅ `pnpm typecheck` passes without errors
+- ✅ `pnpm build` completes successfully (124/124 tasks successful)
+
+**Notes**:
+- The `?` modifier on method names is only valid in interface/type declarations, not in class method implementations
+- Both methods still throw errors as placeholders until WorkOS SDK exposes the Audit Logs query/export API
+- This was a critical P0 issue that was blocking TypeScript compilation
+
+**Next Engineer**:
+The highest priority remaining tasks are:
+- Task 046 (P0): Fix open redirect vulnerability in OAuth callback page
+- Task 047 (P0): Fix open redirect vulnerability in signup page  
+- Task 049 (P0): Fix Set-Cookie parsing in WorkOS SSO
+- Task 048 (P1): Fix CSV injection in audit export
+
+These security vulnerabilities should be addressed before manual testing (Task 042).
+

@@ -114,7 +114,7 @@ export class WorkOSAuditExporter implements IAuditLogger {
    * query API directly. For production use, query events via the WorkOS dashboard
    * or use SIEM integrations.
    */
-  async query?(filter: AuditFilter): Promise<AuditEvent[]> {
+  async query(filter: AuditFilter): Promise<AuditEvent[]> {
     // TODO: Implement when WorkOS SDK exposes the Audit Logs query API
     // For now, throw an error indicating this feature is not available
     throw new Error(
@@ -129,7 +129,7 @@ export class WorkOSAuditExporter implements IAuditLogger {
    * Note: This method is a placeholder. For production use, export events via
    * the WorkOS dashboard or SIEM integrations (Splunk, Datadog, etc.).
    */
-  async export?(filter: AuditFilter, format: AuditExportFormat): Promise<ReadableStream> {
+  async export(filter: AuditFilter, format: AuditExportFormat): Promise<ReadableStream> {
     // TODO: Implement when WorkOS SDK exposes the Audit Logs export API
     // For now, throw an error indicating this feature is not available
     throw new Error(
