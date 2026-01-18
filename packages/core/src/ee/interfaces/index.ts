@@ -7,5 +7,4 @@
  * @packageDocumentation
  */
 
-// Placeholder - interfaces will be added in subsequent tasks
-export {};
+export type { EEUser, IUserProvider } from './user.js';
