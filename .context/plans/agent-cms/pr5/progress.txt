@@ -237,3 +237,30 @@ Next engineer: Task 009 (Create MastraAuthProvider base class) is ready to imple
 - Base class is now accessible from @mastra/core/ee
 
 Next engineer: Task 010 (Create capabilities detection and response building) is ready to implement. The base auth provider class is complete and ready for the capabilities API that will use buildCapabilities() and integrate license checking.
+
+### 2026-01-17 - Task 010 Complete
+- Created packages/core/src/ee/capabilities.ts with full implementation
+- Defined LoginConfig interface with type ('sso' | 'credentials' | 'both'), signUpEnabled, and SSO config
+- Imported CapabilityFlags from auth-provider.ts to avoid duplication
+- Defined PublicAuthCapabilities interface with enabled and login config fields
+- Defined UserAccess interface with roles and permissions arrays
+- Defined AuthenticatedCapabilities extending PublicAuthCapabilities with user, capabilities, and access
+- Implemented buildPublicCapabilities(provider) function
+  - Integrates license check with bypass for isMastraCloudAuth providers
+  - Returns enabled: false if no valid license (unless Mastra Cloud Auth)
+  - Detects available auth methods (SSO, credentials, or both)
+  - Returns login configuration with SSO button config and signup availability
+- Implemented buildAuthenticatedCapabilities(provider, user) function
+  - Extends public capabilities with user context
+  - Adds capability flags for all EE interfaces
+  - Fetches user's roles and permissions from RBAC provider if available
+  - Returns complete authenticated capability response
+- All types are exported from packages/core/src/ee/index.ts (capabilities module already exported)
+- Verified full monorepo typecheck passes with pnpm typecheck
+- Verified full monorepo build passes with pnpm build (123 tasks successful)
+- Public capabilities enable login page rendering without authentication
+- Authenticated capabilities include full user context with roles/permissions
+- License check respects isMastraCloudAuth bypass flag
+- All types are now accessible from @mastra/core/ee
+
+Next engineer: Task 011 (Create withEE composition helper) is ready to implement. The capabilities detection system is complete and ready for the withEE() composition helper that wraps auth providers to add EE capabilities.
