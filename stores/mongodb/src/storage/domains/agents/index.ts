@@ -437,11 +437,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
     try {
       const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
-      const result = await collection
-        .find<any>({ agentId })
-        .sort({ versionNumber: -1 })
-        .limit(1)
-        .toArray();
+      const result = await collection.find<any>({ agentId }).sort({ versionNumber: -1 }).limit(1).toArray();
 
       if (!result || result.length === 0) {
         return null;
@@ -499,7 +495,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       // MongoDB sort: 1 = ASC, -1 = DESC
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
-      let cursor = collection.find({ agentId }).sort({ [field]: sortOrder }).skip(offset);
+      let cursor = collection
+        .find({ agentId })
+        .sort({ [field]: sortOrder })
+        .skip(offset);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);

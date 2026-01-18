@@ -14,13 +14,7 @@ export interface DeleteAgentConfirmProps {
   onSuccess?: () => void;
 }
 
-export function DeleteAgentConfirm({
-  agentId,
-  agentName,
-  open,
-  onOpenChange,
-  onSuccess,
-}: DeleteAgentConfirmProps) {
+export function DeleteAgentConfirm({ agentId, agentName, open, onOpenChange, onSuccess }: DeleteAgentConfirmProps) {
   const { deleteStoredAgent } = useStoredAgentMutations(agentId);
 
   const handleDelete = async () => {
@@ -55,8 +49,8 @@ export function DeleteAgentConfirm({
             <div className="text-sm text-destructive">
               <p className="font-medium">This action cannot be undone.</p>
               <p className="mt-1 text-xs">
-                This will permanently delete the agent and all of its version history. Any workflows
-                or configurations using this agent will need to be updated.
+                This will permanently delete the agent and all of its version history. Any workflows or configurations
+                using this agent will need to be updated.
               </p>
             </div>
           </div>
