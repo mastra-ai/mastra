@@ -153,7 +153,7 @@ export const ProviderSelect = ({
                     className="w-3.5 h-3.5 text-gray-500 hover:text-gray-700 cursor-pointer"
                     onClick={e => {
                       e.stopPropagation();
-                      window.open(selectedProviderData.docUrl, '_blank');
+                      window.open(selectedProviderData.docUrl, '_blank', 'noopener,noreferrer');
                     }}
                   />
                 </div>
@@ -216,7 +216,7 @@ export const ProviderSelect = ({
                     className="w-4 h-4 text-gray-500 hover:text-gray-700 cursor-pointer"
                     onClick={e => {
                       e.stopPropagation();
-                      window.open(provider.docUrl, '_blank');
+                      window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
                     }}
                   />
                 )}
