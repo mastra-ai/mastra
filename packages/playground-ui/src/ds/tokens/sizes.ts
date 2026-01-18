@@ -18,4 +18,6 @@ export const Sizes = {
   'truncate-md': '180px',
   'screen-85': '85vh',
   'screen-90': '90vh',
+  'popover-width': '280px',
+  'scroll-height': '250px',
 };

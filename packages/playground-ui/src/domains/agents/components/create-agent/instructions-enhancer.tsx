@@ -114,7 +114,7 @@ const EnhancerModelSelector = ({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[280px] p-2"
+        className="w-popover-width p-2"
         onOpenAutoFocus={e => {
           e.preventDefault();
           inputRef.current?.focus();
@@ -131,7 +131,7 @@ const EnhancerModelSelector = ({
           placeholder="Search models..."
           className="mb-2"
         />
-        <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+        <div className="max-h-scroll-height overflow-y-auto space-y-0.5">
           {/* Only show "Default" option in edit mode */}
           {!isCreateMode && (
             <div
