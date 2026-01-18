@@ -52,6 +52,8 @@ import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
 import Login from './pages/login';
+import { SignUp } from './pages/signup';
+import { OAuthCallback } from './pages/oauth/callback';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -106,8 +108,10 @@ function App() {
         <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>
             <Routes>
-              {/* Login route - no layout */}
+              {/* Auth routes - no layout */}
               <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/oauth/callback" element={<OAuthCallback />} />
 
               <Route
                 element={

@@ -1236,3 +1236,49 @@ Verification summary:
 All acceptance criteria for Task 040 are met. The complete PR builds and type checks successfully.
 
 Next engineer: Task 041 (Run and fix affected package tests) is ready to implement. This will run tests for all packages modified in this PR (core, server, playground-ui, auth packages). Alternatively, frontend tasks (036, 038, 039) can be completed to finish the UI implementation before running the full test suite.
+
+### 2026-01-18 - Task 036 Complete
+- Created packages/playground/src/pages/signup/index.tsx with SignUp component
+- Implemented signup page using LoginPage component with initialMode="signup"
+- Component features:
+  - Uses useCurrentUser hook to check authentication state
+  - Automatically redirects already authenticated users to intended destination
+  - Checks if signup is enabled via capabilities.login.signUpEnabled flag
+  - Shows "Sign Up Disabled" message with link to sign in if signup is disabled
+  - Uses useSearchParams to extract redirect parameter from query string
+  - Handles redirectUri for post-signup navigation (full URLs and paths)
+  - Full-screen layout with neutral background matching login page
+- Created packages/playground/src/pages/oauth/ directory
+- Created packages/playground/src/pages/oauth/callback.tsx with OAuthCallback component
+- OAuth callback component handles SSO authentication redirect flow:
+  - Shows loading state while server processes OAuth callback at /api/auth/sso/callback
+  - Server-side callback exchanges authorization code for session cookies
+  - Handles error cases with user-friendly error messages
+  - Provides fallback redirect if server redirect fails after 5 seconds
+  - Shows success/error UI states with icons and messages
+  - Redirects to original destination extracted from state parameter
+- Updated packages/playground/src/App.tsx:
+  - Added imports for SignUp and OAuthCallback components
+  - Registered /signup route without layout (standalone page)
+  - Registered /oauth/callback route without layout (standalone page)
+  - All auth routes grouped together before main Layout wrapper
+- Auth flow integration:
+  - Signup page integrates with useAuthCapabilities and useCurrentUser hooks
+  - OAuth callback page works with server-side /api/auth/sso/callback endpoint
+  - Session cookies set automatically by server on successful OAuth flow
+  - Redirect URL preserved through auth flow via query parameters
+- Verified full monorepo typecheck passes
+- Verified full monorepo build passes (124 tasks successful)
+- All acceptance criteria met
+
+Implementation details:
+- Signup page reuses LoginPage component with initialMode="signup" prop
+- LoginPage already implements full signup form with validation
+- OAuth callback is primarily handled server-side for security
+- Frontend callback page provides loading/error UI for better UX
+- Server-side callback at /api/auth/sso/callback handles code exchange and session creation
+- Both pages use consistent styling with login page (bg-surface1, centered card)
+- Error handling includes query parameter propagation and user-friendly messages
+- All components properly integrate with auth hooks ecosystem
+
+Next engineer: Task 038 (Create audit log page) or Task 039 (Integrate auth into playground layout) are ready to implement. Task 039 is P0 and integrates the auth status/user menu into the playground header. All frontend auth pages (login, signup, OAuth callback) are now complete.
