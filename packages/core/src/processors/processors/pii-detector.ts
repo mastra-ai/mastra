@@ -306,12 +306,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
             })
           : baseSchema;
 
-      let response;
+      let result: PIIDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -319,16 +319,18 @@ export class PIIDetector implements Processor<'pii-detector'> {
           providerOptions: this.providerOptions,
           tracingContext,
         });
+        result = response.object!;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
+
+        result = response.object as PIIDetectionResult;
       }
 
-      const result = response.object as PIIDetectionResult;
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {
         if (!result.redacted_content && result.detections && result.detections.length > 0) {

@@ -53,7 +53,7 @@ export interface SystemPromptDetection {
   /** End position in text */
   end: number;
   /** Redacted value if available */
-  redacted_value: string | null;
+  redacted_value?: string | null;
 }
 
 export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'> {
@@ -247,7 +247,6 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   ): Promise<SystemPromptDetectionResult> {
     try {
       const model = await this.detectionAgent.getModel();
-      let result: any;
 
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of system prompt detected'),
@@ -276,22 +275,27 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
             })
           : baseSchema;
 
+      let result: SystemPromptDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        result = await this.detectionAgent.generate(text, {
+        const response = await this.detectionAgent.generate(text, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           tracingContext,
         });
+
+        result = response.object!;
       } else {
-        result = await this.detectionAgent.generateLegacy(text, {
-          output: schema,
+        const response = await this.detectionAgent.generateLegacy(text, {
+          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           tracingContext,
         });
+
+        result = response.object as SystemPromptDetectionResult;
       }
 
-      return result.object as SystemPromptDetectionResult;
+      return result;
     } catch (error) {
       console.warn('[SystemPromptScrubber] Detection agent failed:', error);
       return {

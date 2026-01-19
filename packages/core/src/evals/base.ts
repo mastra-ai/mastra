@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import * as z3 from 'zod-v3';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -574,22 +575,23 @@ class MastraScorer<
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const schema = z.object({ score: z.number() });
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
-            schema,
+            schema: z.object({ score: z.number() }),
           },
           tracingContext,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: schema,
+          output: z3.object({
+            score: z3.number(),
+          }),
           tracingContext,
         });
       }
-      return { result: result.object.score, prompt };
+      return { result: result.object!.score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
@@ -612,7 +614,7 @@ class MastraScorer<
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: promptStep.outputSchema,
+          output: promptStep.outputSchema as unknown as z3.ZodSchema,
           tracingContext,
         });
       }

@@ -8,7 +8,7 @@ import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type { Processor, ProcessorStepOutput } from '@mastra/core/processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
-import type { ChunkType, OutputSchema, SchemaWithValidation } from '@mastra/core/stream';
+import type { ChunkType, OutputSchema } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
@@ -273,7 +273,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
-    z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
+    z.object({ text: z.string() })) as unknown as PublicSchema<TStepOutput>;
   const { retries, scorers, ...agentOptions } =
     options ?? ({} as AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> });
 

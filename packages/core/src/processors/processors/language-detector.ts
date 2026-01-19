@@ -272,7 +272,6 @@ export class LanguageDetector implements Processor<'language-detector'> {
 
     try {
       const model = await this.detectionAgent.getModel();
-      let response;
 
       const baseSchema = z.object({
         iso_code: z.string().describe('ISO language code').nullable(),
@@ -286,8 +285,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
             })
           : baseSchema;
 
+      let result: LanguageDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
           },
@@ -297,16 +297,18 @@ export class LanguageDetector implements Processor<'language-detector'> {
           providerOptions: this.providerOptions,
           tracingContext,
         });
+
+        result = response.object!;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
-      }
 
-      const result = response.object as LanguageDetectionResult;
+        result = response.object as LanguageDetectionResult;
+      }
 
       if (result.translated_text && !result.confidence) {
         result.confidence = 0.95;

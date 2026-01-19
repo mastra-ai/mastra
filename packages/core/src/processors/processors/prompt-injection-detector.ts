@@ -199,7 +199,6 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     const prompt = this.createDetectionPrompt(content);
     try {
       const model = await this.detectionAgent.getModel();
-      let response;
 
       const baseSchema = z.object({
         categories: z
@@ -229,11 +228,12 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         });
       }
 
+      let result: PromptInjectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -241,16 +241,18 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           providerOptions: this.providerOptions,
           tracingContext,
         });
+
+        result = response.object!;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
-      }
 
-      const result = response.object satisfies PromptInjectionResult;
+        result = response.object as PromptInjectionResult;
+      }
 
       return result;
     } catch (error) {

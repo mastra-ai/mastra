@@ -1,12 +1,11 @@
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
-import type { ZodType, ZodTypeDef, infer as zodInfer } from 'zod/v3';
+import zodToJsonSchemaOriginal from 'zod-to-json-schema';
+import type { ZodType, ZodTypeDef } from 'zod-v3';
 import type {
   StandardSchemaWithJSON,
   StandardSchemaWithJSONProps,
   ZodToJsonSchemaTarget,
 } from '../standard-schema.types';
-
 /**
  * Target mapping from Standard Schema targets to zod-to-json-schema targets.
  */
@@ -40,7 +39,11 @@ function convertToJsonSchema<T extends ZodType<any, ZodTypeDef, any>>(
     );
   }
 
-  const jsonSchema = zodToJsonSchema(zodSchema, target, 'none');
+  // @ts-expect-error - typescript does not resolve correct zod version
+  const jsonSchema = zodToJsonSchemaOriginal(zodSchema, {
+    $refStrategy: 'none',
+    target,
+  });
 
   return jsonSchema as Record<string, unknown>;
 }
@@ -73,14 +76,12 @@ function convertToJsonSchema<T extends ZodType<any, ZodTypeDef, any>>(
  * const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
  * ```
  */
-export function toStandardSchema<T extends ZodType<any, ZodTypeDef, any>>(
-  zodSchema: T,
-): T & StandardSchemaWithJSON<zodInfer<T>, zodInfer<T>> {
+export function toStandardSchema<T>(zodSchema: ZodType<T, ZodTypeDef, T>): T & StandardSchemaWithJSON<T, T> {
   // Create a wrapper object that includes the jsonSchema converter
-  const wrapper = Object.create(zodSchema) as T & StandardSchemaWithJSON<zodInfer<T>, zodInfer<T>>;
+  const wrapper = Object.create(zodSchema) as T & StandardSchemaWithJSON<T, T>;
 
   // Get the existing ~standard property from Zod
-  const existingStandard = zodSchema['~standard'] as StandardSchemaV1.Props<zodInfer<T>, zodInfer<T>>;
+  const existingStandard = zodSchema['~standard'] as StandardSchemaV1.Props<T, T>;
 
   // Create the JSON Schema converter
   const jsonSchemaConverter: StandardJSONSchemaV1.Converter = {
@@ -99,7 +100,7 @@ export function toStandardSchema<T extends ZodType<any, ZodTypeDef, any>>(
     value: {
       ...existingStandard,
       jsonSchema: jsonSchemaConverter,
-    } satisfies StandardSchemaWithJSONProps<zodInfer<T>, zodInfer<T>>,
+    } satisfies StandardSchemaWithJSONProps<T, T>,
     writable: false,
     enumerable: true,
     configurable: false,

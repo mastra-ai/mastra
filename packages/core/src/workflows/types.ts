@@ -8,10 +8,13 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
-import type { InferOutput } from '../schema/standard-schema.types';
+import type {
+  InferPublicSchema,
+  PublicSchema,
+  StandardSchemaWithJSON,
+  InferStandardSchemaOutput,
+} from '../schema/schema';
 import type { OutputSchema } from '../stream';
-import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
 import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -203,7 +206,7 @@ export type PathsToStringProps<T> =
       : never;
 
 export type ExtractSchemaType<T extends StandardSchemaWithJSON> = T extends StandardSchemaWithJSON
-  ? InferOutput<T>
+  ? InferStandardSchemaOutput<T>
   : never;
 
 export type ExtractSchemaFromStep<
@@ -562,23 +565,6 @@ export type StepParams<
   >;
 };
 
-/**
- * Legacy StepParams type for backward compatibility.
- * Use the schema-based StepParams for new code.
- */
-export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
-  id: TStepId;
-  description?: string;
-  inputSchema: SchemaWithValidation<TStepInput>;
-  outputSchema: SchemaWithValidation<TStepOutput>;
-  resumeSchema?: SchemaWithValidation<TResume>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  stateSchema?: SchemaWithValidation<TState>;
-  retries?: number;
-  scorers?: DynamicArgument<MastraScorers>;
-  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
-};
-
 export type ToolStep<
   TSchemaIn,
   TSuspendSchema,
@@ -586,8 +572,8 @@ export type ToolStep<
   TSchemaOut,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-  inputSchema: SchemaWithValidation<TSchemaIn>;
-  outputSchema: SchemaWithValidation<TSchemaOut>;
+  inputSchema: StandardSchemaWithJSON<TSchemaIn>;
+  outputSchema: StandardSchemaWithJSON<TSchemaOut>;
   execute: (input: TSchemaIn, context?: TContext) => Promise<any>;
 };
 
@@ -602,10 +588,14 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+                : unknown,
+              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+                : unknown,
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
             >;
       };
     } & TracingProperties)
@@ -618,10 +608,14 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+                : unknown,
+              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+                : unknown,
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
             >;
       };
       error: Error;
@@ -635,10 +629,14 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+                : unknown,
+              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+                : unknown,
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
             >;
       };
       /** Tripwire data including reason, retry flag, metadata, and processor ID */
@@ -653,10 +651,14 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+                : unknown,
+              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+                : unknown,
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
             >;
       };
       suspendPayload: any;
@@ -671,10 +673,14 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+                : unknown,
+              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+                : unknown,
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
             >;
       };
     } & TracingProperties);
@@ -688,10 +694,14 @@ export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<st
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
-              InferZodLikeSchema<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+                : unknown,
+              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+                : unknown,
+              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
             >;
       };
     };

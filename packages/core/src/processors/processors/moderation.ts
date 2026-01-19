@@ -1,4 +1,5 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { GenerateObjectResult } from '@internal/ai-sdk-v4';
 import z from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -6,7 +7,7 @@ import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream';
+import type { ChunkType, FullOutput } from '../../stream';
 import type { Processor } from '../index';
 
 /**
@@ -279,12 +280,13 @@ export class ModerationProcessor implements Processor<'moderation'> {
           .nullable(),
         reason: z.string().describe('Brief explanation of why content was flagged').nullable(),
       });
-      let response;
+
+      let result: ModerationResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.moderationAgent.generate(prompt, {
+        const response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -292,16 +294,18 @@ export class ModerationProcessor implements Processor<'moderation'> {
           providerOptions: this.providerOptions,
           tracingContext,
         });
+
+        result = response.object!;
       } else {
-        response = await this.moderationAgent.generateLegacy(prompt, {
-          output: schema,
+        const response = await this.moderationAgent.generateLegacy(prompt, {
+          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
-      }
 
-      const result = response.object satisfies ModerationResult;
+        result = response.object as ModerationResult;
+      }
 
       return result;
     } catch (error) {

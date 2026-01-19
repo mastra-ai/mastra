@@ -1,7 +1,7 @@
 import type { Schema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
+import type z4 from 'zod';
 import type z3 from 'zod/v3';
-import type z4 from 'zod/v4';
 import type { StandardSchemaWithJSON } from './standard-schema.types';
 
 export type { StandardSchemaWithJSON, InferOutput as InferStandardSchemaOutput } from './standard-schema.types';

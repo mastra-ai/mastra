@@ -310,4 +310,9 @@ export interface ToolAction<
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /**
+   * Optional MCP-specific properties including annotations and metadata.
+   * Only relevant when the tool is being used in an MCP context.
+   */
+  mcp?: MCPToolProperties;
 }

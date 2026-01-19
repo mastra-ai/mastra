@@ -5,7 +5,7 @@ import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
@@ -106,7 +106,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 args: toolCall.args,
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata,
+                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               },
             };
             await processAndEnqueueChunk(chunk);
@@ -128,7 +128,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
                   },
                   ...(toolCallErrorResult.providerMetadata
-                    ? { providerMetadata: toolCallErrorResult.providerMetadata }
+                    ? { providerMetadata: toolCallErrorResult.providerMetadata as ProviderMetadata }
                     : {}),
                 };
               }),
@@ -167,7 +167,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               result: toolCall.result,
-              providerMetadata: toolCall.providerMetadata,
+              providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               providerExecuted: toolCall.providerExecuted,
             },
           };
@@ -200,7 +200,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   args: toolCall.args,
                   result: toolCall.result,
                 },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                ...(toolCall.providerMetadata
+                  ? { providerMetadata: toolCall.providerMetadata as ProviderMetadata }
+                  : {}),
               };
             }),
           },

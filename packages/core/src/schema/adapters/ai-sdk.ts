@@ -114,8 +114,10 @@ export class AiSdkSchemaWrapper<Input = unknown, Output = Input> implements Stan
     }
 
     // Convert the AI SDK error to a Standard Schema issue
+    // Cast to the failure type since TypeScript can't narrow discriminated unions with private field access
+    const failureResult = result as { success: false; error: Error };
     return {
-      issues: [{ message: result.error.message }],
+      issues: [{ message: failureResult.error.message }],
     };
   }
 

@@ -28,4 +28,4 @@ export type InferOutput<T extends StandardTypedV1> = StandardTypedV1.InferOutput
  */
 export type ZodToJsonSchemaTarget = 'jsonSchema7' | 'openApi3' | 'jsonSchema2019-09';
 
-export type StandardSchemaIssue = StandardSchemaWithJSON.Issue;
+export type StandardSchemaIssue = StandardSchemaV1.Issue;

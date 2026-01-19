@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod-v3';
 
 /**
  * Checks if a value is a Zod type

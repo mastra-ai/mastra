@@ -23,9 +23,13 @@ import type { Processor } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import { toStandardSchema } from '../schema/schema';
-import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
+import type {
+  InferPublicSchema,
+  InferStandardSchemaOutput,
+  PublicSchema,
+  StandardSchemaWithJSON,
+} from '../schema/schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
-import type { InferSchemaOutput, InferZodLikeSchema, OutputSchema, SchemaWithValidation } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -190,7 +194,7 @@ export function createStep<TStepId extends string>(
 export function createStep<TStepId extends string, TStepOutput>(
   agent: Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-    structuredOutput: { schema: OutputSchema<TStepOutput> };
+    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
@@ -327,7 +331,7 @@ function createStepFromParams<
 function createStepFromAgent<TStepId extends string, TStepOutput>(
   params: Agent<TStepId, any>,
   agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: OutputSchema<TStepOutput> };
+    structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
@@ -337,17 +341,19 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
-    z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
+    z.object({ text: z.string() })) as unknown as PublicSchema<TStepOutput>;
   const { retries, scorers, ...agentOptions } =
     options ?? ({} as AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> });
 
   return {
     id: params.id,
     description: params.getDescription(),
-    inputSchema: z.object({
-      prompt: z.string(),
-    }),
-    outputSchema,
+    inputSchema: toStandardSchema(
+      z.object({
+        prompt: z.string(),
+      }),
+    ),
+    outputSchema: toStandardSchema(outputSchema),
     retries,
     scorers,
     execute: async ({
@@ -600,11 +606,19 @@ function createStepFromProcessor<TProcessorId extends string>(
     }
   };
 
+  // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
+  // but TypeScript type inference has issues with the complex discriminated union types.
+  // We use type assertions here since toStandardSchema returns the schema directly
+  // when it already implements StandardSchemaWithJSON.
   return {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
-    inputSchema: ProcessorStepInputSchema,
-    outputSchema: ProcessorStepOutputSchema,
+    inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<
+      z.infer<typeof ProcessorStepInputSchema>
+    >,
+    outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
+      z.infer<typeof ProcessorStepOutputSchema>
+    >,
     execute: async ({ inputData, requestContext, tracingContext }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1094,8 +1108,8 @@ function createStepFromProcessor<TProcessorId extends string>(
   } satisfies Step<
     `processor:${TProcessorId}`,
     unknown,
-    InferSchemaOutput<typeof ProcessorStepInputSchema>,
-    InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+    InferStandardSchemaOutput<typeof ProcessorStepInputSchema>,
+    InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
     unknown,
     unknown,
     DefaultEngineType
@@ -1432,14 +1446,14 @@ export class Workflow<
                   | Step<string, any, any, any, any, any, TEngineType>[];
                 path: string;
               }
-            | { value: any; schema: SchemaWithValidation<any> }
+            | { value: any; schema: PublicSchema<any> }
             | {
                 initData: Workflow<TEngineType, any, any, any, any, any, any>;
                 path: string;
               }
             | {
                 requestContextPath: string;
-                schema: SchemaWithValidation<any>;
+                schema: PublicSchema<any>;
               }
             | DynamicMapping<TPrevSchema, any>;
         }
@@ -1613,7 +1627,9 @@ export class Workflow<
       TInput,
       TOutput,
       {
-        [K in keyof StepsRecord<TParallelSteps>]: InferZodLikeSchema<StepsRecord<TParallelSteps>[K]['outputSchema']>;
+        [K in keyof StepsRecord<TParallelSteps>]: InferStandardSchemaOutput<
+          StepsRecord<TParallelSteps>[K]['outputSchema']
+        >;
       }
     >;
   }
@@ -1667,7 +1683,7 @@ export class Workflow<
       TInput,
       TOutput,
       {
-        [K in keyof StepsRecord<ExtractedSteps[]>]?: InferZodLikeSchema<
+        [K in keyof StepsRecord<ExtractedSteps[]>]?: InferStandardSchemaOutput<
           StepsRecord<ExtractedSteps[]>[K]['outputSchema']
         >;
       }
