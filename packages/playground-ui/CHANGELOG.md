@@ -1,5 +1,68 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.25
+
+### Patch Changes
+
+- Added human-in-the-loop (HITL) tool approval support for `generate()` method. ([#12056](https://github.com/mastra-ai/mastra/pull/12056))
+
+  **Why:** This provides parity between `stream()` and `generate()` for tool approval flows, allowing non-streaming use cases to leverage `requireToolApproval` without needing to switch to streaming.
+
+  Previously, tool approval with `requireToolApproval` only worked with `stream()`. Now you can use the same approval flow with `generate()` for non-streaming use cases.
+
+  **Using tool approval with generate()**
+
+  ```typescript
+  const output = await agent.generate('Find user John', {
+    requireToolApproval: true,
+  });
+
+  // Check if a tool is waiting for approval
+  if (output.finishReason === 'suspended') {
+    console.log('Tool requires approval:', output.suspendPayload.toolName);
+
+    // Approve the tool call
+    const result = await agent.approveToolCallGenerate({
+      runId: output.runId,
+      toolCallId: output.suspendPayload.toolCallId,
+    });
+
+    console.log(result.text);
+  }
+  ```
+
+  **Declining a tool call**
+
+  ```typescript
+  if (output.finishReason === 'suspended') {
+    const result = await agent.declineToolCallGenerate({
+      runId: output.runId,
+      toolCallId: output.suspendPayload.toolCallId,
+    });
+  }
+  ```
+
+  **New methods added:**
+  - `agent.approveToolCallGenerate({ runId, toolCallId })` - Approves a pending tool call and returns the complete result
+  - `agent.declineToolCallGenerate({ runId, toolCallId })` - Declines a pending tool call and returns the complete result
+
+  **Server routes added:**
+  - `POST /api/agents/:agentId/approve-tool-call-generate`
+  - `POST /api/agents/:agentId/decline-tool-call-generate`
+
+  The playground UI now also supports tool approval when using generate mode.
+
+- Fix navigation for processors Studio tab ([#12062](https://github.com/mastra-ai/mastra/pull/12062))
+
+- Added Processors tab to Mastra Studio. You can now view all configured processors, see which agents use them, and test processors directly from the UI. Processor workflows automatically redirect to the workflow graph view with a simplified input mode for testing. ([#12059](https://github.com/mastra-ai/mastra/pull/12059))
+
+- Updated dependencies [[`ed3e3dd`](https://github.com/mastra-ai/mastra/commit/ed3e3ddec69d564fe2b125e083437f76331f1283), [`6833c69`](https://github.com/mastra-ai/mastra/commit/6833c69607418d257750bbcdd84638993d343539), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`3a76a80`](https://github.com/mastra-ai/mastra/commit/3a76a80284cb71a0faa975abb3d4b2a9631e60cd), [`8538a0d`](https://github.com/mastra-ai/mastra/commit/8538a0d232619bf55dad7ddc2a8b0ca77c679a87), [`9312dcd`](https://github.com/mastra-ai/mastra/commit/9312dcd1c6f5b321929e7d382e763d95fdc030f5), [`7691bb3`](https://github.com/mastra-ai/mastra/commit/7691bb317f62d43b0733209aaa83b428414c8dd1)]:
+  - @mastra/core@1.0.0-beta.25
+  - @mastra/client-js@1.0.0-beta.25
+  - @mastra/react@1.0.0-beta.25
+  - @mastra/schema-compat@1.0.0-beta.8
+  - @mastra/ai-sdk@1.0.0-beta.16
+
 ## 7.0.0-beta.24
 
 ### Minor Changes
