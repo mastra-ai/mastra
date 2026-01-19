@@ -299,6 +299,8 @@ export class Mastra<
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
+  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
+    new Map();
   #memory?: TMemory;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
@@ -2065,6 +2067,52 @@ export class Mastra<
     }
 
     processors[processorKey] = processor;
+  }
+
+  /**
+   * Registers a processor configuration with agent context.
+   * This tracks which agents use which processors with what configuration.
+   *
+   * @param processor - The processor instance
+   * @param agentId - The ID of the agent that uses this processor
+   * @param type - Whether this is an input or output processor
+   */
+  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+    const processorId = processor.id;
+    if (!this.#processorConfigurations.has(processorId)) {
+      this.#processorConfigurations.set(processorId, []);
+    }
+    const configs = this.#processorConfigurations.get(processorId)!;
+
+    // Check if this exact configuration already exists
+    const exists = configs.some(c => c.agentId === agentId && c.type === type);
+    if (!exists) {
+      configs.push({ processor, agentId, type });
+    }
+  }
+
+  /**
+   * Gets all processor configurations for a specific processor ID.
+   *
+   * @param processorId - The ID of the processor
+   * @returns Array of configurations with agent context
+   */
+  public getProcessorConfigurations(
+    processorId: string,
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+    return this.#processorConfigurations.get(processorId) || [];
+  }
+
+  /**
+   * Gets all processor configurations.
+   *
+   * @returns Map of processor IDs to their configurations
+   */
+  public listProcessorConfigurations(): Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+  > {
+    return this.#processorConfigurations;
   }
 
   /**
