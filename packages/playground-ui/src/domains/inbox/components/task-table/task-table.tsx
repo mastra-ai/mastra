@@ -4,9 +4,9 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 import { Icon } from '@/ds/icons/Icon';
 import { DocsIcon } from '@/ds/icons/DocsIcon';
+import { InboxCoinIcon } from '@/ds/icons/InboxCoinIcon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
-import { Inbox } from 'lucide-react';
 
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -137,26 +137,24 @@ const TasksTableSkeleton = () => (
 );
 
 const EmptyTasksTable = () => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<Inbox className="h-12 w-12 text-text3" />}
-      titleSlot="No Tasks"
-      descriptionSlot="No tasks in this inbox yet. Tasks will appear here when added."
-      actionSlot={
-        <Button
-          size="lg"
-          className="w-full"
-          variant="light"
-          as="a"
-          href="https://mastra.ai/en/docs/inbox/overview"
-          target="_blank"
-        >
-          <Icon>
-            <DocsIcon />
-          </Icon>
-          Docs
-        </Button>
-      }
-    />
-  </div>
+  <EmptyState
+    iconSlot={<InboxCoinIcon />}
+    titleSlot="No Tasks"
+    descriptionSlot="No tasks in this inbox yet. Add a task using the button above or via the API."
+    actionSlot={
+      <Button
+        size="lg"
+        className="w-full"
+        variant="light"
+        as="a"
+        href="https://mastra.ai/en/docs/inbox/overview"
+        target="_blank"
+      >
+        <Icon>
+          <DocsIcon />
+        </Icon>
+        Inbox Docs
+      </Button>
+    }
+  />
 );
