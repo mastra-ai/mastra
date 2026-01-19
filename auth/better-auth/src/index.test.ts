@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MastraAuthBetterAuth } from './index';
+
 import type { BetterAuthUser, BetterAuthConfig } from './types';
+
+import { MastraAuthBetterAuth } from './index';
 
 // Mock the better-auth library
 const mockGetSession = vi.fn();
