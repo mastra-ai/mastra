@@ -1,6 +1,9 @@
 ---
 '@mastra/core': minor
 '@mastra/pg': minor
+'@mastra/clickhouse': minor
+'@mastra/libsql': minor
+'@mastra/mongodb': minor
 ---
 
 Added database cleanup methods for data retention
