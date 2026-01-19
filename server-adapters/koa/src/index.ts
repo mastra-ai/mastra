@@ -228,7 +228,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown): Promise<void> {
     if (route.responseType === 'json') {
-      ctx.body = result;
+      // Handle null explicitly - Koa treats ctx.body = null as 204 No Content
+      // but we want to return JSON null with 200 OK
+      if (result === null) {
+        ctx.status = 200;
+        ctx.type = 'application/json';
+        ctx.body = 'null';
+      } else {
+        ctx.body = result;
+      }
     } else if (route.responseType === 'stream') {
       await this.stream(route, ctx, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {

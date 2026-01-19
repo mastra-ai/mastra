@@ -51,6 +51,10 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
+import { Login } from './pages/login';
+import { SignUp } from './pages/signup';
+import { OAuthCallback } from './pages/oauth/callback';
+import { Audit } from './pages/audit';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -105,6 +109,11 @@ function App() {
         <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>
             <Routes>
+              {/* Auth routes - no layout */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/oauth/callback" element={<OAuthCallback />} />
+
               <Route
                 element={
                   <Layout>
@@ -123,6 +132,7 @@ function App() {
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
                 <Route path="/observability" element={<Observability />} />
+                <Route path="/audit" element={<Audit />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />

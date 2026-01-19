@@ -55,3 +55,27 @@ export class MastraAuthWorkos extends MastraAuthProvider<WorkosUser> {
     return isAdmin;
   }
 }
+
+// Export EE types and providers for new auth provider implementation
+export type {
+  WorkOSConfig,
+  WorkOSUser,
+  WorkOSSessionConfig,
+  WorkOSSSOConfig,
+  MastraAuthWorkosOptions,
+} from './types.js';
+export { mapWorkOSUserToEEUser } from './types.js';
+export { WorkOSSSOProvider } from './sso.js';
+export { WorkOSSessionProvider } from './session.js';
+export { WebSessionStorage } from './session-storage.js';
+export { WorkOSUserProvider } from './user.js';
+export { MastraRBACWorkos } from './rbac.js';
+export type { WorkOSRBACConfig } from './rbac.js';
+export { WorkOSDirectorySync } from './directory-sync.js';
+export type { WorkOSDirectorySyncConfig, DirectorySyncEvent, DirectorySyncEventType } from './directory-sync.js';
+export { WorkOSAuditExporter } from './audit-export.js';
+export type { WorkOSAuditExporterConfig } from './audit-export.js';
+
+// Export the main EE auth provider (recommended for new implementations)
+export { MastraAuthWorkosEE } from './provider-ee.js';
+export type { MastraAuthWorkosEEOptions } from './provider-ee.js';
