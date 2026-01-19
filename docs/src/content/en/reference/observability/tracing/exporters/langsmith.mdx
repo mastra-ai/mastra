@@ -93,6 +93,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to LangSmith.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any pending spans to LangSmith without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript

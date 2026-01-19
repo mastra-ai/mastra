@@ -97,6 +97,7 @@ export const WorkflowBadge = ({
         toolApprovalMetadata={toolApprovalMetadata}
         toolName={toolName}
         isNetwork={isNetwork}
+        isGenerateMode={metadata?.mode === 'generate'}
       />
     </BadgeWrapper>
   );

@@ -18,6 +18,8 @@ declare global {
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
+import { Processors } from '@/pages/processors';
+import { Processor } from '@/pages/processors/processor';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
@@ -34,6 +36,7 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 import { McpServerPage } from './pages/mcps/[serverId]';
 
 import {
+  useMastraPlatform,
   LinkComponentProvider,
   LinkComponentProviderProps,
   PlaygroundConfigGuard,
@@ -65,6 +68,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  processorsLink: () => `/processors`,
+  processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
@@ -86,6 +91,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, isLoading } = useStudioConfig();
+  const { isMastraPlatform } = useMastraPlatform();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -110,44 +116,17 @@ function App() {
                   </Layout>
                 }
               >
-                <Route path="/settings" element={<StudioSettingsPage />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/templates" element={<Templates />} />
-                <Route path="/templates/:templateSlug" element={<Template />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
+                {isMastraPlatform ? null : (
+                  <>
+                    <Route path="/settings" element={<StudioSettingsPage />} />
+                    <Route path="/templates" element={<Templates />} />
+                    <Route path="/templates/:templateSlug" element={<Template />} />
+                  </>
+                )}
+
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
                 <Route path="/observability" element={<Observability />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
@@ -162,9 +141,12 @@ function App() {
                   <Route path="chat" element={<Agent />} />
                   <Route path="chat/:threadId" element={<Agent />} />
                 </Route>
-                <Route path="/tools" element={<Tools />} />
 
+                <Route path="/tools" element={<Tools />} />
                 <Route path="/tools/:toolId" element={<Tool />} />
+
+                <Route path="/processors" element={<Processors />} />
+                <Route path="/processors/:processorId" element={<Processor />} />
                 <Route path="/mcps" element={<MCPs />} />
 
                 <Route path="/mcps/:serverId" element={<McpServerPage />} />

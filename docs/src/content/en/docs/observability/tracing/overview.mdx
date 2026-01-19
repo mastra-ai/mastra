@@ -86,9 +86,10 @@ In addition to the internal exporters, Mastra supports integration with popular 
 - **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
 - **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
 - **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
-- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
-  - Supports: Dash0, Datadog, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
+- **[PostHog](/docs/v1/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
 - **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
+- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
+  - Supports: Dash0, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
@@ -386,8 +387,7 @@ requestContext.set("environment", "production");
 requestContext.set("tenantId", "tenant-456");
 
 // All spans in this trace automatically get userId, environment, and tenantId metadata
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   requestContext,
 });
 ```
@@ -402,8 +402,7 @@ requestContext.set("userId", "user-123");
 requestContext.set("environment", "production");
 requestContext.set("experimentId", "exp-789");
 
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   requestContext,
   tracingOptions: {
     requestContextKeys: ["experimentId"], // Adds to configured keys
@@ -451,8 +450,7 @@ Use `tracingOptions.tags` to add tags when executing agents or workflows:
 
 ```ts
 // With agents
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -480,8 +478,7 @@ const result = await run.start({
 - **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
 
 ```ts
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Analyze this" }],
+const result = await agent.generate([{ role: "user", content: "Analyze this" }], {
   tracingOptions: {
     tags: ["production", "analytics"],
     metadata: { userId: "user-123", experimentId: "exp-456" },
@@ -503,24 +500,21 @@ When processing sensitive data, you may want to prevent input and output values 
 
 ```ts
 // Hide input data (e.g., user credentials, PII)
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Process this sensitive data" }],
+const result = await agent.generate([{ role: "user", content: "Process this sensitive data" }], {
   tracingOptions: {
     hideInput: true, // Input will be hidden from all spans
   },
 });
 
 // Hide output data (e.g., generated secrets, confidential results)
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Generate API keys" }],
+const result = await agent.generate([{ role: "user", content: "Generate API keys" }], {
   tracingOptions: {
     hideOutput: true, // Output will be hidden from all spans
   },
 });
 
 // Hide both input and output
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Handle confidential request" }],
+const result = await agent.generate([{ role: "user", content: "Handle confidential request" }], {
   tracingOptions: {
     hideInput: true,
     hideOutput: true,
@@ -535,8 +529,7 @@ const result = await agent.generate({
 - **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
 
 ```ts
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Sensitive operation" }],
+const result = await agent.generate([{ role: "user", content: "Sensitive operation" }], {
   tracingOptions: {
     hideInput: true,
     hideOutput: true,
@@ -620,15 +613,29 @@ execute: async (inputData, context) => {
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
-## Span Processors
+## Span Formatting
 
-Span processors allow you to transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Mastra includes built-in processors and supports custom implementations.
+Mastra provides two ways to transform span data before it reaches your observability platform: **span processors** and **custom span formatters**. Both allow you to modify, filter, or enrich trace data, but they operate at different levels and serve different purposes.
 
-### Built-in Processors
+| Feature | Span Processors | Custom Span Formatters |
+| --- | --- | --- |
+| Configuration level | Observability config | Per-exporter |
+| Operates on | Internal `Span` object | Exported `ExportedSpan` data |
+| Applies to | All exporters | Single exporter |
+| Async support | No | Yes |
+| Use case | Security, filtering, enrichment | Platform-specific formatting, async enrichment |
+
+Use **span processors** for synchronous transformations that should apply to all exporters (like redacting sensitive data). Use **custom span formatters** when different exporters need different representations of the same data (like plain text for one platform and structured data for another), or when you need to perform asynchronous operations like fetching data from external APIs.
+
+### Span Processors
+
+Span processors transform, filter, or enrich trace data before it's exported. They act as a pipeline between span creation and export, enabling you to modify spans for security, compliance, or debugging purposes. Processors run once and affect all exporters.
+
+#### Built-in Processors
 
 - [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
-### Creating Custom Processors
+#### Creating Custom Processors
 
 You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
@@ -661,13 +668,149 @@ export const mastra = new Mastra({
 });
 ```
 
-Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases for custom processors include:
+Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases include:
 
+- Redacting sensitive data (passwords, tokens, API keys)
 - Adding environment-specific metadata
 - Filtering out spans based on criteria
 - Normalizing data formats
-- Sampling high-volume traces
 - Enriching spans with business context
+
+### Custom Span Formatters
+
+Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
+
+#### Use Cases
+
+- **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
+- **Transform input/output formats** - Customize how data appears in specific platforms
+- **Platform-specific field mapping** - Add or remove fields based on platform requirements
+- **Async data enrichment** - Fetch additional context from external APIs or databases
+
+#### Configuration
+
+Add a `customSpanFormatter` to any exporter configuration:
+
+```ts title="src/mastra/index.ts"
+import { BraintrustExporter } from "@mastra/braintrust";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { SpanType } from "@mastra/core/observability";
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Formatter that extracts plain text from AI messages
+const plainTextFormatter: CustomSpanFormatter = (span) => {
+  if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+    const userMessage = span.input.find((m) => m.role === "user");
+    return {
+      ...span,
+      input: userMessage?.content ?? span.input,
+    };
+  }
+  return span;
+};
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          // Braintrust gets plain text formatting
+          new BraintrustExporter({
+            customSpanFormatter: plainTextFormatter,
+          }),
+          // Langfuse keeps the original structured format
+          new LangfuseExporter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+#### Chaining Multiple Formatters
+
+Use `chainFormatters` to combine multiple formatters. Chains support both sync and async formatters:
+
+```ts
+import { chainFormatters } from "@mastra/observability";
+
+const inputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  input: extractPlainText(span.input),
+});
+
+const outputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  output: extractPlainText(span.output),
+});
+
+const exporter = new BraintrustExporter({
+  customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
+});
+```
+
+#### Async Formatters
+
+Custom span formatters support asynchronous operations, enabling use cases like fetching data from external APIs or databases to enrich your spans:
+
+```ts
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// Async formatter that enriches spans with user data
+const userEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  const userId = span.metadata?.userId;
+  if (!userId) return span;
+
+  // Fetch user data from your API or database
+  const userData = await fetchUserData(userId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      userName: userData.name,
+      userEmail: userData.email,
+      department: userData.department,
+    },
+  };
+};
+
+// Async formatter that looks up additional context
+const contextEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  if (span.type !== SpanType.AGENT_RUN) return span;
+
+  // Fetch experiment configuration
+  const experimentConfig = await getExperimentConfig(span.metadata?.experimentId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      experimentVariant: experimentConfig?.variant,
+      experimentGroup: experimentConfig?.group,
+    },
+  };
+};
+
+// Use async formatters with an exporter
+const exporter = new BraintrustExporter({
+  customSpanFormatter: userEnrichmentFormatter,
+});
+
+// Or chain sync and async formatters together
+const exporter = new LangfuseExporter({
+  customSpanFormatter: chainFormatters([
+    plainTextFormatter,           // sync
+    userEnrichmentFormatter,      // async
+    contextEnrichmentFormatter,   // async
+  ]),
+});
+```
+
+:::note
+Async formatters add latency to span export. Keep async operations fast (under 100ms) to avoid slowing down your application. Consider using caching for frequently accessed data.
+:::
 
 ## Serialization Options
 
@@ -740,16 +883,12 @@ Both `generate` and `stream` methods return the trace ID in their response:
 
 ```ts
 // Using generate
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-});
+const result = await agent.generate("Hello");
 
 console.log("Trace ID:", result.traceId);
 
 // Using stream
-const streamResult = await agent.stream({
-  messages: [{ role: "user", content: "Tell me a story" }],
-});
+const streamResult = await agent.stream("Tell me a story");
 
 console.log("Trace ID:", streamResult.traceId);
 ```
@@ -895,6 +1034,52 @@ app.post("/api/analyze", async (req, res) => {
 ```
 
 This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
+
+## Flushing Traces in Serverless Environments
+
+In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflare Workers, runtime instances can be reused across multiple requests. The `flush()` method allows you to ensure all buffered spans are exported before the runtime terminates, without shutting down the exporter (which would prevent future exports).
+
+### Using flush()
+
+Call `flush()` on the observability instance to flush all exporters:
+
+```ts
+// Get the observability instance from Mastra
+const observability = mastra.getObservability();
+
+// Flush all buffered spans to all exporters
+await observability.flush();
+```
+
+### When to Use flush()
+
+Use `flush()` in these scenarios:
+
+- **End of serverless function execution**: Ensure spans are exported before the runtime is paused or terminated
+- **Before long-running operations**: Flush accumulated spans before a potentially slow operation
+- **Periodic flushing**: In long-running processes, periodically flush to ensure timely data availability
+
+```ts
+// Example: Vercel serverless function
+export async function POST(req: Request) {
+  const result = await agent.generate([{ role: "user", content: await req.text() }]);
+
+  // Ensure spans are exported before function completes
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+### flush() vs shutdown()
+
+| Method | Behavior | Use Case |
+| --- | --- | --- |
+| `flush()` | Exports buffered spans, keeps exporter active | Serverless environments, periodic flushing |
+| `shutdown()` | Exports buffered spans, releases resources | Application shutdown, graceful termination |
+
+Use `flush()` when you need to ensure data is exported but want to keep the exporter ready for future requests. Use `shutdown()` only when the application is terminating.
 
 ## What Gets Traced
 

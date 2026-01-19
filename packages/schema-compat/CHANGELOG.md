@@ -1,5 +1,17 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Fixed OpenAI schema validation error when using passthrough schemas with tools like `vectorQueryTool`. ([#11846](https://github.com/mastra-ai/mastra/pull/11846))
+
+  **What was happening:** Tools using `.passthrough()` or `z.looseObject()` schemas (like the RAG `vectorQueryTool`) would fail with OpenAI models, returning the error: "Invalid schema for function: In context=('additionalProperties',), schema must have a 'type' key."
+
+  **What changed:** The OpenAI schema compatibility layer now converts passthrough schemas to strict object schemas, producing valid `additionalProperties: false` instead of the invalid empty object `{}` that Zod v4 generates.
+
+  Fixes #11823
+
 ## 1.0.0-beta.6
 
 ### Patch Changes

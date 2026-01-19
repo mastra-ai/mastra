@@ -2,7 +2,6 @@ import {
   Breadcrumb,
   Crumb,
   ScoresList,
-  scoresListColumns,
   Header,
   MainContentLayout,
   PageHeader,
@@ -16,7 +15,6 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
@@ -24,11 +22,14 @@ import {
   HeaderGroup,
   ScorerCombobox,
   toast,
+  Spinner,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { ClientScoreRowData } from '@mastra/client-js';
+import { ScoreRowData } from '@mastra/core/evals';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -202,12 +203,19 @@ export default function Scorer() {
             />
 
             {isLoadingScores ? (
-              <EntryListSkeleton columns={scoresListColumns} />
+              <div className="h-full w-full flex items-center justify-center">
+                <Spinner />
+              </div>
             ) : (
               <ScoresList
                 scores={scores}
                 selectedScoreId={selectedScoreId}
-                pagination={pagination}
+                pagination={{
+                  total: pagination?.total || 0,
+                  hasMore: pagination?.hasMore || false,
+                  perPage: pagination?.perPage || 0,
+                  page: pagination?.page || 0,
+                }}
                 onScoreClick={handleScoreClick}
                 onPageChange={setScoresPage}
                 errorMsg={scoresError?.message}
@@ -218,7 +226,7 @@ export default function Scorer() {
       </MainContentLayout>
       <ScoreDialog
         scorerName={scorer?.scorer?.config?.name}
-        score={scores.find(s => s.id === selectedScoreId)}
+        score={mapScore(scores.find(s => s.id === selectedScoreId))}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={toNextScore}
@@ -228,3 +236,12 @@ export default function Scorer() {
     </>
   );
 }
+
+const mapScore = (score?: ClientScoreRowData): ScoreRowData | undefined => {
+  if (!score) return undefined;
+  return {
+    ...score,
+    createdAt: new Date(score.createdAt),
+    updatedAt: new Date(score.updatedAt),
+  };
+};

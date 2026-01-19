@@ -23,7 +23,11 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```
 
-> **Note:** Review your Supabase Row Level Security (RLS) settings to ensure proper data access controls.
+:::note
+
+Review your Supabase Row Level Security (RLS) settings to ensure proper data access controls.
+
+:::
 
 ## Installation
 
@@ -49,9 +53,9 @@ export const mastra = new Mastra({
 });
 ```
 
-> **Note:** The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
-
 :::info
+
+The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
 Visit [MastraAuthSupabase](/reference/v1/auth/supabase) for all available configuration options.
 
@@ -78,7 +82,11 @@ const authTokenResponse = await supabase.auth.signInWithPassword({
 const accessToken = authTokenResponse.data?.session?.access_token;
 ```
 
-> Refer to the [Supabase documentation](https://supabase.com/docs/guides/auth) for other authentication methods like OAuth, magic links, and more.
+:::note
+
+Refer to the [Supabase documentation](https://supabase.com/docs/guides/auth) for other authentication methods like OAuth, magic links, and more.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -95,9 +103,9 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -109,26 +117,26 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
 
 <Tabs>
     <TabItem value="react" label="React">
-    ```tsx title="src/components/test-agent.tsx" copy
-    import { mastraClient } from "../../lib/mastra-client";
 
-    export const TestAgent = () => {
-      async function handleClick() {
-        const agent = mastraClient.getAgent("weatherAgent");
+      ```tsx title="src/components/test-agent.tsx" copy
+      import { mastraClient } from "../../lib/mastra-client";
 
-        const response = await agent.generate({
-          messages: "What's the weather like in New York"
-        });
+      export const TestAgent = () => {
+        async function handleClick() {
+          const agent = mastraClient.getAgent("weatherAgent");
 
-        console.log(response);
-      }
+          const response = await agent.generate("What's the weather like in New York");
 
-      return <button onClick={handleClick}>Test Agent</button>;
-    };
-    ```
+          console.log(response);
+        }
+
+        return <button onClick={handleClick}>Test Agent</button>;
+      };
+      ```
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -137,5 +145,6 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>

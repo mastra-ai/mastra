@@ -1,6 +1,7 @@
 import { InputField, type InputFieldProps } from './input-field';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
+import { transitions } from '@/ds/primitives/transitions';
 
 export type SearchFieldProps = InputFieldProps & {
   onReset?: () => void;
@@ -24,7 +25,13 @@ export function SearchField({ onReset, ...props }: SearchFieldProps) {
         <button
           type="button"
           onClick={onReset}
-          className={cn('absolute top-1/2 right-2 -translate-y-1/2 p-1', '[&:hover>svg]:text-neutral5')}
+          className={cn(
+            'absolute top-1/2 right-2 -translate-y-1/2 p-1 rounded',
+            transitions.all,
+            'hover:bg-surface4',
+            '[&>svg]:transition-colors [&>svg]:duration-normal',
+            '[&:hover>svg]:text-neutral5',
+          )}
         >
           <XIcon className="text-neutral3 w-[1rem] h-[1rem]" />
         </button>
