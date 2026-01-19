@@ -10,6 +10,9 @@ export function generateContextualValue(fieldName?: string): string {
 
   const field = fieldName.toLowerCase();
 
+  // Handle email fields with valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
+
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
@@ -174,6 +177,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
+
+  // Audit route params
+  if (route.path.includes(':id') && route.path.includes('/audit/')) params.id = 'test-audit-id';
 
   return params;
 }

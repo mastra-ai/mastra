@@ -66,8 +66,24 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // Test non-deprecated routes with full test suite
     // Skip MCP transport routes (mcp-http, mcp-sse) - they require MCP protocol handling
     // and are tested separately via mcp-transport-test-suite
+    // Skip auth routes that require auth provider configuration (SSO, credentials, audit)
+    // These routes need a configured auth provider which isn't available in default test context
+    const AUTH_PROVIDER_ROUTES = [
+      '/api/auth/sso/login',
+      '/api/auth/sso/callback',
+      '/api/auth/credentials/sign-in',
+      '/api/auth/credentials/sign-up',
+      '/api/auth/logout',
+      '/api/audit',
+      '/api/audit/export',
+      '/api/audit/:id',
+    ];
     const activeRoutes = SERVER_ROUTES.filter(
-      r => !r.deprecated && r.responseType !== 'mcp-http' && r.responseType !== 'mcp-sse',
+      r =>
+        !r.deprecated &&
+        r.responseType !== 'mcp-http' &&
+        r.responseType !== 'mcp-sse' &&
+        !AUTH_PROVIDER_ROUTES.includes(r.path),
     );
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
@@ -340,8 +356,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
     // Additional cross-route tests
     describe('Cross-Route Tests', () => {
-      // Test array query parameters for ALL GET routes
-      const getRoutes = SERVER_ROUTES.filter(r => r.method === 'GET' && !r.deprecated);
+      // Test array query parameters for ALL GET routes (excluding auth provider routes)
+      const getRoutes = SERVER_ROUTES.filter(
+        r => r.method === 'GET' && !r.deprecated && !AUTH_PROVIDER_ROUTES.includes(r.path),
+      );
       getRoutes.forEach(route => {
         it(`should handle array query parameters for ${route.method} ${route.path}`, async () => {
           const request = buildRouteRequest(route);
@@ -400,14 +418,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
       });
 
-      // Test empty body for ALL POST routes with body schema (excluding MCP transport routes)
+      // Test empty body for ALL POST routes with body schema (excluding MCP transport and auth provider routes)
       const postRoutesWithBody = SERVER_ROUTES.filter(
         r =>
           r.method === 'POST' &&
           r.bodySchema &&
           !r.deprecated &&
           r.responseType !== 'mcp-http' &&
-          r.responseType !== 'mcp-sse',
+          r.responseType !== 'mcp-sse' &&
+          !AUTH_PROVIDER_ROUTES.includes(r.path),
       );
       postRoutesWithBody.forEach(route => {
         it(`should handle empty body for ${route.method} ${route.path}`, async () => {
