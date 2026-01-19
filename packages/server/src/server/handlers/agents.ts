@@ -245,8 +245,9 @@ async function formatAgentList({
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
 
+  const logger = mastra.getLogger();
+
   if ('listWorkflows' in agent) {
-    const logger = mastra.getLogger();
     try {
       const workflows = await agent.listWorkflows({ requestContext });
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<

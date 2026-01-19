@@ -1,6 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
-import { isProcessorWorkflow, type Processor, type ProcessorWorkflow } from '@mastra/core/processors';
+import { isProcessorWorkflow } from '@mastra/core/processors';
+import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
 
 import { HTTPException } from '../http-exception';
 import {
