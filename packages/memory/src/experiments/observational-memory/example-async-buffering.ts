@@ -10,21 +10,14 @@
  */
 
 import { Agent } from '@mastra/core/agent';
-import { InMemoryMemory } from '@mastra/core/storage';
+import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { MessageHistory } from '@mastra/memory';
 import { ObservationalMemory } from './observational-memory';
 import { TokenCounter } from './token-counter';
 
 // Create storage
-const storage = new InMemoryMemory({
-  collection: {
-    threads: new Map(),
-    resources: new Map(),
-    messages: new Map(),
-    observationalMemory: new Map(),
-  },
-  operations: {} as any,
-});
+const db = new InMemoryDB();
+const storage = new InMemoryMemory({ db });
 
 const messageHistory = new MessageHistory({
   storage,

@@ -586,6 +586,60 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /** Only observe messages created after OM is enabled */
   private observeFutureOnly: boolean;
 
+  /**
+   * In-memory mutex for serializing observation/reflection cycles per resource/thread.
+   * Prevents race conditions where two concurrent cycles could both read isObserving=false
+   * before either sets it to true, leading to lost work.
+   *
+   * Key format: "resource:{resourceId}" or "thread:{threadId}"
+   * Value: Promise that resolves when the lock is released
+   *
+   * NOTE: This mutex only works within a single Node.js process. For distributed
+   * deployments, external locking (Redis, database locks) would be needed, or
+   * accept eventual consistency (acceptable for v1).
+   */
+  private locks = new Map<string, Promise<void>>();
+
+  /**
+   * Acquire a lock for the given key, execute the callback, then release.
+   * If a lock is already held, waits for it to be released before acquiring.
+   */
+  private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    // Wait for any existing lock to be released
+    const existingLock = this.locks.get(key);
+    if (existingLock) {
+      await existingLock;
+    }
+
+    // Create a new lock
+    let releaseLock: () => void;
+    const lockPromise = new Promise<void>(resolve => {
+      releaseLock = resolve;
+    });
+    this.locks.set(key, lockPromise);
+
+    try {
+      return await fn();
+    } finally {
+      // Release the lock
+      releaseLock!();
+      // Clean up if this is still our lock
+      if (this.locks.get(key) === lockPromise) {
+        this.locks.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Get the lock key for the current scope
+   */
+  private getLockKey(threadId: string | null | undefined, resourceId: string | null | undefined): string {
+    if (this.scope === 'resource' && resourceId) {
+      return `resource:${resourceId}`;
+    }
+    return `thread:${threadId ?? 'unknown'}`;
+  }
+
   constructor(config: ObservationalMemoryConfig) {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
@@ -1931,58 +1985,76 @@ ${formattedMessages}
 
     // ═══════════════════════════════════════════════════════════════════
     // SIMPLIFIED SYNC-ONLY FLOW (async buffering disabled)
+    // Use in-memory mutex to prevent race conditions between concurrent
+    // observation cycles for the same resource/thread.
     // ═══════════════════════════════════════════════════════════════════
 
-    const shouldObserveNow = this.shouldObserve(totalPendingTokens, currentObservationTokens);
-    omDebug(`[OM] Observe check: totalPending=${totalPendingTokens} > threshold=${threshold} ? ${shouldObserveNow}`);
+    const lockKey = this.getLockKey(threadId, resourceId);
+    await this.withLock(lockKey, async () => {
+      // Re-fetch record inside lock to get latest state
+      record = await this.getOrCreateRecord(threadId, resourceId);
 
-    if (shouldObserveNow) {
-      // ════════════════════════════════════════════════════════════
-      // LOCKING: Check if observation is already in progress
-      // This prevents race conditions when multiple threads are active
-      // ════════════════════════════════════════════════════════════
-      if (record.isObserving) {
-        omDebug(`[OM] Observation already in progress for ${record.id}, skipping`);
-      } else {
+      // Recalculate with fresh record data
+      const freshUnobservedMessages = this.getUnobservedMessages(allMessages, record);
+      const freshSessionTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
+      const freshObservationTokens = record.observationTokenCount ?? 0;
+      const freshPendingTokens = record.pendingMessageTokens ?? 0;
+      const freshTotalPendingTokens = freshPendingTokens + freshSessionTokens;
+
+      const freshThreshold = this.calculateDynamicThreshold(
+        this.observerConfig.observationThreshold,
+        freshObservationTokens,
+        this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+      );
+
+      const shouldObserveNow = this.shouldObserve(freshTotalPendingTokens, freshObservationTokens);
+      omDebug(
+        `[OM] Observe check: totalPending=${freshTotalPendingTokens} > threshold=${freshThreshold} ? ${shouldObserveNow}`,
+      );
+
+      if (shouldObserveNow) {
         // ════════════════════════════════════════════════════════════
         // SYNC PATH: Do synchronous observation (blocking)
+        // No need to check isObserving flag - mutex guarantees exclusivity
         // ════════════════════════════════════════════════════════════
-        omDebug(`[OM] Observation threshold exceeded (${totalPendingTokens} > ${threshold}), triggering Observer`);
+        omDebug(
+          `[OM] Observation threshold exceeded (${freshTotalPendingTokens} > ${freshThreshold}), triggering Observer`,
+        );
 
         if (this.scope === 'resource' && resourceId) {
           // Resource scope: observe ALL threads with unobserved messages
           // Pass current thread's messages from messageList since they may not be in DB yet
-          await this.doResourceScopedObservation(record, threadId, resourceId, unobservedMessages);
+          await this.doResourceScopedObservation(record, threadId, resourceId, freshUnobservedMessages);
         } else {
           // Thread scope: observe only current thread
-          await this.doSynchronousObservation(record, threadId, unobservedMessages);
+          await this.doSynchronousObservation(record, threadId, freshUnobservedMessages);
         }
-      }
-    } else if (currentSessionTokens > 0) {
-      // ═══════════════════════════════════════════════════════════════════
-      // Observation not triggered - accumulate pending tokens for next check
-      // This allows observations to trigger after multiple small sessions
-      // ═══════════════════════════════════════════════════════════════════
-      omDebug(`[OM] Accumulating ${currentSessionTokens} pending tokens (total will be ${totalPendingTokens})`);
-      // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
-      await (this.storage as any).addPendingMessageTokens(record.id, currentSessionTokens);
+      } else if (freshSessionTokens > 0) {
+        // ═══════════════════════════════════════════════════════════════════
+        // Observation not triggered - accumulate pending tokens for next check
+        // This allows observations to trigger after multiple small sessions
+        // ═══════════════════════════════════════════════════════════════════
+        omDebug(`[OM] Accumulating ${freshSessionTokens} pending tokens (total will be ${freshTotalPendingTokens})`);
+        // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
+        await (this.storage as any).addPendingMessageTokens(record.id, freshSessionTokens);
 
-      // Emit debug event for token accumulation
-      this.emitDebugEvent({
-        type: 'tokens_accumulated',
-        timestamp: new Date(),
-        threadId,
-        resourceId: resourceId ?? '',
-        pendingTokens,
-        sessionTokens: currentSessionTokens,
-        totalPendingTokens,
-        threshold,
-        messages: unobservedMessages.map(m => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-        })),
-      });
-    }
+        // Emit debug event for token accumulation
+        this.emitDebugEvent({
+          type: 'tokens_accumulated',
+          timestamp: new Date(),
+          threadId,
+          resourceId: resourceId ?? '',
+          pendingTokens: freshPendingTokens,
+          sessionTokens: freshSessionTokens,
+          totalPendingTokens: freshTotalPendingTokens,
+          threshold: freshThreshold,
+          messages: freshUnobservedMessages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          })),
+        });
+      }
+    });
 
     // NOTE: Async reflection buffering disabled - reflection happens synchronously in maybeReflect()
 
@@ -2841,100 +2913,105 @@ ${formattedMessages}
     const { reflect = true, reflectionThreshold, maxInputTokens } = options ?? {};
     const ids = this.getStorageIds(threadId, resourceId);
 
-    // Get or create the record
-    // For resource scope, threadId is null but we pass the original threadId for record creation
-    let record = await this.getOrCreateRecord(ids.threadId ?? threadId, ids.resourceId);
+    // Use mutex to prevent concurrent finalize calls for the same resource/thread
+    const lockKey = this.getLockKey(ids.threadId ?? threadId, ids.resourceId);
 
-    // Load ALL unobserved messages (no threshold check)
-    // For resource scope, pass null threadId to load from all threads
-    const unobservedMessages = await this.loadUnobservedMessages(
-      ids.threadId ?? threadId,
-      ids.resourceId,
-      record.lastObservedAt,
-    );
+    return this.withLock(lockKey, async () => {
+      // Get or create the record
+      // For resource scope, threadId is null but we pass the original threadId for record creation
+      let record = await this.getOrCreateRecord(ids.threadId ?? threadId, ids.resourceId);
 
-    let observed = false;
-    let reflected = false;
-    let reflectionCount = 0;
-    let observationTokens = record.observationTokenCount;
+      // Load ALL unobserved messages (no threshold check)
+      // For resource scope, pass null threadId to load from all threads
+      const unobservedMessages = await this.loadUnobservedMessages(
+        ids.threadId ?? threadId,
+        ids.resourceId,
+        record.lastObservedAt,
+      );
 
-    // Run observation if there are unobserved messages
-    if (unobservedMessages.length > 0) {
-      omDebug(`[OM Finalize] Running observation on ${unobservedMessages.length} messages`);
+      let observed = false;
+      let reflected = false;
+      let reflectionCount = 0;
+      let observationTokens = record.observationTokenCount;
 
-      if (this.scope === 'resource') {
-        // Resource scope: group by thread and observe each, with optional mid-loop reflection
-        const result = await this.doResourceScopedObservationWithTokenLimit(
-          record,
-          threadId,
-          ids.resourceId,
-          unobservedMessages,
-          {
-            maxInputTokens,
-            reflectionThreshold,
-            reflect,
-          },
-        );
-        reflectionCount = result.reflectionCount;
-        reflected = result.reflected;
-      } else {
-        // Thread scope: observe all messages together
-        await this.doSynchronousObservation(record, threadId, unobservedMessages);
-      }
+      // Run observation if there are unobserved messages
+      if (unobservedMessages.length > 0) {
+        omDebug(`[OM Finalize] Running observation on ${unobservedMessages.length} messages`);
 
-      observed = true;
-
-      // Reload record to get updated token count
-      const updatedRecord = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
-      observationTokens = updatedRecord?.observationTokenCount ?? 0;
-
-      omDebug(`[OM Finalize] Observation complete: ${observationTokens} tokens`);
-    } else {
-      omDebug(`[OM Finalize] No unobserved messages, skipping observation`);
-    }
-
-    // Run final reflection if requested and threshold is met (and we haven't already reflected enough)
-    if (reflect && observationTokens > 0) {
-      const threshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-
-      if (observationTokens >= threshold) {
-        omDebug(`[OM Finalize] Running final reflection (${observationTokens} >= ${threshold} tokens)`);
-
-        // Get fresh record for reflection
-        const recordForReflection = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
-        if (recordForReflection?.activeObservations) {
-          await this.storage.setReflectingFlag(recordForReflection.id, true);
-
-          try {
-            const patternsToReflect = this.reflectorRecognizePatterns ? recordForReflection.patterns : undefined;
-            const reflectResult = await this.callReflector(
-              recordForReflection.activeObservations,
-              undefined,
-              patternsToReflect,
-            );
-            const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
-
-            await this.storage.createReflectionGeneration({
-              currentRecord: recordForReflection,
-              reflection: reflectResult.observations,
-              tokenCount: reflectionTokenCount,
-              patterns: reflectResult.patterns,
-            });
-
-            reflected = true;
-            reflectionCount++;
-            observationTokens = reflectionTokenCount;
-            omDebug(`[OM Finalize] Final reflection complete: ${reflectionTokenCount} tokens`);
-          } finally {
-            await this.storage.setReflectingFlag(recordForReflection.id, false);
-          }
+        if (this.scope === 'resource') {
+          // Resource scope: group by thread and observe each, with optional mid-loop reflection
+          const result = await this.doResourceScopedObservationWithTokenLimit(
+            record,
+            threadId,
+            ids.resourceId,
+            unobservedMessages,
+            {
+              maxInputTokens,
+              reflectionThreshold,
+              reflect,
+            },
+          );
+          reflectionCount = result.reflectionCount;
+          reflected = result.reflected;
+        } else {
+          // Thread scope: observe all messages together
+          await this.doSynchronousObservation(record, threadId, unobservedMessages);
         }
-      } else {
-        omDebug(`[OM Finalize] Skipping final reflection (${observationTokens} < ${threshold} tokens)`);
-      }
-    }
 
-    return { observed, reflected, observationTokens, reflectionCount };
+        observed = true;
+
+        // Reload record to get updated token count
+        const updatedRecord = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+        observationTokens = updatedRecord?.observationTokenCount ?? 0;
+
+        omDebug(`[OM Finalize] Observation complete: ${observationTokens} tokens`);
+      } else {
+        omDebug(`[OM Finalize] No unobserved messages, skipping observation`);
+      }
+
+      // Run final reflection if requested and threshold is met (and we haven't already reflected enough)
+      if (reflect && observationTokens > 0) {
+        const threshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+
+        if (observationTokens >= threshold) {
+          omDebug(`[OM Finalize] Running final reflection (${observationTokens} >= ${threshold} tokens)`);
+
+          // Get fresh record for reflection
+          const recordForReflection = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+          if (recordForReflection?.activeObservations) {
+            await this.storage.setReflectingFlag(recordForReflection.id, true);
+
+            try {
+              const patternsToReflect = this.reflectorRecognizePatterns ? recordForReflection.patterns : undefined;
+              const reflectResult = await this.callReflector(
+                recordForReflection.activeObservations,
+                undefined,
+                patternsToReflect,
+              );
+              const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+
+              await this.storage.createReflectionGeneration({
+                currentRecord: recordForReflection,
+                reflection: reflectResult.observations,
+                tokenCount: reflectionTokenCount,
+                patterns: reflectResult.patterns,
+              });
+
+              reflected = true;
+              reflectionCount++;
+              observationTokens = reflectionTokenCount;
+              omDebug(`[OM Finalize] Final reflection complete: ${reflectionTokenCount} tokens`);
+            } finally {
+              await this.storage.setReflectingFlag(recordForReflection.id, false);
+            }
+          }
+        } else {
+          omDebug(`[OM Finalize] Skipping final reflection (${observationTokens} < ${threshold} tokens)`);
+        }
+      }
+
+      return { observed, reflected, observationTokens, reflectionCount };
+    });
   }
 
   /**
