@@ -387,8 +387,7 @@ requestContext.set("environment", "production");
 requestContext.set("tenantId", "tenant-456");
 
 // All spans in this trace automatically get userId, environment, and tenantId metadata
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   requestContext,
 });
 ```
@@ -403,8 +402,7 @@ requestContext.set("userId", "user-123");
 requestContext.set("environment", "production");
 requestContext.set("experimentId", "exp-789");
 
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   requestContext,
   tracingOptions: {
     requestContextKeys: ["experimentId"], // Adds to configured keys
@@ -452,8 +450,7 @@ Use `tracingOptions.tags` to add tags when executing agents or workflows:
 
 ```ts
 // With agents
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -481,8 +478,7 @@ const result = await run.start({
 - **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
 
 ```ts
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Analyze this" }],
+const result = await agent.generate([{ role: "user", content: "Analyze this" }], {
   tracingOptions: {
     tags: ["production", "analytics"],
     metadata: { userId: "user-123", experimentId: "exp-456" },
@@ -504,24 +500,21 @@ When processing sensitive data, you may want to prevent input and output values 
 
 ```ts
 // Hide input data (e.g., user credentials, PII)
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Process this sensitive data" }],
+const result = await agent.generate([{ role: "user", content: "Process this sensitive data" }], {
   tracingOptions: {
     hideInput: true, // Input will be hidden from all spans
   },
 });
 
 // Hide output data (e.g., generated secrets, confidential results)
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Generate API keys" }],
+const result = await agent.generate([{ role: "user", content: "Generate API keys" }], {
   tracingOptions: {
     hideOutput: true, // Output will be hidden from all spans
   },
 });
 
 // Hide both input and output
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Handle confidential request" }],
+const result = await agent.generate([{ role: "user", content: "Handle confidential request" }], {
   tracingOptions: {
     hideInput: true,
     hideOutput: true,
@@ -536,8 +529,7 @@ const result = await agent.generate({
 - **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
 
 ```ts
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Sensitive operation" }],
+const result = await agent.generate([{ role: "user", content: "Sensitive operation" }], {
   tracingOptions: {
     hideInput: true,
     hideOutput: true,
@@ -891,16 +883,12 @@ Both `generate` and `stream` methods return the trace ID in their response:
 
 ```ts
 // Using generate
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-});
+const result = await agent.generate("Hello");
 
 console.log("Trace ID:", result.traceId);
 
 // Using stream
-const streamResult = await agent.stream({
-  messages: [{ role: "user", content: "Tell me a story" }],
-});
+const streamResult = await agent.stream("Tell me a story");
 
 console.log("Trace ID:", streamResult.traceId);
 ```
@@ -1074,9 +1062,7 @@ Use `flush()` in these scenarios:
 ```ts
 // Example: Vercel serverless function
 export async function POST(req: Request) {
-  const result = await agent.generate({
-    messages: [{ role: "user", content: await req.text() }],
-  });
+  const result = await agent.generate([{ role: "user", content: await req.text() }]);
 
   // Ensure spans are exported before function completes
   const observability = mastra.getObservability();

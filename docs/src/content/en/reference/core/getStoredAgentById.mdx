@@ -16,7 +16,7 @@ The `.getStoredAgentById()` method retrieves an agent configuration from storage
 const agent = await mastra.getStoredAgentById("my-stored-agent");
 
 if (agent) {
-  const response = await agent.generate({ messages: "Hello!" });
+  const response = await agent.generate("Hello");
   console.log(response.text);
 }
 ```

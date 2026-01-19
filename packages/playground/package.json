@@ -4,6 +4,11 @@
   "version": "0.0.5",
   "type": "module",
   "homepage": "https://mastra.ai",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "./**/*.d.ts"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -17,7 +22,11 @@
     "build": "vite build",
     "build:watch": "vite build --watch",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts",
+    "test:e2e:ui": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts --ui",
+    "test:e2e:dev:ui": "pnpm test:e2e:setup && E2E_PORT=5173 playwright test -c e2e/playwright.config.ts --ui",
+    "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --ignore-workspace --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
@@ -34,6 +43,7 @@
     "react-router": "^7.6.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.0",
     "@eslint/js": "^9.37.0",
     "@tailwindcss/container-queries": "^0.1.1",
     "@types/react": "^19.1.9",
@@ -43,6 +53,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "nanoid": "^5.1.6",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "typescript": "catalog:",

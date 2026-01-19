@@ -1,5 +1,21 @@
 # @mastra/qdrant
 
+## 1.0.0-beta.5
+
+### Minor Changes
+
+- Add full support for Qdrant named vectors, allowing collections with multiple vector spaces. ([#11905](https://github.com/mastra-ai/mastra/pull/11905))
+  - Added `namedVectors` parameter to `createIndex()` for creating multi-vector collections
+  - Added `vectorName` parameter to `upsert()` for inserting into specific vector spaces
+  - Added `using` parameter to `query()` for querying specific vector spaces
+  - Changed `client` from `private` to `protected` to enable subclass extension
+  - Added vector name validation when upserting to named vector collections
+
+### Patch Changes
+
+- Updated dependencies [[`1dbd8c7`](https://github.com/mastra-ai/mastra/commit/1dbd8c729fb6536ec52f00064d76b80253d346e9), [`c59e13c`](https://github.com/mastra-ai/mastra/commit/c59e13c7688284bd96b2baee3e314335003548de), [`f9a2509`](https://github.com/mastra-ai/mastra/commit/f9a25093ea72d210a5e52cfcb3bcc8b5e02dc25c), [`7a010c5`](https://github.com/mastra-ai/mastra/commit/7a010c56b846a313a49ae42fccd3d8de2b9f292d)]:
+  - @mastra/core@1.0.0-beta.24
+
 ## 1.0.0-beta.4
 
 ### Minor Changes
