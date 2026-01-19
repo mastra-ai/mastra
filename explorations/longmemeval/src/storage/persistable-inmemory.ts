@@ -1,10 +1,4 @@
-import {
-  InMemoryMemory,
-  InMemoryThreads,
-  InMemoryResources,
-  InMemoryMessages,
-  InMemoryObservationalMemory,
-} from '@mastra/core/storage';
+import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 
@@ -12,36 +6,22 @@ import { existsSync } from 'fs';
  * Extended InMemoryMemory with persist/hydrate capabilities for benchmarking.
  * Allows saving and loading the in-memory state to/from disk.
  *
- * NOTE: We store a reference to the same Map instances that are passed to the parent class.
- * When hydrating, we must clear and repopulate these maps instead of replacing them,
+ * NOTE: We store a reference to the InMemoryDB instance that is passed to the parent class.
+ * When hydrating, we must clear and repopulate the maps instead of replacing them,
  * otherwise the parent class won't see the updated data.
  */
 export class PersistableInMemoryMemory extends InMemoryMemory {
-  private _collection: {
-    threads: InMemoryThreads;
-    resources: InMemoryResources;
-    messages: InMemoryMessages;
-    observationalMemory: InMemoryObservationalMemory;
-  };
-
+  private _db: InMemoryDB;
   private isReadonly = false;
 
   constructor(args?: { readOnly: boolean }) {
-    const collection = {
-      threads: new Map(),
-      resources: new Map(),
-      messages: new Map(),
-      observationalMemory: new Map(),
-    };
+    const db = new InMemoryDB();
 
-    super({
-      collection,
-      operations: {} as any, // Not needed for benchmark
-    });
+    super({ db });
 
     if (args?.readOnly) this.isReadonly = true;
-    // Store the SAME map instances that were passed to super()
-    this._collection = collection;
+    // Store the SAME db instance that was passed to super()
+    this._db = db;
   }
 
   /**
@@ -50,10 +30,10 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
   async persist(filePath: string): Promise<void> {
     if (this.isReadonly) return;
     const data: Record<string, any> = {
-      threads: Array.from(this._collection.threads.entries()),
-      resources: Array.from(this._collection.resources.entries()),
-      messages: Array.from(this._collection.messages.entries()),
-      observationalMemory: Array.from(this._collection.observationalMemory.entries()),
+      threads: Array.from(this._db.threads.entries()),
+      resources: Array.from(this._db.resources.entries()),
+      messages: Array.from(this._db.messages.entries()),
+      observationalMemory: Array.from(this._db.observationalMemory.entries()),
     };
 
     await writeFile(filePath, JSON.stringify(data, null, 2));
@@ -72,10 +52,10 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
     const data = JSON.parse(content);
 
     // Clear existing data first
-    this._collection.threads.clear();
-    this._collection.resources.clear();
-    this._collection.messages.clear();
-    this._collection.observationalMemory.clear();
+    this._db.threads.clear();
+    this._db.resources.clear();
+    this._db.messages.clear();
+    this._db.observationalMemory.clear();
 
     // Restore data into the SAME map instances (don't replace the maps!)
     // Convert date strings back to Date objects for all record types
@@ -86,7 +66,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
           createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
           updatedAt: value.updatedAt ? new Date(value.updatedAt) : undefined,
         };
-        this._collection.threads.set(key, thread);
+        this._db.threads.set(key, thread);
       }
     }
     if (data.resources) {
@@ -96,7 +76,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
           createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
           updatedAt: value.updatedAt ? new Date(value.updatedAt) : undefined,
         };
-        this._collection.resources.set(key, resource);
+        this._db.resources.set(key, resource);
       }
     }
     if (data.messages) {
@@ -106,7 +86,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
           ...value,
           createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
         };
-        this._collection.messages.set(key, message);
+        this._db.messages.set(key, message);
       }
     }
     if (data.observationalMemory) {
@@ -119,7 +99,7 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
           updatedAt: record.updatedAt ? new Date(record.updatedAt) : undefined,
           lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
         }));
-        this._collection.observationalMemory.set(key, convertedRecords);
+        this._db.observationalMemory.set(key, convertedRecords);
       }
     }
   }
@@ -128,10 +108,10 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
    * Clear all data
    */
   async clear(): Promise<void> {
-    this._collection.threads.clear();
-    this._collection.resources.clear();
-    this._collection.messages.clear();
-    this._collection.observationalMemory.clear();
+    this._db.threads.clear();
+    this._db.resources.clear();
+    this._db.messages.clear();
+    this._db.observationalMemory.clear();
   }
 
   /**
@@ -144,10 +124,11 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
     observationalMemoryRecords: number;
   } {
     return {
-      threads: this._collection.threads.size,
-      resources: this._collection.resources.size,
-      messages: this._collection.messages.size,
-      observationalMemoryRecords: this._collection.observationalMemory.size,
+      threads: this._db.threads.size,
+      resources: this._db.resources.size,
+      messages: this._db.messages.size,
+      observationalMemoryRecords: this._db.observationalMemory.size,
     };
   }
+
 }

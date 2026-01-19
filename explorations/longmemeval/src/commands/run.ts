@@ -916,7 +916,6 @@ Active evaluations:`;
     const usesObservationRag = configDef.usesObservationRag;
 
     if (usesObservationRag && usesObservationalMemory) {
-      console.log('[DEBUG] Creating ObservationSemanticFilter for RAG');
       // Use a shared cache directory for embeddings (content-based, reusable across configs)
       // Subdirectory by model name for future multi-model support
       const embeddingsCacheDir = join(preparedDir, '..', '.embeddings-cache', 'fastembed-small');
@@ -1051,7 +1050,11 @@ ${JSON.stringify(responses, null, 2)}`);
     }
 
     // Create request context with currentDate for OM relative time annotations
-    const requestContext = new RequestContext([['currentDate', questionDate ?? new Date()]]);
+    // Also set MastraMemory context so ObservationalMemory processor can find threadId/resourceId
+    const requestContext = new RequestContext([
+      ['currentDate', questionDate ?? new Date()],
+      ['MastraMemory', { thread: { id: evalThreadId }, resourceId: meta.resourceId }],
+    ]);
 
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
