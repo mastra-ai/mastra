@@ -18,7 +18,7 @@ This change adds support for the `tracingOptions.tags` feature to the OpenTeleme
 
 **Usage:**
 ```typescript
-const result = await agent.generate([{ role: "user", content: "Hello" }], {
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2"],
   },
