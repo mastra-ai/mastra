@@ -163,19 +163,21 @@ export async function createHonoServer(
     healthHandler,
   );
 
-  app.get(
-    '/api',
-    describeRoute({
-      description: 'API Welcome Page',
-      tags: ['system'],
-      responses: {
-        200: {
-          description: 'Success',
+  if (options?.isDev) {
+    app.get(
+      '/api',
+      describeRoute({
+        description: 'API Welcome Page',
+        tags: ['system'],
+        responses: {
+          200: {
+            description: 'Success',
+          },
         },
-      },
-    }),
-    rootHandler,
-  );
+      }),
+      rootHandler,
+    );
+  }
 
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
