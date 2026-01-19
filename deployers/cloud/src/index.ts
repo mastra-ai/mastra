@@ -19,6 +19,15 @@ export class CloudDeployer extends Deployer {
     this.studio = studio ?? false;
   }
 
+  /**
+   * Returns cloud-specific externals that should be excluded from bundling.
+   * These packages are imported in the generated entry code (getEntry) and need
+   * to be externalized to prevent circular dependency errors during bundling.
+   */
+  protected getAdditionalExternals(): string[] {
+    return ['@mastra/loggers', '@mastra/libsql'];
+  }
+
   protected async getUserBundlerOptions(
     mastraEntryFile: string,
     outputDirectory: string,

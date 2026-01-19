@@ -1,5 +1,6 @@
 ---
 '@mastra/deployer': patch
+'@mastra/cloud': patch
 ---
 
-Fixed circular dependency errors when deploying to Mastra Cloud. Packages @mastra/loggers and @mastra/libsql are now properly externalized during bundling, preventing the 'reexport that references itself' error. This fix allows cloud deployments to succeed even when users don't have these packages explicitly installed in their project.
+Fixed circular dependency errors when deploying to Mastra Cloud. Added `getAdditionalExternals()` hook to the Bundler base class, allowing deployers to specify deployer-specific packages that should be externalized during bundling. CloudDeployer now uses this hook to externalize `@mastra/loggers` and `@mastra/libsql`, preventing the 'reexport that references itself' error without affecting other deployers.

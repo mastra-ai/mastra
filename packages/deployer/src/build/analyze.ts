@@ -282,12 +282,15 @@ export async function analyzeBundle(
     projectRoot,
     isDev = false,
     bundlerOptions,
+    additionalExternals = [],
   }: {
     outputDir: string;
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
     bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
+    /** Deployer-specific externals to be merged with GLOBAL_EXTERNALS */
+    additionalExternals?: string[];
   },
   logger: IMastraLogger,
 ) {
@@ -322,7 +325,9 @@ If you think your configuration is valid, please open an issue.`);
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
-  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
+  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals, ...additionalExternals].filter(
+    Boolean,
+  ) as string[];
 
   logger.info('Analyzing dependencies...');
 

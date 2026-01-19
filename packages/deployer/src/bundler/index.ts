@@ -34,6 +34,15 @@ export abstract class Bundler extends MastraBundler {
     super({ name, component });
   }
 
+  /**
+   * Returns additional externals specific to this deployer/bundler.
+   * Override this method in subclasses to add deployer-specific externals
+   * that should be excluded from bundling.
+   */
+  protected getAdditionalExternals(): string[] {
+    return [];
+  }
+
   async prepare(outputDirectory: string): Promise<void> {
     // Clean up the output directory first
     await emptyDir(outputDirectory);
@@ -301,6 +310,7 @@ export abstract class Bundler extends MastraBundler {
           projectRoot,
           platform: this.platform,
           bundlerOptions: internalBundlerOptions,
+          additionalExternals: this.getAdditionalExternals(),
         },
         this.logger,
       );

@@ -339,6 +339,33 @@ describe('CloudDeployer', () => {
     });
   });
 
+  describe('getAdditionalExternals', () => {
+    it('should return cloud-specific externals', () => {
+      // @ts-ignore - accessing protected method for testing
+      const externals = deployer.getAdditionalExternals();
+
+      expect(externals).toContain('@mastra/loggers');
+      expect(externals).toContain('@mastra/libsql');
+      expect(externals).toHaveLength(2);
+    });
+
+    it('should match packages imported in getEntry()', () => {
+      // @ts-ignore - accessing protected method for testing
+      const externals = deployer.getAdditionalExternals();
+      // @ts-ignore - accessing private method for testing
+      const entry = deployer.getEntry();
+
+      // Verify that the externals match what's imported in the entry
+      expect(entry).toContain("import { PinoLogger } from '@mastra/loggers';");
+      expect(entry).toContain("import { HttpTransport } from '@mastra/loggers/http';");
+      expect(entry).toContain("import { LibSQLStore, LibSQLVector } from '@mastra/libsql';");
+
+      // The externals should cover these imports (including subpaths)
+      expect(externals).toContain('@mastra/loggers'); // covers @mastra/loggers and @mastra/loggers/http
+      expect(externals).toContain('@mastra/libsql');
+    });
+  });
+
   describe('integration scenarios', () => {
     it('should handle complete build flow', async () => {
       const mastraDir = '/test/project';
