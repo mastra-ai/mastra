@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
+import type { StorageDomains } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { LibSQLStore } from '@mastra/libsql';
+import { describe, it, expect, afterAll, beforeEach } from 'vitest';
 
 const dbFile = 'file:storage-init-test.db';
 const files = ['storage-init-test.db', 'storage-init-test.db-shm', 'storage-init-test.db-wal'];
@@ -48,14 +49,14 @@ class TrackingLibSQLStore extends LibSQLStore {
       return originalScoresInit();
     };
 
-    const observabilityStore = this.stores.observability;
+    const observabilityStore = this.stores.observability!;
     const originalObservabilityInit = observabilityStore.init.bind(observabilityStore);
     observabilityStore.init = async () => {
       this.observabilityInitCount++;
       return originalObservabilityInit();
     };
 
-    const agentsStore = this.stores.agents;
+    const agentsStore = this.stores.agents!;
     const originalAgentsInit = agentsStore.init.bind(agentsStore);
     agentsStore.init = async () => {
       this.agentsInitCount++;
@@ -68,9 +69,7 @@ class TrackingLibSQLStore extends LibSQLStore {
     return super.init();
   }
 
-  override async getStore<K extends keyof import('@mastra/core/storage').StorageDomains>(
-    storeName: K,
-  ): Promise<import('@mastra/core/storage').StorageDomains[K] | undefined> {
+  override async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
     this.getStoreCount++;
     return super.getStore(storeName);
   }
