@@ -2,7 +2,7 @@ import {
   Breadcrumb,
   Crumb,
   ScoresList,
-  scoresListColumns,
+  ScoresListSkeleton,
   Header,
   MainContentLayout,
   PageHeader,
@@ -16,7 +16,6 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
@@ -202,7 +201,7 @@ export default function Scorer() {
             />
 
             {isLoadingScores ? (
-              <EntryListSkeleton columns={scoresListColumns} />
+              <ScoresListSkeleton />
             ) : (
               <ScoresList
                 scores={scores}
