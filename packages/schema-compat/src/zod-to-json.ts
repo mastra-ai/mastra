@@ -88,7 +88,7 @@ function patchRecordSchemas(schema: any): any {
 /**
  * Recursively fixes anyOf patterns that some providers (like OpenAI) don't accept.
  * Converts anyOf: [{type: X}, {type: "null"}] to type: [X, "null"]
- * Also fixes empty {} property schemas by converting to an "allow anything" type union.
+ * Also fixes empty {} property schemas by converting to a union of primitive types.
  */
 function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   if (typeof schema !== 'object' || schema === null) {
@@ -118,21 +118,21 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
     }
   }
 
-  // Fix empty property schemas {} - convert to any type to preserve "allow anything" semantics
+  // Fix empty property schemas {} - OpenAI requires a type key
   if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
     result.properties = Object.fromEntries(
       Object.entries(result.properties).map(([key, value]) => {
         const propSchema = value as JSONSchema7;
 
-        // If property is an empty object {}, convert to allow any type
-        // {} in JSON Schema means "allow anything", so we use all types
+        // If property is an empty object {}, convert to allow most types
+        // Note: We exclude 'object' because OpenAI requires additionalProperties: false for object types
         if (
           typeof propSchema === 'object' &&
           propSchema !== null &&
           !Array.isArray(propSchema) &&
           Object.keys(propSchema).length === 0
         ) {
-          return [key, { type: ['string', 'number', 'boolean', 'object', 'array', 'null'] as JSONSchema7['type'] }];
+          return [key, { type: ['string', 'number', 'boolean', 'array', 'null'] as JSONSchema7['type'] }];
         }
 
         // Recursively fix nested schemas
