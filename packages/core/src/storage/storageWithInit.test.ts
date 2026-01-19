@@ -70,4 +70,43 @@ describe('augmentWithInit', () => {
 
     expect(mockStorage.init).toHaveBeenCalled();
   });
+
+  it('should only call init once when init() is called explicitly first, then other methods', async () => {
+    const mockStorage = {
+      init: vi.fn().mockResolvedValue(true),
+      listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
+      getStore: vi.fn().mockResolvedValue({}),
+      disableInit: false,
+    } as unknown as MastraStorage;
+
+    const augmentedStorage = augmentWithInit(mockStorage);
+
+    // Call init explicitly first
+    await augmentedStorage.init();
+
+    // Then call other methods
+    await augmentedStorage.listMessages({ threadId: '1' });
+    await augmentedStorage.getStore('memory');
+    await augmentedStorage.listMessages({ threadId: '2' });
+
+    // init should only be called once despite multiple method calls
+    expect(mockStorage.init).toHaveBeenCalledTimes(1);
+  });
+
+  it('should only call init once when called multiple times explicitly', async () => {
+    const mockStorage = {
+      init: vi.fn().mockResolvedValue(true),
+      disableInit: false,
+    } as unknown as MastraStorage;
+
+    const augmentedStorage = augmentWithInit(mockStorage);
+
+    // Call init multiple times
+    await augmentedStorage.init();
+    await augmentedStorage.init();
+    await augmentedStorage.init();
+
+    // init should only be called once
+    expect(mockStorage.init).toHaveBeenCalledTimes(1);
+  });
 });
