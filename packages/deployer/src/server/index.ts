@@ -163,7 +163,7 @@ export async function createHonoServer(
     healthHandler,
   );
 
-  if (options?.isDev) {
+  if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
       '/api',
       describeRoute({
