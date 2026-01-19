@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MastraAuthCloud } from './index';
+
 import type { CloudUser } from './types';
+
+import { MastraAuthCloud } from './index';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
