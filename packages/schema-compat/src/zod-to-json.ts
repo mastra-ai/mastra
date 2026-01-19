@@ -88,7 +88,7 @@ function patchRecordSchemas(schema: any): any {
 /**
  * Recursively fixes anyOf patterns that some providers (like OpenAI) don't accept.
  * Converts anyOf: [{type: X}, {type: "null"}] to type: [X, "null"]
- * Also fixes empty {} property schemas by converting to nullable string.
+ * Also fixes empty {} property schemas by converting to an "allow anything" type union.
  */
 function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   if (typeof schema !== 'object' || schema === null) {
@@ -104,10 +104,12 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
 
     if (nullSchema && otherSchema && typeof otherSchema === 'object' && otherSchema.type) {
       // Convert anyOf to type array format
+      // Normalize sibling fields (like properties/items) before returning
       const { anyOf, ...rest } = result;
+      const fixedRest = fixAnyOfNullable(rest as JSONSchema7);
       const fixedOther = fixAnyOfNullable(otherSchema as JSONSchema7);
       return {
-        ...rest,
+        ...fixedRest,
         ...fixedOther,
         type: (Array.isArray(fixedOther.type)
           ? [...fixedOther.type, 'null']
