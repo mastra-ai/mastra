@@ -1,4 +1,4 @@
-import type { InboxStats } from '@mastra/core';
+import type { InboxStats } from '@mastra/core/inbox';
 import { Clock, Play, CheckCircle, XCircle, Pause, RefreshCw, Inbox } from 'lucide-react';
 
 export interface InboxStatsDisplayProps {

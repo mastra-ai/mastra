@@ -1,7 +1,7 @@
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
 import { ColumnDef, Row } from '@tanstack/react-table';
-import { TaskPriority } from '@mastra/core';
+import { TaskPriority } from '@mastra/core/inbox';
 import { TaskStatusBadge } from '../task-status-badge';
 import { TaskTableColumn } from './types';
 import { useLinkComponent } from '@/lib/framework';

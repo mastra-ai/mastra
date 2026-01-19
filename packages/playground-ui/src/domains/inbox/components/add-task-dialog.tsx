@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CreateTaskInput, TaskPriority } from '@mastra/core';
+import type { CreateTaskInput, TaskPriority } from '@mastra/core/inbox';
 import {
   Dialog,
   DialogContent,

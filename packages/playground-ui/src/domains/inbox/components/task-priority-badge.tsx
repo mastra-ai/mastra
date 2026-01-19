@@ -1,4 +1,4 @@
-import { TaskPriority } from '@mastra/core';
+import { TaskPriority } from '@mastra/core/inbox';
 import { Badge } from '../../../ds/components/Badge';
 import { ArrowDown, ArrowRight, ArrowUp, AlertTriangle } from 'lucide-react';
 

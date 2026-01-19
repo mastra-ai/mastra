@@ -1,4 +1,4 @@
-import type { Task } from '@mastra/core';
+import type { Task } from '@mastra/core/inbox';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';

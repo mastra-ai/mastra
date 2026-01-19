@@ -1,4 +1,4 @@
-import { TaskStatus } from '@mastra/core';
+import { TaskStatus } from '@mastra/core/inbox';
 import { Badge } from '../../../ds/components/Badge';
 import { CheckCircle, Clock, XCircle, Play, Pause, RefreshCw, AlertCircle } from 'lucide-react';
 

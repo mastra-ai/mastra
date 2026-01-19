@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { InboxIcon, PlusIcon } from 'lucide-react';
-import type { Task, CreateTaskInput } from '@mastra/core';
+import type { Task, CreateTaskInput } from '@mastra/core/inbox';
 import {
   Header,
   HeaderTitle,

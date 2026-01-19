@@ -1,4 +1,4 @@
-import type { Task, TaskStatus, TaskPriority } from '@mastra/core';
+import type { Task, TaskStatus, TaskPriority } from '@mastra/core/inbox';
 
 export type TaskTableData = Task;
 

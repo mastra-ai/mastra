@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '../../../store/playground-store';
 
-import type { Task, CreateTaskInput } from '@mastra/core';
+import type { Task, CreateTaskInput } from '@mastra/core/inbox';
 
 // Extended client type to include inbox methods
 type InboxClient = {

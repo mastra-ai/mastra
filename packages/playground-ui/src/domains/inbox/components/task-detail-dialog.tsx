@@ -1,4 +1,4 @@
-import type { Task } from '@mastra/core';
+import type { Task } from '@mastra/core/inbox';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { KeyValueList, type KeyValueListItemData } from '@/ds/components/KeyValueList';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
