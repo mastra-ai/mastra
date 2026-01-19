@@ -138,7 +138,7 @@ describe('Swagger UI and OpenAPI documentation warning', () => {
     expect(mockWarn).not.toHaveBeenCalled();
   });
 
-  it('should not warn when swaggerUI is enabled but openAPIDocs is explicitly undefined in production', async () => {
+  it('should warn when swaggerUI is enabled but openAPIDocs is explicitly undefined in production', async () => {
     vi.mocked(mockMastra.getServer).mockReturnValue({
       build: {
         swaggerUI: true,
