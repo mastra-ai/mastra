@@ -36,4 +36,5 @@ export const BUNDLE = [
   'v1/storage-get-messages-paginated',
   'v1/storage-list-workflow-runs',
   'v1/vector-pg-constructor',
+  'v1/client-msg-function-args',
 ];
