@@ -184,14 +184,7 @@ const result = await agent.executeTool("tool-id", {
 Stream responses from an agent network for multi-agent interactions:
 
 ```typescript
-const response = await agent.network({
-  messages: [
-    {
-      role: "user",
-      content: "Research this topic and write a summary",
-    },
-  ],
-});
+const response = await agent.network("Research this topic and write a summary");
 
 response.processDataStream({
   onChunk: async (chunk) => {
