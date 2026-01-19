@@ -268,11 +268,17 @@ async function formatAgentList({
 
   // Get and serialize only user-configured processors (excludes memory-derived processors)
   // This ensures the UI only shows processors explicitly configured by the user
-  const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
-  const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
-  const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
-  const serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
-  const serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  let serializedInputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  let serializedOutputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  try {
+    const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
+    const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
+    const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
+    serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
+    serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  } catch (error) {
+    logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
+  }
 
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
@@ -437,11 +443,17 @@ async function formatAgent({
 
   // Get and serialize only user-configured processors (excludes memory-derived processors)
   // This ensures the UI only shows processors explicitly configured by the user
-  const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
-  const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
-  const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
-  const serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
-  const serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  let serializedInputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  let serializedOutputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  try {
+    const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
+    const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
+    const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
+    serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
+    serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  } catch (error) {
+    mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
+  }
 
   return {
     name: agent.name,
