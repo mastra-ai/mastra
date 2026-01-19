@@ -1,7 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { SignUpCredentials, AuthResult } from './use-auth-actions.js';
+import { createAuthClient } from '../lib/auth-client';
 
 /**
  * Hook for credentials-based signup flow.
@@ -55,25 +56,13 @@ export function useCredentialsSignup() {
     name: '',
   });
 
+  const authClient = useMemo(() => {
+    const baseUrl = (client as any).options?.baseUrl || '';
+    return createAuthClient(baseUrl);
+  }, [client]);
+
   const mutation = useMutation<AuthResult, Error, void>({
-    mutationFn: async () => {
-      const baseUrl = (client as any).options?.baseUrl || '';
-      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-up`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(credentials),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || 'Sign up failed');
-      }
-
-      return response.json();
-    },
+    mutationFn: () => authClient.signUp(credentials),
     onSuccess: () => {
       // Invalidate auth queries to refetch user state
       queryClient.invalidateQueries({ queryKey: ['auth'] });

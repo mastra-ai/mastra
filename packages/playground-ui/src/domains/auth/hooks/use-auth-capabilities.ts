@@ -1,6 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import type { AuthCapabilities } from '../types';
+import { createAuthClient } from '../lib/auth-client';
 
 /**
  * Fetches authentication capabilities from the server
@@ -11,20 +13,14 @@ import type { AuthCapabilities } from '../types';
 export function useAuthCapabilities() {
   const client = useMastraClient();
 
+  const authClient = useMemo(() => {
+    const baseUrl = (client as any).options?.baseUrl || '';
+    return createAuthClient(baseUrl);
+  }, [client]);
+
   return useQuery<AuthCapabilities>({
     queryKey: ['auth', 'capabilities'],
-    queryFn: async () => {
-      const baseUrl = (client as any).options?.baseUrl || '';
-      const response = await fetch(`${baseUrl}/api/auth/capabilities`, {
-        credentials: 'include', // Include cookies for session validation
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch auth capabilities: ${response.statusText}`);
-      }
-
-      return response.json();
-    },
+    queryFn: () => authClient.getCapabilities(),
     // Short TTL for auth state - we want to check auth state frequently
     // but not on every render
     staleTime: 30000, // 30 seconds

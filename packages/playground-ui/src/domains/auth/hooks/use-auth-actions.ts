@@ -1,6 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import type { SSOLoginResponse, LogoutResponse } from '../types.js';
+import { createAuthClient } from '../lib/auth-client';
 
 /**
  * Credentials for signing in with email and password
@@ -66,28 +68,16 @@ export function useAuthActions() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
+  const authClient = useMemo(() => {
+    const baseUrl = (client as any).options?.baseUrl || '';
+    return createAuthClient(baseUrl);
+  }, [client]);
+
   /**
    * Sign in with email and password
    */
   const signIn = useMutation<AuthResult, Error, SignInCredentials>({
-    mutationFn: async credentials => {
-      const baseUrl = (client as any).options?.baseUrl || '';
-      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-in`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for session
-        body: JSON.stringify(credentials),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(error.message || `Sign in failed: ${response.statusText}`);
-      }
-
-      return response.json();
-    },
+    mutationFn: credentials => authClient.signIn(credentials),
     onSuccess: () => {
       // Invalidate auth queries to refetch user state
       queryClient.invalidateQueries({ queryKey: ['auth'] });
@@ -98,24 +88,7 @@ export function useAuthActions() {
    * Sign up with email and password
    */
   const signUp = useMutation<AuthResult, Error, SignUpCredentials>({
-    mutationFn: async credentials => {
-      const baseUrl = (client as any).options?.baseUrl || '';
-      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-up`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for session
-        body: JSON.stringify(credentials),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(error.message || `Sign up failed: ${response.statusText}`);
-      }
-
-      return response.json();
-    },
+    mutationFn: credentials => authClient.signUp(credentials),
     onSuccess: () => {
       // Invalidate auth queries to refetch user state
       queryClient.invalidateQueries({ queryKey: ['auth'] });
@@ -159,28 +132,13 @@ export function useAuthActions() {
 export function useSSOLogin() {
   const client = useMastraClient();
 
+  const authClient = useMemo(() => {
+    const baseUrl = (client as any).options?.baseUrl || '';
+    return createAuthClient(baseUrl);
+  }, [client]);
+
   return useMutation<SSOLoginResponse, Error, { redirectUri?: string }>({
-    mutationFn: async ({ redirectUri }) => {
-      const params = new URLSearchParams();
-      if (redirectUri) {
-        params.set('redirect_uri', redirectUri);
-      }
-
-      const url = `${(client as any).options?.baseUrl || ''}/api/auth/sso/login${params.toString() ? `?${params}` : ''}`;
-
-      const response = await fetch(url, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to initiate SSO login: ${response.status}`);
-      }
-
-      return response.json();
-    },
+    mutationFn: ({ redirectUri }) => authClient.getSSOLoginUrl(redirectUri),
   });
 }
 
@@ -223,22 +181,13 @@ export function useLogout() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
+  const authClient = useMemo(() => {
+    const baseUrl = (client as any).options?.baseUrl || '';
+    return createAuthClient(baseUrl);
+  }, [client]);
+
   return useMutation<LogoutResponse, Error, void>({
-    mutationFn: async () => {
-      const response = await fetch(`${(client as any).options?.baseUrl || ''}/api/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to logout: ${response.status}`);
-      }
-
-      return response.json();
-    },
+    mutationFn: () => authClient.logout(),
     onSuccess: () => {
       // Invalidate all auth-related queries
       queryClient.invalidateQueries({ queryKey: ['auth'] });

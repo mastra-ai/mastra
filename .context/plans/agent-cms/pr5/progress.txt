@@ -2399,3 +2399,88 @@ Task 084 - Fix import ordering and type-only imports in WorkOS provider-ee.ts
 - File passes lint, typecheck, and build
 - All acceptance criteria met
 
+
+---
+
+## Task 085: Document or resolve auth hooks fetch() guideline exception
+
+**Date:** 2026-01-18
+**Status:** ✅ COMPLETED
+
+### What was done:
+- Created centralized auth client utility to avoid direct fetch() calls in hooks
+- Created centralized audit client utility for audit log operations
+- Updated all auth hooks to use the new AuthClient class
+- Updated all audit hooks to use the new AuditClient class
+- Removed direct fetch() calls from all affected hooks
+
+### Solution chosen: Option C - Auth Client Utility
+**Rationale:**
+- Cleanest interim solution that follows playground-ui guidelines
+- Centralizes all auth API calls in one place (auth-client.ts)
+- Maintains type safety throughout the call chain
+- Eliminates code duplication across hooks
+- Keeps `(client as any)` type casting contained to client creation
+- Can be easily migrated to SDK methods when they become available
+
+### Implementation details:
+
+**Created files:**
+1. `packages/playground-ui/src/domains/auth/lib/auth-client.ts`
+   - AuthClient class with methods: getCapabilities(), signIn(), signUp(), getSSOLoginUrl(), logout()
+   - createAuthClient() factory function
+   - Full TypeScript type safety for all methods
+
+2. `packages/playground-ui/src/domains/audit/lib/audit-client.ts`
+   - AuditClient class with methods: getAuditLogs(), exportAuditLogs()
+   - createAuditClient() factory function
+   - Handles date conversions and blob exports
+
+**Updated hooks:**
+1. `packages/playground-ui/src/domains/auth/hooks/use-auth-capabilities.ts`
+   - Uses authClient.getCapabilities() instead of direct fetch()
+   - Auth client created via useMemo for stability
+
+2. `packages/playground-ui/src/domains/auth/hooks/use-auth-actions.ts`
+   - Updated signIn, signUp, useSSOLogin, and useLogout hooks
+   - All use authClient methods instead of direct fetch()
+   - Simplified mutation functions significantly
+
+3. `packages/playground-ui/src/domains/auth/hooks/use-credentials-login.ts`
+   - Uses authClient.signIn() instead of direct fetch()
+
+4. `packages/playground-ui/src/domains/auth/hooks/use-credentials-signup.ts`
+   - Uses authClient.signUp() instead of direct fetch()
+
+5. `packages/playground-ui/src/domains/audit/hooks/use-audit-logs.ts`
+   - Updated useAuditLogs and useExportAuditLogs hooks
+   - Uses auditClient methods instead of direct fetch()
+   - Cleaner separation of concerns (fetch logic vs. download logic)
+
+### Verification:
+- Verified full monorepo typecheck passes with pnpm typecheck (exit code 0)
+- Verified full monorepo build passes with pnpm build (124 tasks successful)
+- All auth and audit hooks now follow playground-ui coding guidelines
+- No direct fetch() calls remain in auth or audit hooks
+
+### Acceptance criteria met:
+✓ Auth client utility centralizes and type-safes the API calls
+✓ All direct fetch() calls removed from hooks
+✓ Type safety maintained throughout
+✓ Follows playground-ui REQUIRED guidelines (use SDK, no direct fetch)
+✓ Code is more maintainable and testable
+
+### Benefits:
+- **Architectural improvement**: Clear separation between API client layer and React hooks
+- **Type safety**: All API calls are fully typed
+- **Testability**: AuthClient and AuditClient can be easily mocked for testing
+- **Maintainability**: Single source of truth for all auth/audit API calls
+- **Future-proof**: Can be easily replaced with SDK methods when available
+
+### Notes for next engineer:
+- The auth and audit client utilities are interim solutions
+- When @mastra/client-js SDK adds auth methods, migrate to using SDK
+- The `(client as any)` type casting is now contained to client creation only
+- All hooks use proper useMemo to avoid recreating clients on every render
+- Remaining incomplete task: Task 086 (P2 - Replace stub getUser implementation)
+- Task 086 is the final task for PR5
