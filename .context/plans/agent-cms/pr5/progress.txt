@@ -2391,3 +2391,11 @@ This was the final task for PR5! All 76 tasks are now complete. The Auth feature
 - No breaking changes - function still returns BetterAuthUser type with valid Date objects
 - Remaining incomplete task: Task 084 (P2 - Import ordering in WorkOS provider-ee.ts)
 - Task 084 is the final task for PR5
+
+Task 084 - Fix import ordering and type-only imports in WorkOS provider-ee.ts
+- Removed unused imports WorkOSConfig and WorkOSUser from line 30
+- Imports are now properly organized (external packages first, then local imports)
+- Type-only imports are using proper syntax
+- File passes lint, typecheck, and build
+- All acceptance criteria met
+

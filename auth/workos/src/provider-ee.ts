@@ -12,19 +12,23 @@
  * @module auth-workos/provider-ee
  */
 
-import { MastraAuthProvider, type MastraAuthProviderConfig } from '@mastra/core/ee';
-import type { EEUser } from '@mastra/core/ee';
+import { MastraAuthProvider } from '@mastra/core/ee';
+import type { MastraAuthProviderConfig, EEUser } from '@mastra/core/ee';
+import { createAuthService } from '@workos/authkit-session';
+import type { AuthKitConfig } from '@workos/authkit-session';
 import { WorkOS } from '@workos-inc/node';
-import { createAuthService, type AuthKitConfig } from '@workos/authkit-session';
 
-import type { WorkOSConfig, WorkOSUser, MastraAuthWorkosOptions } from './types.js';
-import { WorkOSSSOProvider } from './sso.js';
-import { WorkOSSessionProvider } from './session.js';
+import { WorkOSAuditExporter } from './audit-export.js';
+import type { WorkOSAuditExporterConfig } from './audit-export.js';
+import { WorkOSDirectorySync } from './directory-sync.js';
+import type { WorkOSDirectorySyncConfig } from './directory-sync.js';
+import { MastraRBACWorkos } from './rbac.js';
+import type { WorkOSRBACConfig } from './rbac.js';
 import { WebSessionStorage } from './session-storage.js';
+import { WorkOSSessionProvider } from './session.js';
+import { WorkOSSSOProvider } from './sso.js';
+import type { MastraAuthWorkosOptions } from './types.js';
 import { WorkOSUserProvider } from './user.js';
-import { MastraRBACWorkos, type WorkOSRBACConfig } from './rbac.js';
-import { WorkOSDirectorySync, type WorkOSDirectorySyncConfig } from './directory-sync.js';
-import { WorkOSAuditExporter, type WorkOSAuditExporterConfig } from './audit-export.js';
 
 /**
  * Extended options for MastraAuthWorkos including optional RBAC, directory sync, and audit export.

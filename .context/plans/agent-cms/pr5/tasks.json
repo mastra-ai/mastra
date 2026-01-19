@@ -1508,7 +1508,7 @@
       "id": "044",
       "category": "security",
       "priority": "P0",
-      "title": "Fix CVE-2024-56734: Upgrade better-auth to \u22651.1.6",
+      "title": "Fix CVE-2024-56734: Upgrade better-auth to ≥1.1.6",
       "description": "The better-auth dependency v1.1.4 has a critical open-redirect vulnerability (CVE-2024-56734) in the email verification endpoint. Must upgrade to at least v1.1.6.",
       "files": [
         "auth/better-auth/package.json"
@@ -1520,7 +1520,7 @@
         "Run tests to ensure no breaking changes"
       ],
       "acceptanceCriteria": [
-        "better-auth version is \u22651.1.6 in package.json",
+        "better-auth version is ≥1.1.6 in package.json",
         "pnpm-lock.yaml reflects the updated version",
         "Package builds successfully",
         "Tests pass"
@@ -2533,8 +2533,8 @@
       ],
       "estimatedComplexity": "small",
       "dependencies": [],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     }
   ]
 }
