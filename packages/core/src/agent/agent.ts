@@ -3280,9 +3280,15 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
+    // Deep merge tracingOptions to preserve tags from defaultOptions when options.tracingOptions is undefined or empty
+    const mergedTracingOptions =
+      defaultOptions?.tracingOptions || options?.tracingOptions
+        ? { ...defaultOptions?.tracingOptions, ...options?.tracingOptions }
+        : undefined;
     const mergedOptions = {
       ...defaultOptions,
       ...(options ?? {}),
+      ...(mergedTracingOptions !== undefined ? { tracingOptions: mergedTracingOptions } : {}),
     } as unknown as AgentExecutionOptions<any>;
 
     const llm = await this.getLLM({
@@ -3370,9 +3376,15 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
+    // Deep merge tracingOptions to preserve tags from defaultOptions when streamOptions.tracingOptions is undefined or empty
+    const mergedTracingOptions =
+      defaultOptions?.tracingOptions || streamOptions?.tracingOptions
+        ? { ...defaultOptions?.tracingOptions, ...streamOptions?.tracingOptions }
+        : undefined;
     const mergedOptions = {
       ...defaultOptions,
       ...(streamOptions ?? {}),
+      ...(mergedTracingOptions !== undefined ? { tracingOptions: mergedTracingOptions } : {}),
     } as unknown as AgentExecutionOptions<OUTPUT>;
 
     const llm = await this.getLLM({

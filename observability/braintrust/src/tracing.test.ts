@@ -1715,7 +1715,7 @@ describe('BraintrustExporter', () => {
   });
 
   describe('Tags Support', () => {
-    it('should include tags in span.log() for root spans with tags', async () => {
+    it('should include tags in event for root spans with tags', async () => {
       const rootSpanWithTags = createMockSpan({
         id: 'root-with-tags',
         name: 'tagged-agent',
@@ -1732,18 +1732,22 @@ describe('BraintrustExporter', () => {
 
       await exporter.exportTracingEvent(event);
 
-      // Should log tags via span.log()
+      // Data properties (including tags) should be passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            'mastra-trace-id': rootSpanWithTags.traceId,
+          name: 'tagged-agent',
+          spanId: 'root-with-tags',
+          event: expect.objectContaining({
+            tags: ['production', 'experiment-v2', 'user-request'],
+            metadata: expect.objectContaining({
+              'mastra-trace-id': rootSpanWithTags.traceId,
+            }),
           }),
-          tags: ['production', 'experiment-v2', 'user-request'],
         }),
       );
     });
 
-    it('should not include tags in span.log() when tags array is empty', async () => {
+    it('should not include tags in event when tags array is empty', async () => {
       const rootSpanEmptyTags = createMockSpan({
         id: 'root-empty-tags',
         name: 'agent-no-tags',
@@ -1761,12 +1765,12 @@ describe('BraintrustExporter', () => {
       await exporter.exportTracingEvent(event);
       expect(mockLogger.startSpan).toHaveBeenCalledOnce();
 
-      // Should startSpan without tags property
+      // Event should not contain tags when tags array is empty
       const call = mockLogger.startSpan.mock.calls[0][0];
-      expect(call.tags).toBeUndefined();
+      expect(call.event.tags).toBeUndefined();
     });
 
-    it('should not include tags in span.log() when tags is undefined', async () => {
+    it('should not include tags in event when tags is undefined', async () => {
       const rootSpanNoTags = createMockSpan({
         id: 'root-no-tags',
         name: 'agent-undefined-tags',
@@ -1784,9 +1788,9 @@ describe('BraintrustExporter', () => {
       await exporter.exportTracingEvent(event);
       expect(mockLogger.startSpan).toHaveBeenCalledOnce();
 
-      // Should startSpan without tags property
+      // Event should not contain tags when tags is undefined
       const callArg = mockLogger.startSpan.mock.calls[0][0];
-      expect(callArg.tags).toBeUndefined();
+      expect(callArg.event.tags).toBeUndefined();
     });
 
     it('should include tags with workflow spans', async () => {
@@ -1806,13 +1810,17 @@ describe('BraintrustExporter', () => {
 
       await exporter.exportTracingEvent(event);
 
-      // Should capture tags via span.startSpan()
+      // Tags and metadata should be in the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            'mastra-trace-id': workflowSpanWithTags.traceId,
+          name: 'data-processing-workflow',
+          spanId: 'workflow-with-tags',
+          event: expect.objectContaining({
+            tags: ['batch-processing', 'priority-high'],
+            metadata: expect.objectContaining({
+              'mastra-trace-id': workflowSpanWithTags.traceId,
+            }),
           }),
-          tags: ['batch-processing', 'priority-high'],
         }),
       );
     });
@@ -1833,7 +1841,7 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       });
 
-      // Clear mock to check child span startSpan calls
+      // Clear mocks to check child span calls
       mockSpan.startSpan.mockClear();
 
       // Create child span (should not have tags even if we set them)
@@ -1855,12 +1863,12 @@ describe('BraintrustExporter', () => {
         exportedSpan: childSpan,
       });
 
-      // Check that the startSpan call for child span does not include tags
-      const logCall = mockSpan.startSpan.mock.calls[0][0];
-      expect(logCall.tags).toBeUndefined();
+      // Check that the event for child span does not include tags
+      const startSpanCall = mockSpan.startSpan.mock.calls[0][0];
+      expect(startSpanCall.event.tags).toBeUndefined();
     });
 
-    it('should include tags only on initial log, not on updates or end', async () => {
+    it('should include tags only on initial event, not on updates or end', async () => {
       const rootSpanWithTags = createMockSpan({
         id: 'root-lifecycle-tags',
         name: 'lifecycle-agent',
@@ -1870,19 +1878,23 @@ describe('BraintrustExporter', () => {
         tags: ['lifecycle-tag'],
       });
 
-      // Start span - should include tags
+      // Start span - tags should be in the event parameter
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpanWithTags,
       });
 
-      // Verify initial startSpan has tags
+      // Verify tags and metadata were passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            'mastra-trace-id': rootSpanWithTags.traceId,
+          name: 'lifecycle-agent',
+          spanId: 'root-lifecycle-tags',
+          event: expect.objectContaining({
+            tags: ['lifecycle-tag'],
+            metadata: expect.objectContaining({
+              'mastra-trace-id': rootSpanWithTags.traceId,
+            }),
           }),
-          tags: ['lifecycle-tag'],
         }),
       );
 
