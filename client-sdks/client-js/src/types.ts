@@ -287,8 +287,10 @@ export interface ListMemoryThreadsParams {
   agentId?: string;
   page?: number;
   perPage?: number;
-  orderBy?: 'createdAt' | 'updatedAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
   requestContext?: RequestContext | Record<string, any>;
 }
 

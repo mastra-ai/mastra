@@ -116,8 +116,7 @@ export class MastraClient extends BaseResource {
       ...(params.agentId && { agentId: params.agentId }),
       ...(params.page !== undefined && { page: params.page.toString() }),
       ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
-      ...(params.orderBy && { orderBy: params.orderBy }),
-      ...(params.sortDirection && { sortDirection: params.sortDirection }),
+      ...(params.orderBy && { orderBy: JSON.stringify(params.orderBy) }),
     });
 
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
