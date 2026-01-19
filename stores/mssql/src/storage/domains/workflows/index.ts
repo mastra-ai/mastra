@@ -7,6 +7,8 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -538,6 +540,93 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             workflowName: workflowName || 'all',
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    const tableName = getTableName({
+      indexName: TABLE_WORKFLOW_SNAPSHOT,
+      schemaName: getSchemaName(this.schema),
+    });
+    const transaction = this.pool.transaction();
+
+    try {
+      await transaction.begin();
+
+      // Build WHERE clause conditions
+      const conditions: string[] = [];
+      const request = new sql.Request(transaction);
+
+      // Date filter - delete workflow runs created before this date
+      conditions.push('[createdAt] < @beforeDate');
+      request.input('beforeDate', args.beforeDate);
+
+      // Optional filters
+      if (args.filters?.workflowName !== undefined) {
+        conditions.push('[workflow_name] = @workflowName');
+        request.input('workflowName', args.filters.workflowName);
+      }
+
+      if (args.filters?.status !== undefined) {
+        conditions.push("JSON_VALUE([snapshot], '$.status') = @status");
+        request.input('status', args.filters.status);
+      }
+
+      if (args.filters?.resourceId !== undefined) {
+        conditions.push('[resourceId] = @resourceId');
+        request.input('resourceId', args.filters.resourceId);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // First count the records to be deleted
+      const countResult = await request.query(`SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`);
+      const deletedCount = countResult.recordset[0]?.count ?? 0;
+
+      if (deletedCount === 0) {
+        await transaction.commit();
+        return { deletedCount: 0 };
+      }
+
+      // Delete the records (need new request for the delete)
+      const deleteRequest = new sql.Request(transaction);
+      deleteRequest.input('beforeDate', args.beforeDate);
+      if (args.filters?.workflowName !== undefined) {
+        deleteRequest.input('workflowName', args.filters.workflowName);
+      }
+      if (args.filters?.status !== undefined) {
+        deleteRequest.input('status', args.filters.status);
+      }
+      if (args.filters?.resourceId !== undefined) {
+        deleteRequest.input('resourceId', args.filters.resourceId);
+      }
+
+      await deleteRequest.query(`DELETE FROM ${tableName} WHERE ${whereClause}`);
+      await transaction.commit();
+
+      return {
+        deletedCount,
+      };
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
           },
         },
         error,
