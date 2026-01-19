@@ -11,11 +11,12 @@ import { Plus, BookOpen } from 'lucide-react';
 
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
+import { getColumns } from './columns';
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { useExperimentalFeatures } from '@/lib/experimental-features/hooks/use-experimental-features';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -26,7 +27,9 @@ export interface AgentsTableProps {
 export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
+  const columns = useMemo(() => getColumns(experimentalFeaturesEnabled), [experimentalFeaturesEnabled]);
 
   const table = useReactTable({
     data: projectData,
@@ -50,7 +53,7 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
       </SearchbarWrapper>
 
       {isLoading ? (
-        <AgentsTableSkeleton />
+        <AgentsTableSkeleton showSourceColumn={experimentalFeaturesEnabled} />
       ) : (
         <ScrollableContainer>
           <TooltipProvider>
@@ -81,10 +84,11 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
   );
 }
 
-const AgentsTableSkeleton = () => (
+const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }) => (
   <Table>
     <Thead>
       <Th>Name</Th>
+      {showSourceColumn && <Th>Source</Th>}
       <Th>Model</Th>
       <Th>Attached entities</Th>
     </Thead>
@@ -94,6 +98,11 @@ const AgentsTableSkeleton = () => (
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
+          {showSourceColumn && (
+            <Cell>
+              <Skeleton className="h-4 w-16" />
+            </Cell>
+          )}
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>

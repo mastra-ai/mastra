@@ -262,6 +262,9 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // This creates a version if there are meaningful changes and updates activeVersionId
       const { agent } = await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent);
 
+      // Clear the cached agent instance so the next request gets the updated config
+      mastra.clearStoredAgentCache(storedAgentId);
+
       return agent;
     } catch (error) {
       return handleError(error, 'Error updating stored agent');
@@ -301,6 +304,9 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       }
 
       await agentsStore.deleteAgent({ id: storedAgentId });
+
+      // Clear the cached agent instance
+      mastra.clearStoredAgentCache(storedAgentId);
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

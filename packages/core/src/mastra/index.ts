@@ -315,6 +315,8 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
+  // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
+  #storedAgentsCache: Map<string, Agent> = new Map();
 
   get pubsub() {
     return this.#pubsub;
@@ -849,6 +851,16 @@ export class Mastra<
     }
 
     // Default behavior: get the current agent config with version resolution
+    // Check cache first for non-raw requests (allows in-memory model changes to persist)
+    if (!options?.raw) {
+      const cachedAgent = this.#storedAgentsCache.get(id);
+      if (cachedAgent) {
+        this.#logger?.debug(`[getStoredAgentById] Returning cached agent "${id}"`);
+        return cachedAgent;
+      }
+      this.#logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
+    }
+
     const storedAgent = await agentsStore.getAgentByIdResolved({ id });
 
     if (!storedAgent) {
@@ -859,7 +871,21 @@ export class Mastra<
       return storedAgent;
     }
 
-    return this.#createAgentFromStoredConfig(storedAgent);
+    const agent = this.#createAgentFromStoredConfig(storedAgent);
+    // Cache the agent for future requests
+    this.#storedAgentsCache.set(id, agent);
+    return agent;
+  }
+
+  /**
+   * Clears the cached stored agent instance, forcing a fresh load from storage on next access.
+   * This should be called when an agent is updated via the Edit dialog to ensure
+   * the cached instance is refreshed with the new configuration.
+   *
+   * @param id - The ID of the agent to clear from cache
+   */
+  public clearStoredAgentCache(id: string): void {
+    this.#storedAgentsCache.delete(id);
   }
 
   /**
@@ -1052,6 +1078,9 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
+    // Mark the agent as coming from storage (used by UI to show edit button)
+    (agent as any).source = 'stored';
+
     return agent;
   }
 
@@ -1071,7 +1100,7 @@ export class Mastra<
       try {
         const tool = this.getToolById(toolKey as any);
         resolvedTools[toolKey] = tool;
-      } catch {
+      } catch (err) {
         // Tool reference exists but tool is not registered - log warning
         this.#logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }
@@ -1169,7 +1198,7 @@ export class Mastra<
    * @private
    */
   #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
-    if (!storedScorers) {
+    if (!storedScorers || Object.keys(storedScorers).length === 0) {
       return undefined;
     }
 

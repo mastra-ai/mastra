@@ -110,6 +110,7 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  source?: 'code' | 'stored';
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -309,6 +310,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: (agent as any).source ?? 'code',
   };
 }
 
@@ -346,6 +348,16 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     }
   }
 
+  // If still not found, try to get stored agent
+  if (!agent) {
+    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
+    }
+  }
+
   if (!agent) {
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
@@ -365,8 +377,8 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
-  const tools = await agent.listTools({ requestContext });
 
+  const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
   let serializedAgentWorkflows: Record<
@@ -472,6 +484,7 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: (agent as any).source ?? 'code',
   };
 }
 
@@ -488,26 +501,59 @@ export const LIST_AGENTS_ROUTE = createRoute({
   }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
-  description: 'Returns a list of all available agents in the system',
+  description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const agents = mastra.listAgents();
+      const codeAgents = mastra.listAgents();
 
       const isPartial = partial === 'true';
-      const serializedAgentsMap = await Promise.all(
-        Object.entries(agents).map(async ([id, agent]) => {
+
+      // Serialize code-defined agents
+      const serializedCodeAgentsMap = await Promise.all(
+        Object.entries(codeAgents).map(async ([id, agent]) => {
           return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
-      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
         (acc, { id, ...rest }) => {
           acc[id] = { id, ...rest };
           return acc;
         },
         {},
       );
+
+      // Also fetch and include stored agents
+      try {
+        const storedAgentsResult = await mastra.listStoredAgents();
+        if (storedAgentsResult?.agents) {
+          // Process each agent individually to avoid one bad agent breaking the whole list
+          for (const agent of storedAgentsResult.agents) {
+            try {
+              const serialized = await formatAgentList({
+                id: agent.id,
+                mastra,
+                agent,
+                requestContext,
+                partial: isPartial,
+              });
+              // Don't overwrite code-defined agents with same ID
+              if (!serializedAgents[serialized.id]) {
+                serializedAgents[serialized.id] = serialized;
+              }
+            } catch (agentError) {
+              // Log but continue with other agents
+              const logger = mastra.getLogger();
+              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+            }
+          }
+        }
+      } catch (storageError) {
+        // Storage not configured or doesn't support agents - log and ignore
+        const logger = mastra.getLogger();
+        logger.debug('Could not fetch stored agents', { error: storageError });
+      }
 
       return serializedAgents;
     } catch (error) {
@@ -1045,6 +1091,9 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
 
+      // Update the model in-memory only (for temporary testing)
+      // This allows users to test different models without persisting
+      // To save permanently, users should use the Edit agent dialog
       agent.__updateModel({ model: newModel });
 
       return { message: 'Agent model updated' };

@@ -53,9 +53,9 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         description: values.description,
         instructions: values.instructions,
         model: values.model as Record<string, unknown>,
-        tools: codeDefinedTools.length > 0 ? codeDefinedTools : undefined,
-        integrations: integrationIds.length > 0 ? integrationIds : undefined,
-        integrationTools: integrationToolIds.length > 0 ? integrationToolIds : undefined,
+        tools: codeDefinedTools,
+        integrations: integrationIds.length > 0 ? integrationIds : [],
+        integrationTools: integrationToolIds,
         workflows: values.workflows,
         agents: values.agents,
         memory: values.memory,
@@ -120,7 +120,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
           <DialogTitle>Edit Agent</DialogTitle>
         </DialogHeader>
         {isLoadingAgent ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-8 px-6">
             <Spinner className="h-8 w-8" />
           </div>
         ) : initialValues ? (
@@ -136,7 +136,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
             excludeAgentId={agentId}
           />
         ) : (
-          <div className="flex items-center justify-center py-8 text-icon3">Agent not found</div>
+          <div className="flex items-center justify-center py-8 px-6 text-icon3">Agent not found</div>
         )}
       </DialogContent>
     </Dialog>

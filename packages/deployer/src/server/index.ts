@@ -75,6 +75,18 @@ export async function createHonoServer(
     tools: {},
   },
 ) {
+  // Register bundled tools with Mastra so they can be used by stored agents
+  // This bridges the gap between tools discovered by the CLI bundler and the Mastra instance
+  if (options.tools) {
+    for (const [key, tool] of Object.entries(options.tools)) {
+      try {
+        mastra.addTool(tool as any, key);
+      } catch (err) {
+        // Tool may already be registered (e.g., if defined in Mastra config), ignore
+      }
+    }
+  }
+
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();

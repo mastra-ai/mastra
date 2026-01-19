@@ -175,7 +175,7 @@ export function AgentForm({
   const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading || scorersLoading;
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">
       {/* Agent ID badge in edit mode */}
       {mode === 'edit' && agentId && (
         <div className="flex items-center gap-2">

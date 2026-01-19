@@ -29,9 +29,9 @@ export const LIST_TOOLS_ROUTE = createRoute({
   summary: 'List all tools',
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
-  handler: async ({ mastra, tools }) => {
+  handler: async ({ mastra, registeredTools }) => {
     try {
-      const allTools = tools || mastra.listTools() || {};
+      const allTools = registeredTools || mastra.listTools() || {};
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
@@ -62,13 +62,13 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   summary: 'Get tool by ID',
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
-  handler: async ({ mastra, tools, toolId }) => {
+  handler: async ({ mastra, registeredTools, toolId }) => {
     try {
       let tool: any;
 
-      // Try explicit tools first, then fallback to mastra
-      if (tools && Object.keys(tools).length > 0) {
-        tool = Object.values(tools).find((t: any) => t.id === toolId);
+      // Try explicit registeredTools first, then fallback to mastra
+      if (registeredTools && Object.keys(registeredTools).length > 0) {
+        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
       }
@@ -101,7 +101,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   summary: 'Execute tool',
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
-  handler: async ({ mastra, runId, toolId, tools, requestContext, ...bodyParams }) => {
+  handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -109,9 +109,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       let tool: any;
 
-      // Try explicit tools first, then fallback to mastra
-      if (tools && Object.keys(tools).length > 0) {
-        tool = Object.values(tools).find((t: any) => t.id === toolId);
+      // Try explicit registeredTools first, then fallback to mastra
+      if (registeredTools && Object.keys(registeredTools).length > 0) {
+        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
       }

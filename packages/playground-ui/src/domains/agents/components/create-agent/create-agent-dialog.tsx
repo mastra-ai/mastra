@@ -42,7 +42,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
 
       const integrationIds = Array.from(integrationIdsSet);
 
-      await createStoredAgent.mutateAsync({
+      const createParams = {
         id: agentId,
         name: values.name,
         description: values.description,
@@ -55,7 +55,9 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
         agents: values.agents,
         memory: values.memory,
         scorers: values.scorers,
-      });
+      };
+
+      await createStoredAgent.mutateAsync(createParams);
       toast.success('Agent created successfully');
       onOpenChange(false);
       onSuccess?.(agentId);

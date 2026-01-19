@@ -117,6 +117,7 @@ export const ProviderSelect = ({
 
   return (
     <Popover
+      modal={true}
       open={showSuggestions}
       onOpenChange={open => {
         if (!open) {
