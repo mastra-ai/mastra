@@ -446,6 +446,67 @@ const handleDecline = async () => {
 };
 ```
 
+## Tool approval with generate()
+
+Tool approval also works with the `generate()` method for non-streaming use cases. When using `generate()` with `requireToolApproval: true`, the method returns immediately when a tool requires approval instead of executing it.
+
+### How it works
+
+When a tool requires approval during a `generate()` call, the response includes:
+
+- `finishReason: 'suspended'` - indicates the agent is waiting for approval
+- `suspendPayload` - contains tool call details (`toolCallId`, `toolName`, `args`)
+- `runId` - needed to approve or decline the tool call
+
+### Approving tool calls
+
+To approve a tool call with `generate()`, use the `approveToolCallGenerate` method:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  console.log("Tool requires approval:", output.suspendPayload.toolName);
+  console.log("Arguments:", output.suspendPayload.args);
+
+  // Approve the tool call and get the final result
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log("Final result:", result.text);
+}
+```
+
+### Declining tool calls
+
+To decline a tool call, use the `declineToolCallGenerate` method:
+
+```typescript
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  // Agent will respond acknowledging the declined tool
+  console.log(result.text);
+}
+```
+
+### Stream vs Generate comparison
+
+| Aspect | `stream()` | `generate()` |
+|--------|-----------|--------------|
+| Response type | Streaming chunks | Complete response |
+| Approval detection | `tool-call-approval` chunk | `finishReason: 'suspended'` |
+| Approve method | `approveToolCall({ runId })` | `approveToolCallGenerate({ runId, toolCallId })` |
+| Decline method | `declineToolCall({ runId })` | `declineToolCallGenerate({ runId, toolCallId })` |
+| Result | Stream to iterate | Full output object |
+
 ## Tool-level approval
 
 There are two types of tool call approval. The first uses `requireApproval`, which is a property on the tool definition, while `requireToolApproval` is a parameter passed to `agent.stream()`. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
@@ -2475,8 +2536,7 @@ The method can return any combination of:
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
 ```typescript
-await agent.generate({
-  prompt: "Complex task",
+await agent.generate("Complex task", {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
       return { model: "openai/gpt-4o-mini" };
@@ -8256,8 +8316,7 @@ Both services must have:
 Tags help you categorize and filter traces in your OTEL backend. Add tags when executing agents or workflows:
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -10774,8 +10833,7 @@ requestContext.set("environment", "production");
 requestContext.set("tenantId", "tenant-456");
 
 // All spans in this trace automatically get userId, environment, and tenantId metadata
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   requestContext,
 });
 ```
@@ -10790,8 +10848,7 @@ requestContext.set("userId", "user-123");
 requestContext.set("environment", "production");
 requestContext.set("experimentId", "exp-789");
 
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   requestContext,
   tracingOptions: {
     requestContextKeys: ["experimentId"], // Adds to configured keys
@@ -10839,8 +10896,7 @@ Use `tracingOptions.tags` to add tags when executing agents or workflows:
 
 ```ts
 // With agents
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -10868,8 +10924,7 @@ const result = await run.start({
 - **Combinable with metadata**: You can use both `tags` and `metadata` in the same `tracingOptions`
 
 ```ts
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Analyze this" }],
+const result = await agent.generate([{ role: "user", content: "Analyze this" }], {
   tracingOptions: {
     tags: ["production", "analytics"],
     metadata: { userId: "user-123", experimentId: "exp-456" },
@@ -10891,24 +10946,21 @@ When processing sensitive data, you may want to prevent input and output values 
 
 ```ts
 // Hide input data (e.g., user credentials, PII)
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Process this sensitive data" }],
+const result = await agent.generate([{ role: "user", content: "Process this sensitive data" }], {
   tracingOptions: {
     hideInput: true, // Input will be hidden from all spans
   },
 });
 
 // Hide output data (e.g., generated secrets, confidential results)
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Generate API keys" }],
+const result = await agent.generate([{ role: "user", content: "Generate API keys" }], {
   tracingOptions: {
     hideOutput: true, // Output will be hidden from all spans
   },
 });
 
 // Hide both input and output
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Handle confidential request" }],
+const result = await agent.generate([{ role: "user", content: "Handle confidential request" }], {
   tracingOptions: {
     hideInput: true,
     hideOutput: true,
@@ -10923,8 +10975,7 @@ const result = await agent.generate({
 - **Combinable with other options**: You can use `hideInput`/`hideOutput` alongside `tags`, `metadata`, and other `tracingOptions`
 
 ```ts
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Sensitive operation" }],
+const result = await agent.generate([{ role: "user", content: "Sensitive operation" }], {
   tracingOptions: {
     hideInput: true,
     hideOutput: true,
@@ -11278,16 +11329,12 @@ Both `generate` and `stream` methods return the trace ID in their response:
 
 ```ts
 // Using generate
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-});
+const result = await agent.generate("Hello");
 
 console.log("Trace ID:", result.traceId);
 
 // Using stream
-const streamResult = await agent.stream({
-  messages: [{ role: "user", content: "Tell me a story" }],
-});
+const streamResult = await agent.stream("Tell me a story");
 
 console.log("Trace ID:", streamResult.traceId);
 ```
@@ -11461,9 +11508,7 @@ Use `flush()` in these scenarios:
 ```ts
 // Example: Vercel serverless function
 export async function POST(req: Request) {
-  const result = await agent.generate({
-    messages: [{ role: "user", content: await req.text() }],
-  });
+  const result = await agent.generate([{ role: "user", content: await req.text() }]);
 
   // Ensure spans are exported before function completes
   const observability = mastra.getObservability();
@@ -13628,9 +13673,13 @@ AUTH0_DOMAIN=your-tenant.auth0.com
 AUTH0_AUDIENCE=your-api-identifier
 ```
 
-> **Note:** You can find your domain in the Auth0 Dashboard under Applications > Settings. The audience is the identifier of your API configured in Auth0 Dashboard > APIs.
+:::note
 
-> For detailed setup instructions, refer to the [Auth0 quickstarts](https://auth0.com/docs/quickstarts) for your specific platform.
+You can find your domain in the Auth0 Dashboard under Applications > Settings. The audience is the identifier of your API configured in Auth0 Dashboard > APIs.
+
+For detailed setup instructions, refer to the [Auth0 quickstarts](https://auth0.com/docs/quickstarts) for your specific platform.
+
+:::
 
 ## Installation
 
@@ -13755,7 +13804,11 @@ export const useAuth0Token = () => {
 };
 ```
 
-> Refer to the [Auth0 React SDK documentation](https://auth0.com/docs/libraries/auth0-react) for more authentication methods and configuration options.
+:::note
+
+Refer to the [Auth0 React SDK documentation](https://auth0.com/docs/libraries/auth0-react) for more authentication methods and configuration options.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -13774,9 +13827,9 @@ export const createMastraClient = (accessToken: string) => {
 };
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -13788,6 +13841,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/mastra-api-test.tsx" copy
     import React, { useState } from 'react';
     import { useAuth0 } from '@auth0/auth0-react';
@@ -13808,9 +13862,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         });
 
         const weatherAgent = mastra.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in New York"
-        });
+        const response = await weatherAgent.generate("What's the weather like in New York");
 
         setResult(response.text);
       };
@@ -13834,6 +13886,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -13842,6 +13895,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 
@@ -13873,7 +13927,11 @@ CLERK_SECRET_KEY=sk_test_...
 CLERK_JWKS_URI=https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.json
 ```
 
-> **Note:** You can find these keys in your Clerk Dashboard under "API Keys".
+:::note
+
+You can find these keys in your Clerk Dashboard under "API Keys".
+
+:::
 
 ## Installation
 
@@ -13900,9 +13958,9 @@ export const mastra = new Mastra({
 });
 ```
 
-> **Note:** The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
-
 :::info
+
+The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
 Visit [MastraAuthClerk](/reference/v1/auth/clerk) for all available configuration options.
 
@@ -13931,7 +13989,11 @@ export const useClerkAuth = () => {
 };
 ```
 
-> Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
+:::info
+
+Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -13948,8 +14010,9 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 :::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -13961,6 +14024,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/test-agent.tsx" copy
     "use client";
 
@@ -13979,9 +14043,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
         });
 
         const weatherAgent = client.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in New York",
-        });
+        const response = await weatherAgent.generate("What's the weather like in New York");
 
         console.log({ response });
       }
@@ -13992,6 +14054,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -14000,6 +14063,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 
@@ -14037,7 +14101,11 @@ FIRESTORE_DATABASE_ID=(default)
 # FIREBASE_DATABASE_ID=(default)
 ```
 
-> **Note:** Store your service account JSON file securely and never commit it to version control.
+:::note
+
+Store your service account JSON file securely and never commit it to version control.
+
+:::
 
 ## Installation
 
@@ -14090,7 +14158,11 @@ The `MastraAuthFirebase` class can be configured through constructor options or 
 - `FIREBASE_SERVICE_ACCOUNT`: Path to Firebase service account JSON file
 - `FIRESTORE_DATABASE_ID` or `FIREBASE_DATABASE_ID`: Firestore database ID
 
-> **Note:** When constructor options are not provided, the class automatically reads these environment variables. This means you can simply call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
+:::note
+
+When constructor options are not provided, the class automatically reads these environment variables. This means you can simply call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
+
+:::
 
 ### User Authorization
 
@@ -14182,7 +14254,11 @@ export const signOutUser = async () => {
 };
 ```
 
-> Refer to the [Firebase documentation](https://firebase.google.com/docs/auth) for other authentication methods like email/password, phone authentication, and more.
+:::note
+
+Refer to the [Firebase documentation](https://firebase.google.com/docs/auth) for other authentication methods like email/password, phone authentication, and more.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -14201,9 +14277,9 @@ export const createMastraClient = (idToken: string) => {
 };
 ```
 
-> **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The ID token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -14215,6 +14291,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/test-agent.tsx" copy
     "use client";
 
@@ -14233,9 +14310,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         const client = createMastraClient(token);
 
         const weatherAgent = client.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in New York",
-        });
+        const response = await weatherAgent.generate("What's the weather like in New York");
 
         console.log({ response });
       }
@@ -14250,6 +14325,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
   </TabItem>
   <TabItem value="nodejs" label="Node.js">
+
     ```typescript title="server.js" copy
     const express = require('express');
     const admin = require('firebase-admin');
@@ -14280,9 +14356,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         });
 
         const weatherAgent = mastra.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in Nairobi"
-        });
+        const response = await weatherAgent.generate("What's the weather like in Nairobi");
 
         res.json({ response: response.text });
       } catch (error) {
@@ -14293,6 +14367,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -14301,6 +14376,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 
@@ -14402,6 +14478,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/test-agent.tsx" copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -14409,9 +14486,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
       async function handleClick() {
         const agent = mastraClient.getAgent("weatherAgent");
 
-        const response = await agent.generate({
-          messages: "Weather in London"
-        });
+        const response = await agent.generate("Weather in London");
 
         console.log(response);
       }
@@ -14422,6 +14497,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -14430,6 +14506,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 
@@ -14472,7 +14549,11 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```
 
-> **Note:** Review your Supabase Row Level Security (RLS) settings to ensure proper data access controls.
+:::note
+
+Review your Supabase Row Level Security (RLS) settings to ensure proper data access controls.
+
+:::
 
 ## Installation
 
@@ -14498,9 +14579,9 @@ export const mastra = new Mastra({
 });
 ```
 
-> **Note:** The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
-
 :::info
+
+The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
 Visit [MastraAuthSupabase](/reference/v1/auth/supabase) for all available configuration options.
 
@@ -14527,7 +14608,11 @@ const authTokenResponse = await supabase.auth.signInWithPassword({
 const accessToken = authTokenResponse.data?.session?.access_token;
 ```
 
-> Refer to the [Supabase documentation](https://supabase.com/docs/guides/auth) for other authentication methods like OAuth, magic links, and more.
+:::note
+
+Refer to the [Supabase documentation](https://supabase.com/docs/guides/auth) for other authentication methods like OAuth, magic links, and more.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -14544,9 +14629,9 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -14558,26 +14643,26 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
 
 <Tabs>
     <TabItem value="react" label="React">
-    ```tsx title="src/components/test-agent.tsx" copy
-    import { mastraClient } from "../../lib/mastra-client";
 
-    export const TestAgent = () => {
-      async function handleClick() {
-        const agent = mastraClient.getAgent("weatherAgent");
+      ```tsx title="src/components/test-agent.tsx" copy
+      import { mastraClient } from "../../lib/mastra-client";
 
-        const response = await agent.generate({
-          messages: "What's the weather like in New York"
-        });
+      export const TestAgent = () => {
+        async function handleClick() {
+          const agent = mastraClient.getAgent("weatherAgent");
 
-        console.log(response);
-      }
+          const response = await agent.generate("What's the weather like in New York");
 
-      return <button onClick={handleClick}>Test Agent</button>;
-    };
-    ```
+          console.log(response);
+        }
+
+        return <button onClick={handleClick}>Test Agent</button>;
+      };
+      ```
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -14586,6 +14671,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 
@@ -14621,9 +14707,13 @@ WORKOS_API_KEY=sk_live_...
 WORKOS_CLIENT_ID=client_...
 ```
 
-> **Note:** You can find your API key and Client ID in the WorkOS Dashboard under API Keys and Applications respectively.
+:::note
 
-> For detailed setup instructions, refer to the [WorkOS documentation](https://workos.com/docs) for your specific platform.
+You can find your API key and Client ID in the WorkOS Dashboard under API Keys and Applications respectively.
+
+For detailed setup instructions, refer to the [WorkOS documentation](https://workos.com/docs) for your specific platform.
+
+:::
 
 ## Installation
 
@@ -14730,7 +14820,11 @@ export const authenticateWithWorkos = async (
 };
 ```
 
-> Refer to the [WorkOS User Management documentation](https://workos.com/docs/authkit/vanilla/nodejs) for more authentication methods and configuration options.
+:::note
+
+Refer to the [WorkOS User Management documentation](https://workos.com/docs/authkit/vanilla/nodejs) for more authentication methods and configuration options.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -14749,9 +14843,9 @@ export const createMastraClient = (accessToken: string) => {
 };
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -14763,6 +14857,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```typescript title="src/api/agents.ts" copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -14785,9 +14880,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
       });
 
       const weatherAgent = mastra.getAgent("weatherAgent");
-      const response = await weatherAgent.generate({
-        messages: "What's the weather like in Nairobi",
-      });
+      const response = await weatherAgent.generate("What's the weather like in Nairobi");
 
       return response.text;
     };
@@ -14795,6 +14888,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -14803,6 +14897,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 
@@ -15365,7 +15460,7 @@ The Mastra Client SDK exposes all resources served by the Mastra Server
 
 ## Generating responses
 
-Call `.generate()` with an array of message objects that include `role` and `content`:
+Call `.generate()` with a string prompt:
 
 ```typescript
 import { mastraClient } from "lib/mastra-client";
@@ -15374,14 +15469,7 @@ const testAgent = async () => {
   try {
     const agent = mastraClient.getAgent("testAgent");
 
-    const response = await agent.generate({
-      messages: [
-        {
-          role: "user",
-          content: "Hello",
-        },
-      ],
-    });
+    const response = await agent.generate("Hello");
 
     console.log(response.text);
   } catch (error) {
@@ -15392,13 +15480,13 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.generate()](/reference/v1/client-js/agents#generate) for more information.
+You can also call `.generate()` with an array of message objects that include `role` and `content`. Visit the [.generate() reference](/reference/v1/client-js/agents#generate) for more information.
 
 :::
 
 ## Streaming responses
 
-Use `.stream()` for real-time responses with an array of message objects that include `role` and `content`:
+Use `.stream()` for real-time responses with a string prompt:
 
 ```typescript
 import { mastraClient } from "lib/mastra-client";
@@ -15407,14 +15495,7 @@ const testAgent = async () => {
   try {
     const agent = mastraClient.getAgent("testAgent");
 
-    const stream = await agent.stream({
-      messages: [
-        {
-          role: "user",
-          content: "Hello",
-        },
-      ],
-    });
+    const stream = await agent.stream("Hello");
 
     stream.processDataStream({
       onTextPart: (text) => {
@@ -15429,7 +15510,7 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.stream()](/reference/v1/client-js/agents#stream) for more information.
+You can also call `.stream()` with an array of message objects that include `role` and `content`. Visit the [.stream() reference](/reference/v1/client-js/agents#stream) for more information.
 
 :::
 
@@ -15516,8 +15597,7 @@ const handleClientTool = async () => {
       },
     });
 
-    const response = await agent.generate({
-      messages: "Change the background to blue",
+    const response = await agent.generate("Change the background to blue", {
       clientTools: { colorChangeTool },
     });
 
@@ -15553,9 +15633,7 @@ You can also use `MastraClient` in server-side environments such as API routes, 
 export async function action() {
   const agent = mastraClient.getAgent("testAgent");
 
-  const stream = await agent.stream({
-    messages: [{ role: "user", content: "Hello" }],
-  });
+  const stream = await agent.stream("Hello");
 
   return new Response(stream.body);
 }
@@ -31885,8 +31963,7 @@ The `prepareStep` callback now receives messages in `MastraDBMessage` format ins
 If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
 
 ```diff
-  agent.generate({
-    prompt: 'Hello',
+  agent.generate('Hello', {
     prepareStep: async ({ messages, messageList }) => {
 -     // messages was AI SDK v5+ ModelMessage format
 -     console.log(messages[0].content);
@@ -32021,6 +32098,16 @@ To migrate, move `messages` to the first argument of the method call:
 +  await agent.network([...], {
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-msg-function-args .
+```
+
+:::
 
 ### `threadId` and `resourceId` to `memory` option
 
@@ -36228,7 +36315,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="139 models"
+      description="140 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -36361,7 +36448,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 139 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 140 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -36485,6 +36572,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1` |
 | `openai/gpt-5.1-chat` |
 | `openai/gpt-5.1-codex` |
+| `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-chat-latest` |
@@ -36781,7 +36869,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 70+ AI providers and 1834+ models through Mastra's model router."
+description: "Access 70+ AI providers and 1839+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36794,7 +36882,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1834 models from 70 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1839 models from 70 providers through a single API.
 
 ## Features
 
@@ -40295,7 +40383,7 @@ const agent = new Agent({
 
 ---
 title: "Cerebras | Models | Mastra"
-description: "Use Cerebras models with Mastra. 3 models available."
+description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -40306,7 +40394,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 [EN] Source: https://mastra.ai/en/models/providers/cerebras
 
-Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
+Access 4 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
@@ -40367,6 +40455,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 0.6,
     "outputCost": 1.2
+  },
+  {
+    "model": "cerebras/zai-glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 40960,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "cerebras/zai-glm-4.7",
@@ -46551,7 +46651,7 @@ const agent = new Agent({
 
 ---
 title: "Hugging Face | Models | Mastra"
-description: "Use Hugging Face models with Mastra. 14 models available."
+description: "Use Hugging Face models with Mastra. 15 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -46561,7 +46661,7 @@ description: "Use Hugging Face models with Mastra. 14 models available."
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 [EN] Source: https://mastra.ai/en/models/providers/huggingface
 
-Access 14 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 15 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -46766,6 +46866,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.7-Flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -46798,7 +46910,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "huggingface/zai-org/GLM-4.7"
+      ? "huggingface/zai-org/GLM-4.7-Flash"
       : "huggingface/MiniMaxAI/MiniMax-M2.1";
   }
 });
@@ -47256,7 +47368,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
-      description="3 models"
+      description="4 models"
       href="/models/v1/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
@@ -47311,7 +47423,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/helicone.svg"
     />    <CardGridItem
       title="Hugging Face"
-      description="14 models"
+      description="15 models"
       href="/models/v1/providers/huggingface"
       logo="https://models.dev/logos/huggingface.svg"
     />    <CardGridItem
@@ -47406,7 +47518,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
       title="Ollama Cloud"
-      description="12 models"
+      description="13 models"
       href="/models/v1/providers/ollama-cloud"
       logo="https://models.dev/logos/ollama-cloud.svg"
     />    <CardGridItem
@@ -47506,7 +47618,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zai.svg"
     />    <CardGridItem
       title="Z.AI Coding Plan"
-      description="7 models"
+      description="8 models"
       href="/models/v1/providers/zai-coding-plan"
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
@@ -52605,7 +52717,7 @@ const agent = new Agent({
 
 ---
 title: "Ollama Cloud | Models | Mastra"
-description: "Use Ollama Cloud models with Mastra. 12 models available."
+description: "Use Ollama Cloud models with Mastra. 13 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -52615,7 +52727,7 @@ description: "Use Ollama Cloud models with Mastra. 12 models available."
 # <img src="https://models.dev/logos/ollama-cloud.svg" alt="Ollama Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ollama Cloud
 [EN] Source: https://mastra.ai/en/models/providers/ollama-cloud
 
-Access 12 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
+Access 13 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
 
 Learn more in the [Ollama Cloud documentation](https://docs.ollama.com/cloud).
 
@@ -52691,6 +52803,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "ollama-cloud/glm-4.6:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/glm-4.7:cloud",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -59749,6 +59873,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.9
   },
   {
+    "model": "venice/qwen3-vl-235b-a22b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 1.5
+  },
+  {
     "model": "venice/venice-uncensored",
     "imageInput": false,
     "audioInput": false,
@@ -59759,18 +59895,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.2,
     "outputCost": 0.9
-  },
-  {
-    "model": "venice/zai-org-glm-4.6v",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.39,
-    "outputCost": 1.13
   },
   {
     "model": "venice/zai-org-glm-4.7",
@@ -60797,7 +60921,7 @@ const agent = new Agent({
 
 ---
 title: "Z.AI Coding Plan | Models | Mastra"
-description: "Use Z.AI Coding Plan models with Mastra. 7 models available."
+description: "Use Z.AI Coding Plan models with Mastra. 8 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -60807,7 +60931,7 @@ description: "Use Z.AI Coding Plan models with Mastra. 7 models available."
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zai-coding-plan
 
-Access 7 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 8 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI Coding Plan documentation](https://docs.z.ai/devpack/overview).
 
@@ -60928,6 +61052,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.7-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -60960,7 +61096,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai-coding-plan/glm-4.7"
+      ? "zai-coding-plan/glm-4.7-flash"
       : "zai-coding-plan/glm-4.5";
   }
 });
@@ -62657,13 +62793,13 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       name: "requireToolApproval",
       type: "boolean",
       isOptional: true,
-      description: "Require approval for all tool calls before execution.",
+      description: "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
     },
     {
       name: "autoResumeSuspendedTools",
       type: "boolean",
       isOptional: true,
-      description: "Automatically resume suspended tools.",
+      description: "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
     },
     {
       name: "toolCallConcurrency",
@@ -63193,7 +63329,50 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       name: "finishReason",
       type: "string",
       description:
-        "The reason generation finished (e.g., 'stop', 'tool-calls', 'error').",
+        "The reason generation finished. Values include 'stop' (normal completion), 'tool-calls' (ended with tool calls), 'suspended' (waiting for tool approval), or 'error' (error occurred).",
+    },
+    {
+      name: "suspendPayload",
+      type: "object",
+      isOptional: true,
+      description:
+        "Present when `finishReason` is 'suspended'. Contains tool call details needed to approve or decline the pending tool call.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "Unique identifier for the pending tool call.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "Name of the tool that requires approval.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "args",
+              type: "Record<string, any>",
+              description: "Arguments that will be passed to the tool.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description:
+        "Unique identifier for this execution run. Required when calling `approveToolCallGenerate()` or `declineToolCallGenerate()` to resume a suspended execution.",
     },
     {
       name: "traceId",
@@ -67820,7 +67999,7 @@ import { createUIMessageStream } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
 import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
 
-const response = await agent.stream({ messages: "Tell me a story" });
+const response = await agent.stream("Tell me a story");
 
 const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
   start(controller) {
@@ -67871,14 +68050,7 @@ const result = await agent.executeTool("tool-id", {
 Stream responses from an agent network for multi-agent interactions:
 
 ```typescript
-const response = await agent.network({
-  messages: [
-    {
-      role: "user",
-      content: "Research this topic and write a summary",
-    },
-  ],
-});
+const response = await agent.network("Research this topic and write a summary");
 
 response.processDataStream({
   onChunk: async (chunk) => {
@@ -67919,6 +68091,44 @@ response.processDataStream({
     console.log(chunk);
   },
 });
+```
+
+### approveToolCallGenerate()
+
+Approve a pending tool call when using `generate()` (non-streaming). Returns the complete response:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log(result.text);
+}
+```
+
+### declineToolCallGenerate()
+
+Decline a pending tool call when using `generate()` (non-streaming). Returns the complete response:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log(result.text);
+}
 ```
 
 ## Client Tools
@@ -68122,9 +68332,7 @@ All API methods can throw errors that you can catch and handle:
 ```typescript
 try {
   const agent = mastraClient.getAgent("agent-id");
-  const response = await agent.generate({
-    messages: [{ role: "user", content: "Hello" }],
-  });
+  const response = await agent.generate("Hello");
 } catch (error) {
   console.error("An error occurred:", error.message);
 }
@@ -70691,7 +70899,7 @@ The `.getStoredAgentById()` method retrieves an agent configuration from storage
 const agent = await mastra.getStoredAgentById("my-stored-agent");
 
 if (agent) {
-  const response = await agent.generate({ messages: "Hello!" });
+  const response = await agent.generate("Hello");
   console.log(response.text);
 }
 ```
@@ -71514,7 +71722,7 @@ const { agents, total, hasMore } = await mastra.listStoredAgents();
 for (const agent of agents) {
   console.log(agent.id, agent.name);
   // Each agent is ready to use
-  // const response = await agent.generate({ messages: "Hello!" });
+  // const response = await agent.generate("Hello");
 }
 ```
 
@@ -80329,8 +80537,7 @@ The OtelBridge supports trace tagging for categorization and filtering. Tags are
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -80842,8 +81049,7 @@ The ArizeExporter supports trace tagging for categorization and filtering. Tags 
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -82609,8 +82815,7 @@ The OtelExporter supports trace tagging for categorization and filtering. Tags a
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -89991,7 +90196,7 @@ const streamAgent = createRoute({
   }),
   handler: async ({ agentId, messages, mastra, abortSignal }) => {
     const agent = mastra.getAgent(agentId);
-    return agent.stream({ messages, abortSignal });
+    return agent.stream(messages, { abortSignal });
   },
 });
 ```

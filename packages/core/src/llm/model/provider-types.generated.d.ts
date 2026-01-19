@@ -58,12 +58,14 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'glm-4.6v',
     'glm-4.7',
+    'glm-4.7-flash',
   ];
   readonly 'ollama-cloud': readonly [
     'cogito-2.1:671b-cloud',
     'deepseek-v3.1:671b-cloud',
     'gemini-3-pro-preview:latest',
     'glm-4.6:cloud',
+    'glm-4.7:cloud',
     'gpt-oss:120b-cloud',
     'gpt-oss:20b-cloud',
     'kimi-k2-thinking:cloud',
@@ -680,8 +682,8 @@ export type ProviderModelsMap = {
     'qwen3-4b',
     'qwen3-coder-480b-a35b-instruct',
     'qwen3-next-80b',
+    'qwen3-vl-235b-a22b',
     'venice-uncensored',
-    'zai-org-glm-4.6v',
     'zai-org-glm-4.7',
   ];
   readonly 'siliconflow-cn': readonly [
@@ -1095,6 +1097,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'zai-org/GLM-4.7',
+    'zai-org/GLM-4.7-Flash',
   ];
   readonly opencode: readonly [
     'alpha-gd4',
@@ -1389,6 +1392,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.1',
     'openai/gpt-5.1-chat',
     'openai/gpt-5.1-codex',
+    'openai/gpt-5.1-codex-max',
     'openai/gpt-5.1-codex-mini',
     'openai/gpt-5.2',
     'openai/gpt-5.2-chat-latest',
@@ -1872,7 +1876,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.1-fast-reasoning',
     'xai/grok-code-fast-1',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.6', 'zai-glm-4.7'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-7-sonnet-20250219',
