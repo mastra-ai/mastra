@@ -124,15 +124,15 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
       Object.entries(result.properties).map(([key, value]) => {
         const propSchema = value as JSONSchema7;
 
-        // If property is an empty object {}, convert to allow most types
-        // Note: We exclude 'object' because OpenAI requires additionalProperties: false for object types
+        // If property is an empty object {}, convert to allow primitive types
+        // Note: We exclude 'object' (requires additionalProperties) and 'array' (requires items) for OpenAI
         if (
           typeof propSchema === 'object' &&
           propSchema !== null &&
           !Array.isArray(propSchema) &&
           Object.keys(propSchema).length === 0
         ) {
-          return [key, { type: ['string', 'number', 'boolean', 'array', 'null'] as JSONSchema7['type'] }];
+          return [key, { type: ['string', 'number', 'boolean', 'null'] as JSONSchema7['type'] }];
         }
 
         // Recursively fix nested schemas
