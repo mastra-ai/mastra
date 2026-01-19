@@ -187,13 +187,13 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       name: "requireToolApproval",
       type: "boolean",
       isOptional: true,
-      description: "Require approval for all tool calls before execution.",
+      description: "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
     },
     {
       name: "autoResumeSuspendedTools",
       type: "boolean",
       isOptional: true,
-      description: "Automatically resume suspended tools.",
+      description: "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
     },
     {
       name: "toolCallConcurrency",
@@ -723,7 +723,50 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       name: "finishReason",
       type: "string",
       description:
-        "The reason generation finished (e.g., 'stop', 'tool-calls', 'error').",
+        "The reason generation finished. Values include 'stop' (normal completion), 'tool-calls' (ended with tool calls), 'suspended' (waiting for tool approval), or 'error' (error occurred).",
+    },
+    {
+      name: "suspendPayload",
+      type: "object",
+      isOptional: true,
+      description:
+        "Present when `finishReason` is 'suspended'. Contains tool call details needed to approve or decline the pending tool call.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "Unique identifier for the pending tool call.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "Name of the tool that requires approval.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "args",
+              type: "Record<string, any>",
+              description: "Arguments that will be passed to the tool.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description:
+        "Unique identifier for this execution run. Required when calling `approveToolCallGenerate()` or `declineToolCallGenerate()` to resume a suspended execution.",
     },
     {
       name: "traceId",

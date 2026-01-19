@@ -3675,6 +3675,50 @@ export class Agent<
   }
 
   /**
+   * Approves a pending tool call and returns the complete result (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
+   *
+   * @example
+   * ```typescript
+   * const output = await agent.generate('Find user', { requireToolApproval: true });
+   * if (output.finishReason === 'suspended') {
+   *   const result = await agent.approveToolCallGenerate({
+   *     runId: output.runId,
+   *     toolCallId: output.suspendPayload.toolCallId
+   *   });
+   *   console.log(result.text);
+   * }
+   * ```
+   */
+  async approveToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    return this.resumeGenerate({ approved: true }, options);
+  }
+
+  /**
+   * Declines a pending tool call and returns the complete result (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
+   *
+   * @example
+   * ```typescript
+   * const output = await agent.generate('Find user', { requireToolApproval: true });
+   * if (output.finishReason === 'suspended') {
+   *   const result = await agent.declineToolCallGenerate({
+   *     runId: output.runId,
+   *     toolCallId: output.suspendPayload.toolCallId
+   *   });
+   *   console.log(result.text);
+   * }
+   * ```
+   */
+  async declineToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    return this.resumeGenerate({ approved: false }, options);
+  }
+
+  /**
    * Legacy implementation of generate method using AI SDK v4 models.
    * Use this method if you need to continue using AI SDK v4 models.
    *

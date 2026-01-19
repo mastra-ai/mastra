@@ -32,8 +32,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
   const requireApprovalMetadata =
-    (metadata?.mode === 'stream' || metadata?.mode === 'network') && metadata?.requireApprovalMetadata;
-  const suspendedTools = (metadata?.mode === 'stream' || metadata?.mode === 'network') && metadata?.suspendedTools;
+    (metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate') &&
+    metadata?.requireApprovalMetadata;
+  const suspendedTools =
+    (metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate') &&
+    metadata?.suspendedTools;
 
   const toolApprovalMetadata = requireApprovalMetadata
     ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
