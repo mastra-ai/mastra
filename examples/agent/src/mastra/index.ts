@@ -4,6 +4,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
+import { supportAgent, analysisAgent } from './agents/inbox-agents';
+import { supportInbox, analysisInbox } from './inboxes/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import {
@@ -62,6 +64,13 @@ const config = {
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
+    // Inbox agents
+    supportAgent,
+    analysisAgent,
+  },
+  inboxes: {
+    supportInbox,
+    analysisInbox,
   },
   processors: {
     moderationProcessor,
