@@ -10,6 +10,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import {
   EntityType,
+  InternalSpans,
   SpanType,
   getOrCreateSpan,
   type AnySpan,
@@ -1573,6 +1574,10 @@ export async function createNetworkLoop({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      tracingPolicy: {
+        // Mark workflow spans as internal so they don't clutter the trace output
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   });
 
@@ -2146,6 +2151,9 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .then(networkWorkflow)
@@ -2179,6 +2187,9 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .dountil(iterationWithValidation, async ({ inputData }) => {
