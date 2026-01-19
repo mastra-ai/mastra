@@ -1,5 +1,11 @@
 # mastra
 
+## 1.0.0-beta.16
+
+### Patch Changes
+
+- Update internal dependencies ([#12050](https://github.com/mastra-ai/mastra/pull/12050))
+
 ## 1.0.0-beta.15
 
 ### Minor Changes
