@@ -1,6 +1,7 @@
 export * as agentBuilder from './handlers/agent-builder';
 export * as agents from './handlers/agents';
 export * as a2a from './handlers/a2a';
+export * as inbox from './handlers/inbox';
 export * as logs from './handlers/logs';
 export * as mcp from './handlers/mcp';
 export * as memory from './handlers/memory';

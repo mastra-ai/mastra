@@ -10,6 +10,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
+import { Inbox, type CreateTaskInput, type Task } from '../inbox';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -38,7 +39,17 @@ import { createOnScorerHook } from './hooks';
  * object had getters or non-enumerable properties.
  */
 function createUndefinedPrimitiveError(
-  type: 'agent' | 'tool' | 'processor' | 'vector' | 'scorer' | 'workflow' | 'mcp-server' | 'gateway' | 'memory',
+  type:
+    | 'agent'
+    | 'tool'
+    | 'processor'
+    | 'vector'
+    | 'scorer'
+    | 'workflow'
+    | 'mcp-server'
+    | 'gateway'
+    | 'memory'
+    | 'inbox',
   value: null | undefined,
   key?: string,
 ): MastraError {
@@ -101,6 +112,7 @@ export interface Config<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TInboxes extends Record<string, Inbox> = Record<string, Inbox>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -215,6 +227,12 @@ export interface Config<
   memory?: TMemory;
 
   /**
+   * Inboxes are task queues that receive tasks from various sources
+   * and allow agents to claim and process them.
+   */
+  inboxes?: TInboxes;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -282,6 +300,7 @@ export class Mastra<
   >,
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
+  TInboxes extends Record<string, Inbox> = Record<string, Inbox>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -300,6 +319,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #memory?: TMemory;
+  #inboxes?: TInboxes;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -511,6 +531,7 @@ export class Mastra<
     this.#tools = {} as TTools;
     this.#processors = {} as TProcessors;
     this.#memory = {} as TMemory;
+    this.#inboxes = {} as TInboxes;
     this.#workflows = {} as TWorkflows;
     this.#gateways = {} as Record<string, MastraModelGateway>;
 
@@ -587,6 +608,15 @@ export class Mastra<
       Object.entries(config.agents).forEach(([key, agent]) => {
         if (agent != null) {
           this.addAgent(agent, key);
+        }
+      });
+    }
+
+    // Register inboxes after storage is configured
+    if (config?.inboxes) {
+      Object.entries(config.inboxes).forEach(([key, inbox]) => {
+        if (inbox != null) {
+          this.addInbox(inbox, key);
         }
       });
     }
@@ -732,6 +762,120 @@ export class Mastra<
    */
   public listAgents() {
     return this.#agents;
+  }
+
+  // ===== INBOX METHODS =====
+
+  /**
+   * Retrieves a registered inbox by its ID.
+   *
+   * @param id - The unique identifier of the inbox
+   * @returns The inbox if found, undefined otherwise
+   *
+   * @example
+   * ```typescript
+   * const inbox = mastra.getInbox('github');
+   * if (inbox) {
+   *   await inbox.add({ type: 'issue', payload: { title: 'Bug fix' } });
+   * }
+   * ```
+   */
+  public getInbox<TInboxId extends keyof TInboxes>(id: TInboxId): TInboxes[TInboxId] | undefined {
+    return this.#inboxes?.[id];
+  }
+
+  /**
+   * Retrieves a registered inbox by its ID, throwing if not found.
+   *
+   * @param id - The unique identifier of the inbox
+   * @throws {MastraError} When the inbox is not found
+   *
+   * @example
+   * ```typescript
+   * const inbox = mastra.getInboxOrThrow('github');
+   * await inbox.add({ type: 'issue', payload: { title: 'Bug fix' } });
+   * ```
+   */
+  public getInboxOrThrow<TInboxId extends keyof TInboxes>(id: TInboxId): TInboxes[TInboxId] {
+    const inbox = this.#inboxes?.[id];
+    if (!inbox) {
+      throw new MastraError({
+        id: 'INBOX_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Inbox '${String(id)}' not found`,
+        details: {
+          status: 404,
+          inboxId: String(id),
+          inboxes: Object.keys(this.#inboxes ?? {}).join(', '),
+        },
+      });
+    }
+    return inbox;
+  }
+
+  /**
+   * Lists all registered inboxes.
+   *
+   * @returns Record of all registered inboxes keyed by their ID
+   *
+   * @example
+   * ```typescript
+   * const inboxes = mastra.listInboxes();
+   * console.log(Object.keys(inboxes)); // ['github', 'linear', 'internal']
+   * ```
+   */
+  public listInboxes(): TInboxes {
+    return this.#inboxes ?? ({} as TInboxes);
+  }
+
+  /**
+   * Adds a task to the specified inbox.
+   *
+   * @param inboxId - The ID of the inbox to add the task to
+   * @param input - The task input data
+   * @returns The created task
+   * @throws {MastraError} When the inbox is not found
+   *
+   * @example
+   * ```typescript
+   * const task = await mastra.addTask('github', {
+   *   type: 'support',
+   *   payload: { issueNumber: 123, title: 'Need help' }
+   * });
+   * console.log(task.id);
+   * ```
+   */
+  public async addTask<TInboxId extends keyof TInboxes>(inboxId: TInboxId, input: CreateTaskInput): Promise<Task> {
+    const inbox = this.getInboxOrThrow(inboxId);
+    return inbox.add(input);
+  }
+
+  /**
+   * Registers an inbox with this Mastra instance.
+   *
+   * @param inbox - The inbox instance to register
+   * @param key - Optional key to register the inbox under (defaults to inbox.id)
+   *
+   * @example
+   * ```typescript
+   * const inbox = new Inbox({ id: 'tasks' });
+   * mastra.addInbox(inbox);
+   * ```
+   */
+  public addInbox(inbox: Inbox, key?: string): void {
+    if (inbox == null) {
+      throw createUndefinedPrimitiveError('inbox', inbox, key);
+    }
+
+    const inboxKey = key || inbox.id;
+    inbox.__registerMastra(this as any);
+
+    const inboxes = this.#inboxes as Record<string, Inbox>;
+    if (inboxes[inboxKey]) {
+      this.#logger?.warn(`Inbox with key '${inboxKey}' already exists. It will be overwritten.`);
+    }
+    inboxes[inboxKey] = inbox;
   }
 
   /**

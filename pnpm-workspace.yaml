@@ -9,6 +9,7 @@ packages:
   - pubsub/*
   - client-sdks/*
   - integrations/*
+  - inbox/*
   - examples/dane
   - auth/*
   - observability/*

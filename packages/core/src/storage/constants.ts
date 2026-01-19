@@ -10,6 +10,7 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_INBOX_TASKS = 'mastra_inbox_tasks';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +20,8 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_INBOX_TASKS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -105,6 +107,51 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const INBOX_TASKS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  inboxId: { type: 'text', nullable: false },
+  type: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  priority: { type: 'integer', nullable: false },
+
+  // Display
+  title: { type: 'text', nullable: true },
+  sourceId: { type: 'text', nullable: true },
+  sourceUrl: { type: 'text', nullable: true },
+
+  // Data
+  payload: { type: 'jsonb', nullable: false },
+  result: { type: 'jsonb', nullable: true },
+  error: { type: 'jsonb', nullable: true },
+
+  // Assignment
+  targetAgentId: { type: 'text', nullable: true },
+  claimedBy: { type: 'text', nullable: true },
+
+  // Run association
+  runId: { type: 'text', nullable: true },
+
+  // Timing
+  createdAt: { type: 'timestamp', nullable: false },
+  claimedAt: { type: 'timestamp', nullable: true },
+  claimExpiresAt: { type: 'timestamp', nullable: true },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+
+  // Retries
+  attempts: { type: 'integer', nullable: false },
+  maxAttempts: { type: 'integer', nullable: false },
+  nextRetryAt: { type: 'timestamp', nullable: true },
+
+  // Human-in-the-loop
+  suspendedAt: { type: 'timestamp', nullable: true },
+  suspendPayload: { type: 'jsonb', nullable: true },
+  resumePayload: { type: 'jsonb', nullable: true },
+
+  // Metadata
+  metadata: { type: 'jsonb', nullable: true },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +214,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_INBOX_TASKS]: INBOX_TASKS_SCHEMA,
 };

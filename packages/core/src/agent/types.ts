@@ -34,6 +34,7 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { IInbox } from '../inbox';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
@@ -430,3 +431,96 @@ export type AgentExecuteOnFinishOptions = {
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+
+/**
+ * Result of a batch processing operation.
+ */
+export interface AgentBatchResult<TTask = unknown> {
+  processed: number;
+  completed: number;
+  failed: number;
+  tasks: Array<{
+    task: TTask;
+    result?: unknown;
+    error?: Error;
+  }>;
+}
+
+/**
+ * Options for agent.handle() - continuous inbox processing.
+ *
+ * Task lifecycle hooks (onComplete, onError) are defined on the Inbox itself,
+ * not here. This keeps the responsibility clear: the Inbox owns task lifecycle.
+ */
+export interface AgentHandleOptions<TTask = unknown> {
+  /**
+   * The inbox(es) to handle tasks from.
+   * Can be a single inbox, an array of inboxes, or inbox IDs (resolved from Mastra).
+   */
+  inbox: IInbox<any> | IInbox<any>[] | string | string[];
+
+  /**
+   * Polling interval in milliseconds.
+   * @default 1000
+   */
+  pollInterval?: number;
+
+  /**
+   * Maximum concurrent tasks to process.
+   * @default 1
+   */
+  maxConcurrent?: number;
+
+  /**
+   * Task types to claim (filter by type).
+   */
+  taskTypes?: string[];
+
+  /**
+   * Custom filter function for tasks.
+   */
+  filter?: (task: TTask) => boolean;
+
+  /**
+   * Called when no tasks are available in any inbox.
+   */
+  onEmpty?: () => void | Promise<void>;
+
+  /**
+   * AbortSignal to stop the handle loop.
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * Options for batch processing tasks.
+ *
+ * Task lifecycle hooks (onComplete, onError) are defined on the Inbox itself.
+ */
+export interface AgentBatchOptions<TTask = unknown> {
+  /**
+   * The inbox(es) to process tasks from.
+   */
+  inbox: IInbox<any> | IInbox<any>[] | string | string[];
+
+  /**
+   * Maximum number of tasks to process.
+   * @default 10
+   */
+  limit?: number;
+
+  /**
+   * Timeout in milliseconds for the entire batch.
+   */
+  timeout?: number;
+
+  /**
+   * Task types to claim (filter by type).
+   */
+  taskTypes?: string[];
+
+  /**
+   * Custom filter function for tasks.
+   */
+  filter?: (task: TTask) => boolean;
+}

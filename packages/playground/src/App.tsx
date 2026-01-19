@@ -30,6 +30,7 @@ import { PostHogProvider } from './lib/analytics';
 import RequestContext from './pages/request-context';
 import MCPs from './pages/mcps';
 import MCPServerToolExecutor from './pages/mcps/tool';
+import Inbox from './pages/inbox';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
@@ -69,6 +70,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  inboxLink: (inboxId: string) => `/inbox?inboxId=${inboxId}`,
+  taskLink: (inboxId: string, taskId: string) => `/inbox/${inboxId}/tasks/${taskId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -123,6 +126,7 @@ function App() {
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
                 <Route path="/observability" element={<Observability />} />
+                <Route path="/inbox" element={<Inbox />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />

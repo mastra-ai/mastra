@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  InboxIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -35,6 +36,12 @@ const mainNavigation: NavSection[] = [
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Inbox',
+        url: '/inbox',
+        icon: <InboxIcon />,
         isOnMastraPlatform: true,
       },
       {

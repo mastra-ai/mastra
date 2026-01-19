@@ -3822,4 +3822,385 @@ export class Agent<
       });
     }
   }
+
+  // ================================
+  // Inbox Handling
+  // ================================
+
+  #abortController: AbortController | null = null;
+  #runningTasks = new Set<string>();
+
+  /**
+   * Stops the agent's inbox handle loop.
+   *
+   * @example
+   * ```typescript
+   * // Start handling
+   * agent.handle({ inbox: supportInbox });
+   *
+   * // Later, stop
+   * agent.stop();
+   * ```
+   */
+  stop(): void {
+    if (this.#abortController) {
+      this.#abortController.abort();
+      this.#abortController = null;
+    }
+  }
+
+  /**
+   * Handles tasks from the inbox(es) continuously.
+   *
+   * The agent will:
+   * 1. Poll the inbox(es) for available tasks
+   * 2. Claim tasks that match the filter criteria
+   * 3. Process tasks using the agent's generate() method
+   * 4. Mark tasks as completed or failed
+   * 5. Call onComplete/onError hooks defined on the Inbox
+   *
+   * Task lifecycle hooks (onComplete, onError) are defined on the Inbox itself,
+   * keeping responsibility clear: the Inbox owns the task lifecycle.
+   *
+   * @example
+   * ```typescript
+   * // Define completion behavior on the inbox
+   * const inbox = new Inbox({
+   *   id: 'support',
+   *   onComplete: async (task, result) => {
+   *     await notifyUser(task.payload.userId, result);
+   *   },
+   * });
+   *
+   * // Agent handles the inbox
+   * await agent.handle({ inbox });
+   *
+   * // With filtering
+   * await agent.handle({
+   *   inbox: [githubInbox, linearInbox],
+   *   taskTypes: ['bug', 'feature'],
+   *   maxConcurrent: 3,
+   * });
+   *
+   * // With abort signal
+   * const controller = new AbortController();
+   * agent.handle({ inbox, signal: controller.signal });
+   * // Later: controller.abort();
+   * ```
+   */
+  async handle(options: import('./types').AgentHandleOptions): Promise<void> {
+    const {
+      inbox: inboxOption,
+      pollInterval = 1000,
+      maxConcurrent = 1,
+      taskTypes,
+      filter,
+      onEmpty,
+      signal: externalSignal,
+    } = options;
+
+    // Set up abort controller
+    this.#abortController = new AbortController();
+    const signal = externalSignal ?? this.#abortController.signal;
+
+    // Resolve inboxes
+    const inboxes = await this.#resolveInboxes(inboxOption);
+
+    if (inboxes.length === 0) {
+      throw new MastraError({
+        id: 'AGENT_HANDLE_NO_INBOXES',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentId: this.id },
+        text: `No inboxes provided to agent.handle()`,
+      });
+    }
+
+    this.logger.info(`Agent ${this.id} handling ${inboxes.length} inbox(es)`);
+
+    // Main handle loop
+    while (!signal.aborted) {
+      let claimedTask = false;
+
+      // Check if we have room for more tasks
+      if (this.#runningTasks.size >= maxConcurrent) {
+        await this.#sleep(pollInterval, signal);
+        continue;
+      }
+
+      // Try to claim from each inbox
+      for (const inbox of inboxes) {
+        if (signal.aborted) break;
+        if (this.#runningTasks.size >= maxConcurrent) break;
+
+        try {
+          const task = await inbox.claim(this.id, {
+            types: taskTypes,
+            filter,
+          });
+
+          if (task) {
+            claimedTask = true;
+            this.#runningTasks.add(task.id);
+
+            // Process task asynchronously (non-blocking)
+            this.#processTask(inbox, task).finally(() => {
+              this.#runningTasks.delete(task.id);
+            });
+          }
+        } catch (error) {
+          this.logger.error(`Error claiming task from inbox ${inbox.id}:`, error);
+        }
+      }
+
+      // If no tasks were claimed, call onEmpty and wait
+      if (!claimedTask && this.#runningTasks.size === 0) {
+        await onEmpty?.();
+      }
+
+      // Wait before next poll
+      await this.#sleep(pollInterval, signal);
+    }
+
+    // Wait for running tasks to complete
+    while (this.#runningTasks.size > 0) {
+      await this.#sleep(100, undefined);
+    }
+
+    this.logger.info(`Agent ${this.id} stopped handling inboxes`);
+  }
+
+  /**
+   * Process a batch of tasks from the inbox(es).
+   * Useful for serverless environments with limited execution time.
+   *
+   * Task lifecycle hooks (onComplete, onError) are defined on the Inbox itself.
+   *
+   * @example
+   * ```typescript
+   * // Process up to 5 tasks with a 25 second timeout
+   * const results = await agent.processBatch({
+   *   inbox: tasksInbox,
+   *   limit: 5,
+   *   timeout: 25_000,
+   * });
+   *
+   * console.log(`Processed ${results.processed} tasks`);
+   * ```
+   */
+  async processBatch(options: import('./types').AgentBatchOptions): Promise<import('./types').AgentBatchResult> {
+    const { inbox: inboxOption, limit = 10, timeout, taskTypes, filter } = options;
+
+    // Resolve inboxes
+    const inboxes = await this.#resolveInboxes(inboxOption);
+
+    if (inboxes.length === 0) {
+      throw new MastraError({
+        id: 'AGENT_BATCH_NO_INBOXES',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentId: this.id },
+        text: `No inboxes provided to agent.processBatch()`,
+      });
+    }
+
+    const results: import('./types').AgentBatchResult = {
+      processed: 0,
+      completed: 0,
+      failed: 0,
+      tasks: [],
+    };
+
+    const startTime = Date.now();
+    let processed = 0;
+
+    // Process tasks from each inbox
+    for (const inbox of inboxes) {
+      while (processed < limit) {
+        // Check timeout
+        if (timeout && Date.now() - startTime > timeout) {
+          this.logger.debug(`Batch timeout reached after processing ${processed} tasks`);
+          return results;
+        }
+
+        // Claim a task
+        const task = await inbox.claim(this.id, {
+          types: taskTypes,
+          filter,
+        });
+
+        if (!task) {
+          // No more tasks in this inbox
+          break;
+        }
+
+        processed++;
+        results.processed++;
+
+        try {
+          const result = await this.#processTaskCore(inbox, task);
+          results.completed++;
+          results.tasks.push({ task, result });
+        } catch (error) {
+          results.failed++;
+          results.tasks.push({ task, error: error as Error });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Resolve inbox option to array of IInbox instances.
+   */
+  async #resolveInboxes(
+    inboxOption: import('./types').AgentHandleOptions['inbox'],
+  ): Promise<import('../inbox').IInbox[]> {
+    // Normalize to array
+    const inboxInputs = Array.isArray(inboxOption) ? inboxOption : [inboxOption];
+
+    const inboxes: import('../inbox').IInbox[] = [];
+
+    for (const input of inboxInputs) {
+      if (typeof input === 'string') {
+        // Resolve by ID from Mastra
+        if (!this.#mastra) {
+          throw new MastraError({
+            id: 'AGENT_HANDLE_MASTRA_NOT_REGISTERED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: { agentId: this.id, inboxId: input },
+            text: `Cannot resolve inbox by ID "${input}" - agent is not registered with Mastra`,
+          });
+        }
+        const inbox = this.#mastra.getInbox(input);
+        if (!inbox) {
+          throw new MastraError({
+            id: 'AGENT_HANDLE_INBOX_NOT_FOUND',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: { agentId: this.id, inboxId: input },
+            text: `Inbox "${input}" not found in Mastra`,
+          });
+        }
+        inboxes.push(inbox);
+      } else {
+        // Direct inbox instance
+        inboxes.push(input);
+      }
+    }
+
+    return inboxes;
+  }
+
+  /**
+   * Process a single task asynchronously.
+   */
+  async #processTask(inbox: import('../inbox').IInbox, task: import('../inbox').Task): Promise<void> {
+    try {
+      await this.#processTaskCore(inbox, task);
+    } catch {
+      // Error already handled in #processTaskCore (inbox.fail + inbox.onError called)
+    }
+  }
+
+  /**
+   * Core task processing logic.
+   */
+  async #processTaskCore(inbox: import('../inbox').IInbox, task: import('../inbox').Task): Promise<unknown> {
+    const runId = this.#mastra?.generateId() ?? randomUUID();
+
+    try {
+      // Mark task as in progress
+      await inbox.startTask(task.id);
+
+      // Update task with runId
+      await inbox.updateTask(task.id, { runId });
+
+      this.logger.debug(`Processing task ${task.id} (runId: ${runId})`);
+
+      // Build the message from task payload
+      const message = this.#buildMessageFromTask(task);
+
+      // Generate response using the agent
+      const result = await this.generate(message, { runId });
+
+      // Extract text from result
+      const resultText = result.text || (result.object ? JSON.stringify(result.object) : '');
+
+      // Mark task as completed
+      await inbox.complete(task.id, { text: resultText, object: result.object });
+
+      // Call inbox's onComplete hook
+      await inbox.onComplete?.(task, { text: resultText, object: result.object });
+
+      this.logger.debug(`Completed task ${task.id}`);
+
+      return { text: resultText, object: result.object };
+    } catch (error) {
+      this.logger.error(`Failed task ${task.id}:`, error);
+
+      // Mark task as failed (this handles retries internally)
+      await inbox.fail(task.id, error as Error);
+
+      // Call inbox's onError hook
+      await inbox.onError?.(task, error as Error);
+
+      throw error;
+    }
+  }
+
+  /**
+   * Build a message from task payload for the agent to process.
+   */
+  #buildMessageFromTask(task: import('../inbox').Task): MessageListInput {
+    const payload = task.payload as Record<string, unknown>;
+
+    // If payload has a 'message' or 'prompt' field, use that directly
+    if (typeof payload?.message === 'string') {
+      return payload.message;
+    }
+    if (typeof payload?.prompt === 'string') {
+      return payload.prompt;
+    }
+
+    // If payload has a 'messages' array, use that
+    if (Array.isArray(payload?.messages)) {
+      return payload.messages as MessageListInput;
+    }
+
+    // Otherwise, format the task as a structured prompt
+    const parts: string[] = [];
+
+    if (task.title) {
+      parts.push(`# ${task.title}`);
+    }
+
+    if (task.type) {
+      parts.push(`Type: ${task.type}`);
+    }
+
+    // Include payload as JSON
+    parts.push(`\nTask Details:\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``);
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Sleep for a duration, respecting abort signal.
+   */
+  async #sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+    return new Promise<void>(resolve => {
+      const timeout = setTimeout(resolve, ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  }
 }

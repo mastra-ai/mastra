@@ -1,5 +1,6 @@
 export * from './base';
 export * from './agents';
+export * from './inbox';
 export * from './scores';
 export * from './observability';
 export * from './operations';

@@ -15,6 +15,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  Inbox,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -765,6 +766,36 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Inbox
+  // ============================================================================
+
+  /**
+   * Lists all registered inboxes
+   * @param requestContext - Optional request context
+   * @returns Promise containing list of inbox info
+   */
+  public listInboxes(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<{ inboxes: Array<{ id: string; name?: string }> }> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+    const searchParams = new URLSearchParams();
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/inboxes${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets an inbox instance by ID
+   * @param inboxId - ID of the inbox to retrieve
+   * @returns Inbox instance
+   */
+  public getInbox(inboxId: string): Inbox {
+    return new Inbox(this.options, inboxId);
   }
 
   // ============================================================================

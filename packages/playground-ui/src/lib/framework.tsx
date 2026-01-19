@@ -34,6 +34,9 @@ type LinkComponentPaths = {
   mcpServerLink: (serverId: string) => string;
   mcpServerToolLink: (serverId: string, toolId: string) => string;
   workflowRunLink: (workflowId: string, runId: string) => string;
+
+  inboxLink?: (inboxId: string) => string;
+  taskLink?: (inboxId: string, taskId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
